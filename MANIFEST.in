@@ -1,0 +1,3 @@
+include debrify/config/config.yaml
+exclude debrify/data/torrent.csv
+exclude debrify/data/torrents.db
