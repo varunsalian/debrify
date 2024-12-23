@@ -1,7 +1,6 @@
 PyYAML==6.0.1
-PyYAML==6.0.2
-rd_api_py==0.4.0
-Requests==2.32.3
+rd-api-py==0.4.0
+Requests
 rich==13.9.4
 setuptools==75.1.0
 tqdm==4.66.5
