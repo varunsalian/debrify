@@ -4,3 +4,4 @@ Requests
 rich==13.9.4
 setuptools==75.1.0
 tqdm==4.66.5
+duckdb

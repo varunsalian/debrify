@@ -1,10 +1,10 @@
-import sqlite3
+import duckdb
 
 class TorrentCSVSearch:
     def __init__(self, db_name):
         """Initialize the database connection."""
         self.db_name = db_name
-        self.conn = sqlite3.connect(self.db_name)
+        self.conn = duckdb.connect(self.db_name)
         print(f"\033[1;34mConnected to database: '{self.db_name}'.\033[0m")
 
     def search_title(self, query, case_sensitive=False):
@@ -16,40 +16,36 @@ class TorrentCSVSearch:
             case_sensitive (bool): If True, performs case-sensitive search.
 
         Returns:
-            list: Matching records as tuples.
+            list: Matching records as dictionaries.
         """
-        cursor = self.conn.cursor()
-
-        # Split the query into individual words (based on spaces)
         search_terms = query.split()
-
-        # Prepare the LIKE conditions for each search term
-        like_conditions = [f"%{term}%" for term in search_terms]
-        sql_query = "SELECT * FROM torrents WHERE "
-
-        # Create a list of conditions for the SQL query using the search terms
-        sql_query += " AND ".join([f"LOWER(name) LIKE LOWER(?)" for _ in search_terms])
+        results = []
 
         try:
-            # Execute the query
-            # print(f"\033[1;34mExecuting search for terms: {search_terms}\033[0m")
-            if case_sensitive:
-                cursor.execute(sql_query, tuple(search_terms))  # Use exact case search
-            else:
-                cursor.execute(sql_query, tuple(like_conditions))  # Default case-insensitive search
-            results = cursor.fetchall()
+            for term in search_terms:
+                if case_sensitive:
+                    condition = f"name LIKE '%{term}%'"
+                else:
+                    condition = f"LOWER(name) LIKE LOWER('%{term}%')"
+
+                # Execute the search query
+                query = f"SELECT * FROM torrents WHERE {condition};"
+                matches = self.conn.execute(query).fetchall()
+                results.extend(matches)
+
+            # Remove duplicates from results based on the 'infohash' column
+            unique_results = {record[0]: record for record in results}.values()
 
             # Display the results
-            if results:
-                print(f"\033[1;32mFound {len(results)} matching records.\033[0m")
+            if unique_results:
+                print(f"\033[1;32mFound {len(unique_results)} matching records.\033[0m")
             else:
                 print(f"\033[1;33mNo matching records found.\033[0m")
-            return results
+
+            return list(unique_results)
         except Exception as e:
             print(f"\033[1;31mAn error occurred during search: {e}\033[0m")
             return []
-        finally:
-            cursor.close()
 
     def close(self):
         """Close the database connection."""

@@ -2,8 +2,6 @@ import os
 from .clients import RealDebridClient
 from .services import TorrentCSVSearch
 from .utils import common_utils
-from rich.console import Console
-from rich.table import Table
 from tqdm import tqdm
 import yaml
 from .utils.common_utils import load_configs, display_results, parse_arguments, force_update_database, get_absoulute_path
@@ -43,20 +41,6 @@ def search_and_process_results(config):
             continue
 
         process_torrents(results_csv, download_start_from, download_end_at, download_to_debrid, debrid_client)
-
-
-def display_results(results_csv, keyword):
-    """Display search results in a table."""
-    console = Console()
-    table = Table(title=f"Results for '{keyword}'")
-    table.add_column("No.", style="cyan", justify="right")
-    table.add_column("Data", style="magenta", justify="left")
-
-    for index, data in enumerate(results_csv, start=1):
-        table.add_row(f"{index:04}", data[1])
-
-    console.print(table)
-
 
 def process_torrents(results_csv, start, end, download_to_debrid, debrid_client):
     """Process torrents within the specified range."""
