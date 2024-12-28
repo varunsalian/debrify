@@ -49,25 +49,34 @@ def str2bool(value):
 
 
 def preprocess_keywords(args):
-    """Process --keywords to treat space-separated words as single arguments until a comma is encountered."""
+    """
+    Processes the arguments to handle --keywords flag.
+    Comma separates keywords, and space within a comma-separated group stays intact.
+    """
     combined_keywords = []
     temp = []
+
     for arg in args:
+        if arg.startswith('--'):  # Stop processing on encountering a new flag
+            if temp:
+                combined_keywords.append(' '.join(temp))
+            return combined_keywords, args[args.index(arg):]
         if ',' in arg:
+            # Handle comma-separated keywords
             parts = arg.split(',')
             if temp:
-                temp.append(parts[0])
-                combined_keywords.append(' '.join(temp))
-                temp = []
+                temp.append(parts[0])  # Add the first part to the current group
+                combined_keywords.append(' '.join(temp))  # Complete the group
+                temp = []  # Reset for the next group
             else:
-                combined_keywords.append(parts[0])
-            if len(parts) > 1:
-                combined_keywords.extend(parts[1:])
+                combined_keywords.append(parts[0])  # Add the first part directly
+            # Add remaining parts as new keywords
+            combined_keywords.extend(part.strip() for part in parts[1:] if part.strip())
         else:
-            temp.append(arg)
+            temp.append(arg)  # Collect space-separated words
     if temp:
-        combined_keywords.append(' '.join(temp))
-    return combined_keywords
+        combined_keywords.append(' '.join(temp))  # Add the last group
+    return combined_keywords, []
 
 
 def load_configs(args):
@@ -76,13 +85,11 @@ def load_configs(args):
 
     if args.keywords:
         config['keywords'] = args.keywords
-    if args.debrid_api_key:
-        config['debrid_api_key'] = args.debrid_api_key
     if args.download_start_from is not None:
         config['download_start_from'] = args.download_start_from
     if args.download_end_at is not None:
         config['download_end_at'] = args.download_end_at
-    if args.download_to_debrid:
+    if args.download_to_debrid is not None:
         config['download_to_debrid'] = args.download_to_debrid
     if args.print_results is not None:
         config['print_results'] = args.print_results
@@ -106,13 +113,12 @@ def display_results(results_csv, keyword):
 
 def parse_arguments():
     """Parse command-line arguments."""
-    # Preprocess the keywords argument manually
     args = sys.argv[1:]
     if '--keywords' in args:
         keywords_index = args.index('--keywords') + 1
         raw_keywords = args[keywords_index:]  # Everything after --keywords
-        processed_keywords = preprocess_keywords(raw_keywords)
-        args = args[:keywords_index] + processed_keywords  # Replace the original args
+        processed_keywords, remaining_args = preprocess_keywords(raw_keywords)
+        args = args[:keywords_index] + processed_keywords + remaining_args  # Combine processed and remaining args
 
     parser = argparse.ArgumentParser(description="A CLI tool for managing torrents.")
     parser.add_argument("-v", "--version", action="version", version="%(prog)s 1.0")
@@ -125,12 +131,12 @@ def parse_arguments():
         "--keywords",
         type=str,
         nargs='+',
-        help="Keywords to search in torrents (space-separated groups split by commas).",
+        help="Keywords to search in torrents (comma-separated, space within groups preserved).",
     )
-    parser.add_argument("--debrid-api-key", type=str, help="API key for RealDebrid.")
+    parser.add_argument("--set-debrid-api-key", type=str, help="API key for RealDebrid.")
     parser.add_argument("--download-start-from", type=int, help="Start index for downloading torrents.")
     parser.add_argument("--download-end-at", type=int, help="End index for downloading torrents.")
-    parser.add_argument("--download-to-debrid", action="store_true", help="Flag to download torrents to RealDebrid.")
+    parser.add_argument("--download-to-debrid", type=str2bool, help="Flag to download torrents to RealDebrid.")
     parser.add_argument("--print-results", type=str2bool, help="Set to 'true' or 'false' to control printing results.")
     return parser.parse_args(args)
 
@@ -150,5 +156,7 @@ def force_update_database(url, filename, db_name):
     database = TorrentDatabase(db_name)
     database.insert_data(filename)
     database.close()
+
+    delete_file_if_exists(filename)
 
     print("Force update completed.")

@@ -5,7 +5,8 @@ from .utils import common_utils
 from rich.console import Console
 from rich.table import Table
 from tqdm import tqdm
-from .utils.common_utils import load_configs, display_results, parse_arguments, force_update_database
+import yaml
+from .utils.common_utils import load_configs, display_results, parse_arguments, force_update_database, get_absoulute_path
 
 def search_and_process_results(config):
     """Search for results and process them based on configuration."""
@@ -75,6 +76,26 @@ def database_exists(db_path):
 
 def main():
     args = parse_arguments()
+
+    if args.set_debrid_api_key:
+        # Update the debrid API key in the configuration file
+        config_path = get_absoulute_path('config/config.yaml')
+        try:
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file) or {}
+        except FileNotFoundError:
+            config = {}
+
+        config['debrid_api_key'] = args.set_debrid_api_key
+
+        with open(config_path, 'w') as file:
+            yaml.safe_dump(config, file)
+
+        print(f"Updated debrid_api_key in {config_path}.")
+        return
+
+
+
     config = load_configs(args)
 
     url = config.get('torrent_csv_url', None)
