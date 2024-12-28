@@ -1,5 +1,9 @@
 import os
 import yaml
+import argparse
+import sys
+from ..services import TorrentDatabase, TorrentCSVDownloader
+
 
 def delete_file_if_exists(filename):
     """Delete a file if it exists."""
@@ -31,3 +35,120 @@ def load_config():
     except yaml.YAMLError as e:
         print(f"Error: Failed to parse YAML file. Details: {e}")
         exit(1)
+
+def str2bool(value):
+    """Convert string to boolean."""
+    if isinstance(value, bool):
+        return value
+    if value.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif value.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def preprocess_keywords(args):
+    """Process --keywords to treat space-separated words as single arguments until a comma is encountered."""
+    combined_keywords = []
+    temp = []
+    for arg in args:
+        if ',' in arg:
+            parts = arg.split(',')
+            if temp:
+                temp.append(parts[0])
+                combined_keywords.append(' '.join(temp))
+                temp = []
+            else:
+                combined_keywords.append(parts[0])
+            if len(parts) > 1:
+                combined_keywords.extend(parts[1:])
+        else:
+            temp.append(arg)
+    if temp:
+        combined_keywords.append(' '.join(temp))
+    return combined_keywords
+
+
+def load_configs(args):
+    """Load the configuration and override with command-line arguments."""
+    config = load_config()  # Assuming a method to load the config file
+
+    if args.keywords:
+        config['keywords'] = args.keywords
+    if args.debrid_api_key:
+        config['debrid_api_key'] = args.debrid_api_key
+    if args.download_start_from is not None:
+        config['download_start_from'] = args.download_start_from
+    if args.download_end_at is not None:
+        config['download_end_at'] = args.download_end_at
+    if args.download_to_debrid:
+        config['download_to_debrid'] = args.download_to_debrid
+    if args.print_results is not None:
+        config['print_results'] = args.print_results
+    return config
+
+
+def display_results(results_csv, keyword):
+    """Display search results in a table."""
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title=f"Results for '{keyword}'")
+    table.add_column("No.", style="cyan", justify="right")
+    table.add_column("Data", style="magenta", justify="left")
+
+    for index, data in enumerate(results_csv, start=1):
+        table.add_row(f"{index:04}", data[1])
+
+    console.print(table)
+
+def parse_arguments():
+    """Parse command-line arguments."""
+    # Preprocess the keywords argument manually
+    args = sys.argv[1:]
+    if '--keywords' in args:
+        keywords_index = args.index('--keywords') + 1
+        raw_keywords = args[keywords_index:]  # Everything after --keywords
+        processed_keywords = preprocess_keywords(raw_keywords)
+        args = args[:keywords_index] + processed_keywords  # Replace the original args
+
+    parser = argparse.ArgumentParser(description="A CLI tool for managing torrents.")
+    parser.add_argument("-v", "--version", action="version", version="%(prog)s 1.0")
+    parser.add_argument(
+        "--force-update",
+        action="store_true",
+        help="Force delete, download, and reinsert data into the database even if it exists.",
+    )
+    parser.add_argument(
+        "--keywords",
+        type=str,
+        nargs='+',
+        help="Keywords to search in torrents (space-separated groups split by commas).",
+    )
+    parser.add_argument("--debrid-api-key", type=str, help="API key for RealDebrid.")
+    parser.add_argument("--download-start-from", type=int, help="Start index for downloading torrents.")
+    parser.add_argument("--download-end-at", type=int, help="End index for downloading torrents.")
+    parser.add_argument("--download-to-debrid", action="store_true", help="Flag to download torrents to RealDebrid.")
+    parser.add_argument("--print-results", type=str2bool, help="Set to 'true' or 'false' to control printing results.")
+    return parser.parse_args(args)
+
+def force_update_database(url, filename, db_name):
+    """Delete existing files, download the file, and insert data into the database."""
+    print("Starting force update...")
+
+    # Delete existing files
+    delete_file_if_exists(filename)
+    delete_file_if_exists(db_name)
+
+    # Download the file
+    downloader = TorrentCSVDownloader(url, filename)
+    downloader.download()
+
+    # Insert data into SQLite database
+    database = TorrentDatabase(db_name)
+    database.insert_data(filename)
+    database.close()
+
+    print("Force update completed.")

@@ -1,5 +1,4 @@
-keywords: ["ubuntu"]
-real_debrid_api_key: "YOUR_API_KEY_HERE"
+debrid_api_key: "YOUR_API_KEY_HERE"
 download_start_from: 0
 download_end_at: 3
 download_to_debrid: true
