@@ -111,7 +111,7 @@ def display_results(results_csv, keyword):
     table.add_column("No.", style="cyan", justify="right")
     table.add_column("Data", style="magenta", justify="left")
 
-    for index, data in enumerate(results_csv, start=1):
+    for index, data in enumerate(results_csv, start=0):
         table.add_row(f"{index:04}", data[1])
 
     console.print(table)
