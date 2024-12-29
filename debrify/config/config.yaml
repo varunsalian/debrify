@@ -1,6 +1,5 @@
 debrid_api_key: "YOUR_API_KEY_HERE"
-download_start_from: 0
-download_end_at: 3
+download_range: "0-200000"
 download_to_debrid: true
 download_type: "highest_size"
 print_results: true

@@ -4,6 +4,13 @@ import argparse
 import sys
 from debrify.services import TorrentDatabase, TorrentCSVDownloader
 
+def parse_download_range(range_str):
+    """Parse a range string (e.g., "1-200") into start and end integers."""
+    try:
+        start, end = map(int, range_str.split('-'))
+        return start, end
+    except ValueError:
+        raise ValueError("Invalid range format. Use the format 'start-end'.")
 
 def delete_file_if_exists(filename):
     """Delete a file if it exists."""
@@ -85,10 +92,8 @@ def load_configs(args):
 
     if args.keywords:
         config['keywords'] = args.keywords
-    if args.download_start_from is not None:
-        config['download_start_from'] = args.download_start_from
-    if args.download_end_at is not None:
-        config['download_end_at'] = args.download_end_at
+    if args.download_range is not None:
+        config['download_range'] = args.download_range
     if args.download_to_debrid is not None:
         config['download_to_debrid'] = args.download_to_debrid
     if args.print_results is not None:
@@ -134,8 +139,7 @@ def parse_arguments():
         help="Keywords to search in torrents (comma-separated, space within groups preserved).",
     )
     parser.add_argument("--set-debrid-api-key", type=str, help="API key for RealDebrid.")
-    parser.add_argument("--download-start-from", type=int, help="Start index for downloading torrents.")
-    parser.add_argument("--download-end-at", type=int, help="End index for downloading torrents.")
+    parser.add_argument("--download-range", type=str, help="Start and End index for downloading torrent into debrid")
     parser.add_argument("--download-to-debrid", type=str2bool, help="Flag to download torrents to RealDebrid.")
     parser.add_argument("--print-results", type=str2bool, help="Set to 'true' or 'false' to control printing results.")
     return parser.parse_args(args)

@@ -5,7 +5,7 @@ from debrify.utils import common_utils
 from tqdm import tqdm
 import yaml
 from debrify.utils.common_utils import load_configs, display_results, parse_arguments, force_update_database, \
-    get_absoulute_path
+    get_absoulute_path, parse_download_range
 
 def search_and_process_results(config):
     """Search for results and process them based on configuration."""
@@ -14,8 +14,8 @@ def search_and_process_results(config):
         print("Error: 'keywords' not found (either use --keyword flag and provide space separated keywords or use the config file to provide keywords)")
         return
 
-    download_start_from = config.get('download_start_from', 0)
-    download_end_at = config.get('download_end_at', 1000000)
+    download_range = config.get('download_range', "0-2000000")
+    download_start_from, download_end_at = parse_download_range(download_range)
     download_to_debrid = config.get('download_to_debrid', False)
     print_results = config.get('print_results', False)
 
