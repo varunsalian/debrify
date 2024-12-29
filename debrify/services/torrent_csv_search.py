@@ -9,7 +9,7 @@ class TorrentCSVSearch:
 
     def search_title(self, query, case_sensitive=False):
         """
-        Search for a title in the torrents table with Google-like flexibility.
+        Search for a title in the torrents table where all query words must be present.
 
         Parameters:
             query (str): The search query (can be one or more words).
@@ -22,27 +22,27 @@ class TorrentCSVSearch:
         results = []
 
         try:
+            # Build the WHERE condition to ensure all terms are present
+            conditions = []
             for term in search_terms:
                 if case_sensitive:
-                    condition = f"name LIKE '%{term}%'"
+                    conditions.append(f"name LIKE '%{term}%'")
                 else:
-                    condition = f"LOWER(name) LIKE LOWER('%{term}%')"
+                    conditions.append(f"LOWER(name) LIKE LOWER('%{term}%')")
 
-                # Execute the search query
-                query = f"SELECT * FROM torrents WHERE {condition};"
-                matches = self.conn.execute(query).fetchall()
-                results.extend(matches)
+            combined_condition = " AND ".join(conditions)
 
-            # Remove duplicates from results based on the 'infohash' column
-            unique_results = {record[0]: record for record in results}.values()
+            # Execute the search query
+            sql_query = f"SELECT * FROM torrents WHERE {combined_condition};"
+            results = self.conn.execute(sql_query).fetchall()
 
             # Display the results
-            if unique_results:
-                print(f"\033[1;32mFound {len(unique_results)} matching records.\033[0m")
+            if results:
+                print(f"\033[1;32mFound {len(results)} matching records.\033[0m")
             else:
                 print(f"\033[1;33mNo matching records found.\033[0m")
 
-            return list(unique_results)
+            return results
         except Exception as e:
             print(f"\033[1;31mAn error occurred during search: {e}\033[0m")
             return []

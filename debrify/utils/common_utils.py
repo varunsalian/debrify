@@ -2,7 +2,7 @@ import os
 import yaml
 import argparse
 import sys
-from ..services import TorrentDatabase, TorrentCSVDownloader
+from debrify.services import TorrentDatabase, TorrentCSVDownloader
 
 
 def delete_file_if_exists(filename):

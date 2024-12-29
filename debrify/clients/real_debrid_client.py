@@ -1,8 +1,6 @@
 import os
-import requests
-import yaml
 from rdapi import RD
-from ..utils import common_utils
+from debrify.utils import common_utils
 
 # Set environment variables (ensure these are not committed to a public repo)
 os.environ["SLEEP"] = "2000"

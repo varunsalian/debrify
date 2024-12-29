@@ -1,10 +1,11 @@
 import os
-from .clients import RealDebridClient
-from .services import TorrentCSVSearch
-from .utils import common_utils
+from debrify.clients import RealDebridClient
+from debrify.services import TorrentCSVSearch
+from debrify.utils import common_utils
 from tqdm import tqdm
 import yaml
-from .utils.common_utils import load_configs, display_results, parse_arguments, force_update_database, get_absoulute_path
+from debrify.utils.common_utils import load_configs, display_results, parse_arguments, force_update_database, \
+    get_absoulute_path
 
 def search_and_process_results(config):
     """Search for results and process them based on configuration."""
