@@ -1,4 +1,4 @@
-name: Setup and Clone Debrify (Mac)
+name: Create Mac Installer
 
 on:
   workflow_dispatch:
