@@ -53,7 +53,12 @@ jobs:
           --add-data "debrify/data:debrify/data/" \
           "debrify/main.py"
 
-    - name: List Output Files
+    - name: Execute Main with --force-update
       run: |
-        ls -al dist/main/
+        chmod +x dist/main/main
+        ./dist/main/main --force-update
+
+    - name: Execute Main with --keywords kannada
+      run: |
+        ./dist/main/main --keywords kannada
           
