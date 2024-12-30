@@ -1,0 +1,74 @@
+name: Setup (Mac)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-and-clone:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install Python 3.12.7
+      run: |
+        brew update
+        brew install python@3.12
+        echo "Python 3.12 installed: $(python3.12 --version)"
+        curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+        echo "Pip installed: $(pip --version)"
+
+    - name: Install Git
+      run: |
+        brew install git
+        echo "Git version: $(git --version)"
+
+    - name: Create and Activate Virtual Environment
+      run: |
+        python3.12 -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip setuptools wheel
+        echo "Virtual environment setup completed."
+
+    - name: Install PyInstaller in Virtual Environment
+      run: |
+        source venv/bin/activate
+        pip install pyinstaller
+        pyinstaller --version
+
+    - name: Install Dependencies
+      run: |
+        source venv/bin/activate
+        pip install -r requirements.txt
+
+    - name: Build executable with PyInstaller
+      run: |
+        source venv/bin/activate
+        pyinstaller \
+          --noconfirm \
+          --onedir \
+          --console \
+          --add-data "debrify/config/config.yaml:debrify/config/" \
+          --add-data "debrify/config/error_codes.json:rdapi/" \
+          --add-data "debrify/data:debrify/data/" \
+          "debrify/main.py"
+
+    # - name: Execute Main with --force-update
+    #   run: |
+    #     chmod +x dist/main/main
+    #     ./dist/main/main --force-update
+
+    # - name: Execute Main with --keywords kannada
+    #   run: |
+    #     ./dist/main/main --keywords kannada
+
+    - name: Compress dist/main/
+      run: |
+        zip -r dist-main-mac.zip dist main/
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: built-main-mac
+        path: dist-main-mac.zip
