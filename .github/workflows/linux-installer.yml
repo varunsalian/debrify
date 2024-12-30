@@ -28,13 +28,22 @@ jobs:
         sudo apt install -y git
         git --version
 
-    - name: Install PyInstaller
+    - name: Create and Activate Virtual Environment
       run: |
+        python3.12 -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip setuptools wheel
+        echo "Virtual environment setup completed."
+
+    - name: Install PyInstaller in Virtual Environment
+      run: |
+        source venv/bin/activate
         pip install pyinstaller
         pyinstaller --version
 
     - name: Build executable with PyInstaller
       run: |
+        source venv/bin/activate
         pyinstaller \
           --noconfirm \
           --onedir \
