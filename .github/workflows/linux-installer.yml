@@ -30,7 +30,7 @@ jobs:
 
     - name: Change to project directory
       run: |
-        cd debrify/debrify
+        cd debrify
         echo "Current Directory: $(pwd)"
         echo "Listing directory contents:"
         ls -al
