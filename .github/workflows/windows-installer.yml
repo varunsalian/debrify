@@ -55,10 +55,10 @@ jobs:
 
     - name: Compress dist\${{ matrix.architecture }}\main\
       run: |
-        Compress-Archive -Path dist\${{ matrix.architecture }}\main\* -DestinationPath dist-main-windows-${{ matrix.architecture }}.zip
+        Compress-Archive -Path dist\${{ matrix.architecture }}\main\* -DestinationPath debrify-windows-${{ matrix.architecture }}.zip
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
         name: built-main-windows-${{ matrix.architecture }}
-        path: dist-main-windows-${{ matrix.architecture }}.zip
+        path: debrify-windows-${{ matrix.architecture }}.zip
