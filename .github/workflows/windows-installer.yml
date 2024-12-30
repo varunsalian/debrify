@@ -40,17 +40,17 @@ jobs:
         .\venv\Scripts\activate
         pip install -r requirements.txt
 
-    - name: Build executable with PyInstaller for ${matrix.architecture}
+    - name: Build executable with PyInstaller for ${{ matrix.architecture }}
       run: |
         .\venv\Scripts\activate
-        pyinstaller ^
-          --noconfirm ^
-          --onedir ^
-          --console ^
-          --add-data "debrify\config\config.yaml;debrify\config" ^
-          --add-data "debrify\config\error_codes.json;rdapi" ^
-          --add-data "debrify\data;debrify\data" ^
-          --distpath dist\${{ matrix.architecture }} ^
+        pyinstaller `
+          --noconfirm `
+          --onedir `
+          --console `
+          --add-data "debrify\config\config.yaml;debrify\config" `
+          --add-data "debrify\config\error_codes.json;rdapi" `
+          --add-data "debrify\data;debrify\data" `
+          --distpath dist\${{ matrix.architecture }} `
           "debrify\main.py"
 
     - name: Compress dist\${{ matrix.architecture }}\main\
