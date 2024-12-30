@@ -17,12 +17,9 @@ jobs:
         sudo apt install -y software-properties-common
         sudo add-apt-repository -y ppa:deadsnakes/ppa
         sudo apt update
-        sudo apt install -y python3.12 python3.12-venv python3.12-distutils
-        python3.12 --version
-
-    - name: Install pip
-      run: |
+        sudo apt install -y python3.12 python3.12-venv
         curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+        python3.12 --version
         pip --version
 
     - name: Install Git
