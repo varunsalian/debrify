@@ -1,0 +1,41 @@
+name: Setup and Clone Debrify
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-and-clone:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install Python 3.12.7
+      run: |
+        sudo apt update
+        sudo apt install -y software-properties-common
+        sudo add-apt-repository -y ppa:deadsnakes/ppa
+        sudo apt update
+        sudo apt install -y python3.12 python3.12-venv python3.12-distutils
+        python3.12 --version
+
+    - name: Install pip
+      run: |
+        curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+        pip --version
+
+    - name: Install Git
+      run: |
+        sudo apt update
+        sudo apt install -y git
+        git --version
+
+    - name: Clone Debrify repository
+      run: |
+        git clone https://github.com/varunsalian/debrify.git
+
+    - name: Change to project directory
+      run: |
+        cd debrify/debrify
+        echo "Current Directory: $(pwd)"
