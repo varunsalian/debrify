@@ -28,9 +28,18 @@ jobs:
         sudo apt install -y git
         git --version
 
-    - name: Change to project directory
+    - name: Install PyInstaller
       run: |
-        cd debrify
-        echo "Current Directory: $(pwd)"
-        echo "Listing directory contents:"
-        ls -al
+        pip install pyinstaller
+        pyinstaller --version
+
+    - name: Build executable with PyInstaller
+      run: |
+        pyinstaller \
+          --noconfirm \
+          --onedir \
+          --console \
+          --add-data "debrify/config/config.yaml:debrify/config/" \
+          --add-data "debrify/debrify/config/error_codes.json:rdapi/" \
+          --add-data "debrify/debrify/data:debrify/data/" \
+          "debrify/main.py"
