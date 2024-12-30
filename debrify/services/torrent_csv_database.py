@@ -1,5 +1,8 @@
+import multiprocessing as mp
+import sys
+if sys.platform != "win32":
+    mp.set_start_method('fork', force=True)
 import duckdb
-import csv
 
 class TorrentDatabase:
     def __init__(self, db_name):

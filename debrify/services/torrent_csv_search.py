@@ -1,3 +1,7 @@
+import multiprocessing as mp
+import sys
+if sys.platform != "win32":
+    mp.set_start_method('fork', force=True)
 import duckdb
 
 class TorrentCSVSearch:
