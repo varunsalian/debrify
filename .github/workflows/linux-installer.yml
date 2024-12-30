@@ -28,11 +28,9 @@ jobs:
         sudo apt install -y git
         git --version
 
-    - name: Clone Debrify repository
-      run: |
-        git clone https://github.com/varunsalian/debrify.git
-
     - name: Change to project directory
       run: |
         cd debrify/debrify
         echo "Current Directory: $(pwd)"
+        echo "Listing directory contents:"
+        ls -al
