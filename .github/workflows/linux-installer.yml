@@ -52,3 +52,8 @@ jobs:
           --add-data "debrify/config/error_codes.json:rdapi/" \
           --add-data "debrify/data:debrify/data/" \
           "debrify/main.py"
+
+    - name: List Output Files
+      run: |
+        ls -al dist/main/
+          
