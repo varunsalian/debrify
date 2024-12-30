@@ -22,12 +22,6 @@ jobs:
         python3.12 --version
         pip --version
 
-    - name: Install Git
-      run: |
-        sudo apt update
-        sudo apt install -y git
-        git --version
-
     - name: Create and Activate Virtual Environment
       run: |
         python3.12 -m venv venv
@@ -57,15 +51,6 @@ jobs:
           --add-data "debrify/config/error_codes.json:rdapi/" \
           --add-data "debrify/data:debrify/data/" \
           "debrify/main.py"
-
-    # - name: Execute Main with --force-update
-    #   run: |
-    #     chmod +x dist/main/main
-    #     ./dist/main/main --force-update
-
-    # - name: Execute Main with --keywords kannada
-    #   run: |
-    #     ./dist/main/main --keywords kannada
 
     - name: Compress dist/main/
       run: |
