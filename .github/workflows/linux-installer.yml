@@ -49,6 +49,6 @@ jobs:
           --onedir \
           --console \
           --add-data "debrify/config/config.yaml:debrify/config/" \
-          --add-data "debrify/debrify/config/error_codes.json:rdapi/" \
-          --add-data "debrify/debrify/data:debrify/data/" \
+          --add-data "debrify/config/error_codes.json:rdapi/" \
+          --add-data "debrify/data:debrify/data/" \
           "debrify/main.py"
