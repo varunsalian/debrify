@@ -7,11 +7,15 @@ jobs:
   setup-and-clone:
     runs-on: macos-latest
 
+    strategy:
+      matrix:
+        architecture: [arm64, x86_64]
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Install Python 3.12.7 and Create Virtual Environment
+    - name: Install Python 3.12.7 and Create Virtual Environment for ${{ matrix.architecture }}
       run: |
         brew update
         brew install python@3.12
@@ -37,7 +41,7 @@ jobs:
         source venv/bin/activate
         pip install -r requirements.txt
 
-    - name: Build executable with PyInstaller
+    - name: Build executable with PyInstaller for ${{ matrix.architecture }}
       run: |
         source venv/bin/activate
         pyinstaller \
@@ -47,23 +51,15 @@ jobs:
           --add-data "debrify/config/config.yaml:debrify/config/" \
           --add-data "debrify/config/error_codes.json:rdapi/" \
           --add-data "debrify/data:debrify/data/" \
+          --distpath dist/${{ matrix.architecture }} \
           "debrify/main.py"
 
-    # - name: Execute Main with --force-update
-    #   run: |
-    #     chmod +x dist/main/main
-    #     ./dist/main/main --force-update
-
-    # - name: Execute Main with --keywords kannada
-    #   run: |
-    #     ./dist/main/main --keywords kannada
-
-    - name: Compress dist/main/
+    - name: Compress dist/${{ matrix.architecture }}/main/
       run: |
-        zip -r dist-main-mac.zip dist main/
+        zip -r dist-main-mac-${{ matrix.architecture }}.zip dist/${{ matrix.architecture }}/main/
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: built-main-mac
-        path: dist-main-mac.zip
+        name: built-main-mac-${{ matrix.architecture }}
+        path: dist-main-mac-${{ matrix.architecture }}.zip
