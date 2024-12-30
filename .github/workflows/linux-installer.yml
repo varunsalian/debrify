@@ -7,11 +7,15 @@ jobs:
   setup-and-clone:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        architecture: [x86, x64]
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Install Python 3.12.7
+    - name: Install Python 3.12.7 for ${{ matrix.architecture }}
       run: |
         sudo apt update
         sudo apt install -y software-properties-common
@@ -40,7 +44,7 @@ jobs:
         source venv/bin/activate
         pip install -r requirements.txt
 
-    - name: Build executable with PyInstaller
+    - name: Build executable with PyInstaller for ${{ matrix.architecture }}
       run: |
         source venv/bin/activate
         pyinstaller \
@@ -50,18 +54,15 @@ jobs:
           --add-data "debrify/config/config.yaml:debrify/config/" \
           --add-data "debrify/config/error_codes.json:rdapi/" \
           --add-data "debrify/data:debrify/data/" \
+          --distpath dist/${{ matrix.architecture }} \
           "debrify/main.py"
 
-    - name: Compress dist/main/
+    - name: Compress dist/${{ matrix.architecture }}/main/
       run: |
-        zip -r dist-main-linux.zip dist main/
-    
+        zip -r dist-main-linux-${{ matrix.architecture }}.zip dist/${{ matrix.architecture }}/main/
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: built-main-linux
-        path: dist-main-linux.zip
-
-
-    
-          
+        name: built-main-linux-${{ matrix.architecture }}
+        path: dist-main-linux-${{ matrix.architecture }}.zip
