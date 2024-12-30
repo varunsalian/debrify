@@ -58,12 +58,25 @@ jobs:
           --add-data "debrify/data:debrify/data/" \
           "debrify/main.py"
 
-    - name: Execute Main with --force-update
-      run: |
-        chmod +x dist/main/main
-        ./dist/main/main --force-update
+    # - name: Execute Main with --force-update
+    #   run: |
+    #     chmod +x dist/main/main
+    #     ./dist/main/main --force-update
 
-    - name: Execute Main with --keywords kannada
+    # - name: Execute Main with --keywords kannada
+    #   run: |
+    #     ./dist/main/main --keywords kannada
+
+    - name: Compress dist/main/
       run: |
-        ./dist/main/main --keywords kannada
+        zip -r dist-main-linux.zip dist main/
+    
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: built-main-linux
+        path: dist-main-linux.zip
+
+
+    
           
