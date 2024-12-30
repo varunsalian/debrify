@@ -41,6 +41,11 @@ jobs:
         pip install pyinstaller
         pyinstaller --version
 
+    - name: Install Dependencies
+      run: |
+        source venv/bin/activate
+        pip install -r requirements.txt
+
     - name: Build executable with PyInstaller
       run: |
         source venv/bin/activate
