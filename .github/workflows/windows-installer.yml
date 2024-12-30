@@ -1,0 +1,64 @@
+name: Setup and Clone Debrify (Windows)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-and-clone:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        architecture: [x86, x64]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install Python 3.12.7 and Create Virtual Environment
+      run: |
+        choco install python --version=3.12.7 --pre
+        python --version
+        python -m venv venv
+        .\venv\Scripts\activate
+        python -m pip install --upgrade pip setuptools wheel
+        echo "Virtual environment setup completed."
+
+    - name: Install Git
+      run: |
+        choco install git
+        git --version
+
+    - name: Install PyInstaller in Virtual Environment
+      run: |
+        .\venv\Scripts\activate
+        pip install pyinstaller
+        pyinstaller --version
+
+    - name: Install Dependencies
+      run: |
+        .\venv\Scripts\activate
+        pip install -r requirements.txt
+
+    - name: Build executable with PyInstaller for ${matrix.architecture}
+      run: |
+        .\venv\Scripts\activate
+        pyinstaller ^
+          --noconfirm ^
+          --onedir ^
+          --console ^
+          --add-data "debrify\config\config.yaml;debrify\config" ^
+          --add-data "debrify\config\error_codes.json;rdapi" ^
+          --add-data "debrify\data;debrify\data" ^
+          --distpath dist\${{ matrix.architecture }} ^
+          "debrify\main.py"
+
+    - name: Compress dist\${{ matrix.architecture }}\main\
+      run: |
+        Compress-Archive -Path dist\${{ matrix.architecture }}\main\* -DestinationPath dist-main-windows-${{ matrix.architecture }}.zip
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: built-main-windows-${{ matrix.architecture }}
+        path: dist-main-windows-${{ matrix.architecture }}.zip
