@@ -1,4 +1,4 @@
-name: Setup (Mac)
+name: Setup and Clone Debrify (Mac)
 
 on:
   workflow_dispatch:
@@ -11,25 +11,20 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Install Python 3.12.7
+    - name: Install Python 3.12.7 and Create Virtual Environment
       run: |
         brew update
         brew install python@3.12
+        python3.12 -m venv venv
         echo "Python 3.12 installed: $(python3.12 --version)"
-        curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-        echo "Pip installed: $(pip --version)"
+        source venv/bin/activate
+        pip install --upgrade pip setuptools wheel
+        echo "Virtual environment setup completed."
 
     - name: Install Git
       run: |
         brew install git
         echo "Git version: $(git --version)"
-
-    - name: Create and Activate Virtual Environment
-      run: |
-        python3.12 -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip setuptools wheel
-        echo "Virtual environment setup completed."
 
     - name: Install PyInstaller in Virtual Environment
       run: |
