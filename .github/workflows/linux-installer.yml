@@ -57,12 +57,8 @@ jobs:
           --distpath dist/${{ matrix.architecture }} \
           "debrify/main.py"
 
-    - name: Compress dist/${{ matrix.architecture }}/main/
-      run: |
-        zip -r debrify-linux-${{ matrix.architecture }}.zip dist/${{ matrix.architecture }}/main/
-
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: built-main-linux-${{ matrix.architecture }}
-        path: debrify-linux-${{ matrix.architecture }}.zip
+        name: debrify-linux-${{ matrix.architecture }}
+        path: dist/${{ matrix.architecture }}/main/
