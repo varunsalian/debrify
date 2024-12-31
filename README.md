@@ -37,7 +37,7 @@ Debrify utilizes a local database created with **DuckDB**, populated from the op
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/debrify.git
+   git clone https://github.com/varunsalian/debrify.git
    cd debrify
    ```
 
