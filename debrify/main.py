@@ -91,6 +91,7 @@ def main():
         # If force_update is set, execute this first
         print("Force update triggered. Updating database...")
         force_update_database(url, filename, db_name)
+        return
 
     # Continue only if force_update is not set
     if not database_exists(db_name):
