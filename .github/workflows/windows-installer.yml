@@ -24,11 +24,6 @@ jobs:
         python -m pip install --upgrade pip setuptools wheel
         echo "Virtual environment setup completed."
 
-    - name: Install Git
-      run: |
-        choco install git
-        git --version
-
     - name: Install PyInstaller in Virtual Environment
       run: |
         .\venv\Scripts\activate
@@ -40,21 +35,20 @@ jobs:
         .\venv\Scripts\activate
         pip install -r requirements.txt
 
-    - name: Build executable with PyInstaller for ${{ matrix.architecture }}
+    - name: Compress Build Output with Maximum Compression
       run: |
-        .\venv\Scripts\activate
-        pyinstaller `
-          --noconfirm `
-          --onedir `
-          --console `
-          --add-data "debrify\config\config.yaml;debrify\config" `
-          --add-data "debrify\config\error_codes.json;rdapi" `
-          --add-data "debrify\data;debrify\data" `
-          --distpath dist\${{ matrix.architecture }} `
-          "debrify\main.py"
+        cd dist\${{ matrix.architecture }}
+        powershell Compress-Archive -Path * -DestinationPath debrify-windows-${{ matrix.architecture }}.zip -CompressionLevel Optimal
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+    - name: Create Release and Upload ZIP
+      uses: ncipollo/release-action@v1
       with:
-        name: debrify-windows-${{ matrix.architecture }}
-        path: dist\${{ matrix.architecture }}\main\
+        artifacts: dist\${{ matrix.architecture }}\debrify-windows-${{ matrix.architecture }}.zip
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: windows-${{ matrix.architecture }}-${{ github.run_number }}
+        name: "Windows Installer - ${{ matrix.architecture }} - Run #${{ github.run_number }}"
+        body: |
+          This release contains the Windows installer for the ${{ matrix.architecture }} architecture.
+          Build run number: ${{ github.run_number }}
+        draft: false
+        prerelease: false
