@@ -45,8 +45,14 @@ Debrify utilizes a local database created with **DuckDB**, populated from the op
    ```bash
    pip install .
    ```
+      ```bash
+   debrify --help
+   ```
+   Refer to the [Usage](#usage) and [Commands](#commands) sections for available commands.
 
-3. Run the application:
+      OR
+
+   Run the application directly:
    ```bash
    python main.py --help
    ```
