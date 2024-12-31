@@ -57,8 +57,20 @@ jobs:
           --distpath dist/${{ matrix.architecture }} \
           "debrify/main.py"
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+    - name: Compress Build Output with Maximum Compression
+          run: |
+            cd dist/${{ matrix.architecture }}
+            zip -9 -r debrify-linux-${{ matrix.architecture }}.zip .
+
+    - name: Create Release and Upload ZIP
+      uses: ncipollo/release-action@v1
       with:
-        name: debrify-linux-${{ matrix.architecture }}
-        path: dist/${{ matrix.architecture }}/main/
+        artifacts: dist/${{ matrix.architecture }}/debrify-linux-${{ matrix.architecture }}.zip
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: linux-${{ matrix.architecture }}-${{ github.run_number }}
+        name: "Linux Installer - ${{ matrix.architecture }} - Run #${{ github.run_number }}"
+        body: |
+          This release contains the Linux installer for the ${{ matrix.architecture }} architecture.
+          Build run number: ${{ github.run_number }}
+        draft: false
+        prerelease: false
