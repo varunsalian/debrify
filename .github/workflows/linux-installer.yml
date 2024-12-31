@@ -58,9 +58,9 @@ jobs:
           "debrify/main.py"
 
     - name: Compress Build Output with Maximum Compression
-          run: |
-            cd dist/${{ matrix.architecture }}
-            zip -9 -r debrify-linux-${{ matrix.architecture }}.zip .
+      run: |
+        cd dist/${{ matrix.architecture }}
+        zip -9 -r debrify-linux-${{ matrix.architecture }}.zip .
 
     - name: Create Release and Upload ZIP
       uses: ncipollo/release-action@v1
