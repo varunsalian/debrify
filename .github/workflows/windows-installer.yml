@@ -53,12 +53,8 @@ jobs:
           --distpath dist\${{ matrix.architecture }} `
           "debrify\main.py"
 
-    - name: Compress dist\${{ matrix.architecture }}\main\
-      run: |
-        Compress-Archive -Path dist\${{ matrix.architecture }}\main\* -DestinationPath debrify-windows-${{ matrix.architecture }}.zip
-
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: built-main-windows-${{ matrix.architecture }}
-        path: debrify-windows-${{ matrix.architecture }}.zip
+        name: debrify-windows-${{ matrix.architecture }}
+        path: dist\${{ matrix.architecture }}\main\
