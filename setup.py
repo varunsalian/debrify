@@ -9,7 +9,7 @@ required_packages = [pkg.strip() for pkg in required_packages]
 
 setup(
     name="debrify",
-    version="0.0.1",
+    version="0.0.2",
     author="Varun Salian",
     author_email="varunbsalian@gmail.com",
     description="A CLI tool to search and add magnet into your real-debrid account",
