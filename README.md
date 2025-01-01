@@ -89,7 +89,7 @@ Debrify utilizes a local database created with **DuckDB**, populated from the op
 3. **Add Torrents Based on Keywords**:
    To add all torrents matching specified keywords to your Real Debrid account:
    ```bash
-   debrify --keywords keyword1,keyword2
+   debrify --keywords keyword1, keyword2
    ```
 
 4. **List Torrents Without Adding**:
@@ -117,7 +117,7 @@ Debrify utilizes a local database created with **DuckDB**, populated from the op
   ```
 - `--keywords`: Specifies keywords to search in the database. Keywords can be comma-separated, and space within groups is preserved.
   ```bash
-  debrify --keywords keyword1,keyword2
+  debrify --keywords keyword1, keyword2
   ```
 - `--download-to-debrid`: Specifies whether to attempt adding torrents to Real Debrid. Accepts `true` or `false`.
   ```bash
