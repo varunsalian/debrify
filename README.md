@@ -40,7 +40,7 @@ Debrify utilizes a local database created with **DuckDB**, populated from the op
    cd debrify
    ```
 
-2. Install the application:
+2. Install the application (Make sure you have python 3.8 or above):
    ```bash
    pip install .
    ```
