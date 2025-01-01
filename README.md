@@ -22,7 +22,6 @@
 
 Debrify utilizes a local database created with **DuckDB**, populated from the open-source **torrentcsv** dataset. This approach enables fast and reliable torrent searches. When adding a torrent magnet, the tool attempts to add the largest file in the magnet to Real Debrid. If the file is not cached and instantly available, it will not be added, ensuring only ready-to-stream files are processed.
 
-
 ## Features
 
 - **Search Torrents**: Quickly search for torrents using keywords from the locally created database.
@@ -60,7 +59,16 @@ Debrify utilizes a local database created with **DuckDB**, populated from the op
 
 ### For Users
 
-1. Download the appropriate release for your operating system (Linux, Windows, or Mac) from the **Releases** section.
+### On Windows, macOS, and Linux
+
+1. Download the appropriate release for your operating system from the links below:
+
+   - **Windows x86**: [Download](https://github.com/varunsalian/debrify/releases/download/windows-x86-6/debrify-windows-x86.zip)
+   - **Windows x64**: [Download](https://github.com/varunsalian/debrify/releases/download/windows-x64-6/debrify-windows-x64.zip)
+   - **Mac x86_64**: [Download](https://github.com/varunsalian/debrify/releases/download/mac-x86_64-6/debrify-mac-x86_64.zip)
+   - **Mac arm64**: [Download](https://github.com/varunsalian/debrify/releases/download/mac-arm64-6/debrify-mac-arm64.zip)
+   - **Linux x86**: [Download](https://github.com/varunsalian/debrify/releases/download/linux-x86-19/debrify-linux-x86.zip)
+   - **Linux x64**: [Download](https://github.com/varunsalian/debrify/releases/download/linux-x64-19/debrify-linux-x64.zip)
 
 2. Unzip the downloaded file.
 
@@ -72,7 +80,33 @@ Debrify utilizes a local database created with **DuckDB**, populated from the op
    ```
    Refer to the [Usage](#usage) and [Commands](#commands) sections for available commands.
 
+### On Android
+
+1. Install Termux from the [Google Play Store](https://play.google.com/store/apps/details?id=com.termux&hl=en_IN&pli=1) OR [Download APK and Install](https://github.com/termux/termux-app/releases/download/v0.118.1/termux-app_v0.118.1+github-debug_universal.apk)
+2. Open Termux and update the package list:
+   ```bash
+   pkg update
+   ```
+3. Install Python within Termux:
+   ```bash
+   pkg install python
+   ```
+4. Install Debrify using pip:
+   ```bash
+   pip install debrify
+   ```
+5. Run Debrify using:
+   ```bash
+   debrify --help
+   ```
+   Refer to the [Usage](#usage) and [Commands](#commands) sections for available commands.
+
+This process allows you to efficiently run Debrify on Android devices.
+
+
 ## Usage
+
+**<span style='color: orange;'>Note:</span>** **If you have downloaded the release(for windows, mac, linux) , use `./main` instead of `debrify` for the following commands.**
 
 1. **Update the Database**:
    ```bash
