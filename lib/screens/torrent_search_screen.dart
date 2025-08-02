@@ -12,18 +12,57 @@ class TorrentSearchScreen extends StatefulWidget {
   State<TorrentSearchScreen> createState() => _TorrentSearchScreenState();
 }
 
-class _TorrentSearchScreenState extends State<TorrentSearchScreen> {
+class _TorrentSearchScreenState extends State<TorrentSearchScreen>
+    with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   List<Torrent> _torrents = [];
   bool _isLoading = false;
   String _errorMessage = '';
   bool _hasSearched = false;
+  
+  late AnimationController _searchAnimationController;
+  late AnimationController _listAnimationController;
+  late Animation<double> _searchAnimation;
+  late Animation<double> _listAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _listAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    
+    _searchAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _searchAnimationController,
+      curve: Curves.elasticOut,
+    ));
+    
+    _listAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _listAnimationController,
+      curve: Curves.easeInOut,
+    ));
+    
+    _searchAnimationController.forward();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _searchAnimationController.dispose();
+    _listAnimationController.dispose();
     super.dispose();
   }
 
@@ -42,6 +81,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen> {
         _torrents = torrents;
         _isLoading = false;
       });
+      _listAnimationController.forward();
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
@@ -56,108 +96,314 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen> {
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Magnet link copied to clipboard!'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.check,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Magnet link copied to clipboard!',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E293B),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Search Section
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  decoration: InputDecoration(
-                    hintText: 'Search for torrents...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF020617), // Slate 950
+            Color(0xFF0F172A), // Slate 900
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            // Hero Search Section
+            ScaleTransition(
+              scale: _searchAnimation,
+              child: Container(
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF1E293B), // Slate 800
+                      Color(0xFF334155), // Slate 700
+                    ],
                   ),
-                  onSubmitted: _searchTorrents,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Search Icon and Title
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.search_rounded,
+                        color: Color(0xFF6366F1),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Search Torrents',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Find and download your favorite content',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Search Input
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Enter torrent name...',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            color: Color(0xFF6366F1),
+                          ),
+                          suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(
+                                  Icons.clear_rounded,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFF334155),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                        ),
+                        onChanged: (value) => setState(() {}),
+                        onSubmitted: _searchTorrents,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    
+                    // Search Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _searchTorrents(_searchController.text),
+                        icon: const Icon(Icons.search_rounded),
+                        label: const Text(
+                          'Search',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 8,
+                          shadowColor: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: () => _searchTorrents(_searchController.text),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text('Search'),
+            ),
+            
+            // Content Section
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _buildContent(),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        
-        // Content Section
-        Expanded(
-          child: _buildContent(),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildContent() {
     if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Searching for torrents...'),
-          ],
-        ),
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const CircularProgressIndicator(
+              color: Color(0xFF6366F1),
+              strokeWidth: 3,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Searching for torrents...',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Please wait while we find the best results',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
       );
     }
 
     if (_errorMessage.isNotEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.grey[400],
+      return Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF7F1D1D), // Red 900
+              Color(0xFF991B1B), // Red 800
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
             ),
-            const SizedBox(height: 16),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 36,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Oops! Something went wrong',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
             Text(
               _errorMessage,
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 12,
+              ),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () => _searchTorrents(_searchController.text),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try Again'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF7F1D1D),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ],
         ),
@@ -165,21 +411,89 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen> {
     }
 
     if (!_hasSearched) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.search,
-              size: 64,
-              color: Colors.grey[400],
+      return Container(
+        margin: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF1E293B), // Slate 800
+              Color(0xFF334155), // Slate 700
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Search for torrents to get started',
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.search_rounded,
+                color: Color(0xFF6366F1),
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Ready to Search?',
               style: TextStyle(
                 fontSize: 18,
-                color: Colors.grey[600],
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Enter a torrent name above to get started',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.tips_and_updates_rounded,
+                    color: const Color(0xFFF59E0B),
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Try: movies, games, software',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 10,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -188,125 +502,228 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen> {
     }
 
     if (_torrents.isEmpty) {
-      return Center(
+      return Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF1E293B), // Slate 800
+              Color(0xFF334155), // Slate 700
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.search_off,
-              size: 64,
-              color: Colors.grey[400],
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.search_off_rounded,
+                color: Color(0xFFF59E0B),
+                size: 36,
+              ),
             ),
             const SizedBox(height: 16),
-            Text(
-              'No torrents found',
+            const Text(
+              'No Results Found',
               style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[600],
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try different keywords or check your spelling',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _torrents.length,
-      itemBuilder: (context, index) {
-        final torrent = _torrents[index];
-        return _buildTorrentCard(torrent);
-      },
+    return FadeTransition(
+      opacity: _listAnimation,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _torrents.length,
+        itemBuilder: (context, index) {
+          final torrent = _torrents[index];
+          return _buildTorrentCard(torrent, index);
+        },
+      ),
     );
   }
 
-  Widget _buildTorrentCard(Torrent torrent) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _copyMagnetLink(torrent.infohash),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title
-              Text(
-                torrent.name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+  Widget _buildTorrentCard(Torrent torrent, int index) {
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 300 + (index * 100)),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 50 * (1 - value)),
+          child: Opacity(
+            opacity: value,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF1E293B), // Slate 800
+                    Color(0xFF334155), // Slate 700
+                  ],
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 12),
-              
-              // Stats Row
-              Row(
-                children: [
-                  StatChip(
-                    icon: Icons.storage,
-                    text: Formatters.formatFileSize(torrent.sizeBytes),
-                    color: Colors.blue,
-                  ),
-                  const SizedBox(width: 8),
-                  StatChip(
-                    icon: Icons.upload,
-                    text: '${torrent.seeders}',
-                    color: Colors.green,
-                  ),
-                  const SizedBox(width: 8),
-                  StatChip(
-                    icon: Icons.download,
-                    text: '${torrent.leechers}',
-                    color: Colors.orange,
-                  ),
-                  const SizedBox(width: 8),
-                  StatChip(
-                    icon: Icons.check_circle,
-                    text: '${torrent.completed}',
-                    color: Colors.purple,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              
-              // Date
-              Text(
-                'Created: ${Formatters.formatDate(torrent.createdUnix)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-              
-              // Tap hint
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.copy,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Tap to copy magnet link',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _copyMagnetLink(torrent.infohash),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title Row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                torrent.name,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(
+                                Icons.copy_rounded,
+                                color: Color(0xFF6366F1),
+                                size: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Stats Grid
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            StatChip(
+                              icon: Icons.storage_rounded,
+                              text: Formatters.formatFileSize(torrent.sizeBytes),
+                              color: const Color(0xFF3B82F6), // Blue
+                            ),
+                            StatChip(
+                              icon: Icons.upload_rounded,
+                              text: '${torrent.seeders}',
+                              color: const Color(0xFF10B981), // Emerald
+                            ),
+                            StatChip(
+                              icon: Icons.download_rounded,
+                              text: '${torrent.leechers}',
+                              color: const Color(0xFFF59E0B), // Amber
+                            ),
+                            StatChip(
+                              icon: Icons.check_circle_rounded,
+                              text: '${torrent.completed}',
+                              color: const Color(0xFF8B5CF6), // Violet
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        
+                        // Date and Action
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              color: Colors.white.withValues(alpha: 0.6),
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              Formatters.formatDate(torrent.createdUnix),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.6),
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                'Copy Magnet',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF6366F1),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 } 
