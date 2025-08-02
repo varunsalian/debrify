@@ -500,39 +500,478 @@ class _TorrentSearchPageState extends State<TorrentSearchPage> {
   }
 }
 
-class DebridDownloadsPage extends StatelessWidget {
+class DebridDownloadsPage extends StatefulWidget {
   const DebridDownloadsPage({super.key});
 
   @override
+  State<DebridDownloadsPage> createState() => _DebridDownloadsPageState();
+}
+
+class _DebridDownloadsPageState extends State<DebridDownloadsPage> {
+  List<DebridDownload> _downloads = [];
+  bool _isLoading = false;
+  String _errorMessage = '';
+  String? _apiKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadApiKeyAndDownloads();
+  }
+
+  Future<void> _loadApiKeyAndDownloads() async {
+    final prefs = await SharedPreferences.getInstance();
+    final apiKey = prefs.getString('real_debrid_api_key');
+    
+    setState(() {
+      _apiKey = apiKey;
+    });
+
+    if (apiKey != null) {
+      await _fetchDownloads(apiKey);
+    } else {
+      setState(() {
+        _errorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
+      });
+    }
+  }
+
+  Future<void> _fetchDownloads(String apiKey) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://api.real-debrid.com/rest/1.0/downloads?auth_token=$apiKey'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        setState(() {
+          _downloads = data.map((json) => DebridDownload.fromJson(json)).toList();
+          _isLoading = false;
+        });
+      } else if (response.statusCode == 401) {
+        setState(() {
+          _errorMessage = 'Invalid API key. Please check your Real Debrid API key in Settings.';
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = 'Failed to load downloads. Please try again.';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Network error. Please check your connection.';
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _copyDownloadLink(String downloadLink) {
+    Clipboard.setData(ClipboardData(text: downloadLink));
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Download link copied to clipboard!'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes == 0) return 'Unknown size';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  String _formatDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return DateFormat('MMM dd, yyyy HH:mm').format(date);
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Center(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.download,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Debrid Downloads',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.download,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Real Debrid Downloads',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your premium downloads from Real Debrid',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
+          
+          const SizedBox(height: 16),
+          
+          // Refresh Button
+          if (_apiKey != null)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isLoading ? null : () => _fetchDownloads(_apiKey!),
+                icon: _isLoading 
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh),
+                label: Text(_isLoading ? 'Loading...' : 'Refresh Downloads'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          
+          const SizedBox(height: 16),
+          
+          // Content
+          if (_isLoading) ...[
+            const Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading your downloads...'),
+                ],
+              ),
+            ),
+          ] else if (_errorMessage.isNotEmpty) ...[
+            // Error State
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Error Loading Downloads',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red[700],
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _errorMessage,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.red[600],
+                    ),
+                  ),
+                  if (_apiKey == null) ...[
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        // Navigate to settings
+                        setState(() {
+                          // This will trigger navigation to settings
+                        });
+                      },
+                      icon: const Icon(Icons.settings),
+                      label: const Text('Go to Settings'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ] else if (_downloads.isEmpty) ...[
+            // Empty State
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.download_done,
+                    color: Colors.blue,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No Downloads Found',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue[700],
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your Real Debrid downloads will appear here',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.blue[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            // Downloads List
+            Text(
+              'Your Downloads (${_downloads.length})',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _downloads.length,
+              itemBuilder: (context, index) {
+                final download = _downloads[index];
+                return _buildDownloadCard(download);
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDownloadCard(DebridDownload download) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _copyDownloadLink(download.download),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // File Name
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      download.filename,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(
+                    Icons.copy,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              // File Info
+              Row(
+                children: [
+                  _buildInfoChip(
+                    Icons.storage,
+                    _formatFileSize(download.filesize),
+                    Colors.blue,
+                  ),
+                  const SizedBox(width: 8),
+                  _buildInfoChip(
+                    Icons.web,
+                    download.host,
+                    Colors.green,
+                  ),
+                  if (download.type != null) ...[
+                    const SizedBox(width: 8),
+                    _buildInfoChip(
+                      Icons.high_quality,
+                      download.type!,
+                      Colors.purple,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Date
+              Text(
+                'Generated: ${_formatDate(download.generated)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+              
+              // Tap hint
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.copy,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Tap to copy download link',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoChip(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
           Text(
-            'Coming soon...',
+            text,
             style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[500],
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: color,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class DebridDownload {
+  final String id;
+  final String filename;
+  final String mimeType;
+  final int filesize;
+  final String link;
+  final String host;
+  final int chunks;
+  final String download;
+  final String generated;
+  final String? type;
+
+  DebridDownload({
+    required this.id,
+    required this.filename,
+    required this.mimeType,
+    required this.filesize,
+    required this.link,
+    required this.host,
+    required this.chunks,
+    required this.download,
+    required this.generated,
+    this.type,
+  });
+
+  factory DebridDownload.fromJson(Map<String, dynamic> json) {
+    return DebridDownload(
+      id: json['id'] ?? '',
+      filename: json['filename'] ?? '',
+      mimeType: json['mimeType'] ?? '',
+      filesize: json['filesize'] ?? 0,
+      link: json['link'] ?? '',
+      host: json['host'] ?? '',
+      chunks: json['chunks'] ?? 0,
+      download: json['download'] ?? '',
+      generated: json['generated'] ?? '',
+      type: json['type'],
     );
   }
 }
