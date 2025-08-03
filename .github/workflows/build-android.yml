@@ -1,0 +1,56 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+        
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.19.0'
+        channel: 'stable'
+        
+    - name: Get dependencies
+      run: flutter pub get
+      
+    - name: Analyze code
+      run: flutter analyze
+      
+    - name: Run tests
+      run: flutter test
+      
+    - name: Build APK
+      run: flutter build apk --release
+      
+    - name: Upload APK to artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-release
+        path: build/app/outputs/flutter-apk/app-release.apk
+        retention-days: 30
+        
+    - name: Build App Bundle
+      run: flutter build appbundle --release
+      
+    - name: Upload App Bundle to artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-appbundle
+        path: build/app/outputs/bundle/release/app-release.aab
+        retention-days: 30 

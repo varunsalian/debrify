@@ -1,0 +1,12 @@
+# GitHub Actions configuration
+# This file sets default permissions for all workflows
+
+# Default permissions for all workflows
+permissions:
+  contents: read
+  packages: write
+  issues: write
+  pull-requests: write
+  security-events: write
+  actions: read
+  deployments: write 

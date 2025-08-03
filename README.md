@@ -38,9 +38,9 @@ flutter run
 
 ## Building for Production
 
-### Android
+### Local Build
 
-To build a release APK:
+To build a release APK locally:
 ```bash
 flutter build apk --release
 ```
@@ -49,6 +49,24 @@ To build an App Bundle for Google Play Store:
 ```bash
 flutter build appbundle --release
 ```
+
+### Automated CI/CD
+
+This project uses GitHub Actions for automated builds and releases:
+
+- **Automatic Builds**: Every push to `main` branch triggers an automated build
+- **Artifacts**: Built APKs are automatically uploaded to GitHub Actions artifacts
+- **Releases**: Tagged releases (v1.0.0, v1.1.0, etc.) automatically create GitHub releases with downloadable APKs
+
+#### Workflow Files:
+- `.github/workflows/build.yml` - Simple build and upload to artifacts
+- `.github/workflows/ci-cd.yml` - Comprehensive CI/CD with testing and releases
+- `.github/workflows/build-android.yml` - Android-specific build workflow
+
+#### To create a release:
+1. Create and push a tag: `git tag v1.0.0 && git push origin v1.0.0`
+2. GitHub Actions will automatically build and create a release
+3. Download the APK from the GitHub releases page
 
 ### iOS
 
