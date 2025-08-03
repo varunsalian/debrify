@@ -4,7 +4,9 @@ import '../models/rd_torrent.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../utils/formatters.dart';
+import '../utils/file_utils.dart';
 import '../widgets/stat_chip.dart';
+import 'video_player_screen.dart';
 
 class DebridDownloadsScreen extends StatefulWidget {
   const DebridDownloadsScreen({super.key});
@@ -157,7 +159,36 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
-  Future<void> _showMultipleLinksDialog(RDTorrent torrent) async {
+  Future<void> _handlePlayVideo(RDTorrent torrent) async {
+    if (_apiKey == null) return;
+
+    if (torrent.links.length == 1) {
+      // Single video file - play directly
+      try {
+        final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
+        final downloadLink = unrestrictResult['download'];
+        
+        if (mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => VideoPlayerScreen(
+                videoUrl: downloadLink,
+                title: torrent.filename,
+                subtitle: Formatters.formatFileSize(torrent.bytes),
+              ),
+            ),
+          );
+        }
+      } catch (e) {
+        _showError('Failed to load video: ${e.toString()}');
+      }
+    } else {
+      // Multiple files - show popup with play options
+      _showMultipleLinksDialog(torrent, showPlayButtons: true);
+    }
+  }
+
+  Future<void> _showMultipleLinksDialog(RDTorrent torrent, {bool showPlayButtons = false}) async {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -329,6 +360,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                             final link = unrestrictedLinks[index];
                             final fileName = link['filename'] ?? 'Unknown file';
                             final fileSize = link['filesize'] ?? 0;
+                            final isVideo = FileUtils.isVideoFile(fileName);
                             
                             return Container(
                               padding: const EdgeInsets.all(16),
@@ -338,12 +370,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                                      color: isVideo 
+                                        ? const Color(0xFFE50914).withValues(alpha: 0.2)
+                                        : const Color(0xFFF59E0B).withValues(alpha: 0.2),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: const Icon(
-                                      Icons.insert_drive_file,
-                                      color: Color(0xFFF59E0B),
+                                    child: Icon(
+                                      isVideo ? Icons.play_arrow : Icons.insert_drive_file,
+                                      color: isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B),
                                       size: 20,
                                     ),
                                   ),
@@ -379,27 +413,67 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                   
                                   const SizedBox(width: 12),
                                   
-                                  // Copy button
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.copy,
-                                        color: Color(0xFF10B981),
-                                        size: 20,
+                                  // Action buttons
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Play button (only for video files)
+                                      if (isVideo && showPlayButtons) ...[
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE50914).withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: IconButton(
+                                            icon: const Icon(
+                                              Icons.play_arrow,
+                                              color: Color(0xFFE50914),
+                                              size: 20,
+                                            ),
+                                            onPressed: () {
+                                              final downloadLink = link['download'];
+                                              if (downloadLink != null) {
+                                                Navigator.of(context).pop();
+                                                Navigator.of(context).push(
+                                                  MaterialPageRoute(
+                                                    builder: (context) => VideoPlayerScreen(
+                                                      videoUrl: downloadLink,
+                                                      title: fileName,
+                                                      subtitle: Formatters.formatFileSize(fileSize),
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            tooltip: 'Play video',
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      
+                                      // Copy button
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.copy,
+                                            color: Color(0xFF10B981),
+                                            size: 20,
+                                          ),
+                                          onPressed: () {
+                                            final downloadLink = link['download'];
+                                            if (downloadLink != null) {
+                                              _copyToClipboard(downloadLink);
+                                              Navigator.of(context).pop();
+                                            }
+                                          },
+                                          tooltip: 'Copy download link',
+                                        ),
                                       ),
-                                      onPressed: () {
-                                        final downloadLink = link['download'];
-                                        if (downloadLink != null) {
-                                          _copyToClipboard(downloadLink);
-                                          Navigator.of(context).pop();
-                                        }
-                                      },
-                                      tooltip: 'Copy download link',
-                                    ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -862,35 +936,58 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ),
           ),
           
-          // Action buttons
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => _handleCopyDownloadLinks(torrent),
-                    icon: const Icon(Icons.copy, size: 18),
-                    label: Text(
-                      torrent.links.length > 1 
-                        ? 'Copy All Files (${torrent.links.length})'
-                        : 'Copy Download Link',
-                    ),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF6366F1),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+                     // Action buttons
+           Container(
+             decoration: BoxDecoration(
+               color: const Color(0xFF0F172A),
+               borderRadius: const BorderRadius.only(
+                 bottomLeft: Radius.circular(12),
+                 bottomRight: Radius.circular(12),
+               ),
+             ),
+             child: Row(
+               children: [
+                 // Copy button
+                 Expanded(
+                   child: TextButton.icon(
+                     onPressed: () => _handleCopyDownloadLinks(torrent),
+                     icon: const Icon(Icons.copy, size: 18),
+                     label: Text(
+                       torrent.links.length > 1 
+                         ? 'Copy All Files (${torrent.links.length})'
+                         : 'Copy Download Link',
+                     ),
+                     style: TextButton.styleFrom(
+                       foregroundColor: const Color(0xFF6366F1),
+                       padding: const EdgeInsets.symmetric(vertical: 12),
+                     ),
+                   ),
+                 ),
+                 
+                 // Play button (only for single video files)
+                 if (torrent.links.length == 1 && FileUtils.isVideoFile(torrent.filename)) ...[
+                   Container(
+                     decoration: BoxDecoration(
+                       border: Border(
+                         left: BorderSide(
+                           color: const Color(0xFF475569).withValues(alpha: 0.3),
+                         ),
+                       ),
+                     ),
+                     child: TextButton.icon(
+                       onPressed: () => _handlePlayVideo(torrent),
+                       icon: const Icon(Icons.play_arrow, size: 18),
+                       label: const Text('Play'),
+                       style: TextButton.styleFrom(
+                         foregroundColor: const Color(0xFFE50914),
+                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                       ),
+                     ),
+                   ),
+                 ],
+               ],
+             ),
+           ),
         ],
       ),
     );
