@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -27,6 +28,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _hasError = false;
   String _errorMessage = '';
   double _currentAspectRatio = 16 / 9; // Default aspect ratio
+  double _currentBrightness = 1.0; // Current brightness level (0.0 to 1.0)
+  bool _showBrightnessIndicator = false;
+  String _brightnessText = '';
+  bool _showBrightnessArea = false; // Show active area indicator
 
   @override
   void initState() {
@@ -234,6 +239,59 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       // Seek to new position
       _videoPlayerController.seekTo(newPosition);
     }
+  }
+
+  void _handleBrightnessGesture(DragUpdateDetails details) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final orientation = MediaQuery.of(context).orientation;
+    
+    // Determine the active area based on orientation
+    double activeAreaWidth;
+    if (orientation == Orientation.portrait) {
+      // In portrait: left 1/3 of screen
+      activeAreaWidth = screenWidth / 3;
+    } else {
+      // In landscape: left 1/4 of screen (smaller area for better UX)
+      activeAreaWidth = screenWidth / 4;
+    }
+    
+    // Only respond to gestures on the left side of the screen
+    if (details.localPosition.dx < activeAreaWidth) {
+      // Calculate brightness change based on vertical movement
+      // Up = increase brightness, Down = decrease brightness
+      final brightnessChange = -details.delta.dy / screenHeight * 2.0; // Sensitivity factor
+      
+      setState(() {
+        _currentBrightness = (_currentBrightness + brightnessChange).clamp(0.0, 1.0);
+        _showBrightnessIndicator = true;
+        _showBrightnessArea = true;
+        _brightnessText = '${(_currentBrightness * 100).round()}%';
+      });
+      
+      // Set system brightness
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+        statusBarBrightness: _currentBrightness > 0.5 ? Brightness.light : Brightness.dark,
+      ));
+      
+      // Hide indicator after a delay
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _showBrightnessIndicator = false;
+            _showBrightnessArea = false;
+          });
+        }
+      });
+    }
+  }
+
+  void _resetBrightness() {
+    setState(() {
+      _currentBrightness = 1.0;
+      _showBrightnessIndicator = false;
+    });
   }
 
     void _showAspectRatioDialog() {
@@ -446,7 +504,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           children: [
             // Custom App Bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: EdgeInsets.symmetric(
+                horizontal: 16, 
+                vertical: MediaQuery.of(context).orientation == Orientation.portrait ? 12 : 8,
+              ),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -474,9 +535,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       children: [
                         Text(
                           widget.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: MediaQuery.of(context).orientation == Orientation.portrait ? 16 : 14,
                             fontWeight: FontWeight.bold,
                           ),
                           maxLines: 1,
@@ -488,7 +549,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                             widget.subtitle!,
                             style: TextStyle(
                               color: Colors.grey[400],
-                              fontSize: 12,
+                              fontSize: MediaQuery.of(context).orientation == Orientation.portrait ? 12 : 10,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -504,6 +565,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     },
                     icon: const Icon(
                       Icons.aspect_ratio,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      // Reset brightness
+                      _resetBrightness();
+                    },
+                    icon: const Icon(
+                      Icons.brightness_6,
                       color: Colors.white,
                       size: 24,
                     ),
@@ -610,11 +682,73 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     }
 
     if (_chewieController != null) {
-      return GestureDetector(
-        onDoubleTapDown: (details) {
-          _handleDoubleTap(details.localPosition);
-        },
-        child: Chewie(controller: _chewieController!),
+      return Stack(
+        children: [
+          GestureDetector(
+            onDoubleTapDown: (details) {
+              _handleDoubleTap(details.localPosition);
+            },
+            onPanUpdate: _handleBrightnessGesture,
+            child: Chewie(controller: _chewieController!),
+          ),
+          
+          // Brightness area indicator (shows active control area)
+          if (_showBrightnessArea)
+            Positioned(
+              left: 0,
+              top: 0,
+              child: Container(
+                width: MediaQuery.of(context).orientation == Orientation.portrait 
+                  ? MediaQuery.of(context).size.width / 3 
+                  : MediaQuery.of(context).size.width / 4,
+                height: MediaQuery.of(context).size.height,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: const Color(0xFFE50914).withValues(alpha: 0.3),
+                    width: 2,
+                    style: BorderStyle.solid,
+                  ),
+                ),
+              ),
+            ),
+          
+          // Brightness indicator overlay
+          if (_showBrightnessIndicator)
+            Positioned(
+              left: MediaQuery.of(context).orientation == Orientation.portrait ? 50 : 80,
+              top: MediaQuery.of(context).size.height / 2 - 50,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFE50914),
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _currentBrightness > 0.5 ? Icons.brightness_high : Icons.brightness_low,
+                      color: const Color(0xFFE50914),
+                      size: 32,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _brightnessText,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       );
     }
 
