@@ -32,6 +32,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _showBrightnessIndicator = false;
   String _brightnessText = '';
   bool _showBrightnessArea = false; // Show active area indicator
+  bool _isFullscreen = false; // Track fullscreen state
+  bool _showControls = true; // Show/hide video controls
+  bool _isPlaying = true; // Track play/pause state
 
   @override
   void initState() {
@@ -66,6 +69,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       if (_videoPlayerController.value.isInitialized) {
         print('DEBUG: Response body: ${_videoPlayerController.value.position}');
       }
+      
+      // Add listener to track playing state
+      _videoPlayerController.addListener(() {
+        if (mounted) {
+          setState(() {
+            _isPlaying = _videoPlayerController.value.isPlaying;
+          });
+        }
+      });
 
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController,
@@ -73,8 +85,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         looping: false,
         allowFullScreen: true,
         allowMuting: true,
-        showControls: true,
+        showControls: false, // We'll handle controls ourselves
         aspectRatio: _currentAspectRatio,
+        // Disable built-in gesture handling to use our custom gestures
+        allowPlaybackSpeedChanging: false,
         materialProgressColors: ChewieProgressColors(
           playedColor: const Color(0xFFE50914),
           handleColor: const Color(0xFFE50914),
@@ -217,6 +231,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       
       // Get the screen width to determine left/right side
       final screenWidth = MediaQuery.of(context).size.width;
+      final orientation = MediaQuery.of(context).orientation;
+      
+      // Debug: Print double-tap details
+      print('Double-tap: x=${position.dx}, screenWidth=$screenWidth, orientation=$orientation, currentPos=${currentPosition.inSeconds}s, duration=${duration.inSeconds}s');
+      
       final isRightSide = position.dx > screenWidth / 2;
       
       Duration newPosition;
@@ -224,9 +243,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       if (isRightSide) {
         // Forward 10 seconds
         newPosition = currentPosition + const Duration(seconds: 10);
+        print('Seeking forward 10s to ${newPosition.inSeconds}s');
       } else {
         // Backward 10 seconds
         newPosition = currentPosition - const Duration(seconds: 10);
+        print('Seeking backward 10s to ${newPosition.inSeconds}s');
       }
       
       // Ensure position is within bounds
@@ -238,6 +259,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       
       // Seek to new position
       _videoPlayerController.seekTo(newPosition);
+    } else {
+      print('Video controller not initialized for double-tap');
     }
   }
 
@@ -256,16 +279,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       activeAreaWidth = screenWidth / 4;
     }
     
+    // Debug: Print gesture details
+    print('Brightness Gesture: x=${details.localPosition.dx}, y=${details.localPosition.dy}, activeArea=$activeAreaWidth, orientation=$orientation, deltaY=${details.delta.dy}');
+    
     // Only respond to gestures on the left side of the screen
     if (details.localPosition.dx < activeAreaWidth) {
       // Calculate brightness change based on vertical movement
       // Up = increase brightness, Down = decrease brightness
       final brightnessChange = -details.delta.dy / screenHeight * 2.0; // Sensitivity factor
       
+      print('Brightness change: $brightnessChange, current: $_currentBrightness');
+      
       setState(() {
         _currentBrightness = (_currentBrightness + brightnessChange).clamp(0.0, 1.0);
         _showBrightnessIndicator = true;
-        _showBrightnessArea = true;
+        _showBrightnessArea = false; // Don't show the red line
         _brightnessText = '${(_currentBrightness * 100).round()}%';
       });
       
@@ -292,6 +320,48 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _currentBrightness = 1.0;
       _showBrightnessIndicator = false;
     });
+  }
+
+  void _togglePlayPause() {
+    if (_videoPlayerController.value.isInitialized) {
+      setState(() {
+        if (_videoPlayerController.value.isPlaying) {
+          _videoPlayerController.pause();
+          _isPlaying = false;
+        } else {
+          _videoPlayerController.play();
+          _isPlaying = true;
+        }
+      });
+    }
+  }
+
+  void _toggleControls() {
+    setState(() {
+      _showControls = !_showControls;
+    });
+    
+    // Auto-hide controls after 3 seconds
+    if (_showControls) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _isPlaying) {
+          setState(() {
+            _showControls = false;
+          });
+        }
+      });
+    }
+  }
+
+  void _handleTap() {
+    _toggleControls();
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$twoDigitMinutes:$twoDigitSeconds";
   }
 
     void _showAspectRatioDialog() {
@@ -443,8 +513,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         looping: false,
         allowFullScreen: true,
         allowMuting: true,
-        showControls: true,
+        showControls: false, // We'll handle controls ourselves
         aspectRatio: _currentAspectRatio,
+        // Disable built-in gesture handling to use our custom gestures
+        allowPlaybackSpeedChanging: false,
         materialProgressColors: ChewieProgressColors(
           playedColor: const Color(0xFFE50914),
           handleColor: const Color(0xFFE50914),
@@ -582,13 +654,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   ),
                   IconButton(
                     onPressed: () {
+                      // Debug: Test gesture detection
+                      print('Debug: Testing gesture detection');
+                      print('Screen size: ${MediaQuery.of(context).size}');
+                      print('Orientation: ${MediaQuery.of(context).orientation}');
+                      print('Video controller initialized: ${_videoPlayerController.value.isInitialized}');
+                    },
+                    icon: const Icon(
+                      Icons.bug_report,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
                       // Toggle fullscreen
                       if (_chewieController != null) {
                         _chewieController!.toggleFullScreen();
+                        setState(() {
+                          _isFullscreen = !_isFullscreen;
+                        });
                       }
                     },
-                    icon: const Icon(
-                      Icons.fullscreen,
+                    icon: Icon(
+                      _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
                       color: Colors.white,
                       size: 24,
                     ),
@@ -684,33 +773,217 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     if (_chewieController != null) {
       return Stack(
         children: [
-          GestureDetector(
-            onDoubleTapDown: (details) {
-              _handleDoubleTap(details.localPosition);
-            },
-            onPanUpdate: _handleBrightnessGesture,
-            child: Chewie(controller: _chewieController!),
+          // Video player
+          Chewie(controller: _chewieController!),
+          
+          // Overlay gesture detector for custom gestures
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _handleTap,
+              onDoubleTapDown: (details) {
+                print('Double-tap detected at: ${details.localPosition}');
+                _handleDoubleTap(details.localPosition);
+              },
+              onPanUpdate: (details) {
+                print('Pan update detected at: ${details.localPosition}');
+                _handleBrightnessGesture(details);
+              },
+              onPanStart: (details) {
+                print('Pan start detected at: ${details.localPosition}');
+                // Ensure gestures work in both orientations
+                final orientation = MediaQuery.of(context).orientation;
+                final screenWidth = MediaQuery.of(context).size.width;
+                final activeAreaWidth = orientation == Orientation.portrait 
+                  ? screenWidth / 3 
+                  : screenWidth / 4;
+                
+                if (details.localPosition.dx < activeAreaWidth) {
+                  setState(() {
+                    _showBrightnessIndicator = true;
+                    _brightnessText = '${(_currentBrightness * 100).round()}%';
+                  });
+                }
+              },
+              // Make the gesture detector transparent to touch events
+              behavior: HitTestBehavior.opaque,
+            ),
           ),
           
-          // Brightness area indicator (shows active control area)
-          if (_showBrightnessArea)
-            Positioned(
-              left: 0,
-              top: 0,
+          // Custom video controls overlay
+          if (_showControls)
+            Positioned.fill(
               child: Container(
-                width: MediaQuery.of(context).orientation == Orientation.portrait 
-                  ? MediaQuery.of(context).size.width / 3 
-                  : MediaQuery.of(context).size.width / 4,
-                height: MediaQuery.of(context).size.height,
                 decoration: BoxDecoration(
-                  border: Border.all(
-                    color: const Color(0xFFE50914).withValues(alpha: 0.3),
-                    width: 2,
-                    style: BorderStyle.solid,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.6),
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.6),
+                    ],
                   ),
+                ),
+                child: Column(
+                  children: [
+                    // Top controls
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (widget.subtitle != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.subtitle!,
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: 12,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _showAspectRatioDialog,
+                            icon: const Icon(
+                              Icons.aspect_ratio,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _resetBrightness,
+                            icon: const Icon(
+                              Icons.brightness_6,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              if (_chewieController != null) {
+                                _chewieController!.toggleFullScreen();
+                                setState(() {
+                                  _isFullscreen = !_isFullscreen;
+                                });
+                              }
+                            },
+                            icon: Icon(
+                              _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Center play/pause button
+                    Expanded(
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: _togglePlayPause,
+                          child: Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _isPlaying ? Icons.pause : Icons.play_arrow,
+                              color: Colors.white,
+                              size: 48,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    
+                    // Bottom progress bar
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          // Progress bar
+                          if (_videoPlayerController.value.isInitialized)
+                            SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                activeTrackColor: const Color(0xFFE50914),
+                                inactiveTrackColor: Colors.grey[600],
+                                thumbColor: const Color(0xFFE50914),
+                                overlayColor: const Color(0xFFE50914).withValues(alpha: 0.2),
+                                trackHeight: 4,
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                              ),
+                              child: Slider(
+                                value: _videoPlayerController.value.position.inMilliseconds.toDouble(),
+                                max: _videoPlayerController.value.duration.inMilliseconds.toDouble(),
+                                onChanged: (value) {
+                                  _videoPlayerController.seekTo(Duration(milliseconds: value.toInt()));
+                                },
+                              ),
+                            ),
+                          
+                          // Time indicators
+                          if (_videoPlayerController.value.isInitialized)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    _formatDuration(_videoPlayerController.value.position),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatDuration(_videoPlayerController.value.duration),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+          
+          // Brightness area indicator removed to prevent red line issue
           
           // Brightness indicator overlay
           if (_showBrightnessIndicator)
