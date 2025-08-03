@@ -22,11 +22,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _isLoading = false;
   String _errorMessage = '';
   bool _hasSearched = false;
+  bool _isSearchExpanded = false; // New state for search box expansion
   
   late AnimationController _searchAnimationController;
   late AnimationController _listAnimationController;
+  late AnimationController _searchBoxAnimationController; // New animation controller
   late Animation<double> _searchAnimation;
   late Animation<double> _listAnimation;
+  late Animation<double> _searchBoxAnimation; // New animation for search box
 
   @override
   void initState() {
@@ -37,6 +40,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
     _listAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _searchBoxAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
     
@@ -55,6 +62,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       parent: _listAnimationController,
       curve: Curves.easeInOut,
     ));
+
+    _searchBoxAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _searchBoxAnimationController,
+      curve: Curves.easeInOut,
+    ));
     
     _searchAnimationController.forward();
   }
@@ -65,6 +80,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _searchFocusNode.dispose();
     _searchAnimationController.dispose();
     _listAnimationController.dispose();
+    _searchBoxAnimationController.dispose();
     super.dispose();
   }
 
@@ -75,7 +91,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _isLoading = true;
       _errorMessage = '';
       _hasSearched = true;
+      _isSearchExpanded = true;
     });
+
+    // Hide keyboard and animate search box
+    _searchFocusNode.unfocus();
+    _searchBoxAnimationController.forward();
 
     try {
       final torrents = await TorrentService.searchTorrents(query);
@@ -128,6 +149,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  void _toggleSearchBox() {
+    if (_isSearchExpanded) {
+      setState(() {
+        _isSearchExpanded = false;
+      });
+      _searchBoxAnimationController.reverse();
+    } else {
+      setState(() {
+        _isSearchExpanded = true;
+      });
+      _searchBoxAnimationController.forward();
+      _searchFocusNode.requestFocus();
+    }
   }
 
   Future<void> _addToRealDebrid(String infohash, String torrentName) async {
@@ -324,67 +360,78 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       child: SafeArea(
         child: Column(
           children: [
-            // Hero Search Section
-            ScaleTransition(
-              scale: _searchAnimation,
-              child: Container(
-                margin: const EdgeInsets.all(8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF1E293B), // Slate 800
-                      Color(0xFF334155), // Slate 700
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
+            // Animated Search Box
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: EdgeInsets.all(_isSearchExpanded ? 4 : 8),
+              padding: EdgeInsets.all(_isSearchExpanded ? 8 : 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF1E293B), // Slate 800
+                    Color(0xFF334155), // Slate 700
                   ],
                 ),
-                child: Column(
-                  children: [
-                    // Search Icon and Title
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.search_rounded,
-                        color: Color(0xFF6366F1),
-                        size: 24,
+                borderRadius: BorderRadius.circular(_isSearchExpanded ? 12 : 16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: _isSearchExpanded ? 10 : 20,
+                    offset: Offset(0, _isSearchExpanded ? 5 : 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Search Icon and Title (only show when not expanded)
+                  if (!_isSearchExpanded) ...[
+                    ScaleTransition(
+                      scale: _searchAnimation,
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.search_rounded,
+                              color: Color(0xFF6366F1),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Search Torrents',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Find and download your favorite content',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Search Torrents',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Find and download your favorite content',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Search Input
-                    Container(
+                  ],
+                  
+                  // Search Input
+                  GestureDetector(
+                    onTap: _isSearchExpanded ? null : _toggleSearchBox,
+                    child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
@@ -398,9 +445,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       child: TextField(
                         controller: _searchController,
                         focusNode: _searchFocusNode,
+                        onSubmitted: (query) => _searchTorrents(query),
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          hintText: 'Enter torrent name...',
+                          hintText: _isSearchExpanded ? 'Search torrents...' : 'Enter torrent name...',
                           hintStyle: TextStyle(
                             color: Colors.white.withValues(alpha: 0.5),
                           ),
@@ -432,12 +480,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ),
                         onChanged: (value) => setState(() {}),
-                        onSubmitted: _searchTorrents,
                       ),
                     ),
+                  ),
+                  
+                  // Search Button (only show when not expanded)
+                  if (!_isSearchExpanded) ...[
                     const SizedBox(height: 10),
-                    
-                    // Search Button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -463,7 +512,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
             
