@@ -364,70 +364,81 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                             
                             return Container(
                               padding: const EdgeInsets.all(16),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // File icon
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: isVideo 
-                                        ? const Color(0xFFE50914).withValues(alpha: 0.2)
-                                        : const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Icon(
-                                      isVideo ? Icons.play_arrow : Icons.insert_drive_file,
-                                      color: isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B),
-                                      size: 20,
-                                    ),
-                                  ),
-                                  
-                                  const SizedBox(width: 12),
-                                  
-                                  // File info
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          fileName,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.white,
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          Formatters.formatFileSize(fileSize),
-                                          style: TextStyle(
-                                            color: Colors.grey[400],
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  
-                                  const SizedBox(width: 12),
-                                  
-                                  // Action buttons
+                                  // Top row: File icon, name, and size
                                   Row(
-                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      // Play button (only for video files)
-                                      if (isVideo && showPlayButtons) ...[
+                                      // File icon
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: isVideo 
+                                            ? const Color(0xFFE50914).withValues(alpha: 0.2)
+                                            : const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          isVideo ? Icons.play_arrow : Icons.insert_drive_file,
+                                          color: isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      
+                                      const SizedBox(width: 12),
+                                      
+                                      // File info
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              fileName,
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.white,
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              Formatters.formatFileSize(fileSize),
+                                              style: TextStyle(
+                                                color: Colors.grey[400],
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  
+                                  // Bottom row: Action buttons (only if video or showPlayButtons)
+                                  if (isVideo && showPlayButtons) ...[
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        // Play button
                                         Container(
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFFE50914).withValues(alpha: 0.2),
+                                            color: FileUtils.isProblematicVideo(fileName)
+                                              ? const Color(0xFFF59E0B).withValues(alpha: 0.2)
+                                              : const Color(0xFFE50914).withValues(alpha: 0.2),
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: IconButton(
-                                            icon: const Icon(
-                                              Icons.play_arrow,
-                                              color: Color(0xFFE50914),
+                                            icon: Icon(
+                                              FileUtils.isProblematicVideo(fileName)
+                                                ? Icons.warning
+                                                : Icons.play_arrow,
+                                              color: FileUtils.isProblematicVideo(fileName)
+                                                ? const Color(0xFFF59E0B)
+                                                : const Color(0xFFE50914),
                                               size: 20,
                                             ),
                                             onPressed: () {
@@ -445,36 +456,66 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                                 );
                                               }
                                             },
-                                            tooltip: 'Play video',
+                                            tooltip: FileUtils.isProblematicVideo(fileName)
+                                              ? 'Play video (may not work well)'
+                                              : 'Play video',
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                      ],
-                                      
-                                      // Copy button
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: IconButton(
-                                          icon: const Icon(
-                                            Icons.copy,
-                                            color: Color(0xFF10B981),
-                                            size: 20,
+                                        // Copy button
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(8),
                                           ),
-                                          onPressed: () {
-                                            final downloadLink = link['download'];
-                                            if (downloadLink != null) {
-                                              _copyToClipboard(downloadLink);
-                                              Navigator.of(context).pop();
-                                            }
-                                          },
-                                          tooltip: 'Copy download link',
+                                          child: IconButton(
+                                            icon: const Icon(
+                                              Icons.copy,
+                                              color: Color(0xFF10B981),
+                                              size: 20,
+                                            ),
+                                            onPressed: () {
+                                              final downloadLink = link['download'];
+                                              if (downloadLink != null) {
+                                                _copyToClipboard(downloadLink);
+                                                Navigator.of(context).pop();
+                                              }
+                                            },
+                                            tooltip: 'Copy download link',
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
+                                      ],
+                                    ),
+                                  ] else if (!isVideo || !showPlayButtons) ...[
+                                    // For non-video files or when not showing play buttons, show copy button inline
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: IconButton(
+                                            icon: const Icon(
+                                              Icons.copy,
+                                              color: Color(0xFF10B981),
+                                              size: 20,
+                                            ),
+                                            onPressed: () {
+                                              final downloadLink = link['download'];
+                                              if (downloadLink != null) {
+                                                _copyToClipboard(downloadLink);
+                                                Navigator.of(context).pop();
+                                              }
+                                            },
+                                            tooltip: 'Copy download link',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ),
                             );
@@ -976,10 +1017,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                      ),
                      child: TextButton.icon(
                        onPressed: () => _handlePlayVideo(torrent),
-                       icon: const Icon(Icons.play_arrow, size: 18),
-                       label: const Text('Play'),
+                       icon: Icon(
+                         FileUtils.isProblematicVideo(torrent.filename)
+                           ? Icons.warning
+                           : Icons.play_arrow,
+                         size: 18,
+                       ),
+                       label: Text(
+                         FileUtils.isProblematicVideo(torrent.filename) ? 'Play*' : 'Play',
+                       ),
                        style: TextButton.styleFrom(
-                         foregroundColor: const Color(0xFFE50914),
+                         foregroundColor: FileUtils.isProblematicVideo(torrent.filename)
+                           ? const Color(0xFFF59E0B)
+                           : const Color(0xFFE50914),
                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                        ),
                      ),

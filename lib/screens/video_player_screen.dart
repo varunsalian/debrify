@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../utils/file_utils.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final String videoUrl;
@@ -44,6 +45,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   Future<void> _initializePlayer() async {
     try {
+      // Check if this is a problematic video format
+      final fileName = widget.title;
+      final formatWarning = FileUtils.getVideoFormatWarning(fileName);
+      
       _videoPlayerController = VideoPlayerController.networkUrl(
         Uri.parse(widget.videoUrl),
       );
@@ -108,11 +113,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       setState(() {
         _isLoading = false;
       });
+      
+      // Show warning for problematic formats
+      if (formatWarning.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showFormatWarning(formatWarning);
+        });
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
         _hasError = true;
-        _errorMessage = e.toString();
+        _errorMessage = _getUserFriendlyErrorMessage(e, widget.title);
       });
     }
   }
@@ -200,6 +212,58 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String _getUserFriendlyErrorMessage(dynamic error, String fileName) {
+    final errorString = error.toString().toLowerCase();
+    final isProblematic = FileUtils.isProblematicVideo(fileName);
+    
+    if (isProblematic) {
+      return 'This video format is not well supported on mobile devices. Try downloading and playing with a different app.';
+    } else if (errorString.contains('network') || errorString.contains('connection')) {
+      return 'Network error. Please check your internet connection.';
+    } else if (errorString.contains('timeout')) {
+      return 'Request timed out. Please try again.';
+    } else if (errorString.contains('format') || errorString.contains('codec')) {
+      return 'Video format not supported. Try a different video file.';
+    } else {
+      return 'Failed to load video. Please try again.';
+    }
+  }
+
+  void _showFormatWarning(String warning) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.warning,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                warning,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
       ),
     );
   }

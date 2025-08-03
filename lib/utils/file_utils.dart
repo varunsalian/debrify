@@ -14,6 +14,21 @@ class FileUtils {
     '.m2ts',
   ];
 
+  // Well-supported formats that work reliably
+  static const List<String> _wellSupportedFormats = [
+    '.mp4',
+    '.m4v',
+    '.webm',
+    '.3gp',
+  ];
+
+  // Problematic formats that might not work
+  static const List<String> _problematicFormats = [
+    '.wmv',
+    '.avi',
+    '.flv',
+  ];
+
   static bool isVideoFile(String fileName) {
     final extension = _getFileExtension(fileName).toLowerCase();
     return _videoExtensions.contains(extension);
@@ -33,5 +48,25 @@ class FileUtils {
 
   static String getFileExtension(String fileName) {
     return _getFileExtension(fileName);
+  }
+
+  static bool isWellSupportedVideo(String fileName) {
+    final extension = _getFileExtension(fileName).toLowerCase();
+    return _wellSupportedFormats.contains(extension);
+  }
+
+  static bool isProblematicVideo(String fileName) {
+    final extension = _getFileExtension(fileName).toLowerCase();
+    return _problematicFormats.contains(extension);
+  }
+
+  static String getVideoFormatWarning(String fileName) {
+    final extension = _getFileExtension(fileName).toLowerCase();
+    
+    if (_problematicFormats.contains(extension)) {
+      return 'This format (${extension.toUpperCase()}) may not play properly on mobile devices.';
+    }
+    
+    return '';
   }
 } 
