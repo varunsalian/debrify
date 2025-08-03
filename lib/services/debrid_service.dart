@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/debrid_download.dart';
+import '../models/rd_torrent.dart';
 import '../services/storage_service.dart';
 
 class DebridService {
   static const String _baseUrl = 'https://api.real-debrid.com/rest/1.0';
 
-  // Get downloads list
+  // Get downloads list (legacy method)
   static Future<List<DebridDownload>> getDownloads(String apiKey) async {
     try {
       final response = await http.get(
@@ -23,6 +24,70 @@ class DebridService {
         throw Exception('Invalid API key');
       } else {
         throw Exception('Failed to load downloads: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  // Get torrents list with pagination
+  static Future<Map<String, dynamic>> getTorrents(String apiKey, {
+    int page = 1,
+    int limit = 100,
+    String? filter,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+      
+      if (filter != null) {
+        queryParams['filter'] = filter;
+      }
+
+      final uri = Uri.parse('$_baseUrl/torrents').replace(queryParameters: queryParams);
+      
+      print('DEBUG: Making API call to: ${uri.toString()}');
+      print('DEBUG: Headers: Authorization: Bearer ${apiKey.substring(0, 4)}...');
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+      );
+      
+      print('DEBUG: Response status: ${response.statusCode}');
+      print('DEBUG: Response headers: ${response.headers}');
+      if (response.statusCode == 200) {
+        print('DEBUG: Response body: ${response.body}');
+      }
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        final torrents = data.map((json) => RDTorrent.fromJson(json)).toList();
+        
+        // Get total count from headers
+        final totalCount = int.tryParse(response.headers['X-Total-Count'] ?? '0') ?? 0;
+        
+        return {
+          'torrents': torrents,
+          'totalCount': totalCount,
+          'hasMore': torrents.length >= limit, // If we got a full page, there might be more
+        };
+      } else if (response.statusCode == 204) {
+        // No content - no torrents found
+        return {
+          'torrents': <RDTorrent>[],
+          'totalCount': 0,
+          'hasMore': false,
+        };
+      } else if (response.statusCode == 401) {
+        throw Exception('Invalid API key');
+      } else {
+        throw Exception('Failed to load torrents: ${response.statusCode}');
       }
     } catch (e) {
       throw Exception('Network error: $e');
@@ -133,6 +198,17 @@ class DebridService {
       }
     } catch (e) {
       throw Exception('Network error: $e');
+    }
+  }
+
+  // Unrestrict multiple links
+  static Future<List<Map<String, dynamic>>> unrestrictLinks(String apiKey, List<String> links) async {
+    try {
+      final futures = links.map((link) => unrestrictLink(apiKey, link));
+      final results = await Future.wait(futures);
+      return results;
+    } catch (e) {
+      throw Exception('Failed to unrestrict links: $e');
     }
   }
 

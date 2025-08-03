@@ -14,6 +14,15 @@ class Formatters {
     return DateFormat('MMM dd, yyyy').format(date);
   }
 
+  static String formatDateString(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return DateFormat('MMM dd, yyyy').format(date);
+    } catch (e) {
+      return dateString;
+    }
+  }
+
   static String formatDateTime(String dateString) {
     try {
       final date = DateTime.parse(dateString);

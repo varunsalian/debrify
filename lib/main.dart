@@ -228,8 +228,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   ];
 
   final List<String> _titles = [
-    'Search',
-    'Downloads',
+    'Torrent Search',
+    'RD Downloads',
     'Settings',
   ];
 
