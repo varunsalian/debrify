@@ -1,31 +1,22 @@
-# Torrent Search App
+# Debrify
 
-A modern, beautiful Flutter Android app for searching torrents with a clean Material Design 3 interface.
+A modern torrent search and debrid management app built with Flutter.
 
 ## Features
 
-- 🔍 **Search Torrents**: Search for torrents using the torrents-csv.com API
-- 📱 **Modern UI**: Beautiful Material Design 3 interface with smooth animations
-- 📊 **Detailed Information**: View torrent size, seeders, leechers, and completion count
-- 🔗 **Magnet Links**: One-tap magnet link generation and clipboard copying
-- 📅 **Date Information**: See when torrents were created
-- 🌙 **Responsive Design**: Works perfectly on all Android screen sizes
-
-## Screenshots
-
-The app features a clean, modern interface with:
-- Search bar with real-time search functionality
-- Card-based torrent listings with detailed statistics
-- Color-coded stat chips for easy information scanning
-- Smooth animations and transitions
+- **Torrent Search**: Search for torrents across multiple sources
+- **Debrid Downloads**: Manage your debrid downloads and transfers
+- **Modern UI**: Beautiful Material Design 3 interface with dark theme
+- **Cross-platform**: Works on Android, iOS, and other platforms
 
 ## Getting Started
 
 ### Prerequisites
 
 - Flutter SDK (3.8.1 or higher)
+- Dart SDK
 - Android Studio / VS Code
-- Android device or emulator
+- Android SDK (for Android development)
 
 ### Installation
 
@@ -45,58 +36,45 @@ flutter pub get
 flutter run
 ```
 
-### Building for Production
+## Building for Production
 
-To build an APK for distribution:
+### Android
+
+To build a release APK:
 ```bash
 flutter build apk --release
 ```
 
-## API Integration
+To build an App Bundle for Google Play Store:
+```bash
+flutter build appbundle --release
+```
 
-The app integrates with the torrents-csv.com API:
-- **Endpoint**: `https://torrents-csv.com/service/search?q=SEARCH_QUERY`
-- **Response Format**: JSON with torrent information including infohash, name, size, seeders, leechers, etc.
+### iOS
 
-## Features in Detail
+To build for iOS:
+```bash
+flutter build ios --release
+```
 
-### Search Functionality
-- Real-time search with debounced input
-- Error handling for network issues
-- Loading states with progress indicators
-- Empty state handling
+## Project Structure
 
-### Torrent Display
-- **File Size**: Automatically formatted (B, KB, MB, GB)
-- **Seeders**: Green chip showing number of seeders
-- **Leechers**: Orange chip showing number of leechers  
-- **Completed**: Purple chip showing download completion count
-- **Creation Date**: Formatted date display
-
-### Magnet Link Generation
-- Automatic magnet link generation from infohash
-- One-tap clipboard copying
-- Visual feedback with snackbar notifications
+```
+lib/
+├── main.dart              # App entry point
+├── models/                # Data models
+├── screens/               # UI screens
+├── services/              # Business logic and API services
+├── utils/                 # Utility functions
+└── widgets/               # Reusable UI components
+```
 
 ## Dependencies
 
 - `flutter`: Core Flutter framework
-- `http`: For API requests
-- `intl`: For date formatting
-- `cupertino_icons`: iOS-style icons
-
-## Permissions
-
-The app requires the following Android permissions:
-- `INTERNET`: For API communication
-
-## Architecture
-
-The app follows a simple, clean architecture:
-- **Single Screen**: Main search and results display
-- **State Management**: Flutter's built-in setState for simple state management
-- **API Layer**: Direct HTTP requests with error handling
-- **UI Layer**: Material Design 3 components with custom styling
+- `http`: HTTP client for API requests
+- `intl`: Internationalization support
+- `shared_preferences`: Local data storage
 
 ## Contributing
 
@@ -108,8 +86,8 @@ The app follows a simple, clean architecture:
 
 ## License
 
-This project is for educational purposes. Please ensure you comply with local laws regarding torrent usage.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Disclaimer
+## Version
 
-This app is provided for educational purposes only. Users are responsible for ensuring they comply with local laws and regulations regarding torrent usage and copyright.
+Current version: 1.0.0

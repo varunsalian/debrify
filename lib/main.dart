@@ -5,16 +5,21 @@ import 'screens/debrid_downloads_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() {
-  runApp(const TorrentSearchApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  runApp(const DebrifyApp());
 }
 
-class TorrentSearchApp extends StatelessWidget {
-  const TorrentSearchApp({super.key});
+class DebrifyApp extends StatelessWidget {
+  const DebrifyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Torrent Search',
+      title: 'Debrify',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -223,8 +228,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   ];
 
   final List<String> _titles = [
-    'Torrent Search',
-    'Debrid Downloads',
+    'Search',
+    'Downloads',
     'Settings',
   ];
 
@@ -462,7 +467,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Version 1.0.0',
+                        'Debrify v1.0.0',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 11,
