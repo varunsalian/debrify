@@ -141,7 +141,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
-  Future<void> _handleCopyDownloadLinks(RDTorrent torrent) async {
+  Future<void> _handleFileOptions(RDTorrent torrent) async {
     if (_apiKey == null) return;
 
     if (torrent.links.length == 1) {
@@ -155,7 +155,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
     } else {
       // Multiple links - show popup with all files
-      _showMultipleLinksDialog(torrent);
+      _showMultipleLinksDialog(torrent, showPlayButtons: true);
     }
   }
 
@@ -224,62 +224,62 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
             final unrestrictedLinks = snapshot.data!;
             
-                        return Dialog(
-              backgroundColor: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.9,
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.8,
-                  maxWidth: MediaQuery.of(context).size.width * 0.9,
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.download,
-                            color: Color(0xFF6366F1),
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Download Files',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              Text(
-                                torrent.filename,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[400],
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                                     return Dialog(
+               backgroundColor: const Color(0xFF1E293B),
+               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+               child: Container(
+                 width: MediaQuery.of(context).size.width * 0.9,
+                 constraints: BoxConstraints(
+                   maxHeight: MediaQuery.of(context).size.height * 0.8,
+                   maxWidth: MediaQuery.of(context).size.width * 0.9,
+                 ),
+                 padding: const EdgeInsets.all(20),
+                 child: Column(
+                   mainAxisSize: MainAxisSize.min,
+                   crossAxisAlignment: CrossAxisAlignment.start,
+                   children: [
+                     // Header
+                     Row(
+                       children: [
+                         Container(
+                           padding: const EdgeInsets.all(8),
+                           decoration: BoxDecoration(
+                             color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                             borderRadius: BorderRadius.circular(8),
+                           ),
+                           child: Icon(
+                             showPlayButtons ? Icons.play_circle : Icons.download,
+                             color: const Color(0xFF6366F1),
+                             size: 20,
+                           ),
+                         ),
+                         const SizedBox(width: 12),
+                         Expanded(
+                           child: Column(
+                             crossAxisAlignment: CrossAxisAlignment.start,
+                             children: [
+                               Text(
+                                 showPlayButtons ? 'File Options' : 'Download Files',
+                                 style: TextStyle(
+                                   fontSize: 18,
+                                   fontWeight: FontWeight.bold,
+                                   color: Colors.white,
+                                 ),
+                               ),
+                               Text(
+                                 torrent.filename,
+                                 style: TextStyle(
+                                   fontSize: 14,
+                                   color: Colors.grey[400],
+                                 ),
+                                 maxLines: 1,
+                                 overflow: TextOverflow.ellipsis,
+                               ),
+                             ],
+                           ),
+                         ),
+                       ],
+                     ),
                     
                     const SizedBox(height: 20),
                     
@@ -318,10 +318,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          ElevatedButton.icon(
-                            onPressed: () => _copyAllLinks(unrestrictedLinks),
-                            icon: const Icon(Icons.copy_all, size: 16),
-                            label: const Text('Copy All'),
+                                                     ElevatedButton.icon(
+                             onPressed: () => _copyAllLinks(unrestrictedLinks),
+                             icon: const Icon(Icons.copy_all, size: 16),
+                             label: Text(showPlayButtons ? 'Copy All Links' : 'Copy All'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF6366F1),
                               foregroundColor: Colors.white,
@@ -947,14 +947,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
              ),
              child: Row(
                children: [
-                 // Copy button
+                 // File options button
                  Expanded(
                    child: TextButton.icon(
-                     onPressed: () => _handleCopyDownloadLinks(torrent),
-                     icon: const Icon(Icons.copy, size: 18),
+                     onPressed: () => _handleFileOptions(torrent),
+                     icon: const Icon(Icons.more_horiz, size: 18),
                      label: Text(
                        torrent.links.length > 1 
-                         ? 'Copy All Files (${torrent.links.length})'
+                         ? 'File Options (${torrent.links.length})'
                          : 'Copy Download Link',
                      ),
                      style: TextButton.styleFrom(
