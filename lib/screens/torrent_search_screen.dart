@@ -23,6 +23,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String _errorMessage = '';
   bool _hasSearched = false;
   bool _isSearchExpanded = false; // New state for search box expansion
+  String _selectedSearchEngine = 'torrents_csv'; // Default search engine
   
   late AnimationController _searchAnimationController;
   late AnimationController _listAnimationController;
@@ -99,7 +100,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _searchBoxAnimationController.forward();
 
     try {
-      final torrents = await TorrentService.searchTorrents(query);
+      final torrents = await TorrentService.searchTorrents(query, engineName: _selectedSearchEngine);
       setState(() {
         _torrents = torrents;
         _isLoading = false;
@@ -484,9 +485,85 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ),
                   
+                  // Search Engine Dropdown
+                  const SizedBox(height: 24),
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFF334155),
+                    ),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedSearchEngine,
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setState(() {
+                            _selectedSearchEngine = newValue;
+                          });
+                        }
+                      },
+                      style: const TextStyle(color: Colors.white),
+                      dropdownColor: const Color(0xFF1E293B),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Color(0xFF334155),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        isDense: false,
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'torrents_csv',
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Icon(
+                                  Icons.search_rounded,
+                                  color: Color(0xFF6366F1),
+                                  size: 16,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Torrents CSV'),
+                            ],
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'pirate_bay',
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Icon(
+                                  Icons.sailing_rounded,
+                                  color: Color(0xFFF59E0B),
+                                  size: 16,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('The Pirate Bay'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
                   // Search Button (only show when not expanded)
                   if (!_isSearchExpanded) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(

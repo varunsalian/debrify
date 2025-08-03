@@ -1,25 +1,25 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../models/torrent.dart';
+import 'search_engine_factory.dart';
+import 'search_engine.dart';
 
 class TorrentService {
-  static const String _baseUrl = 'https://torrents-csv.com/service/search';
+  static Future<List<Torrent>> searchTorrents(String query, {String? engineName}) async {
+    final engine = engineName != null 
+        ? SearchEngineFactory.getEngine(engineName)
+        : SearchEngineFactory.getDefaultEngine();
+    
+    return await engine.search(query);
+  }
 
-  static Future<List<Torrent>> searchTorrents(String query) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl?q=${Uri.encodeComponent(query)}'),
-      );
+  static List<SearchEngine> getAvailableEngines() {
+    return SearchEngineFactory.getAllEngines();
+  }
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final torrentsList = data['torrents'] as List;
-        return torrentsList.map((json) => Torrent.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load torrents. Please try again.');
-      }
-    } catch (e) {
-      throw Exception('Network error. Please check your connection.');
-    }
+  static List<String> getAvailableEngineNames() {
+    return SearchEngineFactory.getAllEngineNames();
+  }
+
+  static List<String> getAvailableEngineDisplayNames() {
+    return SearchEngineFactory.getAllEngineDisplayNames();
   }
 } 
