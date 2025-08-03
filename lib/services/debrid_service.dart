@@ -66,17 +66,21 @@ class DebridService {
       }
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        final torrents = data.map((json) => RDTorrent.fromJson(json)).toList();
-        
-        // Get total count from headers
-        final totalCount = int.tryParse(response.headers['X-Total-Count'] ?? '0') ?? 0;
-        
-        return {
-          'torrents': torrents,
-          'totalCount': totalCount,
-          'hasMore': torrents.length >= limit, // If we got a full page, there might be more
-        };
+        try {
+          final List<dynamic> data = json.decode(response.body);
+          final torrents = data.map((json) => RDTorrent.fromJson(json)).toList();
+          
+          // Get total count from headers
+          final totalCount = int.tryParse(response.headers['X-Total-Count'] ?? '0') ?? 0;
+          
+          return {
+            'torrents': torrents,
+            'totalCount': totalCount,
+            'hasMore': torrents.length >= limit, // If we got a full page, there might be more
+          };
+        } catch (e) {
+          throw Exception('Failed to parse response data: $e');
+        }
       } else if (response.statusCode == 204) {
         // No content - no torrents found
         return {

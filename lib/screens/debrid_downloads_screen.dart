@@ -99,7 +99,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _errorMessage = _getUserFriendlyErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -133,7 +133,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _errorMessage = _getUserFriendlyErrorMessage(e);
         _isLoadingMore = false;
       });
     }
@@ -483,6 +483,26 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  String _getUserFriendlyErrorMessage(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+    
+    if (errorString.contains('invalid api key') || errorString.contains('401')) {
+      return 'Invalid API key. Please check your Real Debrid settings.';
+    } else if (errorString.contains('network error') || errorString.contains('connection')) {
+      return 'Network connection error. Please check your internet connection.';
+    } else if (errorString.contains('timeout')) {
+      return 'Request timed out. Please try again.';
+    } else if (errorString.contains('long') || errorString.contains('int')) {
+      return 'Data format error. Please refresh and try again.';
+    } else if (errorString.contains('json')) {
+      return 'Invalid response format. Please try again.';
+    } else if (errorString.contains('failed to load torrents')) {
+      return 'Unable to load downloads. Please check your connection and try again.';
+    } else {
+      return 'Something went wrong. Please try again.';
+    }
   }
 
   void _showError(String message) {
