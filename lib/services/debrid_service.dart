@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/debrid_download.dart';
+import '../services/storage_service.dart';
 
 class DebridService {
   static const String _baseUrl = 'https://api.real-debrid.com/rest/1.0';
@@ -76,10 +77,16 @@ class DebridService {
     }
   }
 
-  // Select files (select the largest file)
+  // Select files (select the largest file or all files)
   static Future<void> selectFiles(String apiKey, String torrentId, List<int> fileIds) async {
     try {
-      final fileIdsString = fileIds.join(',');
+      String fileIdsString;
+      if (fileIds.isEmpty) {
+        fileIdsString = 'all';
+      } else {
+        fileIdsString = fileIds.join(',');
+      }
+      
       final response = await http.post(
         Uri.parse('$_baseUrl/torrents/selectFiles/$torrentId'),
         headers: {
@@ -167,19 +174,29 @@ class DebridService {
         throw Exception('No files found in torrent');
       }
 
-      // Step 3: Find the largest file
-      int largestFileId = files[0]['id'];
-      int largestSize = files[0]['bytes'];
+      // Step 3: Get file selection preference
+      final fileSelection = await StorageService.getFileSelection();
+      List<int> fileIdsToSelect = [];
 
-      for (final file in files) {
-        if (file['bytes'] > largestSize) {
-          largestSize = file['bytes'];
-          largestFileId = file['id'];
+      if (fileSelection == 'all') {
+        // Select all files
+        fileIdsToSelect = files.map((file) => file['id'] as int).toList();
+      } else {
+        // Select largest file (default behavior)
+        int largestFileId = files[0]['id'];
+        int largestSize = files[0]['bytes'];
+
+        for (final file in files) {
+          if (file['bytes'] > largestSize) {
+            largestSize = file['bytes'];
+            largestFileId = file['id'];
+          }
         }
+        fileIdsToSelect = [largestFileId];
       }
 
-      // Step 4: Select the largest file
-      await selectFiles(apiKey, torrentId, [largestFileId]);
+      // Step 4: Select files based on preference
+      await selectFiles(apiKey, torrentId, fileIdsToSelect);
 
       // Step 5: Wait a bit and get updated torrent info
       await Future.delayed(const Duration(seconds: 2));

@@ -11,6 +11,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
   String? _savedApiKey;
+  String _fileSelection = 'largest'; // Default to largest file
   bool _isLoading = true;
   bool _isEditing = false;
   bool _obscureText = true;
@@ -18,7 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadApiKey();
+    _loadSettings();
   }
 
   @override
@@ -27,10 +28,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadApiKey() async {
+  Future<void> _loadSettings() async {
     final apiKey = await StorageService.getApiKey();
+    final fileSelection = await StorageService.getFileSelection();
     setState(() {
       _savedApiKey = apiKey;
+      _fileSelection = fileSelection;
       _isLoading = false;
     });
   }
@@ -99,6 +102,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _isEditing = false;
       _apiKeyController.clear();
     });
+  }
+
+  Future<void> _saveFileSelection(String selection) async {
+    await StorageService.saveFileSelection(selection);
+    setState(() {
+      _fileSelection = selection;
+    });
+    _showSnackBar('File selection preference saved!');
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
@@ -418,6 +429,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ],
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // File Selection Card
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.folder_open,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Real Debrid File Selection',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Choose how Real Debrid handles file selection when adding torrents',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // File Selection Options
+                  Column(
+                    children: [
+                      RadioListTile<String>(
+                        title: const Text('File with highest size'),
+                        subtitle: const Text('Ideal for movies - selects the largest file'),
+                        value: 'largest',
+                        groupValue: _fileSelection,
+                        onChanged: (value) {
+                          if (value != null) {
+                            _saveFileSelection(value);
+                          }
+                        },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('All files'),
+                        subtitle: const Text('Downloads all files in the torrent'),
+                        value: 'all',
+                        groupValue: _fileSelection,
+                        onChanged: (value) {
+                          if (value != null) {
+                            _saveFileSelection(value);
+                          }
+                        },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
