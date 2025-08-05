@@ -163,21 +163,27 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (_apiKey == null) return;
 
     if (torrent.links.length == 1) {
-      // Single video file - play directly
+      // Single file - check MIME type after unrestricting
       try {
         final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
         final downloadLink = unrestrictResult['download'];
+        final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
         
-        if (mounted) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => VideoPlayerScreen(
-                videoUrl: downloadLink,
-                title: torrent.filename,
-                subtitle: Formatters.formatFileSize(torrent.bytes),
+        // Check if it's actually a video using MIME type
+        if (FileUtils.isVideoMimeType(mimeType)) {
+          if (mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => VideoPlayerScreen(
+                  videoUrl: downloadLink,
+                  title: torrent.filename,
+                  subtitle: Formatters.formatFileSize(torrent.bytes),
+                ),
               ),
-            ),
-          );
+            );
+          }
+        } else {
+          _showError('This file is not a video (MIME type: $mimeType)');
         }
       } catch (e) {
         _showError('Failed to load video: ${e.toString()}');
@@ -360,7 +366,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                             final link = unrestrictedLinks[index];
                             final fileName = link['filename'] ?? 'Unknown file';
                             final fileSize = link['filesize'] ?? 0;
-                            final isVideo = FileUtils.isVideoFile(fileName);
+                            final mimeType = link['mimeType']?.toString() ?? '';
+                            final isVideo = FileUtils.isVideoMimeType(mimeType);
                             
                             return Container(
                               padding: const EdgeInsets.all(16),
@@ -417,8 +424,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                     ],
                                   ),
                                   
-                                  // Bottom row: Action buttons (only if video or showPlayButtons)
-                                  if (isVideo && showPlayButtons) ...[
+                                  // Bottom row: Action buttons (show for all files when showPlayButtons is true)
+                                  if (showPlayButtons) ...[
                                     const SizedBox(height: 12),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
@@ -426,19 +433,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                         // Play button
                                         Container(
                                           decoration: BoxDecoration(
-                                            color: FileUtils.isProblematicVideo(fileName)
-                                              ? const Color(0xFFF59E0B).withValues(alpha: 0.2)
-                                              : const Color(0xFFE50914).withValues(alpha: 0.2),
+                                            color: isVideo
+                                              ? const Color(0xFFE50914).withValues(alpha: 0.2)
+                                              : const Color(0xFF6366F1).withValues(alpha: 0.2),
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: IconButton(
                                             icon: Icon(
-                                              FileUtils.isProblematicVideo(fileName)
-                                                ? Icons.warning
-                                                : Icons.play_arrow,
-                                              color: FileUtils.isProblematicVideo(fileName)
-                                                ? const Color(0xFFF59E0B)
-                                                : const Color(0xFFE50914),
+                                              isVideo ? Icons.play_arrow : Icons.play_circle_outline,
+                                              color: isVideo
+                                                ? const Color(0xFFE50914)
+                                                : const Color(0xFF6366F1),
                                               size: 20,
                                             ),
                                             onPressed: () {
@@ -1005,8 +1010,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                    ),
                  ),
                  
-                 // Play button (only for single video files)
-                 if (torrent.links.length == 1 && FileUtils.isVideoFile(torrent.filename)) ...[
+                 // Play button (for all single files - MIME type checked after unrestricting)
+                 if (torrent.links.length == 1) ...[
                    Container(
                      decoration: BoxDecoration(
                        border: Border(

@@ -34,6 +34,10 @@ class FileUtils {
     return _videoExtensions.contains(extension);
   }
 
+  static bool isVideoMimeType(String mimeType) {
+    return mimeType.startsWith('video/');
+  }
+
   static String _getFileExtension(String fileName) {
     final lastDotIndex = fileName.lastIndexOf('.');
     if (lastDotIndex == -1) return '';
