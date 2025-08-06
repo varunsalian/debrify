@@ -921,22 +921,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
-  // Helper methods for tab functionality
-  bool _getCurrentLoadingState() {
-    if (_tabController.index == 0) {
-      return _isLoadingTorrents;
-    } else {
-      return _isLoadingDownloads;
-    }
-  }
 
-  void _refreshCurrentTab() {
-    if (_tabController.index == 0) {
-      _fetchTorrents(_apiKey!, reset: true);
-    } else {
-      _fetchDownloads(_apiKey!, reset: true);
-    }
-  }
 
   String _getUserFriendlyErrorMessage(dynamic error) {
     final errorString = error.toString().toLowerCase();
@@ -1066,34 +1051,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             ),
           ),
           
-          // Refresh Button
-          if (_apiKey != null) ...[
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _getCurrentLoadingState() ? null : () => _refreshCurrentTab(),
-                  icon: _getCurrentLoadingState() 
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh),
-                  label: Text(_getCurrentLoadingState() ? 'Loading...' : 'Refresh'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+
           
           // Content
           Expanded(
@@ -1208,24 +1166,34 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       );
     }
 
-    return ListView.builder(
-      controller: _torrentScrollController,
-      padding: const EdgeInsets.all(16),
-      itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _torrents.length) {
-          // Loading more indicator
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
+    return RefreshIndicator(
+      onRefresh: () async {
+        if (_apiKey != null) {
+          await _fetchTorrents(_apiKey!, reset: true);
         }
-
-        final torrent = _torrents[index];
-        return _buildTorrentCard(torrent);
       },
+      color: Colors.white,
+      backgroundColor: const Color(0xFF1E293B),
+      strokeWidth: 3,
+      child: ListView.builder(
+        controller: _torrentScrollController,
+        padding: const EdgeInsets.all(16),
+        itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _torrents.length) {
+            // Loading more indicator
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+
+          final torrent = _torrents[index];
+          return _buildTorrentCard(torrent);
+        },
+      ),
     );
   }
 
@@ -1327,24 +1295,34 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       );
     }
 
-    return ListView.builder(
-      controller: _downloadScrollController,
-      padding: const EdgeInsets.all(16),
-      itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _downloads.length) {
-          // Loading more indicator
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
+    return RefreshIndicator(
+      onRefresh: () async {
+        if (_apiKey != null) {
+          await _fetchDownloads(_apiKey!, reset: true);
         }
-
-        final download = _downloads[index];
-        return _buildDownloadCard(download);
       },
+      color: Colors.white,
+      backgroundColor: const Color(0xFF1E293B),
+      strokeWidth: 3,
+      child: ListView.builder(
+        controller: _downloadScrollController,
+        padding: const EdgeInsets.all(16),
+        itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _downloads.length) {
+            // Loading more indicator
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+
+          final download = _downloads[index];
+          return _buildDownloadCard(download);
+        },
+      ),
     );
   }
 
