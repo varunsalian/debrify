@@ -149,13 +149,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       try {
         final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
         final downloadLink = unrestrictResult['download'];
-        _copyToClipboard(downloadLink);
+        if (mounted) {
+          _copyToClipboard(downloadLink);
+        }
       } catch (e) {
-        _showError('Failed to unrestrict link: ${e.toString()}');
+        if (mounted) {
+          _showError('Failed to unrestrict link: ${e.toString()}');
+        }
       }
     } else {
       // Multiple links - show popup with all files
-      _showMultipleLinksDialog(torrent, showPlayButtons: true);
+      if (mounted) {
+        _showMultipleLinksDialog(torrent, showPlayButtons: true);
+      }
     }
   }
 
@@ -183,14 +189,106 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             );
           }
         } else {
-          _showError('This file is not a video (MIME type: $mimeType)');
+          if (mounted) {
+            _showError('This file is not a video (MIME type: $mimeType)');
+          }
         }
       } catch (e) {
-        _showError('Failed to load video: ${e.toString()}');
+        if (mounted) {
+          _showError('Failed to load video: ${e.toString()}');
+        }
       }
     } else {
       // Multiple files - show popup with play options
-      _showMultipleLinksDialog(torrent, showPlayButtons: true);
+      if (mounted) {
+        _showMultipleLinksDialog(torrent, showPlayButtons: true);
+      }
+    }
+  }
+
+  Future<void> _handleDeleteTorrent(RDTorrent torrent) async {
+    if (_apiKey == null) return;
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete Torrent',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${torrent.filename}" from Real Debrid? This action cannot be undone.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        // Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            backgroundColor: Color(0xFF1E293B),
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Text(
+                  'Deleting torrent...',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        // Delete the torrent
+        await DebridService.deleteTorrent(_apiKey!, torrent.id);
+        
+        // Check if widget is still mounted before updating UI
+        if (mounted) {
+          // Close loading dialog
+          Navigator.of(context).pop();
+          
+          // Remove the torrent from the local list
+          setState(() {
+            _torrents.removeWhere((t) => t.id == torrent.id);
+          });
+          
+          // Show success message
+          _showSuccess('Torrent deleted successfully!');
+        }
+      } catch (e) {
+        // Check if widget is still mounted before updating UI
+        if (mounted) {
+          // Close loading dialog
+          Navigator.of(context).pop();
+          
+          // Show error message
+          _showError('Failed to delete torrent: ${e.toString()}');
+        }
+      }
     }
   }
 
@@ -1040,6 +1138,26 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                      ),
                    ),
                  ],
+                 
+                 // Delete button
+                 Container(
+                   decoration: BoxDecoration(
+                     border: Border(
+                       left: BorderSide(
+                         color: const Color(0xFF475569).withValues(alpha: 0.3),
+                       ),
+                     ),
+                   ),
+                   child: TextButton.icon(
+                     onPressed: () => _handleDeleteTorrent(torrent),
+                     icon: const Icon(Icons.delete_outline, size: 18),
+                     label: const Text('Delete'),
+                     style: TextButton.styleFrom(
+                       foregroundColor: const Color(0xFFEF4444),
+                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                     ),
+                   ),
+                 ),
                ],
              ),
            ),
