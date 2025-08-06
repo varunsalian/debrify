@@ -5,8 +5,10 @@ class DebridDownload {
   final int filesize;
   final String link;
   final String host;
+  final String? hostIcon;
   final int chunks;
   final String download;
+  final int streamable;
   final String generated;
   final String? type;
 
@@ -17,8 +19,10 @@ class DebridDownload {
     required this.filesize,
     required this.link,
     required this.host,
+    this.hostIcon,
     required this.chunks,
     required this.download,
+    required this.streamable,
     required this.generated,
     this.type,
   });
@@ -31,8 +35,10 @@ class DebridDownload {
       filesize: json['filesize'] ?? 0,
       link: json['link'] ?? '',
       host: json['host'] ?? '',
+      hostIcon: json['host_icon'],
       chunks: json['chunks'] ?? 0,
       download: json['download'] ?? '',
+      streamable: json['streamable'] ?? 0,
       generated: json['generated'] ?? '',
       type: json['type'],
     );

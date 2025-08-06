@@ -7,19 +7,50 @@ import '../services/storage_service.dart';
 class DebridService {
   static const String _baseUrl = 'https://api.real-debrid.com/rest/1.0';
 
-  // Get downloads list (legacy method)
-  static Future<List<DebridDownload>> getDownloads(String apiKey) async {
+  // Get downloads list with pagination
+  static Future<Map<String, dynamic>> getDownloads(String apiKey, {
+    int page = 1,
+    int limit = 100,
+  }) async {
     try {
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+
+      final uri = Uri.parse('$_baseUrl/downloads').replace(queryParameters: queryParams);
+      
       final response = await http.get(
-        Uri.parse('$_baseUrl/downloads?auth_token=$apiKey'),
+        uri,
         headers: {
           'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
         },
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => DebridDownload.fromJson(json)).toList();
+        try {
+          final List<dynamic> data = json.decode(response.body);
+          final downloads = data.map((json) => DebridDownload.fromJson(json)).toList();
+          
+          // Get total count from headers
+          final totalCount = int.tryParse(response.headers['X-Total-Count'] ?? '0') ?? 0;
+          
+          return {
+            'downloads': downloads,
+            'totalCount': totalCount,
+            'hasMore': downloads.length >= limit, // If we got a full page, there might be more
+          };
+        } catch (e) {
+          throw Exception('Failed to parse response data: $e');
+        }
+      } else if (response.statusCode == 204) {
+        // No content - no downloads found
+        return {
+          'downloads': <DebridDownload>[],
+          'totalCount': 0,
+          'hasMore': false,
+        };
       } else if (response.statusCode == 401) {
         throw Exception('Invalid API key');
       } else {
@@ -231,6 +262,28 @@ class DebridService {
           throw Exception('Invalid API key');
         } else {
           throw Exception('Failed to delete torrent: ${response.statusCode}');
+        }
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  // Delete download
+  static Future<void> deleteDownload(String apiKey, String downloadId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$_baseUrl/downloads/delete/$downloadId'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+        },
+      );
+
+      if (response.statusCode != 204) {
+        if (response.statusCode == 401) {
+          throw Exception('Invalid API key');
+        } else {
+          throw Exception('Failed to delete download: ${response.statusCode}');
         }
       }
     } catch (e) {

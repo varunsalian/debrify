@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/rd_torrent.dart';
+import '../models/debrid_download.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../utils/formatters.dart';
@@ -15,39 +16,64 @@ class DebridDownloadsScreen extends StatefulWidget {
   State<DebridDownloadsScreen> createState() => _DebridDownloadsScreenState();
 }
 
-class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
+class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with TickerProviderStateMixin {
+  late TabController _tabController;
+  
+  // Torrent Downloads data
   final List<RDTorrent> _torrents = [];
-  final ScrollController _scrollController = ScrollController();
-  bool _isLoading = false;
-  bool _isLoadingMore = false;
-  String _errorMessage = '';
+  final ScrollController _torrentScrollController = ScrollController();
+  bool _isLoadingTorrents = false;
+  bool _isLoadingMoreTorrents = false;
+  String _torrentErrorMessage = '';
+  int _torrentPage = 1;
+  bool _hasMoreTorrents = true;
+  
+  // Downloads data
+  final List<DebridDownload> _downloads = [];
+  final ScrollController _downloadScrollController = ScrollController();
+  bool _isLoadingDownloads = false;
+  bool _isLoadingMoreDownloads = false;
+  String _downloadErrorMessage = '';
+  int _downloadPage = 1;
+  bool _hasMoreDownloads = true;
+  
   String? _apiKey;
-  int _page = 1;
-  bool _hasMore = true;
   static const int _limit = 50;
 
   @override
   void initState() {
     super.initState();
-    _loadApiKeyAndTorrents();
-    _scrollController.addListener(_onScroll);
+    _tabController = TabController(length: 2, vsync: this);
+    _loadApiKeyAndData();
+    _torrentScrollController.addListener(_onTorrentScroll);
+    _downloadScrollController.addListener(_onDownloadScroll);
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _tabController.dispose();
+    _torrentScrollController.dispose();
+    _downloadScrollController.dispose();
     super.dispose();
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      if (!_isLoadingMore && _hasMore) {
+  void _onTorrentScroll() {
+    if (_torrentScrollController.position.pixels >= _torrentScrollController.position.maxScrollExtent - 200) {
+      if (!_isLoadingMoreTorrents && _hasMoreTorrents) {
         _loadMoreTorrents();
       }
     }
   }
 
-  Future<void> _loadApiKeyAndTorrents() async {
+  void _onDownloadScroll() {
+    if (_downloadScrollController.position.pixels >= _downloadScrollController.position.maxScrollExtent - 200) {
+      if (!_isLoadingMoreDownloads && _hasMoreDownloads) {
+        _loadMoreDownloads();
+      }
+    }
+  }
+
+  Future<void> _loadApiKeyAndData() async {
     final apiKey = await StorageService.getApiKey();
     
     setState(() {
@@ -56,9 +82,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     if (apiKey != null) {
       await _fetchTorrents(apiKey, reset: true);
+      await _fetchDownloads(apiKey, reset: true);
     } else {
       setState(() {
-        _errorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
+        _torrentErrorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
+        _downloadErrorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
       });
     }
   }
@@ -66,21 +94,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _fetchTorrents(String apiKey, {bool reset = false}) async {
     if (reset) {
       setState(() {
-        _page = 1;
-        _hasMore = true;
+        _torrentPage = 1;
+        _hasMoreTorrents = true;
         _torrents.clear();
       });
     }
 
     setState(() {
-      _isLoading = true;
-      _errorMessage = '';
+      _isLoadingTorrents = true;
+      _torrentErrorMessage = '';
     });
 
     try {
       final result = await DebridService.getTorrents(
         apiKey,
-        page: _page,
+        page: _torrentPage,
         limit: _limit,
         // filter: 'downloaded', // Temporarily removed to test
       );
@@ -95,29 +123,29 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Filter to show only downloaded torrents
         final downloadedTorrents = newTorrents.where((torrent) => torrent.isDownloaded).toList();
         _torrents.addAll(downloadedTorrents);
-        _hasMore = hasMore;
-        _page++;
-        _isLoading = false;
+        _hasMoreTorrents = hasMore;
+        _torrentPage++;
+        _isLoadingTorrents = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = _getUserFriendlyErrorMessage(e);
-        _isLoading = false;
+        _torrentErrorMessage = _getUserFriendlyErrorMessage(e);
+        _isLoadingTorrents = false;
       });
     }
   }
 
   Future<void> _loadMoreTorrents() async {
-    if (_apiKey == null || _isLoadingMore || !_hasMore) return;
+    if (_apiKey == null || _isLoadingMoreTorrents || !_hasMoreTorrents) return;
 
     setState(() {
-      _isLoadingMore = true;
+      _isLoadingMoreTorrents = true;
     });
 
     try {
       final result = await DebridService.getTorrents(
         _apiKey!,
-        page: _page,
+        page: _torrentPage,
         limit: _limit,
         // filter: 'downloaded', // Temporarily removed to test
       );
@@ -129,14 +157,87 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Filter to show only downloaded torrents
         final downloadedTorrents = newTorrents.where((torrent) => torrent.isDownloaded).toList();
         _torrents.addAll(downloadedTorrents);
-        _hasMore = hasMore;
-        _page++;
-        _isLoadingMore = false;
+        _hasMoreTorrents = hasMore;
+        _torrentPage++;
+        _isLoadingMoreTorrents = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = _getUserFriendlyErrorMessage(e);
-        _isLoadingMore = false;
+        _torrentErrorMessage = _getUserFriendlyErrorMessage(e);
+        _isLoadingMoreTorrents = false;
+      });
+    }
+  }
+
+  // Downloads methods
+  Future<void> _fetchDownloads(String apiKey, {bool reset = false}) async {
+    if (reset) {
+      setState(() {
+        _downloadPage = 1;
+        _hasMoreDownloads = true;
+        _downloads.clear();
+      });
+    }
+
+    setState(() {
+      _isLoadingDownloads = true;
+      _downloadErrorMessage = '';
+    });
+
+    try {
+      final result = await DebridService.getDownloads(
+        apiKey,
+        page: _downloadPage,
+        limit: _limit,
+      );
+
+      final List<DebridDownload> newDownloads = result['downloads'];
+      final bool hasMore = result['hasMore'];
+
+      setState(() {
+        if (reset) {
+          _downloads.clear();
+        }
+        _downloads.addAll(newDownloads);
+        _hasMoreDownloads = hasMore;
+        _downloadPage++;
+        _isLoadingDownloads = false;
+      });
+    } catch (e) {
+      setState(() {
+        _downloadErrorMessage = _getUserFriendlyErrorMessage(e);
+        _isLoadingDownloads = false;
+      });
+    }
+  }
+
+  Future<void> _loadMoreDownloads() async {
+    if (_apiKey == null || _isLoadingMoreDownloads || !_hasMoreDownloads) return;
+
+    setState(() {
+      _isLoadingMoreDownloads = true;
+    });
+
+    try {
+      final result = await DebridService.getDownloads(
+        _apiKey!,
+        page: _downloadPage,
+        limit: _limit,
+      );
+
+      final List<DebridDownload> newDownloads = result['downloads'];
+      final bool hasMore = result['hasMore'];
+
+      setState(() {
+        _downloads.addAll(newDownloads);
+        _hasMoreDownloads = hasMore;
+        _downloadPage++;
+        _isLoadingMoreDownloads = false;
+      });
+    } catch (e) {
+      setState(() {
+        _downloadErrorMessage = _getUserFriendlyErrorMessage(e);
+        _isLoadingMoreDownloads = false;
       });
     }
   }
@@ -202,6 +303,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Multiple files - show popup with play options
       if (mounted) {
         _showMultipleLinksDialog(torrent, showPlayButtons: true);
+      }
+    }
+  }
+
+  // Download action methods
+  Future<void> _handleDownloadAction(DebridDownload download) async {
+    if (_apiKey == null) return;
+
+    // Copy download link to clipboard
+    _copyToClipboard(download.download);
+  }
+
+  Future<void> _handlePlayDownload(DebridDownload download) async {
+    if (_apiKey == null) return;
+
+    // Check if it's a video file
+    if (FileUtils.isVideoMimeType(download.mimeType)) {
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => VideoPlayerScreen(
+              videoUrl: download.download,
+              title: download.filename,
+              subtitle: Formatters.formatFileSize(download.filesize),
+            ),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        _showError('This file is not a video (MIME type: ${download.mimeType})');
       }
     }
   }
@@ -287,6 +419,92 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           
           // Show error message
           _showError('Failed to delete torrent: ${e.toString()}');
+        }
+      }
+    }
+  }
+
+  Future<void> _handleDeleteDownload(DebridDownload download) async {
+    if (_apiKey == null) return;
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete Download',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${download.filename}" from Real Debrid? This action cannot be undone.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        // Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            backgroundColor: Color(0xFF1E293B),
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Text(
+                  'Deleting download...',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        // Delete the download
+        await DebridService.deleteDownload(_apiKey!, download.id);
+        
+        // Check if widget is still mounted before updating UI
+        if (mounted) {
+          // Close loading dialog
+          Navigator.of(context).pop();
+          
+          // Remove the download from the local list
+          setState(() {
+            _downloads.removeWhere((d) => d.id == download.id);
+          });
+          
+          // Show success message
+          _showSuccess('Download deleted successfully!');
+        }
+      } catch (e) {
+        // Check if widget is still mounted before updating UI
+        if (mounted) {
+          // Close loading dialog
+          Navigator.of(context).pop();
+          
+          // Show error message
+          _showError('Failed to delete download: ${e.toString()}');
         }
       }
     }
@@ -703,6 +921,23 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
+  // Helper methods for tab functionality
+  bool _getCurrentLoadingState() {
+    if (_tabController.index == 0) {
+      return _isLoadingTorrents;
+    } else {
+      return _isLoadingDownloads;
+    }
+  }
+
+  void _refreshCurrentTab() {
+    if (_tabController.index == 0) {
+      _fetchTorrents(_apiKey!, reset: true);
+    } else {
+      _fetchDownloads(_apiKey!, reset: true);
+    }
+  }
+
   String _getUserFriendlyErrorMessage(dynamic error) {
     final errorString = error.toString().toLowerCase();
     
@@ -716,7 +951,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       return 'Data format error. Please refresh and try again.';
     } else if (errorString.contains('json')) {
       return 'Invalid response format. Please try again.';
-    } else if (errorString.contains('failed to load torrents')) {
+    } else if (errorString.contains('failed to load torrents') || errorString.contains('failed to load downloads')) {
       return 'Unable to load downloads. Please check your connection and try again.';
     } else {
       return 'Something went wrong. Please try again.';
@@ -800,7 +1035,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Your downloaded torrents from Real Debrid',
+                        'Your downloads from Real Debrid',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                         ),
@@ -812,6 +1047,25 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ),
           ),
           
+          // Tabs
+          Container(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TabBar(
+              controller: _tabController,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.grey[400],
+              indicatorColor: Colors.white,
+              indicatorWeight: 3,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 14),
+              tabs: const [
+                Tab(text: 'Torrent Downloads'),
+                Tab(text: 'Downloads'),
+              ],
+            ),
+          ),
+          
           // Refresh Button
           if (_apiKey != null) ...[
             Padding(
@@ -819,15 +1073,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : () => _fetchTorrents(_apiKey!, reset: true),
-                  icon: _isLoading 
+                  onPressed: _getCurrentLoadingState() ? null : () => _refreshCurrentTab(),
+                  icon: _getCurrentLoadingState() 
                     ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.refresh),
-                  label: Text(_isLoading ? 'Loading...' : 'Refresh Downloads'),
+                  label: Text(_getCurrentLoadingState() ? 'Loading...' : 'Refresh'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Theme.of(context).colorScheme.onPrimary,
@@ -843,28 +1097,34 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           
           // Content
           Expanded(
-            child: _buildContent(),
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildTorrentContent(),
+                _buildDownloadContent(),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildContent() {
-    if (_isLoading && _torrents.isEmpty) {
+  Widget _buildTorrentContent() {
+    if (_isLoadingTorrents && _torrents.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Loading your downloads...'),
+            Text('Loading your torrent downloads...'),
           ],
         ),
       );
     }
 
-    if (_errorMessage.isNotEmpty && _torrents.isEmpty) {
+    if (_torrentErrorMessage.isNotEmpty && _torrents.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -887,7 +1147,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Error Loading Downloads',
+                      'Error Loading Torrent Downloads',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: Colors.red[700],
@@ -896,7 +1156,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _errorMessage,
+                      _torrentErrorMessage,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.red[600],
@@ -929,7 +1189,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ),
             SizedBox(height: 16),
             Text(
-              'No downloads yet',
+              'No torrent downloads yet',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -949,9 +1209,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
 
     return ListView.builder(
-      controller: _scrollController,
+      controller: _torrentScrollController,
       padding: const EdgeInsets.all(16),
-      itemCount: _torrents.length + (_hasMore ? 1 : 0),
+      itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == _torrents.length) {
           // Loading more indicator
@@ -965,6 +1225,125 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
         final torrent = _torrents[index];
         return _buildTorrentCard(torrent);
+      },
+    );
+  }
+
+  Widget _buildDownloadContent() {
+    if (_isLoadingDownloads && _downloads.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading your downloads...'),
+          ],
+        ),
+      );
+    }
+
+    if (_downloadErrorMessage.isNotEmpty && _downloads.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Error Loading Downloads',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red[700],
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _downloadErrorMessage,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.red[600],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => _fetchDownloads(_apiKey!, reset: true),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_downloads.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.download_done,
+              size: 64,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No downloads yet',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Your downloads will appear here',
+              style: TextStyle(
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: _downloadScrollController,
+      padding: const EdgeInsets.all(16),
+      itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == _downloads.length) {
+          // Loading more indicator
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        final download = _downloads[index];
+        return _buildDownloadCard(download);
       },
     );
   }
@@ -1161,6 +1540,199 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                ],
              ),
            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDownloadCard(DebridDownload download) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF475569).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title and status
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        download.filename,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: const Text(
+                        'Downloaded',
+                        style: TextStyle(
+                          color: Color(0xFF10B981),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Stats row
+                Row(
+                  children: [
+                    StatChip(
+                      icon: Icons.storage,
+                      text: Formatters.formatFileSize(download.filesize),
+                      color: const Color(0xFF6366F1),
+                    ),
+                    const SizedBox(width: 8),
+                    StatChip(
+                      icon: Icons.link,
+                      text: '${download.chunks} chunks',
+                      color: const Color(0xFFF59E0B),
+                    ),
+                    const SizedBox(width: 8),
+                    StatChip(
+                      icon: download.streamable == 1 ? Icons.play_arrow : Icons.download,
+                      text: download.streamable == 1 ? 'Streamable' : 'Download',
+                      color: download.streamable == 1 ? const Color(0xFFE50914) : const Color(0xFF10B981),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // Host info
+                Row(
+                  children: [
+                    Icon(
+                      Icons.computer,
+                      size: 16,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      download.host,
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Generated ${Formatters.formatDateString(download.generated)}',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // Action buttons
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Copy link button
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: () => _handleDownloadAction(download),
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('Copy Download Link'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF6366F1),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                
+                // Play button (if streamable)
+                if (download.streamable == 1) ...[
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: const Color(0xFF475569).withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () => _handlePlayDownload(download),
+                      icon: Icon(
+                        FileUtils.isProblematicVideo(download.filename)
+                          ? Icons.warning
+                          : Icons.play_arrow,
+                        size: 18,
+                      ),
+                      label: Text(
+                        FileUtils.isProblematicVideo(download.filename) ? 'Play*' : 'Play',
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: FileUtils.isProblematicVideo(download.filename)
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFFE50914),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      ),
+                    ),
+                  ),
+                ],
+                
+                // Delete button
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: const Color(0xFF475569).withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                  child: TextButton.icon(
+                    onPressed: () => _handleDeleteDownload(download),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Delete'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFEF4444),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
