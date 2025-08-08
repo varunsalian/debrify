@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class DownloadEntry {
   final Task task;
@@ -33,8 +34,19 @@ class DownloadService {
 
   bool _started = false;
 
+  Future<void> _ensureNotificationPermission() async {
+    if (!Platform.isAndroid) return;
+    final status = await Permission.notification.status;
+    if (!status.isGranted) {
+      await Permission.notification.request();
+    }
+  }
+
   Future<void> initialize() async {
     if (_started) return;
+
+    // Request notification permission on Android 13+
+    await _ensureNotificationPermission();
 
     // Configure notifications (Android)
     FileDownloader().configureNotification(
