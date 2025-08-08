@@ -1449,20 +1449,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
              child: Row(
                children: [
                  // File options button
-                 Expanded(
-                   child: TextButton.icon(
-                     onPressed: () => _handleFileOptions(torrent),
-                     icon: const Icon(Icons.more_horiz, size: 18),
-                     label: Text(
-                       torrent.links.length > 1 
-                         ? 'File Options (${torrent.links.length})'
-                         : 'Copy Download Link',
-                     ),
-                     style: TextButton.styleFrom(
-                       foregroundColor: const Color(0xFF6366F1),
-                       padding: const EdgeInsets.symmetric(vertical: 12),
-                     ),
-                   ),
+                                   Expanded(
+                    child: TextButton.icon(
+                      onPressed: () => _handleFileOptions(torrent),
+                      icon: torrent.links.length > 1
+                          ? const Icon(Icons.more_horiz, size: 18)
+                          : const Icon(Icons.copy, size: 18),
+                      label: Text(
+                        torrent.links.length > 1 
+                          ? 'File Options (${torrent.links.length})'
+                          : 'Copy Download Link',
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF6366F1),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
                  ),
                  
                  // Play button (for all single files - MIME type checked after unrestricting)

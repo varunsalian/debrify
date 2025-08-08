@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'screens/torrent_search_screen.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/downloads_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -223,19 +224,22 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
+    const DownloadsScreen(),
     const DebridDownloadsScreen(),
     const SettingsScreen(),
   ];
 
   final List<String> _titles = [
     'Torrent Search',
+    'Downloads',
     'RD Downloads',
     'Settings',
   ];
 
   final List<IconData> _icons = [
     Icons.search_rounded,
-    Icons.download_rounded,
+    Icons.download_for_offline_rounded,
+    Icons.cloud_download_rounded,
     Icons.settings_rounded,
   ];
 
@@ -330,10 +334,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           ),
         ],
       ),
-      body: FadeTransition(
+             body: FadeTransition(
         opacity: _fadeAnimation,
         child: _pages[_selectedIndex],
       ),
+      floatingActionButton: _selectedIndex == 1 ? null : null,
       drawer: Drawer(
         backgroundColor: const Color(0xFF0F172A), // Slate 900
         child: SafeArea(
