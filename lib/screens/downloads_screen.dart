@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../services/download_service.dart';
+import '../services/storage_service.dart';
+import 'settings_screen.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -26,6 +29,24 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   // Live progress snapshots keyed by taskId to show speed/ETA/sizes
   final Map<String, TaskProgressUpdate> _progressByTaskId = {};
 
+  String? _defaultUri;
+
+  String _safReadable(String uri, String filename) {
+    try {
+      final decoded = Uri.decodeComponent(uri);
+      final treeIndex = decoded.indexOf('tree/');
+      if (treeIndex == -1) return 'Shared folder: $filename';
+      String rest = decoded.substring(treeIndex + 5); // after 'tree/'
+      // Expect formats like 'primary:Download/Subdir' or 'home:Documents'
+      final colon = rest.indexOf(':');
+      final path = colon != -1 ? rest.substring(colon + 1) : rest;
+      if (path.isEmpty) return filename;
+      return '$path/$filename';
+    } catch (_) {
+      return 'Shared folder: $filename';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -37,17 +58,16 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     await DownloadService.instance.initialize();
 
     _progressSub = DownloadService.instance.progressStream.listen((update) {
-      // Update live progress data without re-querying DB every tick
       setState(() {
         _progressByTaskId[update.task.taskId] = update;
       });
     });
 
     _statusSub = DownloadService.instance.statusStream.listen((_) {
-      // For status changes, refresh the list from DB
       _refresh();
     });
 
+    _defaultUri = await StorageService.getDefaultDownloadUri();
     await _refresh();
   }
 
@@ -68,7 +88,48 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     super.dispose();
   }
 
+  Future<void> _ensureDefaultLocationOrRedirect() async {
+    _defaultUri = await StorageService.getDefaultDownloadUri();
+    if (_defaultUri != null && _defaultUri!.isNotEmpty) return;
+
+    // Prompt to set default location
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Set default download folder'),
+        content: const Text(
+            'Please choose a default download location in Settings before starting a download.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+
+    if (go == true && mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+      );
+      _defaultUri = await StorageService.getDefaultDownloadUri();
+      setState(() {});
+    }
+
+    throw Exception('default_location_missing');
+  }
+
   Future<void> _showAddDialog() async {
+    try {
+      await _ensureDefaultLocationOrRedirect();
+    } catch (_) {
+      return;
+    }
+
     final urlCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     bool wifiOnly = false;
@@ -76,7 +137,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     String? destPath;
     int? expectedSize;
 
-    // Track if user manually edited the filename to avoid overriding it
     bool nameTouched = false;
 
     Future<void> recompute(StateSetter setLocal) async {
@@ -91,7 +151,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
         return;
       }
 
-      // Suggest filename from server (or URL) only if user hasn't typed a name
       String filename = manualName;
       if (!nameTouched) {
         try {
@@ -100,7 +159,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           filename = suggested.filename;
           nameCtrl.text = filename;
         } catch (_) {
-          // Fallback to url path segment
           final uri = Uri.tryParse(url);
           filename = (uri?.pathSegments.isNotEmpty ?? false)
               ? uri!.pathSegments.last
@@ -108,24 +166,27 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           nameCtrl.text = filename;
         }
       } else if (filename.isEmpty) {
-        // If user cleared it, still give a basic fallback
         final uri = Uri.tryParse(url);
         filename = (uri?.pathSegments.isNotEmpty ?? false)
             ? uri!.pathSegments.last
             : 'file';
       }
 
-      // Compose destination path under app documents/downloads/<folder>/filename
-      final docs = await getApplicationDocumentsDirectory();
-      String sanitize(String s) => s
-          .replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-      final dot = filename.lastIndexOf('.');
-      final folder = sanitize(dot > 0 ? filename.substring(0, dot) : filename);
-      destPath = '${docs.path}/downloads/$folder/$filename';
+      // Destination preview: if Android SAF folder set, show a human-readable path
+      final defaultUri = _defaultUri;
+      if (Platform.isAndroid && defaultUri != null && defaultUri.startsWith('content://')) {
+        destPath = _safReadable(defaultUri, filename);
+      } else {
+        final docs = await getApplicationDocumentsDirectory();
+        String sanitize(String s) => s
+            .replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+        final dot = filename.lastIndexOf('.');
+        final folder = sanitize(dot > 0 ? filename.substring(0, dot) : filename);
+        destPath = '${docs.path}/downloads/$folder/$filename';
+      }
 
-      // Try to fetch expected size via HEAD
       try {
         expectedSize = await DownloadTask(url: url, filename: filename)
             .expectedFileSize();
@@ -172,7 +233,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                color:
+                                    const Color(0xFF6366F1).withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Icon(Icons.add_rounded,
@@ -307,6 +369,44 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
     return Column(
       children: [
+        FutureBuilder<String?>(
+          future: StorageService.getDefaultDownloadUri(),
+          builder: (context, snap) {
+            final missing = (snap.connectionState == ConnectionState.done) &&
+                (snap.data == null || (snap.data?.isEmpty ?? true));
+            if (!missing) return const SizedBox.shrink();
+            return Container(
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
+                border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.4)),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.folder_outlined, color: Color(0xFF7C3AED)),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Set a default download folder in Settings to save files directly there.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                      );
+                      setState(() {});
+                    },
+                    child: const Text('Open Settings'),
+                  )
+                ],
+              ),
+            );
+          },
+        ),
         Container(
           margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(

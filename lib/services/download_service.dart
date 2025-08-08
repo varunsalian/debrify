@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'storage_service.dart';
 
 class DownloadEntry {
   final Task task;
@@ -137,6 +138,41 @@ class DownloadService {
     String? meta,
   }) async {
     await initialize();
+
+    // If user selected a default SAF directory (Android), use a Uri-based task
+    final String? defaultUri = await StorageService.getDefaultDownloadUri();
+
+    if (Platform.isAndroid && defaultUri != null && defaultUri.isNotEmpty) {
+      // Determine filename
+      String filename = (fileName?.trim().isNotEmpty ?? false)
+          ? fileName!.trim()
+          : (Uri.tryParse(url)?.pathSegments.isNotEmpty ?? false)
+              ? Uri.parse(url).pathSegments.last
+              : 'file';
+      filename = _sanitizeName(filename);
+
+      final task = UriDownloadTask(
+        url: url,
+        headers: headers,
+        filename: filename,
+        directoryUri: Uri.parse(defaultUri),
+        updates: Updates.statusAndProgress,
+        requiresWiFi: wifiOnly,
+        retries: retries,
+        allowPause: true,
+      );
+
+      final bool ok = await FileDownloader().enqueue(task);
+      if (!ok) {
+        throw Exception('Failed to enqueue download');
+      }
+
+      return DownloadEntry(
+        task: task,
+        displayName: filename,
+        directory: '',
+      );
+    }
 
     final (dirAbsPath, filename) = await _smartLocationFor(url, fileName);
 

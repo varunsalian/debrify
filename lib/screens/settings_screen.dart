@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import 'package:background_downloader/background_downloader.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,6 +16,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoading = true;
   bool _isEditing = false;
   bool _obscureText = true;
+  String? _defaultDownloadFolder;
 
   @override
   void initState() {
@@ -31,9 +33,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     final apiKey = await StorageService.getApiKey();
     final fileSelection = await StorageService.getFileSelection();
+    final defaultUri = await StorageService.getDefaultDownloadUri();
     setState(() {
       _savedApiKey = apiKey;
       _fileSelection = fileSelection;
+      _defaultDownloadFolder = defaultUri;
       _isLoading = false;
     });
   }
@@ -123,6 +127,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _pickDefaultFolder() async {
+    try {
+      final uri = await FileDownloader().uri.pickDirectory();
+      if (uri == null) return; // user cancelled
+      await StorageService.saveDefaultDownloadUri(uri.toString());
+      setState(() {
+        _defaultDownloadFolder = uri.toString();
+      });
+      _showSnackBar('Default download folder set');
+    } catch (e) {
+      _showSnackBar('Failed to pick folder', isError: true);
+    }
+  }
+
+  Future<void> _clearDefaultFolder() async {
+    await StorageService.clearDefaultDownloadUri();
+    setState(() {
+      _defaultDownloadFolder = null;
+    });
+    _showSnackBar('Default download folder cleared');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -181,9 +207,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
+          // Default download folder
+          Text(
+            'Downloads',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Choose where files are saved by default',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.folder,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Default download folder',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Text(
+                      _defaultDownloadFolder ?? 'Not set',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.grey[700]),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _pickDefaultFolder,
+                          icon: const Icon(Icons.folder_open),
+                          label: const Text('Choose folder'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _defaultDownloadFolder == null ? null : _clearDefaultFolder,
+                          icon: const Icon(Icons.clear),
+                          label: const Text('Clear'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
           // Real Debrid Section
           Text(
             'Real Debrid Configuration',
