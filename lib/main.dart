@@ -224,22 +224,22 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
-    const DownloadsScreen(),
     const DebridDownloadsScreen(),
+    const DownloadsScreen(),
     const SettingsScreen(),
   ];
 
   final List<String> _titles = [
     'Torrent Search',
-    'Downloads',
     'RD Downloads',
+    'Downloads',
     'Settings',
   ];
 
   final List<IconData> _icons = [
     Icons.search_rounded,
-    Icons.download_for_offline_rounded,
     Icons.cloud_download_rounded,
+    Icons.download_for_offline_rounded,
     Icons.settings_rounded,
   ];
 
