@@ -85,32 +85,65 @@ class DownloadService {
 
       final saf = SafStream();
       final int total = await file.length();
-      // Begin a streamed write to SAF to report progress
-      final info = await saf.startWriteStream(
-        targetDirUri,
-        update.task.filename,
-        'application/octet-stream',
-      );
-      final sessionId = info.session;
-      int written = 0;
-      await for (final chunk in file.openRead()) {
-        // Convert to Uint8List for the plugin API
-        final data = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
-        await saf.writeChunk(sessionId, data);
-        written += chunk.length;
+
+      String baseName = update.task.filename;
+      String name = baseName;
+      bool moved = false;
+
+      // Try up to 4 attempts with suffixes to avoid name collisions
+      for (int attempt = 0; attempt < 4 && !moved; attempt++) {
+        name = attempt == 0 ? baseName : _withSuffix(baseName, attempt);
+        try {
+          // First try streamed copy to show progress
+          final info = await saf.startWriteStream(
+            targetDirUri,
+            name,
+            'application/octet-stream',
+          );
+          final sessionId = info.session;
+          int written = 0;
+          await for (final chunk in file.openRead()) {
+            final data = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+            await saf.writeChunk(sessionId, data);
+            written += chunk.length;
+            _moveController.add(MoveProgressUpdate(
+              taskId: update.task.taskId,
+              progress: total > 0 ? (written / total).clamp(0.0, 1.0) : 0.0,
+            ));
+          }
+          await saf.endWriteStream(sessionId);
+          moved = true;
+        } catch (_) {
+          // Fallback to paste for this attempt (no progress but more robust)
+          try {
+            await saf.pasteLocalFile(
+              targetDirUri,
+              absPath,
+              name,
+              'application/octet-stream',
+            );
+            moved = true;
+          } catch (_) {
+            // try next suffix
+            moved = false;
+          }
+        }
+      }
+
+      if (moved) {
         _moveController.add(MoveProgressUpdate(
           taskId: update.task.taskId,
-          progress: total > 0 ? (written / total).clamp(0.0, 1.0) : 0.0,
+          progress: 1.0,
+          done: true,
+        ));
+        await file.delete();
+      } else {
+        _moveController.add(MoveProgressUpdate(
+          taskId: update.task.taskId,
+          progress: 0.0,
+          failed: true,
         ));
       }
-      await saf.endWriteStream(sessionId);
-      _moveController.add(MoveProgressUpdate(
-        taskId: update.task.taskId,
-        progress: 1.0,
-        done: true,
-      ));
-      // Remove local copy after successful paste
-      await file.delete();
     } catch (_) {
       // Report failure; local app copy remains available
       _moveController.add(MoveProgressUpdate(
@@ -119,6 +152,14 @@ class DownloadService {
         failed: true,
       ));
     }
+  }
+
+  String _withSuffix(String filename, int attempt) {
+    if (attempt <= 0) return filename;
+    final dot = filename.lastIndexOf('.');
+    final name = dot > 0 ? filename.substring(0, dot) : filename;
+    final ext = dot > 0 ? filename.substring(dot) : '';
+    return '$name ($attempt)$ext';
   }
 
   Future<void> initialize() async {
