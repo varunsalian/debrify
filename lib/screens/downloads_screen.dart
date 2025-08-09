@@ -322,24 +322,27 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: urlCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Download URL',
-                        hintText: 'https://example.com/file',
-                        prefixIcon: Icon(Icons.link),
+                    const SizedBox(height: 14),
+                    // Modern preview card
+                    if (urlCtrl.text.trim().isNotEmpty || nameCtrl.text.trim().isNotEmpty)
+                      _PreviewCard(
+                        filename: nameCtrl.text.trim(),
+                        host: Uri.tryParse(urlCtrl.text.trim())?.host ?? '',
                       ),
+                    const SizedBox(height: 16),
+                    _StyledField(
+                      controller: urlCtrl,
+                      label: 'Download URL',
+                      hint: 'https://example.com/file',
+                      icon: Icons.link,
                       onChanged: (_) => recompute(setLocal),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
+                    _StyledField(
                       controller: nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'File name',
-                        hintText: 'movie.mp4',
-                        prefixIcon: Icon(Icons.insert_drive_file),
-                      ),
+                      label: 'File name',
+                      hint: 'movie.mp4',
+                      icon: Icons.insert_drive_file,
                       onChanged: (_) {
                         nameTouched = true;
                         recompute(setLocal);
@@ -354,26 +357,40 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                           _chip(Icons.folder, destPath!),
                           _chip(Icons.storage_rounded,
                               expectedSize != null ? humanSize(expectedSize!) : 'Unknown size'),
+                          if (nameCtrl.text.contains('.'))
+                            _chip(Icons.badge_rounded, nameCtrl.text.split('.').last.toUpperCase()),
                         ],
                       ),
                     ],
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 20),
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => Navigator.of(context).pop(false),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFF334155)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
                             child: const Text('Cancel'),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: FilledButton.icon(
+                          child: ElevatedButton.icon(
                             onPressed: (urlCtrl.text.trim().isEmpty)
                                 ? null
                                 : () => Navigator.of(context).pop(true),
                             icon: const Icon(Icons.download_rounded),
                             label: const Text('Download'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: const Color(0xFF6366F1),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 2,
+                            ),
                           ),
                         ),
                       ],
@@ -396,32 +413,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       );
       await _refresh();
     }
-  }
-
-  Widget _chip(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF334155)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
-          const SizedBox(width: 6),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 12),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -454,7 +445,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
-                border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.4)),
+                border: Border.all(
+                    color: const Color(0xFF7C3AED).withValues(alpha: 0.4)),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -470,7 +462,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                   TextButton(
                     onPressed: () async {
                       await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const SettingsScreen()),
                       );
                       setState(() {});
                     },
@@ -542,6 +535,122 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _chip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Styled input field widget for modern look
+class _StyledField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  final IconData icon;
+  final ValueChanged<String>? onChanged;
+  const _StyledField({
+    super.key,
+    required this.controller,
+    required this.label,
+    required this.hint,
+    required this.icon,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon),
+        filled: true,
+        fillColor: const Color(0xFF111827),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF334155)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF6366F1)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      ),
+    );
+  }
+}
+
+class _PreviewCard extends StatelessWidget {
+  final String filename;
+  final String host;
+  const _PreviewCard({super.key, required this.filename, required this.host});
+
+  @override
+  Widget build(BuildContext context) {
+    if (filename.isEmpty && host.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0x141E293B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (filename.isNotEmpty)
+            Text(
+              filename,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          if (host.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.public, size: 14, color: Color(0xFF94A3B8)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    host,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ]
+        ],
+      ),
     );
   }
 }
