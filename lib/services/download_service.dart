@@ -5,6 +5,7 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'storage_service.dart';
+import 'package:saf_stream/saf_stream.dart';
 
 class DownloadEntry {
   final Task task;
@@ -43,6 +44,43 @@ class DownloadService {
     }
   }
 
+  Future<String> _resolveAbsolutePathForTask(Task task) async {
+    // We only construct paths for tasks we created with BaseDirectory.applicationDocuments
+    // and a relative 'directory'
+    Directory docs = await getApplicationDocumentsDirectory();
+    final String dir = (task is DownloadTask) ? (task.directory ?? '') : '';
+    final String filename = task.filename;
+    final String normalizedDir = dir.isEmpty
+        ? docs.path
+        : '${docs.path}/${dir.replaceAll('\\', '/')}';
+    return '$normalizedDir/$filename';
+  }
+
+  Future<void> _moveToSafIfConfigured(TaskStatusUpdate update) async {
+    if (!Platform.isAndroid) return;
+    if (update.status != TaskStatus.complete) return;
+    final String? targetDirUri = await StorageService.getDefaultDownloadUri();
+    if (targetDirUri == null || targetDirUri.isEmpty) return;
+    try {
+      final String absPath = await _resolveAbsolutePathForTask(update.task);
+      final file = File(absPath);
+      if (!await file.exists()) return;
+
+      final saf = SafStream();
+      // Copy local file into SAF directory using original filename
+      await saf.pasteLocalFile(
+        targetDirUri,
+        absPath,
+        update.task.filename,
+        'application/octet-stream',
+      );
+      // Remove local copy after successful paste
+      await file.delete();
+    } catch (_) {
+      // Silently ignore; user can still access local app copy if move fails
+    }
+  }
+
   Future<void> initialize() async {
     if (_started) return;
 
@@ -70,6 +108,9 @@ class DownloadService {
             try {
               await FileDownloader().database.deleteRecordWithId(update.task.taskId);
             } catch (_) {}
+          }
+          if (update.status == TaskStatus.complete) {
+            await _moveToSafIfConfigured(update);
           }
       }
     });
@@ -139,41 +180,6 @@ class DownloadService {
   }) async {
     await initialize();
 
-    // If user selected a default SAF directory (Android), use a Uri-based task
-    final String? defaultUri = await StorageService.getDefaultDownloadUri();
-
-    if (Platform.isAndroid && defaultUri != null && defaultUri.isNotEmpty) {
-      // Determine filename
-      String filename = (fileName?.trim().isNotEmpty ?? false)
-          ? fileName!.trim()
-          : (Uri.tryParse(url)?.pathSegments.isNotEmpty ?? false)
-              ? Uri.parse(url).pathSegments.last
-              : 'file';
-      filename = _sanitizeName(filename);
-
-      final task = UriDownloadTask(
-        url: url,
-        headers: headers,
-        filename: filename,
-        directoryUri: Uri.parse(defaultUri),
-        updates: Updates.statusAndProgress,
-        requiresWiFi: wifiOnly,
-        retries: retries,
-        allowPause: true,
-      );
-
-      final bool ok = await FileDownloader().enqueue(task);
-      if (!ok) {
-        throw Exception('Failed to enqueue download');
-      }
-
-      return DownloadEntry(
-        task: task,
-        displayName: filename,
-        directory: '',
-      );
-    }
-
     final (dirAbsPath, filename) = await _smartLocationFor(url, fileName);
 
     // Convert absolute path to baseDirectory + relative directory
@@ -207,12 +213,14 @@ class DownloadService {
   }
 
   Future<void> pause(Task task) async {
-    await FileDownloader().pause(task as DownloadTask);
+    if (task is DownloadTask) {
+      await FileDownloader().pause(task);
+    }
   }
 
   Future<bool> resume(Task task) async {
-    if (await FileDownloader().taskCanResume(task as DownloadTask)) {
-      return FileDownloader().resume(task as DownloadTask);
+    if (task is DownloadTask && await FileDownloader().taskCanResume(task)) {
+      return FileDownloader().resume(task);
     }
     return false;
   }

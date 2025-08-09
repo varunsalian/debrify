@@ -664,7 +664,7 @@ class _DownloadTile extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                if (record.status == TaskStatus.running)
+                if (record.task is DownloadTask && record.status == TaskStatus.running)
                   OutlinedButton.icon(
                     onPressed: () async {
                       await DownloadService.instance.pause(record.task);
@@ -673,7 +673,7 @@ class _DownloadTile extends StatelessWidget {
                     icon: const Icon(Icons.pause),
                     label: const Text('Pause'),
                   ),
-                if (record.status == TaskStatus.paused)
+                if (record.task is DownloadTask && record.status == TaskStatus.paused)
                   FilledButton.tonalIcon(
                     onPressed: () async {
                       await DownloadService.instance.resume(record.task);
