@@ -28,6 +28,9 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
   // Live progress snapshots keyed by taskId to show speed/ETA/sizes
   final Map<String, TaskProgressUpdate> _progressByTaskId = {};
+  // Move progress after completion (0..1, or failed)
+  final Map<String, double> _moveProgressByTaskId = {};
+  final Set<String> _moveFailed = {};
 
   String? _defaultUri;
 
@@ -65,6 +68,19 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
     _statusSub = DownloadService.instance.statusStream.listen((_) {
       _refresh();
+    });
+
+    DownloadService.instance.moveProgressStream.listen((move) {
+      setState(() {
+        if (move.failed) {
+          _moveFailed.add(move.taskId);
+          _moveProgressByTaskId.remove(move.taskId);
+        } else if (move.done) {
+          _moveProgressByTaskId[move.taskId] = 1.0;
+        } else {
+          _moveProgressByTaskId[move.taskId] = move.progress;
+        }
+      });
     });
 
     _defaultUri = await StorageService.getDefaultDownloadUri();
@@ -443,11 +459,15 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                       records: inProgress,
                       onChanged: _refresh,
                       progressByTaskId: _progressByTaskId,
+                      moveProgressByTaskId: _moveProgressByTaskId,
+                      moveFailed: _moveFailed,
                     ),
                     _DownloadList(
                       records: finished,
                       onChanged: _refresh,
                       progressByTaskId: _progressByTaskId,
+                      moveProgressByTaskId: _moveProgressByTaskId,
+                      moveFailed: _moveFailed,
                     ),
                   ],
                 ),
@@ -472,11 +492,15 @@ class _DownloadList extends StatelessWidget {
   final List<TaskRecord> records;
   final Future<void> Function() onChanged;
   final Map<String, TaskProgressUpdate> progressByTaskId;
+  final Map<String, double> moveProgressByTaskId;
+  final Set<String> moveFailed;
 
   const _DownloadList({
     required this.records,
     required this.onChanged,
     required this.progressByTaskId,
+    required this.moveProgressByTaskId,
+    required this.moveFailed,
   });
 
   @override
@@ -495,6 +519,8 @@ class _DownloadList extends StatelessWidget {
         record: records[index],
         onChanged: onChanged,
         progress: progressByTaskId[records[index].task.taskId],
+        moveProgress: moveProgressByTaskId[records[index].task.taskId],
+        moveFailed: moveFailed.contains(records[index].task.taskId),
       ),
     );
   }
@@ -503,12 +529,16 @@ class _DownloadList extends StatelessWidget {
 class _DownloadTile extends StatelessWidget {
   final TaskRecord record;
   final TaskProgressUpdate? progress;
+  final double? moveProgress; // 0..1 when moving to SAF
+  final bool moveFailed;
   final Future<void> Function() onChanged;
 
   const _DownloadTile({
     required this.record,
     required this.onChanged,
     required this.progress,
+    required this.moveProgress,
+    required this.moveFailed,
   });
 
   String _statusText(TaskStatus status) {
@@ -590,7 +620,7 @@ class _DownloadTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    record.status == TaskStatus.complete
+                    record.status == TaskStatus.complete && (moveProgress == null || moveProgress == 1.0)
                         ? Icons.check_circle
                         : Icons.download_rounded,
                     color: const Color(0xFF6366F1),
@@ -608,7 +638,14 @@ class _DownloadTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 6),
-                      Text(_statusText(record.status),
+                      Text(
+                          record.status == TaskStatus.complete
+                              ? (moveFailed
+                                  ? 'Move failed — kept in app storage'
+                                  : (moveProgress != null && moveProgress! < 1.0
+                                      ? 'Moving to selected folder…'
+                                      : 'Completed'))
+                              : _statusText(record.status),
                           style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.8),
                               fontSize: 12)),
@@ -623,6 +660,17 @@ class _DownloadTile extends StatelessWidget {
               minHeight: 8,
               borderRadius: BorderRadius.circular(8),
             ),
+            if (record.status == TaskStatus.complete && !moveFailed && moveProgress != null && moveProgress! < 1.0) ...[
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: moveProgress!.clamp(0.0, 1.0),
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              const SizedBox(height: 4),
+              Text('Moving ${(moveProgress! * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
+            ],
             const SizedBox(height: 10),
             // Rich stats row
             if (isActive)
@@ -654,7 +702,13 @@ class _DownloadTile extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Download completed')),
+                      SnackBar(
+                        content: Text(moveFailed
+                            ? 'Download completed (kept in app storage)'
+                            : (moveProgress != null && moveProgress! < 1.0
+                                ? 'Moving file to selected folder…'
+                                : 'Download completed')),
+                      ),
                     );
                   },
                   icon: const Icon(Icons.folder_open),

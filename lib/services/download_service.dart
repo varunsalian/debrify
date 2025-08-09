@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
@@ -21,6 +22,19 @@ class DownloadEntry {
   });
 }
 
+class MoveProgressUpdate {
+  final String taskId;
+  final double progress; // 0.0..1.0
+  final bool done;
+  final bool failed;
+  const MoveProgressUpdate({
+    required this.taskId,
+    required this.progress,
+    this.done = false,
+    this.failed = false,
+  });
+}
+
 class DownloadService {
   DownloadService._internal();
   static final DownloadService _instance = DownloadService._internal();
@@ -30,9 +44,12 @@ class DownloadService {
       StreamController.broadcast();
   final StreamController<TaskStatusUpdate> _statusController =
       StreamController.broadcast();
+  final StreamController<MoveProgressUpdate> _moveController =
+      StreamController.broadcast();
 
   Stream<TaskProgressUpdate> get progressStream => _progressController.stream;
   Stream<TaskStatusUpdate> get statusStream => _statusController.stream;
+  Stream<MoveProgressUpdate> get moveProgressStream => _moveController.stream;
 
   bool _started = false;
 
@@ -67,17 +84,40 @@ class DownloadService {
       if (!await file.exists()) return;
 
       final saf = SafStream();
-      // Copy local file into SAF directory using original filename
-      await saf.pasteLocalFile(
+      final int total = await file.length();
+      // Begin a streamed write to SAF to report progress
+      final info = await saf.startWriteStream(
         targetDirUri,
-        absPath,
         update.task.filename,
         'application/octet-stream',
       );
+      final sessionId = info.session;
+      int written = 0;
+      await for (final chunk in file.openRead()) {
+        // Convert to Uint8List for the plugin API
+        final data = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
+        await saf.writeChunk(sessionId, data);
+        written += chunk.length;
+        _moveController.add(MoveProgressUpdate(
+          taskId: update.task.taskId,
+          progress: total > 0 ? (written / total).clamp(0.0, 1.0) : 0.0,
+        ));
+      }
+      await saf.endWriteStream(sessionId);
+      _moveController.add(MoveProgressUpdate(
+        taskId: update.task.taskId,
+        progress: 1.0,
+        done: true,
+      ));
       // Remove local copy after successful paste
       await file.delete();
     } catch (_) {
-      // Silently ignore; user can still access local app copy if move fails
+      // Report failure; local app copy remains available
+      _moveController.add(MoveProgressUpdate(
+        taskId: update.task.taskId,
+        progress: 0.0,
+        failed: true,
+      ));
     }
   }
 
