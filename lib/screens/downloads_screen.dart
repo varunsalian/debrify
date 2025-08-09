@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
 
 import '../services/download_service.dart';
 import '../services/storage_service.dart';
@@ -148,7 +149,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
     final urlCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
-    bool wifiOnly = false;
 
     String? destPath;
     int? expectedSize;
@@ -224,130 +224,131 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       return '${size.toStringAsFixed(2)} ${units[unit]}';
     }
 
-    final res = await showDialog<bool>(
+    final res = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B1220),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
         return StatefulBuilder(builder: (context, setLocal) {
-          return Dialog(
-            backgroundColor: const Color(0xFF1E293B),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: LayoutBuilder(
-              builder: (context, _) {
-                final maxH = MediaQuery.of(context).size.height * 0.8;
-                final kb = MediaQuery.of(context).viewInsets.bottom;
-                return ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: maxH),
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + kb),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color:
-                                    const Color(0xFF6366F1).withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(Icons.add_rounded,
-                                  color: Color(0xFF6366F1)),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text('Add Download',
-                                style: TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.bold)),
-                          ],
+          final kb = MediaQuery.of(context).viewInsets.bottom;
+          return Padding(
+            padding: EdgeInsets.only(bottom: kb),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF334155),
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: urlCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Download URL',
-                            hintText: 'https://... URL',
-                            prefixIcon: Icon(Icons.link),
-                          ),
-                          onChanged: (_) => recompute(setLocal),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: nameCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'File name',
-                            hintText: 'example.mp4',
-                            prefixIcon: Icon(Icons.insert_drive_file),
-                          ),
-                          onChanged: (_) {
-                            nameTouched = true;
-                            recompute(setLocal);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Switch(
-                              value: wifiOnly,
-                              onChanged: (v) => setLocal(() => wifiOnly = v),
-                            ),
-                            const Text('Wi‑Fi only'),
-                            const Spacer(),
-                          ],
-                        ),
-                        if (destPath != null) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF334155),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Destination: $destPath',
-                                    style: const TextStyle(fontSize: 12)),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Size: '
-                                  '${expectedSize != null ? humanSize(expectedSize!) : 'Unknown'}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => Navigator.of(context).pop(false),
-                                child: const Text('Cancel'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: (urlCtrl.text.trim().isEmpty)
-                                    ? null
-                                    : () => Navigator.of(context).pop(true),
-                                child: const Text('Download'),
-                              ),
-                            ),
-                          ],
-                        )
-                      ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.download_for_offline_rounded, color: Colors.white),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text('Add Download',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                          IconButton(
+                            onPressed: () async {
+                              final data = await Clipboard.getData('text/plain');
+                              if (data?.text != null && data!.text!.isNotEmpty) {
+                                urlCtrl.text = data.text!;
+                                await recompute(setLocal);
+                              }
+                            },
+                            icon: const Icon(Icons.paste, color: Colors.white),
+                            tooltip: 'Paste',
+                          )
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: urlCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Download URL',
+                        hintText: 'https://example.com/file',
+                        prefixIcon: Icon(Icons.link),
+                      ),
+                      onChanged: (_) => recompute(setLocal),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'File name',
+                        hintText: 'movie.mp4',
+                        prefixIcon: Icon(Icons.insert_drive_file),
+                      ),
+                      onChanged: (_) {
+                        nameTouched = true;
+                        recompute(setLocal);
+                      },
+                    ),
+                    if (destPath != null) ...[
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _chip(Icons.folder, destPath!),
+                          _chip(Icons.storage_rounded,
+                              expectedSize != null ? humanSize(expectedSize!) : 'Unknown size'),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: (urlCtrl.text.trim().isEmpty)
+                                ? null
+                                : () => Navigator.of(context).pop(true),
+                            icon: const Icon(Icons.download_rounded),
+                            label: const Text('Download'),
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+              ),
             ),
           );
         });
@@ -360,10 +361,35 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       await DownloadService.instance.enqueueDownload(
         url: url,
         fileName: fileName,
-        wifiOnly: wifiOnly,
       );
       await _refresh();
     }
+  }
+
+  Widget _chip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
