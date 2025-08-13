@@ -23,12 +23,15 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
   late final StreamSubscription<TaskProgressUpdate> _progressSub;
   late final StreamSubscription<TaskStatusUpdate> _statusSub;
+  StreamSubscription? _bytesSub;
 
   List<TaskRecord> _records = [];
   bool _loading = true;
 
   // Live progress snapshots keyed by taskId to show speed/ETA/sizes
   final Map<String, TaskProgressUpdate> _progressByTaskId = {};
+  // Raw bytes and totals from Android native
+  final Map<String, (int bytes, int? total)> _bytesByTaskId = {};
   // Move progress after completion (0..1, or failed)
   final Map<String, double> _moveProgressByTaskId = {};
   final Set<String> _moveFailed = {};
@@ -71,6 +74,12 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     _statusSub = DownloadService.instance.statusStream.listen((_) {
       _refresh();
     });
+
+    _bytesSub = DownloadService.instance.bytesProgressStream.listen((evt) {
+      setState(() {
+        _bytesByTaskId[evt.taskId] = (evt.bytes, evt.total >= 0 ? evt.total : null);
+      });
+    }, onError: (_) {});
 
     DownloadService.instance.moveProgressStream.listen((move) {
       setState(() {
@@ -126,6 +135,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     _tabController.dispose();
     _progressSub.cancel();
     _statusSub.cancel();
+    _bytesSub?.cancel();
     super.dispose();
   }
 
@@ -512,6 +522,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                       progressByTaskId: _progressByTaskId,
                       moveProgressByTaskId: _moveProgressByTaskId,
                       moveFailed: _moveFailed,
+                      rawBytes: _bytesByTaskId,
                     ),
                     _DownloadList(
                       records: finished,
@@ -519,6 +530,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                       progressByTaskId: _progressByTaskId,
                       moveProgressByTaskId: _moveProgressByTaskId,
                       moveFailed: _moveFailed,
+                      rawBytes: _bytesByTaskId,
                     ),
                   ],
                 ),
@@ -661,6 +673,7 @@ class _DownloadList extends StatelessWidget {
   final Map<String, TaskProgressUpdate> progressByTaskId;
   final Map<String, double> moveProgressByTaskId;
   final Set<String> moveFailed;
+  final Map<String, (int bytes, int? total)> rawBytes;
 
   const _DownloadList({
     required this.records,
@@ -668,6 +681,7 @@ class _DownloadList extends StatelessWidget {
     required this.progressByTaskId,
     required this.moveProgressByTaskId,
     required this.moveFailed,
+    required this.rawBytes,
   });
 
   @override
@@ -688,6 +702,8 @@ class _DownloadList extends StatelessWidget {
         progress: progressByTaskId[records[index].task.taskId],
         moveProgress: moveProgressByTaskId[records[index].task.taskId],
         moveFailed: moveFailed.contains(records[index].task.taskId),
+        rawBytes: rawBytes[records[index].task.taskId]?.$1,
+        rawTotal: rawBytes[records[index].task.taskId]?.$2,
       ),
     );
   }
@@ -699,6 +715,8 @@ class _DownloadTile extends StatelessWidget {
   final double? moveProgress; // 0..1 when moving to SAF
   final bool moveFailed;
   final Future<void> Function() onChanged;
+  final int? rawBytes;
+  final int? rawTotal;
 
   const _DownloadTile({
     required this.record,
@@ -706,6 +724,8 @@ class _DownloadTile extends StatelessWidget {
     required this.progress,
     required this.moveProgress,
     required this.moveFailed,
+    this.rawBytes,
+    this.rawTotal,
   });
 
   String _statusText(TaskStatus status) {
@@ -748,9 +768,9 @@ class _DownloadTile extends StatelessWidget {
     final double rawProgress = progress?.progress ?? (record.progress ?? 0.0);
     final name = record.task.filename;
 
-    final int? totalBytes = progress?.hasExpectedFileSize == true
+    final int? totalBytes = rawTotal ?? (progress?.hasExpectedFileSize == true
         ? progress!.expectedFileSize
-        : null;
+        : (record.expectedFileSize > 0 ? record.expectedFileSize : null));
     final bool isActive = record.status == TaskStatus.running ||
         record.status == TaskStatus.paused ||
         record.status == TaskStatus.enqueued ||
@@ -764,9 +784,9 @@ class _DownloadTile extends StatelessWidget {
                 : rawProgress.clamp(0.0, 1.0)
             : 0.0;
 
-    final int? downloadedBytes = (totalBytes != null)
+    final int? downloadedBytes = rawBytes ?? ((totalBytes != null)
         ? (shownProgress * totalBytes).round()
-        : null;
+        : null);
     final String? speedStr =
         progress?.hasNetworkSpeed == true ? progress!.networkSpeedAsString : null;
     final String? etaStr =
@@ -848,12 +868,11 @@ class _DownloadTile extends StatelessWidget {
                 children: [
                   if (speedStr != null)
                     _StatChip(icon: Icons.speed, label: speedStr),
-                  if (downloadedBytes != null && totalBytes != null)
-                    _StatChip(
-                      icon: Icons.storage_rounded,
-                      label:
-                          '${_fmtBytes(downloadedBytes)} / ${_fmtBytes(totalBytes)}',
-                    ),
+                  _StatChip(
+                    icon: Icons.storage_rounded,
+                    label: '${downloadedBytes != null ? _fmtBytes(downloadedBytes) : '—'} / '
+                        '${totalBytes != null ? _fmtBytes(totalBytes) : '—'}',
+                  ),
                   if (etaStr != null)
                     _StatChip(icon: Icons.timer, label: 'ETA $etaStr'),
                   if (speedStr == null &&
@@ -863,6 +882,18 @@ class _DownloadTile extends StatelessWidget {
                         label: '${(shownProgress * 100).toStringAsFixed(0)}%'),
                 ],
               ),
+            if (!isActive && record.status == TaskStatus.complete && totalBytes != null) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _StatChip(
+                    icon: Icons.storage_rounded,
+                    label: _fmtBytes(totalBytes),
+                  ),
+                ],
+              ),
+            ],
             if (record.status == TaskStatus.complete)
               Align(
                 alignment: Alignment.centerRight,
@@ -918,10 +949,10 @@ class _DownloadTile extends StatelessWidget {
                 const Spacer(),
                 if (isActive)
                   Text('${(shownProgress * 100).toStringAsFixed(0)}%',
-                      style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8))),
+                      style:
+                          TextStyle(color: Colors.white.withValues(alpha: 0.7))),
               ],
-            )
+            ),
           ],
         ),
       ),

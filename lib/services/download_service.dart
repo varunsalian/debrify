@@ -37,6 +37,13 @@ class MoveProgressUpdate {
   });
 }
 
+class AndroidBytesProgress {
+  final String taskId;
+  final int bytes;
+  final int total; // -1 if unknown
+  const AndroidBytesProgress({required this.taskId, required this.bytes, required this.total});
+}
+
 class DownloadService {
   DownloadService._internal();
   static final DownloadService _instance = DownloadService._internal();
@@ -48,10 +55,13 @@ class DownloadService {
       StreamController.broadcast();
   final StreamController<MoveProgressUpdate> _moveController =
       StreamController.broadcast();
+  final StreamController<AndroidBytesProgress> _bytesController =
+      StreamController.broadcast();
 
   Stream<TaskProgressUpdate> get progressStream => _progressController.stream;
   Stream<TaskStatusUpdate> get statusStream => _statusController.stream;
   Stream<MoveProgressUpdate> get moveProgressStream => _moveController.stream;
+  Stream<AndroidBytesProgress> get bytesProgressStream => _bytesController.stream;
 
   bool _started = false;
   StreamSubscription<Map<String, dynamic>>? _androidEventsSub;
@@ -191,6 +201,7 @@ class DownloadService {
             final prog = total > 0 ? (bytes / total).clamp(0.0, 1.0) : 0.0;
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, prog, expectedFileSize: total);
             _progressController.add(TaskProgressUpdate(task, prog));
+            _bytesController.add(AndroidBytesProgress(taskId: taskId, bytes: bytes, total: total > 0 ? total : -1));
             break;
           case 'paused':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
@@ -242,25 +253,6 @@ class DownloadService {
     }
 
     _started = true;
-  }
-
-  Future<String> _appDownloadsSubdir() async {
-    // Use a stable, app-specific downloads directory under Documents
-    final Directory docs = await getApplicationDocumentsDirectory();
-    final Directory dlDir = Directory('${docs.path}/downloads');
-    if (!await dlDir.exists()) {
-      await dlDir.create(recursive: true);
-    }
-    return dlDir.path;
-  }
-
-  static String _sanitizeName(String name) {
-    // Remove problematic characters and trim
-    final String cleaned = name
-        .replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    return cleaned.isEmpty ? 'download' : cleaned;
   }
 
   Future<(String directory, String filename)> _smartLocationFor(
@@ -407,5 +399,24 @@ class DownloadService {
       return Directory((await getApplicationDocumentsDirectory()).path);
     }
     return Directory((await getApplicationDocumentsDirectory()).path);
+  }
+
+  Future<String> _appDownloadsSubdir() async {
+    // Use a stable, app-specific downloads directory under Documents
+    final Directory docs = await getApplicationDocumentsDirectory();
+    final Directory dlDir = Directory('${docs.path}/downloads');
+    if (!await dlDir.exists()) {
+      await dlDir.create(recursive: true);
+    }
+    return dlDir.path;
+  }
+
+  static String _sanitizeName(String name) {
+    // Remove problematic characters and trim
+    final String cleaned = name
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return cleaned.isEmpty ? 'download' : cleaned;
   }
 } 
