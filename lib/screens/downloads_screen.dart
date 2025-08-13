@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import 'settings_screen.dart';
+import '../services/android_native_downloader.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -180,7 +181,11 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           .trim();
       final dot = filename.lastIndexOf('.');
       final folder = sanitize(dot > 0 ? filename.substring(0, dot) : filename);
-      destPath = '${docs.path}/downloads/$folder/$filename';
+      if (Platform.isAndroid) {
+        destPath = 'Download/Debrify/$filename';
+      } else {
+        destPath = '${docs.path}/downloads/$folder/$filename';
+      }
 
       try {
         expectedSize = await DownloadTask(url: url, filename: filename)
@@ -801,19 +806,23 @@ class _DownloadTile extends StatelessWidget {
               Align(
                 alignment: Alignment.centerRight,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(moveFailed
-                            ? 'Download completed (kept in app storage)'
-                            : (moveProgress != null && moveProgress! < 1.0
-                                ? 'Moving file to selected folder…'
-                                : 'Download completed')),
-                      ),
-                    );
+                  onPressed: () async {
+                    final fileInfo = DownloadService.instance.getLastFileForTask(record.task.taskId);
+                    if (fileInfo == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('File not available to open yet')),
+                      );
+                      return;
+                    }
+                    final ok = await AndroidNativeDownloader.openContentUri(fileInfo.$1, fileInfo.$2);
+                    if (!ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Opened Downloads instead')),
+                      );
+                    }
                   },
-                  icon: const Icon(Icons.folder_open),
-                  label: const Text('Show'),
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Open'),
                 ),
               ),
             const SizedBox(height: 8),

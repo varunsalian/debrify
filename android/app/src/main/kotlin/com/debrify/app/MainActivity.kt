@@ -1,5 +1,6 @@
 package com.debrify.app
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -73,6 +74,34 @@ class MainActivity : FlutterActivity() {
 					}
 					androidx.core.content.ContextCompat.startForegroundService(this, intent)
 					result.success(true)
+				}
+				"openContentUri" -> {
+					val uriStr = call.argument<String>("uri")
+					val mime = call.argument<String>("mimeType") ?: "application/octet-stream"
+					if (uriStr.isNullOrEmpty()) {
+						result.error("bad_args", "uri required", null)
+						return@setMethodCallHandler
+					}
+					try {
+						val u = Uri.parse(uriStr)
+						val view = Intent(Intent.ACTION_VIEW).apply {
+							setDataAndType(u, mime)
+							addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+						}
+						startActivity(view)
+						result.success(true)
+					} catch (e: ActivityNotFoundException) {
+						try {
+							val downloads = Intent("android.intent.action.VIEW_DOWNLOADS")
+							downloads.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+							startActivity(downloads)
+							result.success(false)
+						} catch (e2: Exception) {
+							result.error("open_failed", e2.message, null)
+						}
+					} catch (e: Exception) {
+						result.error("open_failed", e.message, null)
+					}
 				}
 				"openBatteryOptimizationSettings" -> {
 					try {

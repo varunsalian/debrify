@@ -58,6 +58,7 @@ class DownloadService {
       StreamController.broadcast();
   final StreamController<AndroidBytesProgress> _bytesController =
       StreamController.broadcast();
+  final Map<String, (String contentUri, String mimeType)?> _lastFileByTaskId = {};
 
   Stream<TaskProgressUpdate> get progressStream => _progressController.stream;
   Stream<TaskStatusUpdate> get statusStream => _statusController.stream;
@@ -183,14 +184,21 @@ class DownloadService {
           case 'canceled':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.canceled, -2.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.canceled));
+            _lastFileByTaskId.remove(taskId);
             break;
           case 'complete':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.complete, 1.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.complete));
+            final uri = (event['contentUri'] ?? '').toString();
+            final mime = (event['mimeType'] ?? 'application/octet-stream').toString();
+            if (uri.isNotEmpty) {
+              _lastFileByTaskId[taskId] = (uri, mime);
+            }
             break;
           case 'error':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+            _lastFileByTaskId.remove(taskId);
             break;
         }
       });
@@ -393,4 +401,6 @@ class DownloadService {
         .trim();
     return cleaned.isEmpty ? 'download' : cleaned;
   }
+
+  (String contentUri, String mimeType)? getLastFileForTask(String taskId) => _lastFileByTaskId[taskId];
 } 

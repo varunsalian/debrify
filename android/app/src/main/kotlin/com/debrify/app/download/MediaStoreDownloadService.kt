@@ -265,6 +265,8 @@ class MediaStoreDownloadService : Service() {
 					"fileName" to state.fileName,
 					"subDir" to state.subDir,
 					"url" to state.url,
+					"contentUri" to (uri?.toString() ?: ""),
+					"mimeType" to state.mimeType,
 				))
 				states.remove(state.taskId)
 				notificationManager.cancel(taskNotificationId(state.taskId))
@@ -386,6 +388,8 @@ class MediaStoreDownloadService : Service() {
 					"fileName" to state.fileName,
 					"subDir" to state.subDir,
 					"url" to state.url,
+					"contentUri" to (uri?.toString() ?: ""),
+					"mimeType" to state.mimeType,
 				))
 				states.remove(state.taskId)
 				notificationManager.cancel(taskNotificationId(state.taskId))

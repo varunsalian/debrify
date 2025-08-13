@@ -49,6 +49,14 @@ class AndroidNativeDownloader {
 		return (await _channel.invokeMethod<bool>('cancel', {'taskId': taskId})) ?? false;
 	}
 
+	static Future<bool> openContentUri(String uri, String mimeType) async {
+		if (!Platform.isAndroid) return false;
+		return (await _channel.invokeMethod<bool>('openContentUri', {
+			'uri': uri,
+			'mimeType': mimeType,
+		})) ?? false;
+	}
+
 	static Future<bool> openBatteryOptimizationSettings() async {
 		if (!Platform.isAndroid) return false;
 		return (await _channel.invokeMethod<bool>('openBatteryOptimizationSettings')) ?? false;
