@@ -41,7 +41,8 @@ class MediaStoreDownloadService : Service() {
 
 		private const val NOTIFICATION_CHANNEL_ID = "downloads_channel"
 		private const val NOTIFICATION_CHANNEL_NAME = "Downloads"
-		private const val NOTIFICATION_ID = 1001
+		private const val SERVICE_NOTIFICATION_ID = 9000
+		private const val GROUP_KEY_DOWNLOADS = "com.debrify.app.downloads.GROUP"
 	}
 
 	private data class DownloadState(
@@ -85,8 +86,13 @@ class MediaStoreDownloadService : Service() {
 
 				val state = DownloadState(taskId, url, fileName, subDir, mimeType, headers)
 				states[taskId] = state
-				startForeground(NOTIFICATION_ID, buildStatusNotification(state, "Preparing...", indeterminate = true, completed = false))
-				Thread { try { startOrResume(state, fresh = true) } catch (t: Throwable) { try { notifyState(state, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to (t.message ?: "crash"))) } }.start()
+				if (states.size == 1) {
+					startForeground(SERVICE_NOTIFICATION_ID, buildSummaryNotification())
+				} else {
+					updateSummaryNotification()
+				}
+				notifyTask(state, "Preparing...", indeterminate = true, completed = false)
+				Thread { try { startOrResume(state, fresh = true) } catch (t: Throwable) { try { notifyTask(state, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to (t.message ?: "crash"))) } }.start()
 			}
 			ACTION_PAUSE -> {
 				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return START_NOT_STICKY
@@ -94,7 +100,8 @@ class MediaStoreDownloadService : Service() {
 					s.paused = true
 					try { s.connection?.disconnect() } catch (_: Exception) {}
 					try { s.input?.close() } catch (_: Exception) {}
-					notifyState(s, "Paused", indeterminate = false, completed = false)
+					notifyTask(s, "Paused", indeterminate = false, completed = false)
+					updateSummaryNotification()
 					ChannelBridge.emit(mapOf(
 						"type" to "paused",
 						"taskId" to taskId,
@@ -108,7 +115,8 @@ class MediaStoreDownloadService : Service() {
 				states[taskId]?.let { s ->
 					if (s.running) return START_NOT_STICKY
 					s.paused = false
-					Thread { try { startOrResume(s, fresh = false) } catch (t: Throwable) { try { notifyState(s, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to s.taskId, "message" to (t.message ?: "crash"))) } }.start()
+					Thread { try { startOrResume(s, fresh = false) } catch (t: Throwable) { try { notifyTask(s, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to s.taskId, "message" to (t.message ?: "crash"))) } }.start()
+					updateSummaryNotification()
 					ChannelBridge.emit(mapOf(
 						"type" to "resumed",
 						"taskId" to taskId,
@@ -131,10 +139,15 @@ class MediaStoreDownloadService : Service() {
 						"subDir" to s.subDir,
 					))
 					states.remove(taskId)
+					notificationManager.cancel(taskNotificationId(taskId))
 				}
-				stopForeground(STOP_FOREGROUND_REMOVE)
-				notificationManager.cancel(NOTIFICATION_ID)
-				stopSelfSafely()
+				if (states.isEmpty()) {
+					stopForeground(STOP_FOREGROUND_REMOVE)
+					notificationManager.cancel(SERVICE_NOTIFICATION_ID)
+					stopSelfSafely()
+				} else {
+					updateSummaryNotification()
+				}
 			}
 		}
 		return START_NOT_STICKY
@@ -192,7 +205,7 @@ class MediaStoreDownloadService : Service() {
 				}
 				uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
 				if (uri == null) {
-					notifyState(state, "Failed to create destination", indeterminate = true, completed = false)
+					notifyTask(state, "Failed to create destination", indeterminate = true, completed = false)
 					ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to "no destination"))
 					stopSelfSafely(); return
 				}
@@ -243,7 +256,7 @@ class MediaStoreDownloadService : Service() {
 					val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
 					contentResolver.update(uri!!, done, null, null)
 				}
-				notifyState(state, "Download complete", indeterminate = false, completed = true)
+				notifyTask(state, "Download complete", indeterminate = false, completed = true)
 				ChannelBridge.emit(mapOf(
 					"type" to "complete",
 					"taskId" to state.taskId,
@@ -254,9 +267,14 @@ class MediaStoreDownloadService : Service() {
 					"url" to state.url,
 				))
 				states.remove(state.taskId)
-				stopForeground(STOP_FOREGROUND_REMOVE)
-				notificationManager.cancel(NOTIFICATION_ID)
-				stopSelfSafely()
+				notificationManager.cancel(taskNotificationId(state.taskId))
+				if (states.isEmpty()) {
+					stopForeground(STOP_FOREGROUND_REMOVE)
+					notificationManager.cancel(SERVICE_NOTIFICATION_ID)
+					stopSelfSafely()
+				} else {
+					updateSummaryNotification()
+				}
 				return
 			} else if (resp !in 200..206) {
 				throw IllegalStateException("HTTP $resp for $url")
@@ -316,7 +334,8 @@ class MediaStoreDownloadService : Service() {
 			val buffer = ByteArray(256 * 1024)
 			var bytesRead: Int
 			var lastUpdate = System.currentTimeMillis()
-			notifyState(state, "Downloading", indeterminate = state.total <= 0, completed = false)
+			notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
+			updateSummaryNotification()
 			if (state.downloaded == 0L) {
 				ChannelBridge.emit(mapOf(
 					"type" to "progress",
@@ -338,7 +357,7 @@ class MediaStoreDownloadService : Service() {
 				state.downloaded += bytesRead
 				val now = System.currentTimeMillis()
 				if (now - lastUpdate > 500) {
-					notifyState(state, "Downloading", indeterminate = state.total <= 0, completed = false)
+					notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
 					ChannelBridge.emit(mapOf(
 						"type" to "progress",
 						"taskId" to state.taskId,
@@ -358,7 +377,7 @@ class MediaStoreDownloadService : Service() {
 					val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
 					contentResolver.update(uri!!, done, null, null)
 				}
-				notifyState(state, "Download complete", indeterminate = false, completed = true)
+				notifyTask(state, "Download complete", indeterminate = false, completed = true)
 				ChannelBridge.emit(mapOf(
 					"type" to "complete",
 					"taskId" to state.taskId,
@@ -369,17 +388,23 @@ class MediaStoreDownloadService : Service() {
 					"url" to state.url,
 				))
 				states.remove(state.taskId)
-				stopForeground(STOP_FOREGROUND_REMOVE)
-				notificationManager.cancel(NOTIFICATION_ID)
-				stopSelfSafely()
+				notificationManager.cancel(taskNotificationId(state.taskId))
+				if (states.isEmpty()) {
+					stopForeground(STOP_FOREGROUND_REMOVE)
+					notificationManager.cancel(SERVICE_NOTIFICATION_ID)
+					stopSelfSafely()
+				} else {
+					updateSummaryNotification()
+				}
 			} else {
-				notifyState(state, "Paused", indeterminate = false, completed = false)
+				notifyTask(state, "Paused", indeterminate = false, completed = false)
+				updateSummaryNotification()
 			}
 		} catch (e: Exception) {
 			if (state.paused) {
-				notifyState(state, "Paused", indeterminate = false, completed = false)
+				notifyTask(state, "Paused", indeterminate = false, completed = false)
 			} else if (!state.canceled) {
-				notifyState(state, "Download failed", indeterminate = true, completed = false)
+				notifyTask(state, "Download failed", indeterminate = true, completed = false)
 				ChannelBridge.emit(mapOf(
 					"type" to "error",
 					"taskId" to state.taskId,
@@ -431,7 +456,7 @@ class MediaStoreDownloadService : Service() {
 		return PendingIntent.getService(this, (action + taskId).hashCode(), i, flags)
 	}
 
-	private fun buildStatusNotification(state: DownloadState, title: String, indeterminate: Boolean, completed: Boolean): Notification {
+	private fun buildTaskNotification(state: DownloadState, title: String, indeterminate: Boolean, completed: Boolean): Notification {
 		val total = state.total
 		val downloaded = state.downloaded
 		val pct = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else 0
@@ -457,6 +482,7 @@ class MediaStoreDownloadService : Service() {
 			.setContentIntent(pendingIntent)
 			.setPriority(NotificationCompat.PRIORITY_LOW)
 			.setStyle(NotificationCompat.BigTextStyle().bigText(details).setSummaryText(title))
+			.setGroup(GROUP_KEY_DOWNLOADS)
 
 		if (indeterminate) {
 			builder.setProgress(0, 0, true)
@@ -476,9 +502,37 @@ class MediaStoreDownloadService : Service() {
 		return builder.build()
 	}
 
-	private fun notifyState(state: DownloadState, title: String, indeterminate: Boolean, completed: Boolean) {
-		notificationManager.notify(NOTIFICATION_ID, buildStatusNotification(state, title, indeterminate, completed))
+	private fun buildSummaryNotification(): Notification {
+		val active = states.values.count { !it.canceled }
+		val paused = states.values.count { it.paused && !it.canceled }
+		val running = active - paused
+		val summaryText = when {
+			active <= 0 -> "No active downloads"
+			paused > 0 && running > 0 -> "$running running, $paused paused"
+			paused > 0 -> "$paused paused"
+			else -> "$running running"
+		}
+		return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+			.setContentTitle("Downloads")
+			.setContentText(summaryText)
+			.setSmallIcon(com.debrify.app.R.mipmap.ic_launcher)
+			.setOngoing(true)
+			.setOnlyAlertOnce(true)
+			.setPriority(NotificationCompat.PRIORITY_LOW)
+			.setGroup(GROUP_KEY_DOWNLOADS)
+			.setGroupSummary(true)
+			.build()
 	}
+
+	private fun updateSummaryNotification() {
+		notificationManager.notify(SERVICE_NOTIFICATION_ID, buildSummaryNotification())
+	}
+
+	private fun notifyTask(state: DownloadState, title: String, indeterminate: Boolean, completed: Boolean) {
+		notificationManager.notify(taskNotificationId(state.taskId), buildTaskNotification(state, title, indeterminate, completed))
+	}
+
+	private fun taskNotificationId(taskId: String): Int = taskId.hashCode()
 
 	override fun onBind(intent: Intent?): IBinder? = null
 } 
