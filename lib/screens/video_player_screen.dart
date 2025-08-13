@@ -34,6 +34,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Timer? _hideTimer;
 	bool _isSeekingWithSlider = false;
 	_DoubleTapRipple? _ripple;
+	bool _panIgnore = false;
 
 	// Gesture state
 	_GestureMode _mode = _GestureMode.none;
@@ -113,6 +114,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		// Avoid edge conflicts with system back gesture by requiring a margin
 		const edgeGuard = 24.0;
 		if (localPos.dx < edgeGuard || localPos.dx > size.width - edgeGuard) return;
+		// If controls visible, ignore double-taps near top/bottom bars to not clash with buttons/slider
+		if (_controlsVisible.value) {
+			const topBar = 72.0;
+			const bottomBar = 72.0;
+			if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) return;
+		}
 		final isLeft = localPos.dx < size.width / 2;
 		final delta = const Duration(seconds: 10);
 		final target = _controller.value.position + (isLeft ? -delta : delta);
@@ -131,6 +138,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	void _onPanStart(DragStartDetails details) async {
+		// If controls are visible, ignore pans that begin within top/bottom bars so buttons and slider work unaffected
+		_panIgnore = false;
+		if (_controlsVisible.value) {
+			final box = context.findRenderObject() as RenderBox?;
+			if (box != null) {
+				final size = box.size;
+				const topBar = 72.0;
+				const bottomBar = 72.0;
+				final dy = details.localPosition.dy;
+				if (dy < topBar || dy > size.height - bottomBar) {
+					_panIgnore = true;
+					return;
+				}
+			}
+		}
 		_gestureStartPosition = details.localPosition;
 		_gestureStartVideoPosition = _controller.value.position;
 		_gestureStartVolume = await VolumeController().getVolume();
@@ -145,6 +167,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	void _onPanUpdate(DragUpdateDetails details) {
+		if (_panIgnore) return;
 		final dx = details.localPosition.dx - _gestureStartPosition.dx;
 		final dy = details.localPosition.dy - _gestureStartPosition.dy;
 		final absDx = dx.abs();
@@ -187,6 +210,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	void _onPanEnd(DragEndDetails details) {
+		if (_panIgnore) return;
 		if (_mode == _GestureMode.seek && _seekHud.value != null) {
 			_controller.seekTo(_seekHud.value!.target);
 		}
@@ -305,20 +329,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							)
 						else
 							const Center(child: CircularProgressIndicator(color: Colors.white)),
-
-						// Gesture layer
-						GestureDetector(
-							onTap: _toggleControls,
-							onDoubleTapDown: _handleDoubleTap,
-							onPanStart: _onPanStart,
-							onPanUpdate: _onPanUpdate,
-							onPanEnd: _onPanEnd,
-						),
-
 						// Double-tap ripple
 						if (_ripple != null)
 							IgnorePointer(child: CustomPaint(painter: _DoubleTapRipplePainter(_ripple!))),
-
 						// HUDs
 						ValueListenableBuilder<_SeekHudState?>(
 							valueListenable: _seekHud,
@@ -356,7 +369,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								);
 							},
 						),
-
 						// Controls overlay
 						ValueListenableBuilder<bool>(
 							valueListenable: _controlsVisible,
@@ -394,6 +406,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 									),
 								);
 							},
+						),
+						// Top-most gesture layer to always receive pans/double-taps
+						GestureDetector(
+							behavior: HitTestBehavior.translucent,
+							onTap: _controlsVisible.value ? null : _toggleControls,
+							onDoubleTapDown: _handleDoubleTap,
+							onPanStart: _onPanStart,
+							onPanUpdate: _onPanUpdate,
+							onPanEnd: _onPanEnd,
 						),
 					],
 				),
