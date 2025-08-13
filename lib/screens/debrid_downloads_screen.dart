@@ -1338,36 +1338,55 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     ),
                  ),
                  
-                 // Play button (for all single files - MIME type checked after unrestricting)
-                 if (torrent.links.length == 1) ...[
-                   Container(
-                     decoration: BoxDecoration(
-                       border: Border(
-                         left: BorderSide(
-                           color: const Color(0xFF475569).withValues(alpha: 0.3),
-                         ),
-                       ),
-                     ),
-                     child: TextButton.icon(
-                       onPressed: () => _handlePlayVideo(torrent),
-                       icon: Icon(
-                         FileUtils.isProblematicVideo(torrent.filename)
-                           ? Icons.warning
-                           : Icons.play_arrow,
-                         size: 18,
-                       ),
-                       label: Text(
-                         FileUtils.isProblematicVideo(torrent.filename) ? 'Play*' : 'Play',
-                       ),
-                       style: TextButton.styleFrom(
-                         foregroundColor: FileUtils.isProblematicVideo(torrent.filename)
-                           ? const Color(0xFFF59E0B)
-                           : const Color(0xFFE50914),
-                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                       ),
-                     ),
-                   ),
-                 ],
+                // Play button
+                if (torrent.links.length == 1) ...[
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: const Color(0xFF475569).withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () => _handlePlayVideo(torrent),
+                      icon: Icon(
+                        FileUtils.isProblematicVideo(torrent.filename)
+                          ? Icons.warning
+                          : Icons.play_arrow,
+                        size: 18,
+                      ),
+                      label: Text(
+                        FileUtils.isProblematicVideo(torrent.filename) ? 'Play*' : 'Play',
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: FileUtils.isProblematicVideo(torrent.filename)
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFFE50914),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: const Color(0xFF475569).withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () => _handlePlayMultiFileTorrent(torrent),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFE50914),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      ),
+                    ),
+                  ),
+                ],
                  
                  // Delete button
                  Container(
@@ -1664,5 +1683,76 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         ),
       ),
     );
+  }
+
+  Future<void> _handlePlayMultiFileTorrent(RDTorrent torrent) async {
+    if (_apiKey == null) return;
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text(
+                'Preparing playlist…',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final List<PlaylistEntry> entries = [];
+      for (final l in torrent.links) {
+        try {
+          final res = await DebridService.unrestrictLink(_apiKey!, l);
+          final url = (res['download'] ?? '').toString();
+          final fname = (res['filename'] ?? '').toString();
+          final mime = (res['mimeType'] ?? '').toString();
+          if (url.isEmpty) continue;
+          // Filter to videos only
+          if (FileUtils.isVideoMimeType(mime) || FileUtils.isVideoFile(fname)) {
+            entries.add(PlaylistEntry(url: url, title: fname.isNotEmpty ? fname : torrent.filename));
+          }
+        } catch (_) {
+          // Skip problematic item
+          continue;
+        }
+      }
+
+      if (mounted) Navigator.of(context).pop(); // close loading
+
+      if (entries.isEmpty) {
+        if (mounted) {
+          _showError('No playable video files found in this torrent.');
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerScreen(
+            videoUrl: entries.first.url,
+            title: torrent.filename,
+            subtitle: '${entries.length} files',
+            playlist: entries,
+            startIndex: 0,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        _showError('Failed to prepare playlist: $e');
+      }
+    }
   }
 } 

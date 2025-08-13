@@ -13,16 +13,26 @@ class VideoPlayerScreen extends StatefulWidget {
 	final String videoUrl;
 	final String title;
 	final String? subtitle;
+	final List<PlaylistEntry>? playlist;
+	final int? startIndex;
 
 	const VideoPlayerScreen({
 		Key? key,
 		required this.videoUrl,
 		required this.title,
 		this.subtitle,
+		this.playlist,
+		this.startIndex,
 	}) : super(key: key);
 
 	@override
 	State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class PlaylistEntry {
+	final String url;
+	final String title;
+	const PlaylistEntry({required this.url, required this.title});
 }
 
 enum _GestureMode { none, seek, volume, brightness }
@@ -30,12 +40,13 @@ enum _GestureMode { none, seek, volume, brightness }
 enum _AspectMode { contain, cover, fitWidth, fitHeight }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProviderStateMixin {
-	late final VideoPlayerController _controller;
+	late VideoPlayerController _controller;
 	final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
 	Timer? _hideTimer;
 	bool _isSeekingWithSlider = false;
 	_DoubleTapRipple? _ripple;
 	bool _panIgnore = false;
+	int _currentIndex = 0;
 
 	// Gesture state
 	_GestureMode _mode = _GestureMode.none;
@@ -67,7 +78,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_landscapeLocked = true;
 		WakelockPlus.enable();
 		VolumeController().showSystemUI = false;
-		_controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl),
+		final initialUrl = (widget.playlist != null && widget.playlist!.isNotEmpty)
+			? widget.playlist![widget.startIndex ?? 0].url
+			: widget.videoUrl;
+		_currentIndex = widget.playlist != null ? (widget.startIndex ?? 0) : 0;
+		_controller = VideoPlayerController.networkUrl(Uri.parse(initialUrl),
 			videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
 		)
 			..addListener(_onVideoUpdate)
@@ -84,7 +99,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	void _onVideoUpdate() {
 		// Update slider-driven seeks HUD if needed
 		if (!mounted) return;
+		final v = _controller.value;
+		if (v.isInitialized && v.position >= v.duration && v.duration > Duration.zero) {
+			_onPlaybackEnded();
+		}
 		setState(() {});
+	}
+
+	Future<void> _onPlaybackEnded() async {
+		if (widget.playlist == null || widget.playlist!.isEmpty) return;
+		if (_currentIndex + 1 >= widget.playlist!.length) return; // end
+		await _loadPlaylistIndex(_currentIndex + 1, autoplay: true);
+	}
+
+	Future<void> _loadPlaylistIndex(int index, {bool autoplay = false}) async {
+		if (widget.playlist == null || index < 0 || index >= widget.playlist!.length) return;
+		await _saveResume();
+		final entry = widget.playlist![index];
+		final newController = VideoPlayerController.networkUrl(Uri.parse(entry.url),
+			videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+		);
+		final old = _controller;
+		_currentIndex = index;
+		newController.addListener(_onVideoUpdate);
+		await newController.initialize();
+		await _maybeRestoreResumeFor(newController);
+		if (mounted) {
+			setState(() {
+				_controller = newController;
+			});
+			// Dispose old after the new controller is in the tree
+			WidgetsBinding.instance.addPostFrameCallback((_) async {
+				try {
+					old.removeListener(_onVideoUpdate);
+					await old.pause();
+					await old.dispose();
+				} catch (_) {}
+			});
+			if (autoplay) await _controller.play();
+		}
 	}
 
 	@override
@@ -107,26 +160,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	String get _resumeKey {
 		// Use a canonical key stripping volatile query parts
-		final uri = Uri.tryParse(widget.videoUrl);
+		final url = (widget.playlist != null && widget.playlist!.isNotEmpty)
+			? widget.playlist![_currentIndex].url
+			: widget.videoUrl;
+		final uri = Uri.tryParse(url);
 		if (uri == null) return widget.videoUrl;
 		final base = uri.replace(queryParameters: {});
 		return base.toString();
 	}
 
 	Future<void> _maybeRestoreResume() async {
+		await _maybeRestoreResumeFor(_controller);
+	}
+
+	Future<void> _maybeRestoreResumeFor(VideoPlayerController controller) async {
 		final data = await StorageService.getVideoResume(_resumeKey);
 		if (data == null) return;
 		final posMs = (data['positionMs'] ?? 0) as int;
 		final speed = (data['speed'] ?? 1.0) as double;
 		final aspect = (data['aspect'] ?? 'contain') as String;
 		final position = Duration(milliseconds: posMs);
-		final dur = _controller.value.duration;
+		final dur = controller.value.duration;
 		if (dur > Duration.zero && position > const Duration(seconds: 10) && position < dur * 0.9) {
-			await _controller.seekTo(position);
+			await controller.seekTo(position);
 		}
 		// restore speed
 		if (speed != 1.0) {
-			await _controller.setPlaybackSpeed(speed);
+			await controller.setPlaybackSpeed(speed);
 			_playbackSpeed = speed;
 		}
 		// restore aspect
@@ -382,6 +442,55 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 	}
 
+	Future<void> _showPlaylistSheet(BuildContext context) async {
+		if (widget.playlist == null || widget.playlist!.isEmpty) return;
+		await showModalBottomSheet(
+			context: context,
+			backgroundColor: const Color(0xFF0F172A),
+			shape: const RoundedRectangleBorder(
+				borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+			),
+			builder: (context) {
+				return SafeArea(
+					top: false,
+					child: Column(
+						mainAxisSize: MainAxisSize.min,
+						children: [
+							Container(
+								padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+								child: Row(
+									children: [
+										const Icon(Icons.playlist_play_rounded, color: Colors.white),
+										const SizedBox(width: 8),
+										const Text('All files', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+									],
+								),
+							),
+							Flexible(
+								child: ListView.builder(
+									shrinkWrap: true,
+									itemCount: widget.playlist!.length,
+									itemBuilder: (context, index) {
+										final entry = widget.playlist![index];
+										final active = index == _currentIndex;
+										return ListTile(
+											onTap: () async {
+												Navigator.of(context).pop();
+												await _loadPlaylistIndex(index, autoplay: true);
+											},
+											title: Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
+											leading: Icon(active ? Icons.play_arrow_rounded : Icons.movie_rounded, color: active ? Colors.greenAccent : Colors.white70),
+										);
+									},
+								),
+							),
+						],
+					),
+				);
+			},
+		);
+	}
+
 	@override
 	Widget build(BuildContext context) {
 		final isReady = _controller.value.isInitialized;
@@ -473,6 +582,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 											speed: _playbackSpeed,
 											isLandscape: _landscapeLocked,
 											onRotate: _toggleOrientation,
+											hasPlaylist: widget.playlist != null && widget.playlist!.isNotEmpty,
+											onShowPlaylist: () => _showPlaylistSheet(context),
 											onSeekBarChangedStart: () {
 												_isSeekingWithSlider = true;
 											},
@@ -518,6 +629,8 @@ class _Controls extends StatelessWidget {
 	final double speed;
 	final bool isLandscape;
 	final VoidCallback onRotate;
+	final VoidCallback onShowPlaylist;
+	final bool hasPlaylist;
 	final VoidCallback onSeekBarChangedStart;
 	final ValueChanged<double> onSeekBarChanged;
 	final VoidCallback onSeekBarChangeEnd;
@@ -535,6 +648,8 @@ class _Controls extends StatelessWidget {
 		required this.speed,
 		required this.isLandscape,
 		required this.onRotate,
+		required this.onShowPlaylist,
+		required this.hasPlaylist,
 		required this.onSeekBarChangedStart,
 		required this.onSeekBarChanged,
 		required this.onSeekBarChangeEnd,
@@ -615,6 +730,12 @@ class _Controls extends StatelessWidget {
 											icon: const Icon(Icons.crop_free_rounded, color: Colors.white),
 											onPressed: onAspect,
 										),
+										if (hasPlaylist)
+											IconButton(
+												icon: const Icon(Icons.playlist_play_rounded, color: Colors.white),
+												onPressed: onShowPlaylist,
+												tooltip: 'Playlist',
+											),
 										IconButton(
 											icon: Icon(isLandscape ? Icons.stay_current_landscape_rounded : Icons.screen_rotation_rounded, color: Colors.white),
 											onPressed: onRotate,
