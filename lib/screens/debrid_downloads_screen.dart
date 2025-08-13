@@ -512,360 +512,259 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   }
 
   Future<void> _showMultipleLinksDialog(RDTorrent torrent, {bool showPlayButtons = false}) async {
-    showDialog(
+    await showModalBottomSheet(
       context: context,
-      builder: (BuildContext context) {
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B1220),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
         return FutureBuilder<List<Map<String, dynamic>>>(
           future: DebridService.unrestrictLinks(_apiKey!, torrent.links),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return AlertDialog(
-                title: const Text('Processing Files'),
-                content: const Column(
+              return Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: [
+                  children: const [
+                    SizedBox(height: 8),
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
                     Text('Unrestricting download links...'),
+                    SizedBox(height: 8),
                   ],
                 ),
               );
             }
-
             if (snapshot.hasError) {
-              return AlertDialog(
-                title: const Text('Error'),
-                content: Text('Failed to unrestrict links: ${snapshot.error}'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('OK'),
-                  ),
-                ],
+              return Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Failed to unrestrict links'),
+                    const SizedBox(height: 12),
+                    Text(snapshot.error.toString(),
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
               );
             }
 
             final unrestrictedLinks = snapshot.data!;
-            
-                                     return Dialog(
-               backgroundColor: const Color(0xFF1E293B),
-               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-               child: Container(
-                 width: MediaQuery.of(context).size.width * 0.9,
-                 constraints: BoxConstraints(
-                   maxHeight: MediaQuery.of(context).size.height * 0.8,
-                   maxWidth: MediaQuery.of(context).size.width * 0.9,
-                 ),
-                 padding: const EdgeInsets.all(20),
-                 child: Column(
-                   mainAxisSize: MainAxisSize.min,
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: [
-                     // Header
-                     Row(
-                       children: [
-                         Container(
-                           padding: const EdgeInsets.all(8),
-                           decoration: BoxDecoration(
-                             color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                             borderRadius: BorderRadius.circular(8),
-                           ),
-                           child: Icon(
-                             showPlayButtons ? Icons.play_circle : Icons.download,
-                             color: const Color(0xFF6366F1),
-                             size: 20,
-                           ),
-                         ),
-                         const SizedBox(width: 12),
-                         Expanded(
-                           child: Column(
-                             crossAxisAlignment: CrossAxisAlignment.start,
-                             children: [
-                               Text(
-                                 showPlayButtons ? 'File Options' : 'Download Files',
-                                 style: TextStyle(
-                                   fontSize: 18,
-                                   fontWeight: FontWeight.bold,
-                                   color: Colors.white,
-                                 ),
-                               ),
-                               Text(
-                                 torrent.filename,
-                                 style: TextStyle(
-                                   fontSize: 14,
-                                   color: Colors.grey[400],
-                                 ),
-                                 maxLines: 1,
-                                 overflow: TextOverflow.ellipsis,
-                               ),
-                             ],
-                           ),
-                         ),
-                       ],
-                     ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // File count and copy all button
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0xFF475569).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.file_copy,
-                                  size: 16,
-                                  color: Colors.grey[400],
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    '${unrestrictedLinks.length} files available',
-                                    style: TextStyle(
-                                      color: Colors.grey[300],
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
+            bool downloadingAll = false;
+            int addCount = 0;
+            final Set<int> added = {};
+            return StatefulBuilder(
+              builder: (context, setLocal) {
+                final kb = MediaQuery.of(context).viewInsets.bottom;
+                return Padding(
+                  padding: EdgeInsets.only(bottom: kb),
+                  child: SafeArea(
+                    top: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Header
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                                   ),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                              ],
-                            ),
+                                child: Icon(
+                                  showPlayButtons ? Icons.play_circle_fill : Icons.file_download,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'File Options',
+                                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${torrent.filename} • ${unrestrictedLinks.length} files',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              FilledButton.icon(
+                                onPressed: downloadingAll
+                                    ? null
+                                    : () async {
+                                        setLocal(() {
+                                          downloadingAll = true;
+                                          addCount = 0;
+                                        });
+                                        for (var i = 0; i < unrestrictedLinks.length; i++) {
+                                          final link = unrestrictedLinks[i];
+                                          final url = (link['download'] ?? '').toString();
+                                          final fileName = (link['filename'] ?? 'file').toString();
+                                          if (url.isEmpty) continue;
+                                          await DownloadService.instance.enqueueDownload(
+                                            url: url,
+                                            fileName: fileName,
+                                            context: context,
+                                          );
+                                          setLocal(() {
+                                            added.add(i);
+                                            addCount = i + 1;
+                                          });
+                                        }
+                                        setLocal(() => downloadingAll = false);
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Added ${unrestrictedLinks.length} downloads')),
+                                          );
+                                        }
+                                      },
+                                icon: downloadingAll
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Icon(Icons.download_rounded),
+                                label: Text(downloadingAll ? 'Adding $addCount/${unrestrictedLinks.length}…' : 'Download All'),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 12),
-                                                     ElevatedButton.icon(
-                             onPressed: () => _copyAllLinks(unrestrictedLinks),
-                             icon: const Icon(Icons.copy_all, size: 16),
-                             label: Text(showPlayButtons ? 'Copy All Links' : 'Copy All'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6366F1),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                        ),
+
+                        if (downloadingAll) ...[
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: LinearProgressIndicator(
+                                minHeight: 6,
+                                value: unrestrictedLinks.isEmpty ? null : (addCount / unrestrictedLinks.length).clamp(0.0, 1.0),
                               ),
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Files list
-                    Flexible(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFF475569).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: unrestrictedLinks.length,
-                          separatorBuilder: (context, index) => Divider(
-                            height: 1,
-                            color: const Color(0xFF475569).withValues(alpha: 0.3),
-                            indent: 16,
-                            endIndent: 16,
-                          ),
-                          itemBuilder: (context, index) {
-                            final link = unrestrictedLinks[index];
-                            final fileName = link['filename'] ?? 'Unknown file';
-                            final fileSize = link['filesize'] ?? 0;
-                            final mimeType = link['mimeType']?.toString() ?? '';
-                            final isVideo = FileUtils.isVideoMimeType(mimeType);
-                            
-                            return Container(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Top row: File icon, name, and size
-                                  Row(
-                                    children: [
-                                      // File icon
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: isVideo 
-                                            ? const Color(0xFFE50914).withValues(alpha: 0.2)
-                                            : const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Icon(
-                                          isVideo ? Icons.play_arrow : Icons.insert_drive_file,
-                                          color: isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B),
-                                          size: 20,
-                                        ),
+
+                        const SizedBox(height: 12),
+
+                        // File list
+                        Flexible(
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            shrinkWrap: true,
+                            itemCount: unrestrictedLinks.length,
+                            separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              color: const Color(0xFF223047),
+                            ),
+                            itemBuilder: (context, index) {
+                              final link = unrestrictedLinks[index];
+                              final fileName = (link['filename'] ?? 'Unknown file').toString();
+                              final fileSize = (link['filesize'] ?? 0) as int;
+                              final mimeType = (link['mimeType'] ?? '').toString();
+                              final isVideo = FileUtils.isVideoMimeType(mimeType);
+                              final isAdded = added.contains(index);
+
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: (isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B)).withValues(alpha: 0.18),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
-                                      
-                                      const SizedBox(width: 12),
-                                      
-                                      // File info
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              fileName,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.white,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              Formatters.formatFileSize(fileSize),
-                                              style: TextStyle(
-                                                color: Colors.grey[400],
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  
-                                  // Bottom row: Action buttons (show for all files when showPlayButtons is true)
-                                  if (showPlayButtons) ...[
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        // Play button
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: isVideo
-                                              ? const Color(0xFFE50914).withValues(alpha: 0.2)
-                                              : const Color(0xFF6366F1).withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: IconButton(
-                                            icon: Icon(
-                                              isVideo ? Icons.play_arrow : Icons.play_circle_outline,
-                                              color: isVideo
-                                                ? const Color(0xFFE50914)
-                                                : const Color(0xFF6366F1),
-                                              size: 20,
-                                            ),
-                                            onPressed: () {
-                                              final downloadLink = link['download'];
-                                              if (downloadLink != null) {
-                                                Navigator.of(context).pop();
-                                                Navigator.of(context).push(
-                                                  MaterialPageRoute(
-                                                    builder: (context) => VideoPlayerScreen(
-                                                      videoUrl: downloadLink,
-                                                      title: fileName,
-                                                      subtitle: Formatters.formatFileSize(fileSize),
-                                                    ),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                            tooltip: FileUtils.isProblematicVideo(fileName)
-                                              ? 'Play video (may not work well)'
-                                              : 'Play video',
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        // Copy button
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: IconButton(
-                                            icon: const Icon(
-                                              Icons.copy,
-                                              color: Color(0xFF10B981),
-                                              size: 20,
-                                            ),
-                                            onPressed: () {
-                                              final downloadLink = link['download'];
-                                              if (downloadLink != null) {
-                                                _copyToClipboard(downloadLink);
-                                                Navigator.of(context).pop();
-                                              }
-                                            },
-                                            tooltip: 'Copy download link',
-                                          ),
-                                        ),
-                                      ],
+                                      child: Icon(isVideo ? Icons.play_arrow : Icons.insert_drive_file,
+                                          color: isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B)),
                                     ),
-                                  ] else if (!isVideo || !showPlayButtons) ...[
-                                    // For non-video files or when not showing play buttons, show copy button inline
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(8),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            fileName,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                                           ),
-                                          child: IconButton(
-                                            icon: const Icon(
-                                              Icons.copy,
-                                              color: Color(0xFF10B981),
-                                              size: 20,
-                                            ),
-                                            onPressed: () {
-                                              final downloadLink = link['download'];
-                                              if (downloadLink != null) {
-                                                _copyToClipboard(downloadLink);
-                                                Navigator.of(context).pop();
-                                              }
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            Formatters.formatFileSize(fileSize),
+                                            style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    if (showPlayButtons && isVideo) ...[
+                                      OutlinedButton.icon(
+                                        onPressed: () => _playUnrestricted(link),
+                                        icon: const Icon(Icons.play_arrow),
+                                        label: const Text('Play'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    FilledButton.tonalIcon(
+                                      onPressed: isAdded
+                                          ? null
+                                          : () async {
+                                              final url = (link['download'] ?? '').toString();
+                                              if (url.isEmpty) return;
+                                              setLocal(() => added.add(index));
+                                              await DownloadService.instance.enqueueDownload(
+                                                url: url,
+                                                fileName: fileName,
+                                                context: context,
+                                              );
                                             },
-                                            tooltip: 'Copy download link',
-                                          ),
-                                        ),
-                                      ],
+                                      icon: Icon(isAdded ? Icons.check_circle : Icons.download_rounded),
+                                      label: Text(isAdded ? 'Added' : 'Download'),
                                     ),
                                   ],
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // Close button
-                    SizedBox(
-                      width: double.infinity,
-                      child: TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.grey[400],
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                        child: const Text('Close'),
-                      ),
+
+                        // Footer
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Close'),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             );
           },
         );
@@ -1320,34 +1219,35 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // Small download button
-                    IconButton(
-                      tooltip: 'Download',
-                      onPressed: () async {
-                        if (_apiKey == null) return;
-                        try {
-                          final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
-                          final link = unrestrict['download'] as String;
-                          await DownloadService.instance.enqueueDownload(
-                            url: link,
-                            fileName: torrent.filename,
-                            context: context,
-                          );
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Added to downloads')),
+                    // Small download button (only for single-file torrents)
+                    if (torrent.links.length == 1)
+                      IconButton(
+                        tooltip: 'Download',
+                        onPressed: () async {
+                          if (_apiKey == null) return;
+                          try {
+                            final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
+                            final link = unrestrict['download'] as String;
+                            await DownloadService.instance.enqueueDownload(
+                              url: link,
+                              fileName: torrent.filename,
+                              context: context,
                             );
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Added to downloads')),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to start download: $e')),
+                              );
+                            }
                           }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Failed to start download: $e')),
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.download_rounded, color: Color(0xFF10B981)),
-                    ),
+                        },
+                        icon: const Icon(Icons.download_rounded, color: Color(0xFF10B981)),
+                      ),
                   ],
                 ),
                 
@@ -1732,6 +1632,36 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _downloadAllFiles(List<Map<String, dynamic>> links) async {
+    for (final link in links) {
+      final url = (link['download'] ?? '').toString();
+      final fileName = (link['filename'] ?? 'file').toString();
+      if (url.isEmpty) continue;
+      await DownloadService.instance.enqueueDownload(
+        url: url,
+        fileName: fileName,
+        context: context,
+      );
+    }
+  }
+
+  void _playUnrestricted(Map<String, dynamic> link) {
+    final downloadLink = (link['download'] ?? '').toString();
+    final fileName = (link['filename'] ?? 'Video').toString();
+    final fileSize = (link['filesize'] ?? 0) as int;
+    if (downloadLink.isEmpty) return;
+    Navigator.of(context).pop();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => VideoPlayerScreen(
+          videoUrl: downloadLink,
+          title: fileName,
+          subtitle: Formatters.formatFileSize(fileSize),
+        ),
       ),
     );
   }
