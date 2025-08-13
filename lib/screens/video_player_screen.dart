@@ -1,451 +1,707 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../utils/file_utils.dart';
+import 'package:screen_brightness/screen_brightness.dart';
+import 'package:video_player/video_player.dart';
+import 'package:volume_controller/volume_controller.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
-  final String videoUrl;
-  final String title;
-  final String? subtitle;
+	final String videoUrl;
+	final String title;
+	final String? subtitle;
 
-  const VideoPlayerScreen({
-    Key? key,
-    required this.videoUrl,
-    required this.title,
-    this.subtitle,
-  }) : super(key: key);
+	const VideoPlayerScreen({
+		Key? key,
+		required this.videoUrl,
+		required this.title,
+		this.subtitle,
+	}) : super(key: key);
 
-  @override
-  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+	@override
+	State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
-class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  bool _isLoading = false;
-  bool _hasError = false;
-  String _errorMessage = '';
+enum _GestureMode { none, seek, volume, brightness }
 
-  @override
-  void initState() {
-    super.initState();
-    _openVideoInDefaultPlayer();
-  }
+enum _AspectMode { contain, cover, fitWidth, fitHeight }
 
-  Future<void> _openVideoInDefaultPlayer() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _hasError = false;
-      });
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProviderStateMixin {
+	late final VideoPlayerController _controller;
+	final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
+	Timer? _hideTimer;
+	bool _isSeekingWithSlider = false;
+	_DoubleTapRipple? _ripple;
 
-      // Show format warning if needed
-      final formatWarning = FileUtils.getVideoFormatWarning(widget.title);
-      if (formatWarning.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showFormatWarning(formatWarning);
-        });
-      }
+	// Gesture state
+	_GestureMode _mode = _GestureMode.none;
+	Offset _gestureStartPosition = Offset.zero;
+	Duration _gestureStartVideoPosition = Duration.zero;
+	double _gestureStartVolume = 0.0;
+	double _gestureStartBrightness = 0.0;
 
-      // Debug: Print the video URL
-      print('DEBUG: Attempting to open video URL: ${widget.videoUrl}');
-      print('DEBUG: Video title: ${widget.title}');
+	// HUD state
+	final ValueNotifier<_SeekHudState?> _seekHud = ValueNotifier<_SeekHudState?>(null);
+	final ValueNotifier<_VerticalHudState?> _verticalHud = ValueNotifier<_VerticalHudState?>(null);
 
-      // Try different URL formats
-      await _tryDifferentUrlFormats();
-    } catch (e) {
-      print('DEBUG: Error launching video: $e');
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = _getUserFriendlyErrorMessage(e, widget.title);
-      });
-    }
-  }
+	// Aspect / speed
+	_AspectMode _aspectMode = _AspectMode.contain;
+	double _playbackSpeed = 1.0;
 
-  Future<void> _tryDifferentUrlFormats() async {
-    final originalUrl = widget.videoUrl;
-    final List<String> urlVariants = [
-      originalUrl,
-      // Try with different schemes
-      originalUrl.replaceFirst('https://', 'http://'),
-      // Try with explicit video MIME type
-      '$originalUrl#video',
-    ];
+	// Orientation
+	bool _landscapeLocked = false;
 
-    for (final urlVariant in urlVariants) {
-      try {
-        print('DEBUG: Trying URL variant: $urlVariant');
-        final Uri videoUri = Uri.parse(urlVariant);
-        
-        // First, check if we can launch the URL
-        if (await canLaunchUrl(videoUri)) {
-          print('DEBUG: URL can be launched, attempting to open...');
-          
-          // Try with external application mode first
-          final launched = await launchUrl(
-            videoUri,
-            mode: LaunchMode.externalApplication,
-          );
-          
-          if (launched) {
-            print('DEBUG: Video launched successfully with URL: $urlVariant');
-            // Close this screen after launching the video
-            if (mounted) {
-              Navigator.of(context).pop();
-            }
-            return;
-          } else {
-            print('DEBUG: Failed to launch URL with external application mode');
-            // Try alternative launch methods
-            final success = await _tryAlternativeLaunchMethods(videoUri);
-            if (success) return;
-          }
-        } else {
-          print('DEBUG: URL cannot be launched directly: $urlVariant');
-        }
-      } catch (e) {
-        print('DEBUG: Error with URL variant $urlVariant: $e');
-        continue; // Try next variant
-      }
-    }
+	@override
+	void initState() {
+		super.initState();
+		SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+		WakelockPlus.enable();
+		VolumeController().showSystemUI = false;
+		_controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl),
+			videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+		)
+			..addListener(_onVideoUpdate)
+			..initialize().then((_) {
+				if (!mounted) return;
+				setState(() {});
+				_controller.play();
+				_scheduleAutoHide();
+			});
+	}
 
-    // If all URL variants fail, throw error
-    throw Exception('No video player app found on device');
-  }
+	void _onVideoUpdate() {
+		// Update slider-driven seeks HUD if needed
+		if (!mounted) return;
+		setState(() {});
+	}
 
-  Future<bool> _tryAlternativeLaunchMethods(Uri videoUri) async {
-    try {
-      // Try with platform default mode
-      print('DEBUG: Trying platform default mode...');
-      final launched = await launchUrl(
-        videoUri,
-        mode: LaunchMode.platformDefault,
-      );
-      
-      if (launched) {
-        print('DEBUG: Video launched with platform default mode');
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-        return true;
-      }
+	@override
+	void dispose() {
+		_hideTimer?.cancel();
+		_controlsVisible.dispose();
+		_seekHud.dispose();
+		_verticalHud.dispose();
+		_controller.removeListener(_onVideoUpdate);
+		_controller.dispose();
+		WakelockPlus.disable();
+		SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+		SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
+		super.dispose();
+	}
 
-      // Try with inAppWebView mode as last resort
-      print('DEBUG: Trying inAppWebView mode...');
-      final launchedWebView = await launchUrl(
-        videoUri,
-        mode: LaunchMode.inAppWebView,
-      );
-      
-      if (launchedWebView) {
-        print('DEBUG: Video launched with inAppWebView mode');
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-        return true;
-      }
+	void _scheduleAutoHide() {
+		_hideTimer?.cancel();
+		_hideTimer = Timer(const Duration(seconds: 3), () {
+			_controlsVisible.value = false;
+		});
+	}
 
-      // Try opening in browser as last resort
-      print('DEBUG: Trying to open in browser...');
-      final launchedBrowser = await launchUrl(
-        videoUri,
-        mode: LaunchMode.externalApplication,
-      );
-      
-      if (launchedBrowser) {
-        print('DEBUG: Video opened in browser');
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-        return true;
-      }
+	void _toggleControls() {
+		_controlsVisible.value = !_controlsVisible.value;
+		if (_controlsVisible.value) {
+			_scheduleAutoHide();
+		}
+	}
 
-      // If all methods fail, return false
-      print('DEBUG: All launch methods failed');
-      return false;
-    } catch (e) {
-      print('DEBUG: Alternative launch methods failed: $e');
-      return false;
-    }
-  }
+	Future<void> _handleDoubleTap(TapDownDetails details) async {
+		final box = context.findRenderObject() as RenderBox?;
+		if (box == null) return;
+		final size = box.size;
+		final localPos = details.localPosition;
+		// Avoid edge conflicts with system back gesture by requiring a margin
+		const edgeGuard = 24.0;
+		if (localPos.dx < edgeGuard || localPos.dx > size.width - edgeGuard) return;
+		final isLeft = localPos.dx < size.width / 2;
+		final delta = const Duration(seconds: 10);
+		final target = _controller.value.position + (isLeft ? -delta : delta);
+		final minPos = Duration.zero;
+		final maxPos = _controller.value.duration;
+		final clamped = target < minPos ? minPos : (target > maxPos ? maxPos : target);
+		await _controller.seekTo(clamped);
+		_ripple = _DoubleTapRipple(
+			center: localPos,
+			icon: isLeft ? Icons.replay_10_rounded : Icons.forward_10_rounded,
+		);
+		setState(() {});
+		Future.delayed(const Duration(milliseconds: 450), () {
+			if (mounted) setState(() => _ripple = null);
+		});
+	}
 
-  Future<void> _copyUrlToClipboard() async {
-    try {
-      await Clipboard.setData(ClipboardData(text: widget.videoUrl));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Video URL copied to clipboard'),
-            backgroundColor: Color(0xFF10B981),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      print('DEBUG: Failed to copy URL to clipboard: $e');
-    }
-  }
+	void _onPanStart(DragStartDetails details) async {
+		_gestureStartPosition = details.localPosition;
+		_gestureStartVideoPosition = _controller.value.position;
+		_gestureStartVolume = await VolumeController().getVolume();
+		try {
+			_gestureStartBrightness = await ScreenBrightness().current;
+		} catch (_) {
+			_gestureStartBrightness = 0.5;
+		}
+		_mode = _GestureMode.none;
+		_verticalHud.value = null;
+		_seekHud.value = null;
+	}
 
-  Future<void> _openInBrowser() async {
-    try {
-      final Uri videoUri = Uri.parse(widget.videoUrl);
-      final launched = await launchUrl(
-        videoUri,
-        mode: LaunchMode.externalApplication,
-      );
-      
-      if (launched) {
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to open in browser'),
-              backgroundColor: Color(0xFFE50914),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('DEBUG: Failed to open in browser: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: const Color(0xFFE50914),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
+	void _onPanUpdate(DragUpdateDetails details) {
+		final dx = details.localPosition.dx - _gestureStartPosition.dx;
+		final dy = details.localPosition.dy - _gestureStartPosition.dy;
+		final absDx = dx.abs();
+		final absDy = dy.abs();
+		final size = (context.findRenderObject() as RenderBox).size;
 
-  String _getUserFriendlyErrorMessage(dynamic error, String fileName) {
-    final errorString = error.toString().toLowerCase();
-    final isProblematic = FileUtils.isProblematicVideo(fileName);
-    
-    if (isProblematic) {
-      return 'This video format is not well supported on mobile devices. Try downloading and playing with a different app.';
-    } else if (errorString.contains('network') || errorString.contains('connection')) {
-      return 'Network error. Please check your internet connection.';
-    } else if (errorString.contains('timeout')) {
-      return 'Request timed out. Please try again.';
-    } else if (errorString.contains('format') || errorString.contains('codec')) {
-      return 'Video format not supported. Try a different video file.';
-    } else if (errorString.contains('no video player') || errorString.contains('launch')) {
-      return 'No video player app found on your device. Please install a video player app like VLC, MX Player, or similar. You can also copy the URL and open it manually.';
-    } else {
-      return 'Failed to open video. Please try again.';
-    }
-  }
+		// Decide mode on first significant movement
+		if (_mode == _GestureMode.none) {
+			if (absDx > 12 && absDx > absDy) {
+				_mode = _GestureMode.seek;
+			} else if (absDy > 12) {
+				final isLeftHalf = _gestureStartPosition.dx < size.width / 2;
+				_mode = isLeftHalf ? _GestureMode.brightness : _GestureMode.volume;
+			}
+		}
 
-  void _showFormatWarning(String warning) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.warning,
-                color: Color(0xFFF59E0B),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                warning,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF1E293B),
-        duration: const Duration(seconds: 5),
-      ),
-    );
-  }
+		if (_mode == _GestureMode.seek) {
+			final duration = _controller.value.duration;
+			if (duration == Duration.zero) return;
+			// Map horizontal delta to seconds, proportional to width
+			final totalSeconds = duration.inSeconds.toDouble();
+			final seekSeconds = (dx / size.width) * math.min(120.0, totalSeconds);
+			var newPos = _gestureStartVideoPosition + Duration(seconds: seekSeconds.round());
+			if (newPos < Duration.zero) newPos = Duration.zero;
+			if (newPos > duration) newPos = duration;
+			_seekHud.value = _SeekHudState(
+				target: newPos,
+				base: _controller.value.position,
+				isForward: newPos >= _controller.value.position,
+			);
+		} else if (_mode == _GestureMode.volume) {
+			var newVol = (_gestureStartVolume - dy / size.height).clamp(0.0, 1.0);
+			VolumeController().setVolume(newVol);
+			_verticalHud.value = _VerticalHudState(kind: _VerticalKind.volume, value: newVol);
+		} else if (_mode == _GestureMode.brightness) {
+			var newBright = (_gestureStartBrightness - dy / size.height).clamp(0.0, 1.0);
+			ScreenBrightness().setScreenBrightness(newBright);
+			_verticalHud.value = _VerticalHudState(kind: _VerticalKind.brightness, value: newBright);
+		}
+	}
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: SafeArea(
-        child: Center(
-          child: _buildContent(),
-        ),
-      ),
-    );
-  }
+	void _onPanEnd(DragEndDetails details) {
+		if (_mode == _GestureMode.seek && _seekHud.value != null) {
+			_controller.seekTo(_seekHud.value!.target);
+		}
+		_mode = _GestureMode.none;
+		Future.delayed(const Duration(milliseconds: 250), () {
+			_seekHud.value = null;
+			_verticalHud.value = null;
+		});
+	}
 
-  Widget _buildContent() {
-    if (_isLoading) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(
-            color: Color(0xFFE50914),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Opening Video Player...',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            widget.title,
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 14,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
-    }
+	String _format(Duration d) {
+		final sign = d.isNegative ? '-' : '';
+		final abs = d.abs();
+		final h = abs.inHours;
+		final m = abs.inMinutes % 60;
+		final s = abs.inSeconds % 60;
+		if (h > 0) {
+			return '$sign${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+		}
+		return '$sign${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+	}
 
-    if (_hasError) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE50914).withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.error_outline,
-              color: Color(0xFFE50914),
-              size: 48,
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Video Playback Error',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.symmetric(horizontal: 32),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFF475569).withValues(alpha: 0.3),
-              ),
-            ),
-            child: Text(
-              _errorMessage,
-              style: TextStyle(
-                color: Colors.grey[300],
-                fontSize: 14,
-                height: 1.4,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _isLoading = true;
-                        _hasError = false;
-                        _errorMessage = '';
-                      });
-                      _openVideoInDefaultPlayer();
-                    },
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Retry'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE50914),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Close'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.grey),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _copyUrlToClipboard,
-                    icon: const Icon(Icons.copy, size: 18),
-                    label: const Text('Copy URL'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF10B981),
-                      side: const BorderSide(color: Color(0xFF10B981)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  OutlinedButton.icon(
-                    onPressed: _openInBrowser,
-                    icon: const Icon(Icons.open_in_browser, size: 18),
-                    label: const Text('Open in Browser'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF3B82F6),
-                      side: const BorderSide(color: Color(0xFF3B82F6)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      );
-    }
+	void _togglePlay() {
+		if (!_controller.value.isInitialized) return;
+		if (_controller.value.isPlaying) {
+			_controller.pause();
+		} else {
+			_controller.play();
+		}
+		_scheduleAutoHide();
+	}
 
-    // This should not be reached, but just in case
-    return const Text(
-      'Opening video...',
-      style: TextStyle(color: Colors.white),
-    );
-  }
+	void _cycleAspectMode() {
+		setState(() {
+			switch (_aspectMode) {
+				case _AspectMode.contain:
+					_aspectMode = _AspectMode.cover;
+					break;
+				case _AspectMode.cover:
+					_aspectMode = _AspectMode.fitWidth;
+					break;
+				case _AspectMode.fitWidth:
+					_aspectMode = _AspectMode.fitHeight;
+					break;
+				case _AspectMode.fitHeight:
+					_aspectMode = _AspectMode.contain;
+			}
+		});
+		_scheduleAutoHide();
+	}
+
+	void _changeSpeed() {
+		const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+		final idx = speeds.indexOf(_playbackSpeed);
+		final next = speeds[(idx + 1) % speeds.length];
+		_controller.setPlaybackSpeed(next);
+		setState(() => _playbackSpeed = next);
+		_scheduleAutoHide();
+	}
+
+	Future<void> _toggleOrientation() async {
+		if (_landscapeLocked) {
+			await SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
+			_landscapeLocked = false;
+		} else {
+			await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+				DeviceOrientation.landscapeLeft,
+				DeviceOrientation.landscapeRight,
+			]);
+			_landscapeLocked = true;
+		}
+		SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+		if (mounted) setState(() {});
+		_scheduleAutoHide();
+	}
+
+	BoxFit _currentFit() {
+		switch (_aspectMode) {
+			case _AspectMode.contain:
+				return BoxFit.contain;
+			case _AspectMode.cover:
+				return BoxFit.cover;
+			case _AspectMode.fitWidth:
+				return BoxFit.fitWidth;
+			case _AspectMode.fitHeight:
+				return BoxFit.fitHeight;
+		}
+	}
+
+	@override
+	Widget build(BuildContext context) {
+		final isReady = _controller.value.isInitialized;
+		final duration = _controller.value.duration;
+		final pos = _controller.value.position;
+		// final remaining = (duration - pos).clamp(Duration.zero, duration); // not used
+
+		return Scaffold(
+			backgroundColor: Colors.black,
+			body: SafeArea(
+				left: false,
+				top: false,
+				right: false,
+				bottom: false,
+				child: Stack(
+					fit: StackFit.expand,
+					children: [
+						// Video texture
+						if (isReady)
+							FittedBox(
+								fit: _currentFit(),
+								child: SizedBox(
+									width: _controller.value.size.width,
+									height: _controller.value.size.height,
+									child: VideoPlayer(_controller),
+								),
+							)
+						else
+							const Center(child: CircularProgressIndicator(color: Colors.white)),
+
+						// Gesture layer
+						GestureDetector(
+							onTap: _toggleControls,
+							onDoubleTapDown: _handleDoubleTap,
+							onPanStart: _onPanStart,
+							onPanUpdate: _onPanUpdate,
+							onPanEnd: _onPanEnd,
+						),
+
+						// Double-tap ripple
+						if (_ripple != null)
+							IgnorePointer(child: CustomPaint(painter: _DoubleTapRipplePainter(_ripple!))),
+
+						// HUDs
+						ValueListenableBuilder<_SeekHudState?>(
+							valueListenable: _seekHud,
+							builder: (context, hud, _) {
+								return IgnorePointer(
+									ignoring: true,
+									child: AnimatedOpacity(
+										opacity: hud == null ? 0 : 1,
+										duration: const Duration(milliseconds: 120),
+										child: Center(
+											child: hud == null
+												? const SizedBox.shrink()
+												: _SeekHud(hud: hud, format: _format),
+										),
+									),
+								);
+							},
+						),
+						ValueListenableBuilder<_VerticalHudState?>(
+							valueListenable: _verticalHud,
+							builder: (context, hud, _) {
+								return IgnorePointer(
+									ignoring: true,
+									child: AnimatedOpacity(
+										opacity: hud == null ? 0 : 1,
+										duration: const Duration(milliseconds: 120),
+										child: Align(
+											alignment: Alignment.centerRight,
+											child: Padding(
+												padding: const EdgeInsets.only(right: 24),
+												child: hud == null ? const SizedBox.shrink() : _VerticalHud(hud: hud),
+											),
+										),
+									),
+								);
+							},
+						),
+
+						// Controls overlay
+						ValueListenableBuilder<bool>(
+							valueListenable: _controlsVisible,
+							builder: (context, visible, _) {
+								return AnimatedOpacity(
+									opacity: visible ? 1 : 0,
+									duration: const Duration(milliseconds: 150),
+									child: IgnorePointer(
+										ignoring: !visible,
+										child: _Controls(
+											title: widget.title,
+											subtitle: widget.subtitle,
+											duration: duration,
+											position: pos,
+											isPlaying: _controller.value.isPlaying,
+											onPlayPause: _togglePlay,
+											onBack: () => Navigator.of(context).pop(),
+											onAspect: _cycleAspectMode,
+											onSpeed: _changeSpeed,
+											speed: _playbackSpeed,
+											isLandscape: _landscapeLocked,
+											onRotate: _toggleOrientation,
+											onSeekBarChangedStart: () {
+												_isSeekingWithSlider = true;
+											},
+											onSeekBarChanged: (v) {
+												final newPos = duration * v;
+												_controller.seekTo(newPos);
+											},
+											onSeekBarChangeEnd: () {
+												_isSeekingWithSlider = false;
+												_scheduleAutoHide();
+											},
+										),
+									),
+								);
+							},
+						),
+					],
+				),
+			),
+		);
+	}
+}
+
+class _Controls extends StatelessWidget {
+	final String title;
+	final String? subtitle;
+	final Duration duration;
+	final Duration position;
+	final bool isPlaying;
+	final VoidCallback onPlayPause;
+	final VoidCallback onBack;
+	final VoidCallback onAspect;
+	final VoidCallback onSpeed;
+	final double speed;
+	final bool isLandscape;
+	final VoidCallback onRotate;
+	final VoidCallback onSeekBarChangedStart;
+	final ValueChanged<double> onSeekBarChanged;
+	final VoidCallback onSeekBarChangeEnd;
+
+	const _Controls({
+		required this.title,
+		required this.subtitle,
+		required this.duration,
+		required this.position,
+		required this.isPlaying,
+		required this.onPlayPause,
+		required this.onBack,
+		required this.onAspect,
+		required this.onSpeed,
+		required this.speed,
+		required this.isLandscape,
+		required this.onRotate,
+		required this.onSeekBarChangedStart,
+		required this.onSeekBarChanged,
+		required this.onSeekBarChangeEnd,
+	});
+
+	String _format(Duration d) {
+		final sign = d.isNegative ? '-' : '';
+		final abs = d.abs();
+		final h = abs.inHours;
+		final m = abs.inMinutes % 60;
+		final s = abs.inSeconds % 60;
+		if (h > 0) {
+			return '$sign${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+		}
+		return '$sign${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+	}
+
+	@override
+	Widget build(BuildContext context) {
+		final total = duration.inMilliseconds <= 0 ? const Duration(seconds: 1) : duration;
+		final progress = (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+
+		return Container(
+			decoration: const BoxDecoration(
+				gradient: LinearGradient(
+					begin: Alignment.topCenter,
+					end: Alignment.bottomCenter,
+					colors: [
+						Color(0x80000000),
+						Color(0x26000000),
+						Color(0x80000000),
+					],
+				),
+			),
+			child: SafeArea(
+				left: true,
+				right: true,
+				top: true,
+				bottom: true,
+				child: Column(
+					mainAxisAlignment: MainAxisAlignment.spaceBetween,
+					children: [
+						// Top bar
+						Row(
+							children: [
+								IconButton(
+									icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+									onPressed: onBack,
+								),
+								Expanded(
+									child: Column(
+										crossAxisAlignment: CrossAxisAlignment.start,
+										children: [
+											Text(
+												title,
+												maxLines: 1,
+												overflow: TextOverflow.ellipsis,
+												style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+											),
+											if (subtitle != null)
+												Text(
+													subtitle!,
+													maxLines: 1,
+													overflow: TextOverflow.ellipsis,
+													style: const TextStyle(color: Colors.white70, fontSize: 12),
+												),
+										],
+									),
+								),
+								Row(
+									children: [
+										Text('${speed}x', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+										IconButton(
+											icon: const Icon(Icons.slow_motion_video_rounded, color: Colors.white),
+											onPressed: onSpeed,
+										),
+										IconButton(
+											icon: const Icon(Icons.crop_free_rounded, color: Colors.white),
+											onPressed: onAspect,
+										),
+										IconButton(
+											icon: Icon(isLandscape ? Icons.stay_current_landscape_rounded : Icons.screen_rotation_rounded, color: Colors.white),
+											onPressed: onRotate,
+											tooltip: isLandscape ? 'Portrait' : 'Rotate',
+										),
+									],
+								),
+							],
+						),
+
+						// Center play/pause
+						Row(
+							mainAxisAlignment: MainAxisAlignment.center,
+							children: [
+								InkWell(
+									onTap: onPlayPause,
+									customBorder: const CircleBorder(),
+									child: Container(
+										padding: const EdgeInsets.all(14),
+										decoration: BoxDecoration(
+											shape: BoxShape.circle,
+											color: Colors.black.withOpacity(0.4),
+										),
+										child: Icon(
+											isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+											color: Colors.white,
+											size: 42,
+										),
+									),
+								),
+							],
+						),
+
+						// Bottom bar
+						Padding(
+							padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+							child: Column(
+								mainAxisSize: MainAxisSize.min,
+								children: [
+									Row(
+										children: [
+											Text(_format(position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+											const SizedBox(width: 8),
+											Expanded(
+												child: SliderTheme(
+													data: SliderTheme.of(context).copyWith(
+														trackHeight: 3,
+														thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+													),
+												child: Slider(
+													min: 0,
+													max: 1,
+													value: progress.toDouble(),
+													onChangeStart: (_) => onSeekBarChangedStart(),
+													onChanged: (v) => onSeekBarChanged(v),
+													onChangeEnd: (_) => onSeekBarChangeEnd(),
+												),
+											),
+										),
+										const SizedBox(width: 8),
+										Text(_format(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+									],
+									),
+								],
+							),
+						),
+					],
+					),
+				),
+			);
+	}
+}
+
+class _SeekHudState {
+	final Duration base;
+	final Duration target;
+	final bool isForward;
+	_SeekHudState({required this.base, required this.target, required this.isForward});
+}
+
+class _SeekHud extends StatelessWidget {
+	final _SeekHudState hud;
+	final String Function(Duration) format;
+	const _SeekHud({required this.hud, required this.format});
+	@override
+	Widget build(BuildContext context) {
+		final delta = hud.target - hud.base;
+		return Container(
+			padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+			decoration: BoxDecoration(
+				color: Colors.black.withOpacity(0.5),
+				borderRadius: BorderRadius.circular(12),
+			),
+			child: Row(
+				mainAxisSize: MainAxisSize.min,
+				children: [
+					Icon(
+						hud.isForward ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
+						color: Colors.white,
+						size: 20,
+					),
+					const SizedBox(width: 10),
+					Text(
+						'${format(hud.target)}  (${delta.isNegative ? '-' : '+'}${format(delta)})',
+						style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+					),
+				],
+			),
+		);
+	}
+}
+
+enum _VerticalKind { volume, brightness }
+
+class _VerticalHudState {
+	final _VerticalKind kind;
+	final double value; // 0..1
+	_VerticalHudState({required this.kind, required this.value});
+}
+
+class _VerticalHud extends StatelessWidget {
+	final _VerticalHudState hud;
+	const _VerticalHud({required this.hud});
+	@override
+	Widget build(BuildContext context) {
+		final icon = hud.kind == _VerticalKind.volume ? Icons.volume_up_rounded : Icons.brightness_6_rounded;
+		final label = (hud.value * 100).round();
+		return Container(
+			padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+			decoration: BoxDecoration(
+				color: Colors.black.withOpacity(0.5),
+				borderRadius: BorderRadius.circular(12),
+			),
+			child: Column(
+				mainAxisSize: MainAxisSize.min,
+				children: [
+					Icon(icon, color: Colors.white),
+					const SizedBox(height: 8),
+					SizedBox(
+						height: 80,
+						width: 6,
+						child: ClipRRect(
+							borderRadius: BorderRadius.circular(999),
+							child: LinearProgressIndicator(
+								value: hud.value.clamp(0.0, 1.0),
+								minHeight: 6,
+								backgroundColor: Colors.white12,
+								valueColor: AlwaysStoppedAnimation<Color>(
+									hud.kind == _VerticalKind.volume ? Colors.lightBlueAccent : Colors.amberAccent,
+								),
+							),
+						),
+					),
+					const SizedBox(height: 8),
+					Text('$label%', style: const TextStyle(color: Colors.white)),
+				],
+			),
+		);
+	}
+}
+
+class _DoubleTapRipple {
+	final Offset center;
+	final IconData icon;
+	_DoubleTapRipple({required this.center, required this.icon});
+}
+
+class _DoubleTapRipplePainter extends CustomPainter {
+	final _DoubleTapRipple ripple;
+	_DoubleTapRipplePainter(this.ripple);
+	@override
+	void paint(Canvas canvas, Size size) {
+		final paint = Paint()..color = Colors.white.withOpacity(0.15);
+		canvas.drawCircle(ripple.center, 80, paint);
+		final tp = TextPainter(
+			text: TextSpan(
+				text: String.fromCharCode(ripple.icon.codePoint),
+				style: TextStyle(
+					fontSize: 48,
+					fontFamily: ripple.icon.fontFamily,
+					package: ripple.icon.fontPackage,
+					color: Colors.white,
+				),
+			),
+			textDirection: TextDirection.ltr,
+		);
+		tb(Size s) => Offset(ripple.center.dx - s.width / 2, ripple.center.dy - s.height / 2);
+		tp.layout();
+		tp.paint(canvas, tb(tp.size));
+	}
+	@override
+	bool shouldRepaint(covariant _DoubleTapRipplePainter oldDelegate) => true;
 } 
