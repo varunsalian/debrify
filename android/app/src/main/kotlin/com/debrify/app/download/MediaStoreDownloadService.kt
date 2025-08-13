@@ -85,8 +85,8 @@ class MediaStoreDownloadService : Service() {
 
 				val state = DownloadState(taskId, url, fileName, subDir, mimeType, headers)
 				states[taskId] = state
-				startForeground(NOTIFICATION_ID, buildNotification("Preparing...", 0, 0, indeterminate = true))
-				Thread { try { startOrResume(state, fresh = true) } catch (t: Throwable) { try { updateNotification("Error", 0, 0, true) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to (t.message ?: "crash"))) } }.start()
+				startForeground(NOTIFICATION_ID, buildStatusNotification(state, "Preparing...", indeterminate = true, completed = false))
+				Thread { try { startOrResume(state, fresh = true) } catch (t: Throwable) { try { notifyState(state, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to (t.message ?: "crash"))) } }.start()
 			}
 			ACTION_PAUSE -> {
 				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return START_NOT_STICKY
@@ -94,6 +94,7 @@ class MediaStoreDownloadService : Service() {
 					s.paused = true
 					try { s.connection?.disconnect() } catch (_: Exception) {}
 					try { s.input?.close() } catch (_: Exception) {}
+					notifyState(s, "Paused", indeterminate = false, completed = false)
 					ChannelBridge.emit(mapOf(
 						"type" to "paused",
 						"taskId" to taskId,
@@ -107,7 +108,7 @@ class MediaStoreDownloadService : Service() {
 				states[taskId]?.let { s ->
 					if (s.running) return START_NOT_STICKY
 					s.paused = false
-					Thread { try { startOrResume(s, fresh = false) } catch (t: Throwable) { try { updateNotification("Error", 0, 0, true) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to s.taskId, "message" to (t.message ?: "crash"))) } }.start()
+					Thread { try { startOrResume(s, fresh = false) } catch (t: Throwable) { try { notifyState(s, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to s.taskId, "message" to (t.message ?: "crash"))) } }.start()
 					ChannelBridge.emit(mapOf(
 						"type" to "resumed",
 						"taskId" to taskId,
@@ -191,7 +192,7 @@ class MediaStoreDownloadService : Service() {
 				}
 				uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
 				if (uri == null) {
-					updateNotification("Failed to create destination", 0, 0, true)
+					notifyState(state, "Failed to create destination", indeterminate = true, completed = false)
 					ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to "no destination"))
 					stopSelfSafely(); return
 				}
@@ -242,7 +243,7 @@ class MediaStoreDownloadService : Service() {
 					val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
 					contentResolver.update(uri!!, done, null, null)
 				}
-				updateNotification("Download complete", state.total, state.total, indeterminate = false, completed = true)
+				notifyState(state, "Download complete", indeterminate = false, completed = true)
 				ChannelBridge.emit(mapOf(
 					"type" to "complete",
 					"taskId" to state.taskId,
@@ -315,7 +316,7 @@ class MediaStoreDownloadService : Service() {
 			val buffer = ByteArray(256 * 1024)
 			var bytesRead: Int
 			var lastUpdate = System.currentTimeMillis()
-			updateNotification("Downloading", state.downloaded, state.total, indeterminate = state.total <= 0)
+			notifyState(state, "Downloading", indeterminate = state.total <= 0, completed = false)
 			if (state.downloaded == 0L) {
 				ChannelBridge.emit(mapOf(
 					"type" to "progress",
@@ -337,7 +338,7 @@ class MediaStoreDownloadService : Service() {
 				state.downloaded += bytesRead
 				val now = System.currentTimeMillis()
 				if (now - lastUpdate > 500) {
-					updateNotification("Downloading", state.downloaded, state.total, indeterminate = state.total <= 0)
+					notifyState(state, "Downloading", indeterminate = state.total <= 0, completed = false)
 					ChannelBridge.emit(mapOf(
 						"type" to "progress",
 						"taskId" to state.taskId,
@@ -357,7 +358,7 @@ class MediaStoreDownloadService : Service() {
 					val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
 					contentResolver.update(uri!!, done, null, null)
 				}
-				updateNotification("Download complete", state.total, state.total, indeterminate = false, completed = true)
+				notifyState(state, "Download complete", indeterminate = false, completed = true)
 				ChannelBridge.emit(mapOf(
 					"type" to "complete",
 					"taskId" to state.taskId,
@@ -372,13 +373,13 @@ class MediaStoreDownloadService : Service() {
 				notificationManager.cancel(NOTIFICATION_ID)
 				stopSelfSafely()
 			} else {
-				updateNotification("Paused", state.downloaded, state.total, indeterminate = false, completed = false)
+				notifyState(state, "Paused", indeterminate = false, completed = false)
 			}
 		} catch (e: Exception) {
 			if (state.paused) {
-				updateNotification("Paused", state.downloaded, state.total, indeterminate = false, completed = false)
+				notifyState(state, "Paused", indeterminate = false, completed = false)
 			} else if (!state.canceled) {
-				updateNotification("Download failed", 0, 0, true)
+				notifyState(state, "Download failed", indeterminate = true, completed = false)
 				ChannelBridge.emit(mapOf(
 					"type" to "error",
 					"taskId" to state.taskId,
@@ -413,7 +414,29 @@ class MediaStoreDownloadService : Service() {
 		}
 	}
 
-	private fun buildNotification(title: String, progress: Long, total: Long, indeterminate: Boolean = false, completed: Boolean = false): Notification {
+	private fun fmtBytes(bytes: Long): String {
+		val units = arrayOf("B", "KB", "MB", "GB", "TB")
+		var b = bytes.toDouble()
+		var idx = 0
+		while (b >= 1024 && idx < units.size - 1) { b /= 1024; idx++ }
+		return String.format("%.1f %s", b, units[idx])
+	}
+
+	private fun pendingService(action: String, taskId: String): PendingIntent {
+		val i = Intent(this, MediaStoreDownloadService::class.java).apply {
+			setAction(action)
+			putExtra(EXTRA_TASK_ID, taskId)
+		}
+		val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE else PendingIntent.FLAG_UPDATE_CURRENT
+		return PendingIntent.getService(this, (action + taskId).hashCode(), i, flags)
+	}
+
+	private fun buildStatusNotification(state: DownloadState, title: String, indeterminate: Boolean, completed: Boolean): Notification {
+		val total = state.total
+		val downloaded = state.downloaded
+		val pct = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else 0
+		val details = if (total > 0) "${fmtBytes(downloaded)} / ${fmtBytes(total)} ($pct%)" else fmtBytes(downloaded)
+
 		val intent = Intent(this, com.debrify.app.MainActivity::class.java)
 		val pendingIntent: PendingIntent? = TaskStackBuilder.create(this).run {
 			addNextIntentWithParentStack(intent)
@@ -425,24 +448,36 @@ class MediaStoreDownloadService : Service() {
 		}
 
 		val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-			.setContentTitle(title)
+			.setContentTitle(state.fileName)
+			.setContentText(details)
+			.setSubText(title)
 			.setSmallIcon(com.debrify.app.R.mipmap.ic_launcher)
 			.setOngoing(!completed)
 			.setOnlyAlertOnce(true)
 			.setContentIntent(pendingIntent)
 			.setPriority(NotificationCompat.PRIORITY_LOW)
+			.setStyle(NotificationCompat.BigTextStyle().bigText(details).setSummaryText(title))
 
 		if (indeterminate) {
 			builder.setProgress(0, 0, true)
 		} else if (total > 0) {
-			val pct = ((progress.coerceAtLeast(0) * 100) / total.coerceAtLeast(1)).toInt()
 			builder.setProgress(100, pct, false)
 		}
+
+		if (!completed) {
+			if (state.paused) {
+				builder.addAction(com.debrify.app.R.mipmap.ic_launcher, "Resume", pendingService(ACTION_RESUME, state.taskId))
+			} else {
+				builder.addAction(com.debrify.app.R.mipmap.ic_launcher, "Pause", pendingService(ACTION_PAUSE, state.taskId))
+			}
+			builder.addAction(com.debrify.app.R.mipmap.ic_launcher, "Cancel", pendingService(ACTION_CANCEL, state.taskId))
+		}
+
 		return builder.build()
 	}
 
-	private fun updateNotification(title: String, progress: Long, total: Long, indeterminate: Boolean = false, completed: Boolean = false) {
-		notificationManager.notify(NOTIFICATION_ID, buildNotification(title, progress, total, indeterminate, completed))
+	private fun notifyState(state: DownloadState, title: String, indeterminate: Boolean, completed: Boolean) {
+		notificationManager.notify(NOTIFICATION_ID, buildStatusNotification(state, title, indeterminate, completed))
 	}
 
 	override fun onBind(intent: Intent?): IBinder? = null
