@@ -81,6 +81,31 @@ class DownloadService {
     if (_batteryCheckShown) return true;
     _batteryCheckShown = true;
     try {
+      bool proceed = true;
+      if (context != null) {
+        proceed = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Allow background downloads'),
+                content: const Text(
+                    'To keep downloads running reliably in the background, please allow the app to ignore battery optimizations. You can change this later in system settings.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('Not now'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    child: const Text('Continue'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+      }
+      if (!proceed) return false;
+
       // First, request ignore battery optimizations for this app via system dialog
       final ok = await AndroidNativeDownloader.requestIgnoreBatteryOptimizationsForApp();
       if (!ok) {
@@ -91,7 +116,7 @@ class DownloadService {
         }
         return false;
       }
-      // Optionally open the settings list page so users can confirm
+      // Optionally open the settings list page so users can confirm/verify
       await AndroidNativeDownloader.openBatteryOptimizationSettings();
     } catch (_) {
       return true; // don't block if something goes wrong
