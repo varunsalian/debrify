@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'storage_service.dart';
 import 'package:saf_stream/saf_stream.dart';
+import 'android_native_downloader.dart';
+import 'android_download_history.dart';
 
 class DownloadEntry {
   final Task task;
@@ -52,6 +54,7 @@ class DownloadService {
   Stream<MoveProgressUpdate> get moveProgressStream => _moveController.stream;
 
   bool _started = false;
+  StreamSubscription<Map<String, dynamic>>? _androidEventsSub;
 
   Future<void> _ensureNotificationPermission() async {
     if (!Platform.isAndroid) return;
@@ -165,40 +168,78 @@ class DownloadService {
   Future<void> initialize() async {
     if (_started) return;
 
-    // Request notification permission on Android 13+
     await _ensureNotificationPermission();
 
-    // Configure notifications (Android)
-    FileDownloader().configureNotification(
-      running: const TaskNotification('Downloading', '{filename}'),
-      complete: const TaskNotification('Download complete', '{filename}'),
-      error: const TaskNotification('Download failed', '{filename}'),
-      paused: const TaskNotification('Download paused', '{filename}'),
-      progressBar: true,
-    );
+    if (Platform.isAndroid) {
+      await AndroidDownloadHistory.instance.initialize();
+      _androidEventsSub = AndroidNativeDownloader.events.listen((event) {
+        final type = event['type'] as String?;
+        final String taskId = (event['taskId'] ?? '').toString();
+        final task = DownloadTask(
+          taskId: taskId,
+          url: event['url'] ?? '',
+          filename: event['fileName'] ?? 'download',
+        );
+        switch (type) {
+          case 'started':
+            AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
+            _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+            break;
+          case 'progress':
+            final total = (event['total'] as num?)?.toInt() ?? 0;
+            final bytes = (event['bytes'] as num?)?.toInt() ?? 0;
+            final prog = total > 0 ? (bytes / total).clamp(0.0, 1.0) : 0.0;
+            AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, prog, expectedFileSize: total);
+            _progressController.add(TaskProgressUpdate(task, prog));
+            break;
+          case 'paused':
+            AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
+            _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+            break;
+          case 'resumed':
+            AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
+            _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+            break;
+          case 'canceled':
+            AndroidDownloadHistory.instance.upsert(task, TaskStatus.canceled, -2.0);
+            _statusController.add(TaskStatusUpdate(task, TaskStatus.canceled));
+            break;
+          case 'complete':
+            AndroidDownloadHistory.instance.upsert(task, TaskStatus.complete, 1.0);
+            _statusController.add(TaskStatusUpdate(task, TaskStatus.complete));
+            break;
+          case 'error':
+            AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+            _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+            break;
+        }
+      });
+    } else {
+      // Non-Android: keep plugin notification configuration
+      FileDownloader().configureNotification(
+        running: const TaskNotification('Downloading', '{filename}'),
+        complete: const TaskNotification('Download complete', '{filename}'),
+        error: const TaskNotification('Download failed', '{filename}'),
+        paused: const TaskNotification('Download paused', '{filename}'),
+        progressBar: true,
+      );
 
-    // Listen for updates centrally
-    FileDownloader().updates.listen((update) async {
-      switch (update) {
-        case TaskProgressUpdate():
-          _progressController.add(update);
-        case TaskStatusUpdate():
-          _statusController.add(update);
-          if (update.status == TaskStatus.canceled) {
-            // Purge canceled tasks from DB so they don't show up anywhere
-            try {
-              await FileDownloader().database.deleteRecordWithId(update.task.taskId);
-            } catch (_) {}
-          }
-          if (update.status == TaskStatus.complete) {
-            await _moveToSafIfConfigured(update);
-          }
-      }
-    });
-
-    // Track tasks and resume events that happened in background
-    await FileDownloader().trackTasks();
-    await FileDownloader().resumeFromBackground();
+      FileDownloader().updates.listen((update) async {
+        switch (update) {
+          case TaskProgressUpdate():
+            _progressController.add(update);
+          case TaskStatusUpdate():
+            _statusController.add(update);
+            if (update.status == TaskStatus.canceled) {
+              try {
+                await FileDownloader().database.deleteRecordWithId(update.task.taskId);
+              } catch (_) {}
+            }
+        }
+      });
+      await FileDownloader().trackTasks();
+      await FileDownloader().resumeFromBackground();
+    }
 
     _started = true;
   }
@@ -263,6 +304,24 @@ class DownloadService {
 
     final (dirAbsPath, filename) = await _smartLocationFor(url, fileName);
 
+    if (Platform.isAndroid) {
+      final String name = filename;
+      final taskId = await AndroidNativeDownloader.start(
+        url: url,
+        fileName: name,
+        subDir: 'Debrify',
+        headers: headers,
+      );
+      if (taskId == null) {
+        throw Exception('Failed to start download');
+      }
+      final task = DownloadTask(taskId: taskId, url: url, filename: name);
+      // Optimistically add to history as enqueued/running
+      AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
+      return DownloadEntry(task: task, displayName: name, directory: '');
+    }
+
+    // Non-Android: existing plugin flow
     // Convert absolute path to baseDirectory + relative directory
     final (BaseDirectory baseDir, String relativeDir, String relFilename) =
         await Task.split(
@@ -294,12 +353,19 @@ class DownloadService {
   }
 
   Future<void> pause(Task task) async {
+    if (Platform.isAndroid) {
+      await AndroidNativeDownloader.pause(task.taskId);
+      return;
+    }
     if (task is DownloadTask) {
       await FileDownloader().pause(task);
     }
   }
 
   Future<bool> resume(Task task) async {
+    if (Platform.isAndroid) {
+      return AndroidNativeDownloader.resume(task.taskId);
+    }
     if (task is DownloadTask && await FileDownloader().taskCanResume(task)) {
       return FileDownloader().resume(task);
     }
@@ -307,21 +373,39 @@ class DownloadService {
   }
 
   Future<void> cancel(Task task) async {
+    if (Platform.isAndroid) {
+      await AndroidNativeDownloader.cancel(task.taskId);
+      AndroidDownloadHistory.instance.removeById(task.taskId);
+      _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
+      return;
+    }
     await FileDownloader().cancel(task as DownloadTask);
     try {
       await FileDownloader().database.deleteRecordWithId(task.taskId);
     } catch (_) {}
   }
 
+  // For backward UI compatibility; on Android, we don’t maintain a DB of records
   Future<List<TaskRecord>> allRecords() async {
+    if (Platform.isAndroid) {
+      return AndroidDownloadHistory.instance.all();
+    }
     return FileDownloader().database.allRecords();
   }
 
   Future<void> deleteRecord(TaskRecord record) async {
+    if (Platform.isAndroid) {
+      AndroidDownloadHistory.instance.removeById(record.taskId);
+      return;
+    }
     await FileDownloader().database.deleteRecordWithId(record.taskId);
   }
 
   Future<Directory> getDownloadsRoot() async {
-    return Directory(await _appDownloadsSubdir());
+    if (Platform.isAndroid) {
+      // Public Downloads is not directly accessible; keep using app docs for any local-only ops
+      return Directory((await getApplicationDocumentsDirectory()).path);
+    }
+    return Directory((await getApplicationDocumentsDirectory()).path);
   }
 } 
