@@ -131,7 +131,8 @@ class MediaStoreDownloadService : Service() {
 					))
 					states.remove(taskId)
 				}
-				stopForeground(STOP_FOREGROUND_DETACH)
+				stopForeground(STOP_FOREGROUND_REMOVE)
+				notificationManager.cancel(NOTIFICATION_ID)
 				stopSelfSafely()
 			}
 		}
@@ -252,7 +253,8 @@ class MediaStoreDownloadService : Service() {
 					"url" to state.url,
 				))
 				states.remove(state.taskId)
-				stopForeground(STOP_FOREGROUND_DETACH)
+				stopForeground(STOP_FOREGROUND_REMOVE)
+				notificationManager.cancel(NOTIFICATION_ID)
 				stopSelfSafely()
 				return
 			} else if (resp !in 200..206) {
@@ -366,7 +368,8 @@ class MediaStoreDownloadService : Service() {
 					"url" to state.url,
 				))
 				states.remove(state.taskId)
-				stopForeground(STOP_FOREGROUND_DETACH)
+				stopForeground(STOP_FOREGROUND_REMOVE)
+				notificationManager.cancel(NOTIFICATION_ID)
 				stopSelfSafely()
 			} else {
 				updateNotification("Paused", state.downloaded, state.total, indeterminate = false, completed = false)
