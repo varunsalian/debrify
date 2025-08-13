@@ -58,6 +58,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	void initState() {
 		super.initState();
 		SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+		// Default to landscape when entering the player
+		SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+			DeviceOrientation.landscapeLeft,
+			DeviceOrientation.landscapeRight,
+		]);
+		_landscapeLocked = true;
 		WakelockPlus.enable();
 		VolumeController().showSystemUI = false;
 		_controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl),
