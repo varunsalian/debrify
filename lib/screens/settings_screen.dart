@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
-import 'settings/user_download_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -12,7 +11,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
-  String? _defaultDownloadFolder;
   String? _apiKeySummary;
 
   @override
@@ -22,10 +20,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSummaries() async {
-    final defaultUri = await StorageService.getDefaultDownloadUri();
     final apiKey = await StorageService.getApiKey();
     setState(() {
-      _defaultDownloadFolder = defaultUri;
       _apiKeySummary = apiKey == null ? 'Not connected' : 'Connected';
       _loading = false;
     });
@@ -92,20 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
-          // Sections hub
-          _SectionTile(
-            icon: Icons.folder_special_rounded,
-            title: 'User Download Settings',
-            subtitle: _defaultDownloadFolder == null ? 'Default folder: Not set' : 'Default folder: Set',
-            onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const UserDownloadSettingsPage()),
-              );
-              await _loadSummaries();
-              setState(() {});
-            },
-          ),
-          const SizedBox(height: 12),
+          // Real Debrid
           _SectionTile(
             icon: Icons.cloud_download_rounded,
             title: 'Real Debrid Settings',

@@ -93,7 +93,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       });
     });
 
-    _defaultUri = await StorageService.getDefaultDownloadUri();
     await _refresh();
   }
 
@@ -116,38 +115,10 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   }
 
   Future<void> _ensureDefaultLocationOrRedirect() async {
-    _defaultUri = await StorageService.getDefaultDownloadUri();
-    if (_defaultUri != null && _defaultUri!.isNotEmpty) return;
+    // No longer requiring a default location; always allow
+    return;
 
-    // Prompt to set default location
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Set default download folder'),
-        content: const Text(
-            'Please choose a default download location in Settings before starting a download.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Open Settings'),
-          ),
-        ],
-      ),
-    );
-
-    if (go == true && mounted) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SettingsScreen()),
-      );
-      _defaultUri = await StorageService.getDefaultDownloadUri();
-      setState(() {});
-    }
-
-    throw Exception('default_location_missing');
+    // Legacy callers expect an exception to stop flow; we now proceed
   }
 
   Future<void> _showAddDialog({String? initialUrl}) async {
@@ -202,19 +173,14 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       }
 
       // Destination preview: if Android SAF folder set, show a human-readable path
-      final defaultUri = _defaultUri;
-      if (Platform.isAndroid && defaultUri != null && defaultUri.startsWith('content://')) {
-        destPath = _safReadable(defaultUri, filename);
-      } else {
-        final docs = await getApplicationDocumentsDirectory();
-        String sanitize(String s) => s
-            .replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
-        final dot = filename.lastIndexOf('.');
-        final folder = sanitize(dot > 0 ? filename.substring(0, dot) : filename);
-        destPath = '${docs.path}/downloads/$folder/$filename';
-      }
+      final docs = await getApplicationDocumentsDirectory();
+      String sanitize(String s) => s
+          .replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      final dot = filename.lastIndexOf('.');
+      final folder = sanitize(dot > 0 ? filename.substring(0, dot) : filename);
+      destPath = '${docs.path}/downloads/$folder/$filename';
 
       try {
         expectedSize = await DownloadTask(url: url, filename: filename)
@@ -420,46 +386,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
     return Column(
       children: [
-        FutureBuilder<String?>(
-          future: StorageService.getDefaultDownloadUri(),
-          builder: (context, snap) {
-            final missing = (snap.connectionState == ConnectionState.done) &&
-                (snap.data == null || (snap.data?.isEmpty ?? true));
-            if (!missing) return const SizedBox.shrink();
-            return Container(
-              margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
-                border: Border.all(
-                    color: const Color(0xFF7C3AED).withValues(alpha: 0.4)),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.folder_outlined, color: Color(0xFF7C3AED)),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Set a default download folder in Settings to save files directly there.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const SettingsScreen()),
-                      );
-                      setState(() {});
-                    },
-                    child: const Text('Open Settings'),
-                  )
-                ],
-              ),
-            );
-          },
-        ),
+        // Default-folder reminder removed
         Container(
           margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(
