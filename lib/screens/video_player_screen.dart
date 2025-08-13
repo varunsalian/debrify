@@ -7,6 +7,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:video_player/video_player.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../services/storage_service.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
 	final String videoUrl;
@@ -70,12 +71,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
 		)
 			..addListener(_onVideoUpdate)
-			..initialize().then((_) {
+			..initialize().then((_) async {
 				if (!mounted) return;
+				await _maybeRestoreResume();
 				setState(() {});
 				_controller.play();
 				_scheduleAutoHide();
 			});
+		_autosaveTimer = Timer.periodic(const Duration(seconds: 6), (_) => _saveResume(debounced: true));
 	}
 
 	void _onVideoUpdate() {
@@ -86,7 +89,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	@override
 	void dispose() {
+		_saveResume();
 		_hideTimer?.cancel();
+		_autosaveTimer?.cancel();
 		_controlsVisible.dispose();
 		_seekHud.dispose();
 		_verticalHud.dispose();
@@ -96,6 +101,75 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 		SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
 		super.dispose();
+	}
+
+	Timer? _autosaveTimer;
+
+	String get _resumeKey {
+		// Use a canonical key stripping volatile query parts
+		final uri = Uri.tryParse(widget.videoUrl);
+		if (uri == null) return widget.videoUrl;
+		final base = uri.replace(queryParameters: {});
+		return base.toString();
+	}
+
+	Future<void> _maybeRestoreResume() async {
+		final data = await StorageService.getVideoResume(_resumeKey);
+		if (data == null) return;
+		final posMs = (data['positionMs'] ?? 0) as int;
+		final speed = (data['speed'] ?? 1.0) as double;
+		final aspect = (data['aspect'] ?? 'contain') as String;
+		final position = Duration(milliseconds: posMs);
+		final dur = _controller.value.duration;
+		if (dur > Duration.zero && position > const Duration(seconds: 10) && position < dur * 0.9) {
+			await _controller.seekTo(position);
+		}
+		// restore speed
+		if (speed != 1.0) {
+			await _controller.setPlaybackSpeed(speed);
+			_playbackSpeed = speed;
+		}
+		// restore aspect
+		switch (aspect) {
+			case 'cover':
+				_aspectMode = _AspectMode.cover;
+				break;
+			case 'fitWidth':
+				_aspectMode = _AspectMode.fitWidth;
+				break;
+			case 'fitHeight':
+				_aspectMode = _AspectMode.fitHeight;
+				break;
+			default:
+				_aspectMode = _AspectMode.contain;
+		}
+	}
+
+	Future<void> _saveResume({bool debounced = false}) async {
+		if (!_controller.value.isInitialized) return;
+		final pos = _controller.value.position;
+		final dur = _controller.value.duration;
+		if (dur <= Duration.zero) return;
+		final aspectStr = () {
+			switch (_aspectMode) {
+				case _AspectMode.cover:
+					return 'cover';
+				case _AspectMode.fitWidth:
+					return 'fitWidth';
+				case _AspectMode.fitHeight:
+					return 'fitHeight';
+				case _AspectMode.contain:
+				default:
+					return 'contain';
+			}
+		}();
+		await StorageService.upsertVideoResume(_resumeKey, {
+			'positionMs': pos.inMilliseconds,
+			'speed': _playbackSpeed,
+			'aspect': aspectStr,
+			'durationMs': dur.inMilliseconds,
+			'updatedAt': DateTime.now().millisecondsSinceEpoch,
+		});
 	}
 
 	void _scheduleAutoHide() {
@@ -266,6 +340,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			}
 		});
 		_scheduleAutoHide();
+		_saveResume();
 	}
 
 	void _changeSpeed() {
@@ -275,6 +350,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_controller.setPlaybackSpeed(next);
 		setState(() => _playbackSpeed = next);
 		_scheduleAutoHide();
+		_saveResume();
 	}
 
 	Future<void> _toggleOrientation() async {
