@@ -37,7 +37,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   final Set<String> _moveFailed = {};
 
   String? _defaultUri;
-  String? _lastClipboardPrompted;
 
   String _safReadable(String uri, String filename) {
     try {
@@ -96,10 +95,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
     _defaultUri = await StorageService.getDefaultDownloadUri();
     await _refresh();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybePromptFromClipboard();
-    });
   }
 
   Future<void> _refresh() async {
@@ -109,25 +104,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       _records = list;
       _loading = false;
     });
-  }
-
-  bool _looksLikeUrl(String s) {
-    final t = s.trim();
-    final u = Uri.tryParse(t);
-    return u != null && (u.scheme == 'http' || u.scheme == 'https');
-  }
-
-  Future<void> _maybePromptFromClipboard() async {
-    try {
-      final data = await Clipboard.getData('text/plain');
-      final text = data?.text?.trim();
-      if (text == null || text.isEmpty) return;
-      if (!_looksLikeUrl(text)) return;
-      if (_lastClipboardPrompted == text) return;
-      _lastClipboardPrompted = text;
-      if (!mounted) return;
-      await _showAddDialog(initialUrl: text);
-    } catch (_) {}
   }
 
   @override

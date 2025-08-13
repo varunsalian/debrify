@@ -8,6 +8,7 @@ import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../widgets/stat_chip.dart';
 import 'video_player_screen.dart';
+import '../services/download_service.dart';
 
 class DebridDownloadsScreen extends StatefulWidget {
   const DebridDownloadsScreen({super.key});
@@ -1319,23 +1320,32 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: const Text(
-                        'Downloaded',
-                        style: TextStyle(
-                          color: Color(0xFF10B981),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                    // Small download button
+                    IconButton(
+                      tooltip: 'Download',
+                      onPressed: () async {
+                        if (_apiKey == null) return;
+                        try {
+                          final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
+                          final link = unrestrict['download'] as String;
+                          await DownloadService.instance.enqueueDownload(
+                            url: link,
+                            fileName: torrent.filename,
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Added to downloads')),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to start download: $e')),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.download_rounded, color: Color(0xFF10B981)),
                     ),
                   ],
                 ),
@@ -1485,6 +1495,26 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
+  Future<void> _handleDownloadActionForTorrent(RDTorrent torrent) async {
+    if (_apiKey == null) return;
+    try {
+      final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
+      final link = unrestrict['download'] as String;
+      await Clipboard.setData(ClipboardData(text: link));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Link copied to clipboard')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to copy: $e')),
+        );
+      }
+    }
+  }
+
   Widget _buildDownloadCard(DebridDownload download) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1517,6 +1547,32 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                    ),
+                    IconButton(
+                      tooltip: 'Download',
+                      onPressed: () async {
+                        if (_apiKey == null) return;
+                        try {
+                          final unrestrict = await DebridService.unrestrictLink(_apiKey!, download.link);
+                          final link = unrestrict['download'] as String;
+                          await DownloadService.instance.enqueueDownload(
+                            url: link,
+                            fileName: download.filename,
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Added to downloads')),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to start download: $e')),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.download_rounded, color: Color(0xFF10B981)),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
