@@ -1331,6 +1331,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                           await DownloadService.instance.enqueueDownload(
                             url: link,
                             fileName: torrent.filename,
+                            context: context,
                           );
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -1558,6 +1559,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                           await DownloadService.instance.enqueueDownload(
                             url: link,
                             fileName: download.filename,
+                            context: context,
                           );
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(

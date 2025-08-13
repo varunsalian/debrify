@@ -39,7 +39,7 @@ class MediaStoreDownloadService : Service() {
 		const val EXTRA_MIME_TYPE = "extra_mime_type"
 		const val EXTRA_HEADERS = "extra_headers" // HashMap<String, String>
 
-		private const val NOTIFICATION_CHANNEL_ID = "downloads_channel"
+		private const val NOTIFICATION_CHANNEL_ID = "downloads_channel_v2"
 		private const val NOTIFICATION_CHANNEL_NAME = "Downloads"
 		private const val SERVICE_NOTIFICATION_ID = 9000
 		private const val GROUP_KEY_DOWNLOADS = "com.debrify.app.downloads.GROUP"
@@ -433,7 +433,7 @@ class MediaStoreDownloadService : Service() {
 			val channel = NotificationChannel(
 				NOTIFICATION_CHANNEL_ID,
 				NOTIFICATION_CHANNEL_NAME,
-				NotificationManager.IMPORTANCE_LOW
+				NotificationManager.IMPORTANCE_DEFAULT
 			)
 			notificationManager.createNotificationChannel(channel)
 		}

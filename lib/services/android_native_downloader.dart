@@ -48,4 +48,14 @@ class AndroidNativeDownloader {
 		if (!Platform.isAndroid) return false;
 		return (await _channel.invokeMethod<bool>('cancel', {'taskId': taskId})) ?? false;
 	}
+
+	static Future<bool> openBatteryOptimizationSettings() async {
+		if (!Platform.isAndroid) return false;
+		return (await _channel.invokeMethod<bool>('openBatteryOptimizationSettings')) ?? false;
+	}
+
+	static Future<bool> requestIgnoreBatteryOptimizationsForApp() async {
+		if (!Platform.isAndroid) return false;
+		return (await _channel.invokeMethod<bool>('requestIgnoreBatteryOptimizationForApp')) ?? false;
+	}
 } 

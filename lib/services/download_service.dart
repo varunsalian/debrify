@@ -9,6 +9,7 @@ import 'storage_service.dart';
 import 'package:saf_stream/saf_stream.dart';
 import 'android_native_downloader.dart';
 import 'android_download_history.dart';
+import 'package:flutter/material.dart';
 
 class DownloadEntry {
   final Task task;
@@ -65,6 +66,7 @@ class DownloadService {
 
   bool _started = false;
   StreamSubscription<Map<String, dynamic>>? _androidEventsSub;
+  bool _batteryCheckShown = false;
 
   Future<void> _ensureNotificationPermission() async {
     if (!Platform.isAndroid) return;
@@ -72,6 +74,29 @@ class DownloadService {
     if (!status.isGranted) {
       await Permission.notification.request();
     }
+  }
+
+  Future<bool> _ensureBatteryExemptions(BuildContext? context) async {
+    if (!Platform.isAndroid) return true;
+    if (_batteryCheckShown) return true;
+    _batteryCheckShown = true;
+    try {
+      // First, request ignore battery optimizations for this app via system dialog
+      final ok = await AndroidNativeDownloader.requestIgnoreBatteryOptimizationsForApp();
+      if (!ok) {
+        if (context != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please allow “Ignore battery optimizations” to start downloads.')),
+          );
+        }
+        return false;
+      }
+      // Optionally open the settings list page so users can confirm
+      await AndroidNativeDownloader.openBatteryOptimizationSettings();
+    } catch (_) {
+      return true; // don't block if something goes wrong
+    }
+    return true;
   }
 
   Future<String> _resolveAbsolutePathForTask(Task task) async {
@@ -291,12 +316,17 @@ class DownloadService {
     bool wifiOnly = false,
     int retries = 3,
     String? meta,
+    BuildContext? context,
   }) async {
     await initialize();
 
     final (dirAbsPath, filename) = await _smartLocationFor(url, fileName);
 
     if (Platform.isAndroid) {
+      final ok = await _ensureBatteryExemptions(context);
+      if (!ok) {
+        throw Exception('battery_optimization_not_granted');
+      }
       final String name = filename;
       final taskId = await AndroidNativeDownloader.start(
         url: url,

@@ -1,7 +1,10 @@
 package com.debrify.app
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -70,6 +73,28 @@ class MainActivity : FlutterActivity() {
 					}
 					androidx.core.content.ContextCompat.startForegroundService(this, intent)
 					result.success(true)
+				}
+				"openBatteryOptimizationSettings" -> {
+					try {
+						val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+						intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+						startActivity(intent)
+						result.success(true)
+					} catch (e: Exception) {
+						result.error("open_failed", e.message, null)
+					}
+				}
+				"requestIgnoreBatteryOptimizationForApp" -> {
+					try {
+						val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+							data = Uri.parse("package:" + packageName)
+						}
+						intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+						startActivity(intent)
+						result.success(true)
+					} catch (e: Exception) {
+						result.error("request_failed", e.message, null)
+					}
 				}
 				else -> result.notImplemented()
 			}
