@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
   static const String _fileSelectionKey = 'real_debrid_file_selection';
+  static const String _batteryOptStatusKey = 'battery_opt_status_v1'; // granted|denied|never|unknown
   
   // API Key methods
   static Future<String?> getApiKey() async {
@@ -29,5 +30,16 @@ class StorageService {
   static Future<void> saveFileSelection(String selection) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_fileSelectionKey, selection);
+  }
+
+  // Battery optimization status
+  static Future<String> getBatteryOptimizationStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_batteryOptStatusKey) ?? 'unknown';
+  }
+
+  static Future<void> setBatteryOptimizationStatus(String status) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_batteryOptStatusKey, status);
   }
 } 

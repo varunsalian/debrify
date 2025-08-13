@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import 'settings/real_debrid_settings_page.dart';
+import '../services/android_native_downloader.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -99,6 +100,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
               await _loadSummaries();
               setState(() {});
+            },
+          ),
+
+          const SizedBox(height: 12),
+          _SectionTile(
+            icon: Icons.battery_saver,
+            title: 'Allow background downloads',
+            subtitle: 'Optimize reliability in background',
+            onTap: () async {
+              final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Allow background downloads'),
+                      content: const Text(
+                          'Open system settings to allow this app to ignore battery optimizations?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('Open'),
+                        ),
+                      ],
+                    ),
+                  ) ??
+                  false;
+              if (ok) {
+                await StorageService.setBatteryOptimizationStatus('denied');
+                // Let next download prompt again if needed, and also open settings now
+                await AndroidNativeDownloader.openBatteryOptimizationSettings();
+              }
             },
           ),
         ],

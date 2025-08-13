@@ -79,50 +79,174 @@ class DownloadService {
 
   Future<bool> _ensureBatteryExemptions(BuildContext? context) async {
     if (!Platform.isAndroid) return true;
+    // Respect saved preference first
+    final saved = await StorageService.getBatteryOptimizationStatus();
+    if (saved == 'granted') return true;
+    if (saved == 'never') return true; // user opted out
+
     if (_batteryCheckShown) return true;
     _batteryCheckShown = true;
     try {
       bool proceed = true;
+      String choice = 'denied';
       if (context != null) {
-        proceed = await showDialog<bool>(
+        bool dontAskAgain = false;
+        proceed = await showModalBottomSheet<bool>(
               context: context,
-              barrierDismissible: false,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Allow background downloads'),
-                content: const Text(
-                    'To keep downloads running reliably in the background, please allow the app to ignore battery optimizations. You can change this later in system settings.'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(false),
-                    child: const Text('Not now'),
+              isScrollControlled: true,
+              backgroundColor: const Color(0xFF0B1220),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+              builder: (ctx) {
+                final kb = MediaQuery.of(ctx).viewInsets.bottom;
+                return Padding(
+                  padding: EdgeInsets.only(bottom: kb),
+                  child: SafeArea(
+                    top: false,
+                    child: StatefulBuilder(builder: (ctx2, setLocal) {
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Center(
+                              child: Container(
+                                width: 44,
+                                height: 5,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF334155),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                children: const [
+                                  Icon(Icons.battery_saver, color: Colors.white),
+                                  SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text('Allow background downloads',
+                                        style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'To keep downloads running reliably in the background, allow the app to ignore battery optimizations.',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Icon(Icons.check_circle, size: 18, color: const Color(0xFF10B981).withValues(alpha: 0.9)),
+                                const SizedBox(width: 8),
+                                Text('Keeps long downloads alive', style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(Icons.check_circle, size: 18, color: const Color(0xFF10B981).withValues(alpha: 0.9)),
+                                const SizedBox(width: 8),
+                                Text('You can change this later in system settings', style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: dontAskAgain,
+                                  onChanged: (v) => setLocal(() => dontAskAgain = v ?? false),
+                                ),
+                                const SizedBox(width: 4),
+                                const Text("Don't ask again"),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      choice = dontAskAgain ? 'never' : 'denied';
+                                      Navigator.of(ctx2).pop(false);
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(color: Color(0xFF334155)),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                    ),
+                                    child: const Text('Not now'),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () {
+                                      choice = 'granted';
+                                      Navigator.of(ctx2).pop(true);
+                                    },
+                                    icon: const Icon(Icons.check_circle),
+                                    label: const Text('Allow'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      backgroundColor: const Color(0xFF6366F1),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                      elevation: 2,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
                   ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(ctx).pop(true),
-                    child: const Text('Continue'),
-                  ),
-                ],
-              ),
+                );
+              },
             ) ??
             false;
       }
-      if (!proceed) return false;
+      if (!proceed) {
+        await StorageService.setBatteryOptimizationStatus(choice);
+        return true; // do not block downloads
+      }
 
-      // First, request ignore battery optimizations for this app via system dialog
+      // System dialog
       final ok = await AndroidNativeDownloader.requestIgnoreBatteryOptimizationsForApp();
-      if (!ok) {
+      if (ok) {
+        await StorageService.setBatteryOptimizationStatus('granted');
+        return true;
+      } else {
+        await StorageService.setBatteryOptimizationStatus('denied');
         if (context != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please allow “Ignore battery optimizations” to start downloads.')),
+            const SnackBar(content: Text('You can enable background downloads later in Settings.')),
           );
         }
-        return false;
+        return true; // do not block downloads
       }
-      // Optionally open the settings list page so users can confirm/verify
-      await AndroidNativeDownloader.openBatteryOptimizationSettings();
     } catch (_) {
       return true; // don't block if something goes wrong
     }
-    return true;
   }
 
   Future<String> _resolveAbsolutePathForTask(Task task) async {
