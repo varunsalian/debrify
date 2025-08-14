@@ -161,6 +161,7 @@ class _SectionTile extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
+        focusColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(

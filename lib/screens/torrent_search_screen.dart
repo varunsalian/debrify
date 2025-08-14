@@ -430,57 +430,68 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ],
                   
                   // Search Input
-                  GestureDetector(
-                    onTap: _isSearchExpanded ? null : _toggleSearchBox,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        onSubmitted: (query) => _searchTorrents(query),
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: _isSearchExpanded ? 'Search torrents...' : 'Enter torrent name...',
-                          hintStyle: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.search_rounded,
-                            color: Color(0xFF6366F1),
-                          ),
-                          suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(
-                                  Icons.clear_rounded,
-                                  color: Color(0xFFEF4444),
-                                ),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {});
-                                },
-                              )
-                            : null,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFF334155),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
+                  Focus(
+                    onKey: (node, event) {
+                      if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
+                      if (!_isSearchExpanded && (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter)) {
+                        _toggleSearchBox();
+                        _searchFocusNode.requestFocus();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: GestureDetector(
+                      onTap: _isSearchExpanded ? null : _toggleSearchBox,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        onChanged: (value) => setState(() {}),
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          onSubmitted: (query) => _searchTorrents(query),
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: _isSearchExpanded ? 'Search torrents...' : 'Enter torrent name...',
+                            hintStyle: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.search_rounded,
+                              color: Color(0xFF6366F1),
+                            ),
+                            suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.clear_rounded,
+                                    color: Color(0xFFEF4444),
+                                  ),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {});
+                                  },
+                                )
+                              : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFF334155),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                          ),
+                          onChanged: (value) => setState(() {}),
+                        ),
                       ),
                     ),
                   ),
@@ -992,6 +1003,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             color: Colors.transparent,
                             child: InkWell(
                               onTap: () => _copyMagnetLink(torrent.infohash),
+                              onFocusChange: (_) {},
+                              focusColor: const Color(0x336366F1),
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
@@ -1034,6 +1047,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             color: Colors.transparent,
                             child: InkWell(
                               onTap: () => _addToRealDebrid(torrent.infohash, torrent.name),
+                              onFocusChange: (_) {},
+                              focusColor: const Color(0x3310B981),
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(

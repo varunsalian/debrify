@@ -66,4 +66,13 @@ class AndroidNativeDownloader {
 		if (!Platform.isAndroid) return false;
 		return (await _channel.invokeMethod<bool>('requestIgnoreBatteryOptimizationForApp')) ?? false;
 	}
+
+	static Future<bool> isTelevision() async {
+		if (!Platform.isAndroid) return false;
+		try {
+			return (await _channel.invokeMethod<bool>('isTelevision')) ?? false;
+		} catch (_) {
+			return false;
+		}
+	}
 } 

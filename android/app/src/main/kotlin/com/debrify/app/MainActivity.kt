@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.app.UiModeManager
+import android.content.res.Configuration
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -123,6 +125,15 @@ class MainActivity : FlutterActivity() {
 						result.success(true)
 					} catch (e: Exception) {
 						result.error("request_failed", e.message, null)
+					}
+				}
+				"isTelevision" -> {
+					try {
+						val uiModeManager = getSystemService(UI_MODE_SERVICE) as UiModeManager
+						val isTv = uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+						result.success(isTv)
+					} catch (e: Exception) {
+						result.success(false)
 					}
 				}
 				else -> result.notImplemented()

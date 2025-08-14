@@ -4,14 +4,37 @@ import 'screens/torrent_search_screen.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
+import 'services/android_native_downloader.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Set a sensible default orientation: phones stay portrait, Android TV uses landscape.
+  _initOrientation();
   runApp(const DebrifyApp());
+}
+
+Future<void> _initOrientation() async {
+  try {
+    // If running on Android TV, prefer landscape. Otherwise keep portrait.
+    final isTv = await AndroidNativeDownloader.isTelevision();
+    if (isTv) {
+      await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+    }
+  } catch (_) {
+    // Fallback to portrait if detection fails
+    await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
 }
 
 class DebrifyApp extends StatelessWidget {

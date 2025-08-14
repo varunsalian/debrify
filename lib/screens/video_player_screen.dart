@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../services/android_native_downloader.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -168,7 +169,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		try { ScreenBrightness().resetScreenBrightness(); } catch (_) {}
 		WakelockPlus.disable();
 		SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-		SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
+		AndroidNativeDownloader.isTelevision().then((isTv) {
+			if (!isTv) {
+				SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
+			}
+		});
 		super.dispose();
 	}
 
@@ -517,123 +522,171 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				top: false,
 				right: false,
 				bottom: false,
-				child: Stack(
-					fit: StackFit.expand,
-					children: [
-						// Video texture (media_kit renderer)
-						if (isReady)
-							FittedBox(
-								fit: _currentFit(),
-								child: SizedBox(
-									width: 1920,
-									height: 1080,
-									child: mkv.Video(controller: _videoController, controls: null),
-								),
-							)
-						else
-							const Center(child: CircularProgressIndicator(color: Colors.white)),
-						// Double-tap ripple
-						if (_ripple != null)
-							IgnorePointer(child: CustomPaint(painter: _DoubleTapRipplePainter(_ripple!))),
-						// HUDs
-						ValueListenableBuilder<_SeekHudState?>(
-							valueListenable: _seekHud,
-							builder: (context, hud, _) {
-								return IgnorePointer(
-									ignoring: true,
-									child: AnimatedOpacity(
-										opacity: hud == null ? 0 : 1,
-										duration: const Duration(milliseconds: 120),
-										child: Center(
-											child: hud == null
-												? const SizedBox.shrink()
-												: _SeekHud(hud: hud, format: _format),
-										),
+				child: Focus(
+					autofocus: true,
+					onKey: (node, event) {
+						if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
+						final key = event.logicalKey;
+						// Center/Enter toggles play or shows controls
+						if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.gameButtonA) {
+							if (_controlsVisible.value) {
+								_togglePlay();
+							} else {
+								_toggleControls();
+							}
+							return KeyEventResult.handled;
+						}
+
+						// DPAD left/right seek 10s
+						if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.mediaRewind) {
+							final candidate = _position - const Duration(seconds: 10);
+							final newPos = candidate < Duration.zero ? Duration.zero : (candidate > _duration ? _duration : candidate);
+							_player.seek(newPos);
+							_controlsVisible.value = true;
+							_scheduleAutoHide();
+							return KeyEventResult.handled;
+						}
+						if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.mediaFastForward) {
+							final candidate = _position + const Duration(seconds: 10);
+							final newPos = candidate < Duration.zero ? Duration.zero : (candidate > _duration ? _duration : candidate);
+							_player.seek(newPos);
+							_controlsVisible.value = true;
+							_scheduleAutoHide();
+							return KeyEventResult.handled;
+						}
+
+						// DPAD up shows controls
+						if (key == LogicalKeyboardKey.arrowUp) {
+							_controlsVisible.value = true;
+							_scheduleAutoHide();
+							return KeyEventResult.handled;
+						}
+
+						// Media play/pause keys
+						if (key == LogicalKeyboardKey.mediaPlayPause || key == LogicalKeyboardKey.mediaPlay || key == LogicalKeyboardKey.mediaPause) {
+							_togglePlay();
+							return KeyEventResult.handled;
+						}
+						return KeyEventResult.ignored;
+					},
+					child: Stack(
+						fit: StackFit.expand,
+						children: [
+							// Video texture (media_kit renderer)
+							if (isReady)
+								FittedBox(
+									fit: _currentFit(),
+									child: SizedBox(
+										width: 1920,
+										height: 1080,
+										child: mkv.Video(controller: _videoController, controls: null),
 									),
-								);
-							},
-						),
-						ValueListenableBuilder<_VerticalHudState?>(
-							valueListenable: _verticalHud,
-							builder: (context, hud, _) {
-								return IgnorePointer(
-									ignoring: true,
-									child: AnimatedOpacity(
-										opacity: hud == null ? 0 : 1,
-										duration: const Duration(milliseconds: 120),
-										child: Align(
-											alignment: Alignment.centerRight,
-											child: Padding(
-												padding: const EdgeInsets.only(right: 24),
-												child: hud == null ? const SizedBox.shrink() : _VerticalHud(hud: hud),
+								)
+							else
+								const Center(child: CircularProgressIndicator(color: Colors.white)),
+							// Double-tap ripple
+							if (_ripple != null)
+								IgnorePointer(child: CustomPaint(painter: _DoubleTapRipplePainter(_ripple!))),
+							// HUDs
+							ValueListenableBuilder<_SeekHudState?>(
+								valueListenable: _seekHud,
+								builder: (context, hud, _) {
+									return IgnorePointer(
+										ignoring: true,
+										child: AnimatedOpacity(
+											opacity: hud == null ? 0 : 1,
+											duration: const Duration(milliseconds: 120),
+											child: Center(
+												child: hud == null
+													? const SizedBox.shrink()
+													: _SeekHud(hud: hud, format: _format),
 											),
 										),
-									),
-								);
-							},
-						),
-						// Full-screen gesture layer (placed below controls)
-						GestureDetector(
-							behavior: HitTestBehavior.translucent,
-							onTapDown: (d) => _lastTapLocal = d.localPosition,
-							onTap: () {
-								final box = context.findRenderObject() as RenderBox?;
-								if (box == null) return;
-								final size = box.size;
-								final pos = _lastTapLocal ?? Offset.zero;
-								if (_shouldToggleForTap(pos, size, controlsVisible: _controlsVisible.value)) {
-									_toggleControls();
-								}
-							},
-							onDoubleTapDown: _handleDoubleTap,
-							onPanStart: _onPanStart,
-							onPanUpdate: _onPanUpdate,
-							onPanEnd: _onPanEnd,
-						),
-						// Controls overlay (shown only when ready)
-						if (isReady)
-						ValueListenableBuilder<bool>(
-							valueListenable: _controlsVisible,
-							builder: (context, visible, _) {
-								return AnimatedOpacity(
-									opacity: visible ? 1 : 0,
-									duration: const Duration(milliseconds: 150),
-									child: IgnorePointer(
-										ignoring: !visible,
-										child: _Controls(
-											title: widget.title,
-											subtitle: widget.subtitle,
-											duration: duration,
-											position: pos,
-											isPlaying: _isPlaying,
-											isReady: isReady,
-											onPlayPause: _togglePlay,
-											onBack: () => Navigator.of(context).pop(),
-											onAspect: _cycleAspectMode,
-											onSpeed: _changeSpeed,
-											speed: _playbackSpeed,
-											isLandscape: _landscapeLocked,
-											onRotate: _toggleOrientation,
-											hasPlaylist: widget.playlist != null && widget.playlist!.isNotEmpty,
-											onShowPlaylist: () => _showPlaylistSheet(context),
-											onShowTracks: () => _showTracksSheet(context),
-											onSeekBarChangedStart: () {
-												_isSeekingWithSlider = true;
-											},
-											onSeekBarChanged: (v) {
-												final newPos = duration * v;
-												_player.seek(newPos);
-											},
-											onSeekBarChangeEnd: () {
-												_isSeekingWithSlider = false;
-												_scheduleAutoHide();
-											},
+									);
+								},
+							),
+							ValueListenableBuilder<_VerticalHudState?>(
+								valueListenable: _verticalHud,
+								builder: (context, hud, _) {
+									return IgnorePointer(
+										ignoring: true,
+										child: AnimatedOpacity(
+											opacity: hud == null ? 0 : 1,
+											duration: const Duration(milliseconds: 120),
+											child: Align(
+												alignment: Alignment.centerRight,
+												child: Padding(
+													padding: const EdgeInsets.only(right: 24),
+													child: hud == null ? const SizedBox.shrink() : _VerticalHud(hud: hud),
+												),
+											),
 										),
-									),
-								);
-							},
-						),
-					],
+									);
+								},
+							),
+							// Full-screen gesture layer (placed below controls)
+							GestureDetector(
+								behavior: HitTestBehavior.translucent,
+								onTapDown: (d) => _lastTapLocal = d.localPosition,
+								onTap: () {
+									final box = context.findRenderObject() as RenderBox?;
+									if (box == null) return;
+									final size = box.size;
+									final pos = _lastTapLocal ?? Offset.zero;
+									if (_shouldToggleForTap(pos, size, controlsVisible: _controlsVisible.value)) {
+										_toggleControls();
+									}
+								},
+								onDoubleTapDown: _handleDoubleTap,
+								onPanStart: _onPanStart,
+								onPanUpdate: _onPanUpdate,
+								onPanEnd: _onPanEnd,
+							),
+							// Controls overlay (shown only when ready)
+							if (isReady)
+							ValueListenableBuilder<bool>(
+								valueListenable: _controlsVisible,
+								builder: (context, visible, _) {
+									return AnimatedOpacity(
+										opacity: visible ? 1 : 0,
+										duration: const Duration(milliseconds: 150),
+										child: IgnorePointer(
+											ignoring: !visible,
+											child: _Controls(
+												title: widget.title,
+												subtitle: widget.subtitle,
+												duration: duration,
+												position: pos,
+												isPlaying: _isPlaying,
+												isReady: isReady,
+												onPlayPause: _togglePlay,
+												onBack: () => Navigator.of(context).pop(),
+												onAspect: _cycleAspectMode,
+												onSpeed: _changeSpeed,
+												speed: _playbackSpeed,
+												isLandscape: _landscapeLocked,
+												onRotate: _toggleOrientation,
+												hasPlaylist: widget.playlist != null && widget.playlist!.isNotEmpty,
+												onShowPlaylist: () => _showPlaylistSheet(context),
+												onShowTracks: () => _showTracksSheet(context),
+												onSeekBarChangedStart: () {
+													_isSeekingWithSlider = true;
+												},
+												onSeekBarChanged: (v) {
+													final newPos = duration * v;
+													_player.seek(newPos);
+												},
+												onSeekBarChangeEnd: () {
+													_isSeekingWithSlider = false;
+													_scheduleAutoHide();
+												},
+											),
+										),
+									);
+								},
+							),
+						],
+					),
 				),
 			),
 		);

@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     
+    <!-- TV compatibility flags (do not restrict phone installs) -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -13,7 +17,8 @@
         android:allowBackup="true"
         android:fullBackupContent="true"
         android:usesCleartextTraffic="true"
-        android:dataExtractionRules="@xml/data_extraction_rules">
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:banner="@mipmap/ic_launcher">
         <service
             android:name="background.downloader.DownloadWorkerService"
             android:exported="false"
@@ -42,6 +47,11 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Android TV launcher entry -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
