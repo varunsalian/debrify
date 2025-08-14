@@ -164,6 +164,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_paramsSub?.cancel();
 		_completedSub?.cancel();
 		_player.dispose();
+		// Restore system brightness when exiting the player
+		try { ScreenBrightness().resetScreenBrightness(); } catch (_) {}
 		WakelockPlus.disable();
 		SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 		SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
