@@ -47,6 +47,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	_DoubleTapRipple? _ripple;
 	bool _panIgnore = false;
 	int _currentIndex = 0;
+	Offset? _lastTapLocal;
 
 	// Gesture state
 	_GestureMode _mode = _GestureMode.none;
@@ -560,7 +561,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								);
 							},
 						),
-						// Controls overlay
+						// Full-screen gesture layer (placed below controls)
+						GestureDetector(
+							behavior: HitTestBehavior.translucent,
+							onTapDown: (d) => _lastTapLocal = d.localPosition,
+							onTap: () {
+								final box = context.findRenderObject() as RenderBox?;
+								if (box == null) return;
+								final size = box.size;
+								final pos = _lastTapLocal ?? Offset.zero;
+								if (_shouldToggleForTap(pos, size)) {
+									_toggleControls();
+								}
+							},
+							onDoubleTapDown: _handleDoubleTap,
+							onPanStart: _onPanStart,
+							onPanUpdate: _onPanUpdate,
+							onPanEnd: _onPanEnd,
+						),
+						// Controls overlay (shown only when ready)
+						if (isReady)
 						ValueListenableBuilder<bool>(
 							valueListenable: _controlsVisible,
 							builder: (context, visible, _) {
@@ -575,6 +595,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 											duration: duration,
 											position: pos,
 											isPlaying: _controller.value.isPlaying,
+											isReady: isReady,
 											onPlayPause: _togglePlay,
 											onBack: () => Navigator.of(context).pop(),
 											onAspect: _cycleAspectMode,
@@ -600,15 +621,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								);
 							},
 						),
-						// Top-most gesture layer to always receive pans/double-taps
-						GestureDetector(
-							behavior: HitTestBehavior.translucent,
-							onTap: _controlsVisible.value ? null : _toggleControls,
-							onDoubleTapDown: _handleDoubleTap,
-							onPanStart: _onPanStart,
-							onPanUpdate: _onPanUpdate,
-							onPanEnd: _onPanEnd,
-						),
 					],
 				),
 			),
@@ -622,6 +634,7 @@ class _Controls extends StatelessWidget {
 	final Duration duration;
 	final Duration position;
 	final bool isPlaying;
+	final bool isReady;
 	final VoidCallback onPlayPause;
 	final VoidCallback onBack;
 	final VoidCallback onAspect;
@@ -641,6 +654,7 @@ class _Controls extends StatelessWidget {
 		required this.duration,
 		required this.position,
 		required this.isPlaying,
+		required this.isReady,
 		required this.onPlayPause,
 		required this.onBack,
 		required this.onAspect,
@@ -672,19 +686,29 @@ class _Controls extends StatelessWidget {
 		final total = duration.inMilliseconds <= 0 ? const Duration(seconds: 1) : duration;
 		final progress = (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
 
-		return Container(
-			decoration: const BoxDecoration(
-				gradient: LinearGradient(
-					begin: Alignment.topCenter,
-					end: Alignment.bottomCenter,
-					colors: [
-						Color(0x80000000),
-						Color(0x26000000),
-						Color(0x80000000),
-					],
+		return Stack(
+			children: [
+				// Non-interactive gradient overlay
+				Positioned.fill(
+					child: IgnorePointer(
+						ignoring: true,
+						child: Container(
+							decoration: const BoxDecoration(
+								gradient: LinearGradient(
+									begin: Alignment.topCenter,
+									end: Alignment.bottomCenter,
+									colors: [
+										Color(0x80000000),
+										Color(0x26000000),
+										Color(0x80000000),
+									],
+								),
+							),
+						),
+					),
 				),
-			),
-			child: SafeArea(
+				// Interactive controls
+				SafeArea(
 				left: true,
 				right: true,
 				top: true,
@@ -747,6 +771,7 @@ class _Controls extends StatelessWidget {
 						),
 
 						// Center play/pause
+						if (isReady)
 						Row(
 							mainAxisAlignment: MainAxisAlignment.center,
 							children: [
@@ -802,9 +827,10 @@ class _Controls extends StatelessWidget {
 								],
 							),
 						),
-					],
+											],
+						),
 					),
-				),
+				],
 			);
 	}
 }
@@ -928,4 +954,20 @@ class _DoubleTapRipplePainter extends CustomPainter {
 	}
 	@override
 	bool shouldRepaint(covariant _DoubleTapRipplePainter oldDelegate) => true;
+}
+
+// Helpers for tap gating
+bool _isInTopArea(double dy) => dy < 72.0;
+bool _isInBottomArea(double dy, double height) => dy > height - 72.0;
+bool _isInCenterRegion(Offset pos, Size size) {
+	final center = Offset(size.width / 2, size.height / 2);
+	const radius = 120.0; // protect center play area
+	return (pos - center).distance <= radius;
+}
+
+bool _shouldToggleForTap(Offset pos, Size size) {
+	// Hide/show controls on tap outside bars and center region
+	if (_isInTopArea(pos.dy) || _isInBottomArea(pos.dy, size.height)) return false;
+	if (_isInCenterRegion(pos, size)) return false;
+	return true;
 } 
