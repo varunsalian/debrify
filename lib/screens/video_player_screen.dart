@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:video_player/video_player.dart';
-import 'package:volume_controller/volume_controller.dart';
+// Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import 'package:media_kit/media_kit.dart' as mk;
+import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 class VideoPlayerScreen extends StatefulWidget {
 	final String videoUrl;
@@ -40,7 +42,8 @@ enum _GestureMode { none, seek, volume, brightness }
 enum _AspectMode { contain, cover, fitWidth, fitHeight }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProviderStateMixin {
-	late VideoPlayerController _controller;
+	late mk.Player _player;
+	late mkv.VideoController _videoController;
 	final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
 	Timer? _hideTimer;
 	bool _isSeekingWithSlider = false;
@@ -48,6 +51,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	bool _panIgnore = false;
 	int _currentIndex = 0;
 	Offset? _lastTapLocal;
+
+	// media_kit state
+	bool _isReady = false;
+	bool _isPlaying = false;
+	Duration _position = Duration.zero;
+	Duration _duration = Duration.zero;
+	// We render using a large logical surface; fit is controlled by BoxFit
+	StreamSubscription? _posSub;
+	StreamSubscription? _durSub;
+	StreamSubscription? _playSub;
+	StreamSubscription? _paramsSub;
+	StreamSubscription? _completedSub;
 
 	// Gesture state
 	_GestureMode _mode = _GestureMode.none;
@@ -70,6 +85,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	@override
 	void initState() {
 		super.initState();
+		mk.MediaKit.ensureInitialized();
 		SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 		// Default to landscape when entering the player
 		SystemChrome.setPreferredOrientations(<DeviceOrientation>[
@@ -78,33 +94,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		]);
 		_landscapeLocked = true;
 		WakelockPlus.enable();
-		VolumeController().showSystemUI = false;
+		// System volume UI not modified
 		final initialUrl = (widget.playlist != null && widget.playlist!.isNotEmpty)
 			? widget.playlist![widget.startIndex ?? 0].url
 			: widget.videoUrl;
 		_currentIndex = widget.playlist != null ? (widget.startIndex ?? 0) : 0;
-		_controller = VideoPlayerController.networkUrl(Uri.parse(initialUrl),
-			videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
-		)
-			..addListener(_onVideoUpdate)
-			..initialize().then((_) async {
-				if (!mounted) return;
-				await _maybeRestoreResume();
-				setState(() {});
-				_controller.play();
-				_scheduleAutoHide();
-			});
+		_player = mk.Player(configuration: mk.PlayerConfiguration(ready: () {
+			_isReady = true;
+			if (mounted) setState(() {});
+		}));
+		_videoController = mkv.VideoController(_player);
+		_player.open(mk.Media(initialUrl)).then((_) async {
+			await _maybeRestoreResume();
+			_scheduleAutoHide();
+		});
+		_posSub = _player.stream.position.listen((d) {
+			_position = d;
+			// throttle UI updates
+			if (mounted) setState(() {});
+		});
+		_durSub = _player.stream.duration.listen((d) {
+			_duration = d;
+			if (mounted) setState(() {});
+		});
+		_playSub = _player.stream.playing.listen((p) {
+			_isPlaying = p;
+			if (mounted) setState(() {});
+		});
+		// No need to observe video params for sizing; we use a fixed logical surface
+		_completedSub = _player.stream.completed.listen((done) {
+			if (done) _onPlaybackEnded();
+		});
 		_autosaveTimer = Timer.periodic(const Duration(seconds: 6), (_) => _saveResume(debounced: true));
 	}
 
 	void _onVideoUpdate() {
 		// Update slider-driven seeks HUD if needed
 		if (!mounted) return;
-		final v = _controller.value;
-		if (v.isInitialized && v.position >= v.duration && v.duration > Duration.zero) {
-			_onPlaybackEnded();
-		}
-		setState(() {});
+		// handled via stream.completed
+		if (mounted) setState(() {});
 	}
 
 	Future<void> _onPlaybackEnded() async {
@@ -117,28 +145,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		if (widget.playlist == null || index < 0 || index >= widget.playlist!.length) return;
 		await _saveResume();
 		final entry = widget.playlist![index];
-		final newController = VideoPlayerController.networkUrl(Uri.parse(entry.url),
-			videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
-		);
-		final old = _controller;
 		_currentIndex = index;
-		newController.addListener(_onVideoUpdate);
-		await newController.initialize();
-		await _maybeRestoreResumeFor(newController);
-		if (mounted) {
-			setState(() {
-				_controller = newController;
-			});
-			// Dispose old after the new controller is in the tree
-			WidgetsBinding.instance.addPostFrameCallback((_) async {
-				try {
-					old.removeListener(_onVideoUpdate);
-					await old.pause();
-					await old.dispose();
-				} catch (_) {}
-			});
-			if (autoplay) await _controller.play();
-		}
+		await _player.open(mk.Media(entry.url), play: autoplay);
+		await _maybeRestoreResume();
 	}
 
 	@override
@@ -149,8 +158,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_controlsVisible.dispose();
 		_seekHud.dispose();
 		_verticalHud.dispose();
-		_controller.removeListener(_onVideoUpdate);
-		_controller.dispose();
+		_posSub?.cancel();
+		_durSub?.cancel();
+		_playSub?.cancel();
+		_paramsSub?.cancel();
+		_completedSub?.cancel();
+		_player.dispose();
 		WakelockPlus.disable();
 		SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 		SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
@@ -171,23 +184,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	Future<void> _maybeRestoreResume() async {
-		await _maybeRestoreResumeFor(_controller);
-	}
-
-	Future<void> _maybeRestoreResumeFor(VideoPlayerController controller) async {
 		final data = await StorageService.getVideoResume(_resumeKey);
 		if (data == null) return;
 		final posMs = (data['positionMs'] ?? 0) as int;
 		final speed = (data['speed'] ?? 1.0) as double;
 		final aspect = (data['aspect'] ?? 'contain') as String;
 		final position = Duration(milliseconds: posMs);
-		final dur = controller.value.duration;
+		final dur = _duration;
 		if (dur > Duration.zero && position > const Duration(seconds: 10) && position < dur * 0.9) {
-			await controller.seekTo(position);
+			await _player.seek(position);
 		}
 		// restore speed
 		if (speed != 1.0) {
-			await controller.setPlaybackSpeed(speed);
+			await _player.setRate(speed);
 			_playbackSpeed = speed;
 		}
 		// restore aspect
@@ -207,9 +216,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	Future<void> _saveResume({bool debounced = false}) async {
-		if (!_controller.value.isInitialized) return;
-		final pos = _controller.value.position;
-		final dur = _controller.value.duration;
+		if (!_isReady) return;
+		final pos = _position;
+		final dur = _duration;
 		if (dur <= Duration.zero) return;
 		final aspectStr = () {
 			switch (_aspectMode) {
@@ -263,11 +272,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 		final isLeft = localPos.dx < size.width / 2;
 		final delta = const Duration(seconds: 10);
-		final target = _controller.value.position + (isLeft ? -delta : delta);
+		final target = _position + (isLeft ? -delta : delta);
 		final minPos = Duration.zero;
-		final maxPos = _controller.value.duration;
+		final maxPos = _duration;
 		final clamped = target < minPos ? minPos : (target > maxPos ? maxPos : target);
-		await _controller.seekTo(clamped);
+		await _player.seek(clamped);
 		_ripple = _DoubleTapRipple(
 			center: localPos,
 			icon: isLeft ? Icons.replay_10_rounded : Icons.forward_10_rounded,
@@ -295,8 +304,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			}
 		}
 		_gestureStartPosition = details.localPosition;
-		_gestureStartVideoPosition = _controller.value.position;
-		_gestureStartVolume = await VolumeController().getVolume();
+		_gestureStartVideoPosition = _position;
+		_gestureStartVolume = (_player.state.volume / 100.0).clamp(0.0, 1.0);
 		try {
 			_gestureStartBrightness = await ScreenBrightness().current;
 		} catch (_) {
@@ -326,7 +335,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 
 		if (_mode == _GestureMode.seek) {
-			final duration = _controller.value.duration;
+			final duration = _duration;
 			if (duration == Duration.zero) return;
 			// Map horizontal delta to seconds, proportional to width
 			final totalSeconds = duration.inSeconds.toDouble();
@@ -336,12 +345,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			if (newPos > duration) newPos = duration;
 			_seekHud.value = _SeekHudState(
 				target: newPos,
-				base: _controller.value.position,
-				isForward: newPos >= _controller.value.position,
+				base: _position,
+				isForward: newPos >= _position,
 			);
 		} else if (_mode == _GestureMode.volume) {
 			var newVol = (_gestureStartVolume - dy / size.height).clamp(0.0, 1.0);
-			VolumeController().setVolume(newVol);
+			_player.setVolume((newVol * 100).clamp(0.0, 100.0));
 			_verticalHud.value = _VerticalHudState(kind: _VerticalKind.volume, value: newVol);
 		} else if (_mode == _GestureMode.brightness) {
 			var newBright = (_gestureStartBrightness - dy / size.height).clamp(0.0, 1.0);
@@ -353,7 +362,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	void _onPanEnd(DragEndDetails details) {
 		if (_panIgnore) return;
 		if (_mode == _GestureMode.seek && _seekHud.value != null) {
-			_controller.seekTo(_seekHud.value!.target);
+			_player.seek(_seekHud.value!.target);
 		}
 		_mode = _GestureMode.none;
 		Future.delayed(const Duration(milliseconds: 250), () {
@@ -375,11 +384,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	void _togglePlay() {
-		if (!_controller.value.isInitialized) return;
-		if (_controller.value.isPlaying) {
-			_controller.pause();
+		if (!_isReady) return;
+		if (_isPlaying) {
+			_player.pause();
 		} else {
-			_controller.play();
+			_player.play();
 		}
 		_scheduleAutoHide();
 	}
@@ -408,7 +417,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 		final idx = speeds.indexOf(_playbackSpeed);
 		final next = speeds[(idx + 1) % speeds.length];
-		_controller.setPlaybackSpeed(next);
+		_player.setRate(next);
 		setState(() => _playbackSpeed = next);
 		_scheduleAutoHide();
 		_saveResume();
@@ -494,9 +503,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	@override
 	Widget build(BuildContext context) {
-		final isReady = _controller.value.isInitialized;
-		final duration = _controller.value.duration;
-		final pos = _controller.value.position;
+		final isReady = _isReady;
+		final duration = _duration;
+		final pos = _position;
 		// final remaining = (duration - pos).clamp(Duration.zero, duration); // not used
 
 		return Scaffold(
@@ -509,14 +518,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				child: Stack(
 					fit: StackFit.expand,
 					children: [
-						// Video texture
+						// Video texture (media_kit renderer)
 						if (isReady)
 							FittedBox(
 								fit: _currentFit(),
 								child: SizedBox(
-									width: _controller.value.size.width,
-									height: _controller.value.size.height,
-									child: VideoPlayer(_controller),
+									width: 1920,
+									height: 1080,
+									child: mkv.Video(controller: _videoController, controls: null),
 								),
 							)
 						else
@@ -594,7 +603,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 											subtitle: widget.subtitle,
 											duration: duration,
 											position: pos,
-											isPlaying: _controller.value.isPlaying,
+											isPlaying: _isPlaying,
 											isReady: isReady,
 											onPlayPause: _togglePlay,
 											onBack: () => Navigator.of(context).pop(),
@@ -605,12 +614,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 											onRotate: _toggleOrientation,
 											hasPlaylist: widget.playlist != null && widget.playlist!.isNotEmpty,
 											onShowPlaylist: () => _showPlaylistSheet(context),
+											onShowTracks: () => _showTracksSheet(context),
 											onSeekBarChangedStart: () {
 												_isSeekingWithSlider = true;
 											},
 											onSeekBarChanged: (v) {
 												final newPos = duration * v;
-												_controller.seekTo(newPos);
+												_player.seek(newPos);
 											},
 											onSeekBarChangeEnd: () {
 												_isSeekingWithSlider = false;
@@ -643,6 +653,7 @@ class _Controls extends StatelessWidget {
 	final bool isLandscape;
 	final VoidCallback onRotate;
 	final VoidCallback onShowPlaylist;
+	final VoidCallback onShowTracks;
 	final bool hasPlaylist;
 	final VoidCallback onSeekBarChangedStart;
 	final ValueChanged<double> onSeekBarChanged;
@@ -663,6 +674,7 @@ class _Controls extends StatelessWidget {
 		required this.isLandscape,
 		required this.onRotate,
 		required this.onShowPlaylist,
+		required this.onShowTracks,
 		required this.hasPlaylist,
 		required this.onSeekBarChangedStart,
 		required this.onSeekBarChanged,
@@ -753,6 +765,11 @@ class _Controls extends StatelessWidget {
 										IconButton(
 											icon: const Icon(Icons.crop_free_rounded, color: Colors.white),
 											onPressed: onAspect,
+										),
+										IconButton(
+											icon: const Icon(Icons.closed_caption_off_rounded, color: Colors.white),
+											onPressed: onShowTracks,
+											tooltip: 'Audio & Subtitles',
 										),
 										if (hasPlaylist)
 											IconButton(
@@ -972,4 +989,110 @@ bool _shouldToggleForTap(Offset pos, Size size, {required bool controlsVisible})
 	if (_isInTopArea(pos.dy) || _isInBottomArea(pos.dy, size.height)) return false;
 	if (_isInCenterRegion(pos, size)) return false;
 	return true;
+}
+
+Future<void> _persistTrackChoice(String audio, String subtitle) async {}
+
+extension on _VideoPlayerScreenState {
+	Future<void> _showTracksSheet(BuildContext context) async {
+		final tracks = _player.state.tracks;
+		final audios = tracks.audio;
+		final subs = tracks.subtitle;
+		final current = _player.state.track;
+		String selectedAudio = current.audio.id ?? '';
+		String selectedSub = current.subtitle.id ?? '';
+		await showModalBottomSheet(
+			context: context,
+			isScrollControlled: true,
+			backgroundColor: const Color(0xFF0F172A),
+			shape: const RoundedRectangleBorder(
+				borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+			),
+			builder: (context) {
+				return StatefulBuilder(builder: (context, setLocal) {
+					return DraggableScrollableSheet(
+						expand: false,
+						initialChildSize: 0.6,
+						minChildSize: 0.4,
+						maxChildSize: 0.95,
+						builder: (context, scrollController) {
+							return SafeArea(
+								top: false,
+								child: ListView(
+									controller: scrollController,
+									padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+									children: [
+										const Text('Audio', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+										const SizedBox(height: 8),
+										for (final a in audios)
+											ListTile(
+												dense: true,
+												title: Text(a.title ?? a.id ?? 'Audio', style: const TextStyle(color: Colors.white)),
+												trailing: Radio<String>(
+													value: a.id ?? '',
+													groupValue: selectedAudio,
+													onChanged: (v) async {
+														if (v == null) return;
+														setLocal(() => selectedAudio = v);
+														await _player.setAudioTrack(a);
+													},
+												),
+											),
+										const SizedBox(height: 12),
+										const Text('Subtitles', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+										const SizedBox(height: 8),
+										ListTile(
+											dense: true,
+											title: const Text('None', style: TextStyle(color: Colors.white)),
+											trailing: Radio<String>(
+												value: '',
+												groupValue: selectedSub,
+												onChanged: (v) async {
+													setLocal(() => selectedSub = '');
+													await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+												},
+											),
+										),
+										for (final s in subs)
+											ListTile(
+												dense: true,
+												title: Text(s.title ?? s.id ?? 'Subtitle', style: const TextStyle(color: Colors.white)),
+												trailing: Radio<String>(
+													value: s.id ?? '',
+													groupValue: selectedSub,
+													onChanged: (v) async {
+														if (v == null) return;
+														setLocal(() => selectedSub = v);
+														await _player.setSubtitleTrack(s);
+													},
+												),
+											),
+										const SizedBox(height: 12),
+										Align(
+											alignment: Alignment.centerRight,
+											child: FilledButton(
+												onPressed: () async {
+												await StorageService.upsertVideoResume(_resumeKey, {
+													'positionMs': _position.inMilliseconds,
+													'speed': _playbackSpeed,
+													'aspect': _aspectMode.name,
+													'durationMs': _duration.inMilliseconds,
+													'updatedAt': DateTime.now().millisecondsSinceEpoch,
+													'audioTrack': selectedAudio,
+													'subTrack': selectedSub,
+												});
+												if (context.mounted) Navigator.of(context).pop();
+											},
+											child: const Text('Done'),
+										),
+									),
+								],
+							),
+							);
+						},
+					);
+				});
+			},
+		);
+	}
 } 

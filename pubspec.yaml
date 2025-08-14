@@ -46,7 +46,12 @@ dependencies:
   video_player: ^2.9.2
   wakelock_plus: ^1.2.5
   screen_brightness: ^2.1.6
-  volume_controller: ^2.0.7
+  volume_controller: ^3.4.0
+  
+  # media_kit for advanced track APIs
+  media_kit: ^1.1.11
+  media_kit_video: ^1.2.5
+  media_kit_libs_video: ^1.0.5
 
 dev_dependencies:
   flutter_test:
