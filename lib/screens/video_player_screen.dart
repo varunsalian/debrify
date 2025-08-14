@@ -996,104 +996,189 @@ bool _shouldToggleForTap(Offset pos, Size size, {required bool controlsVisible})
 Future<void> _persistTrackChoice(String audio, String subtitle) async {}
 
 extension on _VideoPlayerScreenState {
+	String _niceLanguage(String? codeOrTitle) {
+		final v = (codeOrTitle ?? '').toLowerCase();
+		const map = {
+			'en': 'English','eng': 'English','hi': 'Hindi','es': 'Spanish','spa': 'Spanish','fr': 'French','fra': 'French','de': 'German','ger': 'German','ru': 'Russian','zh': 'Chinese','zho': 'Chinese','ja': 'Japanese','ko': 'Korean','it': 'Italian','pt': 'Portuguese'
+		};
+		return map[v] ?? '';
+	}
+	String _labelForTrack(dynamic t, int index) {
+		final title = (t.title as String?)?.trim();
+		if (title != null && title.isNotEmpty && title.toLowerCase() != 'no' && title.toLowerCase() != 'auto') {
+			final langPretty = _niceLanguage(title);
+			return langPretty.isNotEmpty ? langPretty : title;
+		}
+		final id = (t.id as String?)?.trim();
+		if (id != null && id.isNotEmpty && id.toLowerCase() != 'no' && id.toLowerCase() != 'auto') {
+			final langPretty = _niceLanguage(id);
+			if (langPretty.isNotEmpty) return langPretty;
+		}
+		return 'Track ${index + 1}';
+	}
 	Future<void> _showTracksSheet(BuildContext context) async {
 		final tracks = _player.state.tracks;
-		final audios = tracks.audio;
-		final subs = tracks.subtitle;
-		final current = _player.state.track;
-		String selectedAudio = current.audio.id ?? '';
-		String selectedSub = current.subtitle.id ?? '';
+		final audios = tracks.audio.where((a) => (a.id ?? '').toLowerCase() != 'no').toList(growable: false);
+		final subs = tracks.subtitle.where((s) => (s.id ?? '').toLowerCase() != 'auto' && (s.id ?? '').toLowerCase() != 'no').toList(growable: false);
+		String selectedAudio = _player.state.track.audio.id ?? '';
+		String selectedSub = _player.state.track.subtitle.id ?? '';
+
 		await showModalBottomSheet(
 			context: context,
 			isScrollControlled: true,
-			backgroundColor: const Color(0xFF0F172A),
+			backgroundColor: const Color(0xFF0B1222),
 			shape: const RoundedRectangleBorder(
-				borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+				borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
 			),
 			builder: (context) {
-				return StatefulBuilder(builder: (context, setLocal) {
-					return DraggableScrollableSheet(
-						expand: false,
-						initialChildSize: 0.6,
-						minChildSize: 0.4,
-						maxChildSize: 0.95,
-						builder: (context, scrollController) {
-							return SafeArea(
-								top: false,
-								child: ListView(
-									controller: scrollController,
-									padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-									children: [
-										const Text('Audio', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-										const SizedBox(height: 8),
-										for (final a in audios)
-											ListTile(
-												dense: true,
-												title: Text(a.title ?? a.id ?? 'Audio', style: const TextStyle(color: Colors.white)),
-												trailing: Radio<String>(
-													value: a.id ?? '',
-													groupValue: selectedAudio,
-													onChanged: (v) async {
-														if (v == null) return;
-														setLocal(() => selectedAudio = v);
-														await _player.setAudioTrack(a);
-													},
+				return SafeArea(
+					top: false,
+					child: FractionallySizedBox(
+						heightFactor: 0.7,
+						child: Padding(
+							padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+							child: StatefulBuilder(
+								builder: (context, setModalState) {
+									return Column(
+										crossAxisAlignment: CrossAxisAlignment.stretch,
+										children: [
+											Row(
+												children: [
+													const Icon(Icons.tune_rounded, color: Colors.white),
+													const SizedBox(width: 8),
+													const Text('Audio & Subtitles', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+													const Spacer(),
+													IconButton(
+														icon: const Icon(Icons.close_rounded, color: Colors.white70),
+														onPressed: () => Navigator.of(context).pop(),
+													),
+												],
+											),
+											const SizedBox(height: 10),
+											Expanded(
+												child: Row(
+													children: [
+														// Audio pane
+														Expanded(
+															child: Container(
+																decoration: BoxDecoration(
+																	color: const Color(0xFF121B30),
+																	borderRadius: BorderRadius.circular(12),
+																	border: Border.all(color: const Color(0xFF22304F)),
+																),
+																padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+																child: Column(
+																	crossAxisAlignment: CrossAxisAlignment.start,
+																	children: [
+																		Row(
+																			children: const [
+																				Icon(Icons.volume_up_rounded, color: Colors.white70, size: 18),
+																				SizedBox(width: 6),
+																				Text('Audio', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+																			],
+																		),
+																		const SizedBox(height: 6),
+																		Expanded(
+																			child: ListView.builder(
+																				itemCount: audios.length + 1,
+																				itemBuilder: (context, index) {
+																					if (index == 0) {
+																						return RadioListTile<String>(
+																							value: 'auto',
+																							groupValue: selectedAudio.isEmpty ? 'auto' : selectedAudio,
+																							title: const Text('Auto', style: TextStyle(color: Colors.white)),
+																							dense: true,
+																							onChanged: (v) async {
+																								setModalState(() { selectedAudio = ''; });
+																								await _player.setAudioTrack(mk.AudioTrack.auto());
+																							},
+																						);
+																					}
+																					final a = audios[index - 1];
+																					return RadioListTile<String>(
+																						value: a.id ?? '',
+																						groupValue: selectedAudio.isEmpty ? 'auto' : selectedAudio,
+																						title: Text(_labelForTrack(a, index - 1), style: const TextStyle(color: Colors.white)),
+																						dense: true,
+																						onChanged: (v) async {
+																							if (v == null) return;
+																							setModalState(() { selectedAudio = v; });
+																							await _player.setAudioTrack(a);
+																						},
+																					);
+																				},
+																			),
+																		),
+																	],
+																),
+															),
+														),
+														const SizedBox(width: 12),
+														// Subtitles pane
+														Expanded(
+															child: Container(
+																decoration: BoxDecoration(
+																	color: const Color(0xFF121B30),
+																	borderRadius: BorderRadius.circular(12),
+																	border: Border.all(color: const Color(0xFF22304F)),
+																),
+																padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+																child: Column(
+																	crossAxisAlignment: CrossAxisAlignment.start,
+																	children: [
+																		Row(
+																			children: const [
+																				Icon(Icons.closed_caption_rounded, color: Colors.white70, size: 18),
+																				SizedBox(width: 6),
+																				Text('Subtitles', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+																			],
+																		),
+																		const SizedBox(height: 6),
+																		Expanded(
+																			child: ListView.builder(
+																				itemCount: subs.length + 1,
+																				itemBuilder: (context, index) {
+																					if (index == 0) {
+																						return RadioListTile<String>(
+																							value: '',
+																							groupValue: selectedSub,
+																							title: const Text('Off', style: TextStyle(color: Colors.white)),
+																							dense: true,
+																							onChanged: (v) async {
+																								setModalState(() { selectedSub = ''; });
+																								await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+																							},
+																						);
+																					}
+																					final s = subs[index - 1];
+																					return RadioListTile<String>(
+																						value: s.id ?? '',
+																						groupValue: selectedSub,
+																						title: Text(_labelForTrack(s, index - 1), style: const TextStyle(color: Colors.white)),
+																						dense: true,
+																						onChanged: (v) async {
+																							if (v == null) return;
+																							setModalState(() { selectedSub = v; });
+																							await _player.setSubtitleTrack(s);
+																						},
+																					);
+																				},
+																			),
+																		),
+																	],
+																),
+															),
+														),
+													],
 												),
 											),
-										const SizedBox(height: 12),
-										const Text('Subtitles', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-										const SizedBox(height: 8),
-										ListTile(
-											dense: true,
-											title: const Text('None', style: TextStyle(color: Colors.white)),
-											trailing: Radio<String>(
-												value: '',
-												groupValue: selectedSub,
-												onChanged: (v) async {
-													setLocal(() => selectedSub = '');
-													await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-												},
-											),
-										),
-										for (final s in subs)
-											ListTile(
-												dense: true,
-												title: Text(s.title ?? s.id ?? 'Subtitle', style: const TextStyle(color: Colors.white)),
-												trailing: Radio<String>(
-													value: s.id ?? '',
-													groupValue: selectedSub,
-													onChanged: (v) async {
-														if (v == null) return;
-														setLocal(() => selectedSub = v);
-														await _player.setSubtitleTrack(s);
-													},
-												),
-											),
-										const SizedBox(height: 12),
-										Align(
-											alignment: Alignment.centerRight,
-											child: FilledButton(
-												onPressed: () async {
-												await StorageService.upsertVideoResume(_resumeKey, {
-													'positionMs': _position.inMilliseconds,
-													'speed': _playbackSpeed,
-													'aspect': _aspectMode.name,
-													'durationMs': _duration.inMilliseconds,
-													'updatedAt': DateTime.now().millisecondsSinceEpoch,
-													'audioTrack': selectedAudio,
-													'subTrack': selectedSub,
-												});
-												if (context.mounted) Navigator.of(context).pop();
-											},
-											child: const Text('Done'),
-										),
-									),
-								],
+										],
+									);
+								},
 							),
-							);
-						},
-					);
-				});
+						),
+					),
+				);
 			},
 		);
 	}
