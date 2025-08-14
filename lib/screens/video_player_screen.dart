@@ -570,7 +570,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								if (box == null) return;
 								final size = box.size;
 								final pos = _lastTapLocal ?? Offset.zero;
-								if (_shouldToggleForTap(pos, size)) {
+								if (_shouldToggleForTap(pos, size, controlsVisible: _controlsVisible.value)) {
 									_toggleControls();
 								}
 							},
@@ -965,8 +965,10 @@ bool _isInCenterRegion(Offset pos, Size size) {
 	return (pos - center).distance <= radius;
 }
 
-bool _shouldToggleForTap(Offset pos, Size size) {
-	// Hide/show controls on tap outside bars and center region
+bool _shouldToggleForTap(Offset pos, Size size, {required bool controlsVisible}) {
+	// If controls are hidden, allow toggling from anywhere (including center)
+	if (!controlsVisible) return true;
+	// If controls are visible, avoid toggling when tapping on bars or center to not fight with buttons
 	if (_isInTopArea(pos.dy) || _isInBottomArea(pos.dy, size.height)) return false;
 	if (_isInCenterRegion(pos, size)) return false;
 	return true;
