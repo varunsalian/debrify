@@ -896,11 +896,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEF4444),
+                          color: const Color(0xFF10B981),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
-                          Icons.error,
+                          Icons.check,
                           color: Colors.white,
                           size: 16,
                         ),
@@ -908,7 +908,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'This file is not a video (MIME type: $mimeType)',
+                          'Added to torrent but the file is not a video file',
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                       ),
