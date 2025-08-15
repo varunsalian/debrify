@@ -293,7 +293,7 @@ class DebridService {
   }
 
   // Complete workflow: Add magnet, select largest file, get download link
-  static Future<String> addTorrentToDebrid(String apiKey, String magnetLink) async {
+  static Future<String> addTorrentToDebrid(String apiKey, String magnetLink, {String? tempFileSelection}) async {
     try {
       // Step 1: Add magnet
       final addResponse = await addMagnet(apiKey, magnetLink);
@@ -308,8 +308,8 @@ class DebridService {
         throw Exception('No files found in torrent');
       }
 
-      // Step 3: Get file selection preference
-      final fileSelection = await StorageService.getFileSelection();
+      // Step 3: Get file selection preference (use temp selection if provided, otherwise use saved preference)
+      final fileSelection = tempFileSelection ?? await StorageService.getFileSelection();
       List<int> fileIdsToSelect = [];
 
       if (fileSelection == 'all') {
