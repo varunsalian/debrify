@@ -1263,7 +1263,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ),
                             onTap: () async {
                               Navigator.of(context).pop();
-                              await _downloadFile(link['download'], fileName);
+                              await _downloadFile(link['download'], fileName, torrentName: torrentName);
                             },
                           );
                         },
@@ -1338,6 +1338,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           url: url,
           fileName: fileName,
           context: context,
+          torrentName: torrentName,
         );
       }
       
@@ -1409,12 +1410,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _downloadFile(String downloadLink, String fileName) async {
+  Future<void> _downloadFile(String downloadLink, String fileName, {String? torrentName}) async {
     try {
       await DownloadService.instance.enqueueDownload(
         url: downloadLink,
         fileName: fileName,
         context: context,
+        torrentName: torrentName ?? fileName, // Use provided torrent name or fileName as fallback
       );
       
       ScaffoldMessenger.of(context).showSnackBar(

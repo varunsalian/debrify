@@ -359,6 +359,7 @@ class DownloadService {
   Future<(String directory, String filename)> _smartLocationFor(
     String url,
     String? providedFileName,
+    String? torrentName,
   ) async {
     // Determine file name: provided > last path segment
     String filename = (providedFileName?.trim().isNotEmpty ?? false)
@@ -369,10 +370,16 @@ class DownloadService {
 
     filename = _sanitizeName(filename);
 
-    // Make a folder from base name (without extension)
-    final int dot = filename.lastIndexOf('.');
-    final String baseName = dot > 0 ? filename.substring(0, dot) : filename;
-    final String folder = _sanitizeName(baseName);
+    // Use torrent name for folder if provided, otherwise use base name of file
+    String folder;
+    if (torrentName != null && torrentName.trim().isNotEmpty) {
+      folder = _sanitizeName(torrentName.trim());
+    } else {
+      // Make a folder from base name (without extension)
+      final int dot = filename.lastIndexOf('.');
+      final String baseName = dot > 0 ? filename.substring(0, dot) : filename;
+      folder = _sanitizeName(baseName);
+    }
 
     // Place under downloads/<folder>
     final String downloadsRoot = await _appDownloadsSubdir();
@@ -393,10 +400,11 @@ class DownloadService {
     int retries = 3,
     String? meta,
     BuildContext? context,
+    String? torrentName,
   }) async {
     await initialize();
 
-    final (dirAbsPath, filename) = await _smartLocationFor(url, fileName);
+    final (dirAbsPath, filename) = await _smartLocationFor(url, fileName, torrentName);
 
     if (Platform.isAndroid) {
       final ok = await _ensureBatteryExemptions(context);
@@ -404,10 +412,14 @@ class DownloadService {
         throw Exception('battery_optimization_not_granted');
       }
       final String name = filename;
+      // Use torrent name for subdirectory if provided, otherwise use 'Debrify'
+      final String subDir = torrentName != null && torrentName.trim().isNotEmpty 
+          ? 'Debrify/${_sanitizeName(torrentName.trim())}'
+          : 'Debrify';
       final taskId = await AndroidNativeDownloader.start(
         url: url,
         fileName: name,
-        subDir: 'Debrify',
+        subDir: subDir,
         headers: headers,
       );
       if (taskId == null) {

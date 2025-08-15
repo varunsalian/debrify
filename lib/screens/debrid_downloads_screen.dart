@@ -628,6 +628,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                             url: url,
                                             fileName: fileName,
                                             context: context,
+                                            torrentName: torrent.filename,
                                           );
                                           setLocal(() {
                                             added.add(i);
@@ -737,6 +738,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                 url: url,
                                                 fileName: fileName,
                                                 context: context,
+                                                torrentName: torrent.filename,
                                               );
                                             },
                                       icon: Icon(isAdded ? Icons.check_circle : Icons.download_rounded),
@@ -1232,6 +1234,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                               url: link,
                               fileName: torrent.filename,
                               context: context,
+                              torrentName: torrent.filename,
                             );
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -1479,6 +1482,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                             url: link,
                             fileName: download.filename,
                             context: context,
+                            torrentName: download.filename,
                           );
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -1655,18 +1659,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
-  Future<void> _downloadAllFiles(List<Map<String, dynamic>> links) async {
-    for (final link in links) {
-      final url = (link['download'] ?? '').toString();
-      final fileName = (link['filename'] ?? 'file').toString();
-      if (url.isEmpty) continue;
-      await DownloadService.instance.enqueueDownload(
-        url: url,
-        fileName: fileName,
-        context: context,
-      );
-    }
-  }
+
 
   void _playUnrestricted(Map<String, dynamic> link) {
     final downloadLink = (link['download'] ?? '').toString();
