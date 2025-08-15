@@ -4,6 +4,7 @@ import 'dart:convert';
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
   static const String _fileSelectionKey = 'real_debrid_file_selection';
+  static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _batteryOptStatusKey = 'battery_opt_status_v1'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
   
@@ -33,6 +34,19 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_fileSelectionKey, selection);
   }
+
+  // Post-torrent action methods
+  static Future<String> getPostTorrentAction() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_postTorrentActionKey) ?? 'copy'; // Default to copy to clipboard
+  }
+
+  static Future<void> savePostTorrentAction(String action) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_postTorrentActionKey, action);
+  }
+
+
 
   // Battery optimization status
   static Future<String> getBatteryOptimizationStatus() async {

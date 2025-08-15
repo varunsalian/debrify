@@ -4,8 +4,11 @@ import '../models/torrent.dart';
 import '../services/torrent_service.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
+import '../services/download_service.dart';
 import '../utils/formatters.dart';
+import '../utils/file_utils.dart';
 import '../widgets/stat_chip.dart';
+import 'video_player_screen.dart';
 
 class TorrentSearchScreen extends StatefulWidget {
   const TorrentSearchScreen({super.key});
@@ -264,47 +267,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     try {
       final magnetLink = 'magnet:?xt=urn:btih:$infohash';
-      final downloadLink = await DebridService.addTorrentToDebrid(apiKey, magnetLink);
+      final result = await DebridService.addTorrentToDebrid(apiKey, magnetLink);
       
       // Close loading dialog
       Navigator.of(context).pop();
       
-      // Copy download link to clipboard
-      Clipboard.setData(ClipboardData(text: downloadLink));
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Torrent added to Real Debrid! Download link copied to clipboard.',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF1E293B),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      // Handle post-torrent action
+      await _handlePostTorrentAction(result, torrentName, apiKey);
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
@@ -767,47 +736,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     try {
       final magnetLink = 'magnet:?xt=urn:btih:$infohash';
-      final downloadLink = await DebridService.addTorrentToDebrid(apiKey, magnetLink, tempFileSelection: fileSelection);
+      final result = await DebridService.addTorrentToDebrid(apiKey, magnetLink, tempFileSelection: fileSelection);
       
       // Close loading dialog
       Navigator.of(context).pop();
       
-      // Copy download link to clipboard
-      Clipboard.setData(ClipboardData(text: downloadLink));
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Torrent added to Real Debrid! Download link copied to clipboard.',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF1E293B),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      // Handle post-torrent action
+      await _handlePostTorrentAction(result, torrentName, apiKey);
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
@@ -973,6 +908,593 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _handlePostTorrentAction(Map<String, dynamic> result, String torrentName, String apiKey) async {
+    final postAction = await StorageService.getPostTorrentAction();
+    final downloadLink = result['downloadLink'] as String;
+    final fileSelection = result['fileSelection'] as String;
+    final links = result['links'] as List<dynamic>;
+
+    switch (postAction) {
+      case 'copy':
+        // Copy to clipboard (default behavior)
+        Clipboard.setData(ClipboardData(text: downloadLink));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Torrent added to Real Debrid! Download link copied to clipboard.',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        break;
+      case 'play':
+        // Play video - handle multiple files with playlist
+        if (fileSelection == 'video' && links.length > 1) {
+          // Multiple video files - create playlist
+          await _handlePlayMultiFileTorrent(links, torrentName, apiKey);
+        } else {
+          // Single file or all files - play directly
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => VideoPlayerScreen(
+                videoUrl: downloadLink,
+                title: torrentName,
+              ),
+            ),
+          );
+        }
+        break;
+      case 'download':
+        // Download file(s)
+        if (fileSelection == 'video' && links.length > 1) {
+          // Multiple video files - show selection dialog for download
+          _showDownloadSelectionDialog(links, torrentName);
+        } else {
+          // Single file - download directly
+          await _downloadFile(downloadLink, torrentName);
+        }
+        break;
+    }
+  }
+
+  Future<void> _handlePlayMultiFileTorrent(List<dynamic> links, String torrentName, String apiKey) async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text(
+                'Preparing playlist…',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final List<PlaylistEntry> entries = [];
+      for (final link in links) {
+        try {
+          final res = await DebridService.unrestrictLink(apiKey, link);
+          final url = (res['download'] ?? '').toString();
+          final fname = (res['filename'] ?? '').toString();
+          final mime = (res['mimeType'] ?? '').toString();
+          if (url.isEmpty) continue;
+          // Filter to videos only
+          if (FileUtils.isVideoMimeType(mime) || FileUtils.isVideoFile(fname)) {
+            entries.add(PlaylistEntry(url: url, title: fname.isNotEmpty ? fname : torrentName));
+          }
+        } catch (_) {
+          // Skip problematic item
+          continue;
+        }
+      }
+
+      if (mounted) Navigator.of(context).pop(); // close loading
+
+      if (entries.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.error,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'No playable video files found in this torrent.',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerScreen(
+            videoUrl: entries.first.url,
+            title: torrentName,
+            subtitle: '${entries.length} files',
+            playlist: entries.isNotEmpty ? entries : null,
+            startIndex: 0,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.error,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Failed to prepare playlist: ${e.toString()}',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showDownloadSelectionDialog(List<dynamic> links, String torrentName) async {
+    // First, unrestrict all links to get proper download URLs and filenames
+    final apiKey = await StorageService.getApiKey();
+    if (apiKey == null) return;
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        backgroundColor: Color(0xFF1E293B),
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text(
+              'Preparing download links…',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final List<Map<String, dynamic>> unrestrictedLinks = [];
+      for (final link in links) {
+        try {
+          final res = await DebridService.unrestrictLink(apiKey, link);
+          final url = (res['download'] ?? '').toString();
+          final fname = (res['filename'] ?? '').toString();
+          final mime = (res['mimeType'] ?? '').toString();
+          if (url.isEmpty) continue;
+          // Filter to videos only
+          if (FileUtils.isVideoMimeType(mime) || FileUtils.isVideoFile(fname)) {
+            unrestrictedLinks.add({
+              'download': url,
+              'filename': fname.isNotEmpty ? fname : 'Video File',
+            });
+          }
+        } catch (_) {
+          // Skip problematic item
+          continue;
+        }
+      }
+
+      if (mounted) Navigator.of(context).pop(); // close loading
+
+      if (unrestrictedLinks.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.error,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'No downloadable video files found in this torrent.',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show the download selection dialog with unrestricted links
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return Dialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Select Video to Download',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Download All option
+                    ListTile(
+                      leading: const Icon(
+                        Icons.download_for_offline,
+                        color: Color(0xFF10B981),
+                      ),
+                      title: const Text(
+                        'Download All',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Download all ${unrestrictedLinks.length} videos',
+                        style: TextStyle(color: Colors.grey[400]),
+                      ),
+                      onTap: () async {
+                        Navigator.of(context).pop();
+                        await _downloadAllFiles(unrestrictedLinks, torrentName);
+                      },
+                    ),
+                    const Divider(color: Colors.grey),
+                    // Individual video options - scrollable
+                    Expanded(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: unrestrictedLinks.length,
+                        itemBuilder: (context, index) {
+                          final link = unrestrictedLinks[index];
+                          final fileName = link['filename'] as String;
+                          return ListTile(
+                            leading: const Icon(
+                              Icons.video_file,
+                              color: Colors.grey,
+                            ),
+                            title: Text(
+                              fileName,
+                              style: const TextStyle(color: Colors.white),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              'Tap to download',
+                              style: TextStyle(color: Colors.grey[400]),
+                            ),
+                            onTap: () async {
+                              Navigator.of(context).pop();
+                              await _downloadFile(link['download'], fileName);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.error,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Failed to prepare download links: ${e.toString()}',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+
+
+  Future<void> _downloadAllFiles(List<Map<String, dynamic>> links, String torrentName) async {
+    try {
+      // Start downloads for all files
+      for (final link in links) {
+        final url = (link['download'] ?? '').toString();
+        final fileName = (link['filename'] ?? 'file').toString();
+        if (url.isEmpty) continue;
+        await DownloadService.instance.enqueueDownload(
+          url: url,
+          fileName: fileName,
+          context: context,
+        );
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.download,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Started downloading ${links.length} videos! Check Downloads tab for progress.',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.error,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Failed to start downloads: ${e.toString()}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Future<void> _downloadFile(String downloadLink, String fileName) async {
+    try {
+      await DownloadService.instance.enqueueDownload(
+        url: downloadLink,
+        fileName: fileName,
+        context: context,
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.download,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Download started! Check Downloads tab for progress.',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.error,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Failed to start download: ${e.toString()}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   @override

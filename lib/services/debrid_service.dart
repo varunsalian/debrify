@@ -293,7 +293,7 @@ class DebridService {
   }
 
   // Complete workflow: Add magnet, select largest file, get download link
-  static Future<String> addTorrentToDebrid(String apiKey, String magnetLink, {String? tempFileSelection}) async {
+  static Future<Map<String, dynamic>> addTorrentToDebrid(String apiKey, String magnetLink, {String? tempFileSelection}) async {
     try {
       // Step 1: Add magnet
       final addResponse = await addMagnet(apiKey, magnetLink);
@@ -362,7 +362,12 @@ class DebridService {
       // Don't delete the torrent - let the user keep it in their Real Debrid account
       // The torrent will remain available for future downloads
 
-      return downloadLink;
+      return {
+        'downloadLink': downloadLink,
+        'torrentId': torrentId,
+        'fileSelection': fileSelection,
+        'links': links,
+      };
     } catch (e) {
       throw Exception('Failed to add torrent to Real Debrid: $e');
     }
