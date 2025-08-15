@@ -1,5 +1,6 @@
 import '../utils/series_parser.dart';
 import '../screens/video_player_screen.dart';
+import '../services/episode_info_service.dart';
 
 class SeriesEpisode {
   final String url;
@@ -7,13 +8,15 @@ class SeriesEpisode {
   final String filename;
   final SeriesInfo seriesInfo;
   final int originalIndex;
+  EpisodeInfo? episodeInfo;
 
-  const SeriesEpisode({
+  SeriesEpisode({
     required this.url,
     required this.title,
     required this.filename,
     required this.seriesInfo,
     required this.originalIndex,
+    this.episodeInfo,
   });
 
   String get displayTitle {
@@ -171,5 +174,28 @@ class SeriesPlaylist {
       allEpisodes: allEpisodes,
       isSeries: true,
     );
+  }
+
+  /// Fetch episode information for all episodes in the playlist
+  Future<void> fetchEpisodeInfo() async {
+    if (!isSeries || seriesTitle == null) return;
+
+    for (final season in seasons) {
+      for (final episode in season.episodes) {
+        if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+          try {
+            final episodeInfo = await EpisodeInfoService.getEpisodeInfoByTitle(
+              seriesTitle!,
+              episode.seriesInfo.season!,
+              episode.seriesInfo.episode!,
+            );
+            episode.episodeInfo = episodeInfo;
+          } catch (e) {
+            // Silently fail - episode info is optional
+            print('Failed to fetch episode info: $e');
+          }
+        }
+      }
+    }
   }
 } 

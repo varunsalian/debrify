@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
 
 class SeriesBrowser extends StatefulWidget {
@@ -19,6 +20,7 @@ class SeriesBrowser extends StatefulWidget {
 
 class _SeriesBrowserState extends State<SeriesBrowser> {
   int _selectedSeason = 1;
+  bool _isLoadingEpisodeInfo = false;
 
   @override
   void initState() {
@@ -27,6 +29,47 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     final currentEpisode = widget.seriesPlaylist.allEpisodes[widget.currentEpisodeIndex];
     if (currentEpisode.seriesInfo.season != null) {
       _selectedSeason = currentEpisode.seriesInfo.season!;
+    }
+    
+    // Check if episode info is already loaded, if not, fetch it
+    _ensureEpisodeInfoLoaded();
+  }
+
+  Future<void> _ensureEpisodeInfoLoaded() async {
+    print('Checking if episode info is already loaded...');
+    
+    // Check if any episode already has info loaded
+    bool hasLoadedInfo = false;
+    for (final season in widget.seriesPlaylist.seasons) {
+      for (final episode in season.episodes) {
+        if (episode.episodeInfo != null) {
+          hasLoadedInfo = true;
+          print('Found existing episode info for: ${episode.seriesInfo.title} S${episode.seriesInfo.season}E${episode.seriesInfo.episode}');
+          break;
+        }
+      }
+      if (hasLoadedInfo) break;
+    }
+
+    // If no episode info is loaded, fetch it
+    if (!hasLoadedInfo) {
+      print('No episode info found, fetching...');
+      if (mounted) {
+        setState(() {
+          _isLoadingEpisodeInfo = true;
+        });
+      }
+      
+      await widget.seriesPlaylist.fetchEpisodeInfo();
+      
+      if (mounted) {
+        setState(() {
+          _isLoadingEpisodeInfo = false;
+        });
+      }
+      print('Episode info fetch completed');
+    } else {
+      print('Episode info already loaded, skipping fetch');
     }
   }
 
@@ -110,11 +153,30 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           
           const SizedBox(height: 20),
           
-          // Episodes grid
+          // Episodes horizontal list
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _buildEpisodesGrid(),
+              child: _isLoadingEpisodeInfo
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            color: Colors.white70,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'Loading episode information...',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _buildEpisodesHorizontalList(),
             ),
           ),
         ],
@@ -122,7 +184,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     );
   }
 
-  Widget _buildEpisodesGrid() {
+  Widget _buildEpisodesHorizontalList() {
     final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
     if (selectedSeason == null) {
       return const Center(
@@ -133,25 +195,24 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       );
     }
 
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
       itemCount: selectedSeason.episodes.length,
       itemBuilder: (context, index) {
         final episode = selectedSeason.episodes[index];
         final isCurrentEpisode = episode.originalIndex == widget.currentEpisodeIndex;
         
-        return _EpisodeCard(
-          episode: episode,
-          isCurrentEpisode: isCurrentEpisode,
-          onTap: () {
-            widget.onEpisodeSelected(episode.originalIndex);
-            Navigator.of(context).pop();
-          },
+        return Container(
+          width: 200, // Fixed width for each episode card
+          margin: const EdgeInsets.only(right: 16),
+          child: _EpisodeCard(
+            episode: episode,
+            isCurrentEpisode: isCurrentEpisode,
+            onTap: () {
+              widget.onEpisodeSelected(episode.originalIndex);
+              Navigator.of(context).pop();
+            },
+          ),
         );
       },
     );
@@ -187,13 +248,12 @@ class _EpisodeCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Episode thumbnail placeholder
+              // Episode thumbnail
               Expanded(
                 flex: 3,
                 child: Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF334155),
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(12),
                       topRight: Radius.circular(12),
@@ -201,13 +261,51 @@ class _EpisodeCard extends StatelessWidget {
                   ),
                   child: Stack(
                     children: [
-                      Center(
-                        child: Icon(
-                          Icons.play_circle_outline,
-                          size: 48,
-                          color: Colors.white.withValues(alpha: 0.3),
+                      // Episode poster or placeholder
+                      ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(12),
+                          topRight: Radius.circular(12),
                         ),
+                        child: episode.episodeInfo?.poster != null
+                            ? CachedNetworkImage(
+                                imageUrl: episode.episodeInfo!.poster!,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                placeholder: (context, url) => Container(
+                                  color: const Color(0xFF334155),
+                                  child: const Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: const Color(0xFF334155),
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.play_circle_outline,
+                                      size: 48,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                color: const Color(0xFF334155),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.play_circle_outline,
+                                    size: 48,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ),
                       ),
+                      
+                      // Current episode indicator
                       if (isCurrentEpisode)
                         Positioned(
                           top: 8,
@@ -225,6 +323,39 @@ class _EpisodeCard extends StatelessWidget {
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                               ),
+                            ),
+                          ),
+                        ),
+                      
+                      // Rating
+                      if (episode.episodeInfo?.rating != null)
+                        Positioned(
+                          bottom: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.7),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.star,
+                                  color: Color(0xFFFFD700),
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  episode.episodeInfo!.rating!,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -252,7 +383,7 @@ class _EpisodeCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Expanded(
                         child: Text(
-                          episode.displayTitle,
+                          episode.episodeInfo?.title ?? episode.displayTitle,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,

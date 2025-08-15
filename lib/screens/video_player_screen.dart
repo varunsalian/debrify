@@ -134,6 +134,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			if (done) _onPlaybackEnded();
 		});
 		_autosaveTimer = Timer.periodic(const Duration(seconds: 6), (_) => _saveResume(debounced: true));
+		
+		// Preload episode information if this is a series
+		_preloadEpisodeInfo();
 	}
 
 	void _onVideoUpdate() {
@@ -156,6 +159,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_currentIndex = index;
 		await _player.open(mk.Media(entry.url), play: autoplay);
 		await _maybeRestoreResume();
+	}
+
+	/// Preload episode information in the background
+	Future<void> _preloadEpisodeInfo() async {
+		final seriesPlaylist = widget._seriesPlaylist;
+		if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+			// Preload episode information in the background
+			seriesPlaylist.fetchEpisodeInfo().catchError((error) {
+				// Silently handle errors - this is just preloading
+				print('Episode info preload failed: $error');
+			});
+		}
 	}
 
 	@override
