@@ -989,20 +989,95 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
         break;
       case 'play':
-        // Play video - handle multiple files with playlist
+        // Play video - check if it's actually a video file first
         if (fileSelection == 'video' && links.length > 1) {
           // Multiple video files - create playlist
           await _handlePlayMultiFileTorrent(links, torrentName, apiKey);
         } else {
-          // Single file or all files - play directly
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => VideoPlayerScreen(
-                videoUrl: downloadLink,
-                title: torrentName,
+          // Single file - check MIME type after unrestricting
+          try {
+            final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[0]);
+            final videoUrl = unrestrictResult['download'];
+            final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
+            
+            // Check if it's actually a video using MIME type
+            if (FileUtils.isVideoMimeType(mimeType)) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => VideoPlayerScreen(
+                    videoUrl: videoUrl,
+                    title: torrentName,
+                  ),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEF4444),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.error,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'This file is not a video (MIME type: $mimeType)',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFF1E293B),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  margin: const EdgeInsets.all(16),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.error,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Failed to load video: ${e.toString()}',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF1E293B),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                margin: const EdgeInsets.all(16),
+                duration: const Duration(seconds: 4),
               ),
-            ),
-          );
+            );
+          }
         }
         break;
       case 'download':
