@@ -249,6 +249,14 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                     contentPadding: EdgeInsets.zero,
                   ),
                   RadioListTile<String>(
+                    title: const Text('All video files'),
+                    subtitle: const Text('Selects all video files (mp4, mkv, avi, etc.) from the torrent'),
+                    value: 'video',
+                    groupValue: _fileSelection,
+                    onChanged: (v) => v == null ? null : _saveSelection(v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  RadioListTile<String>(
                     title: const Text('All files'),
                     subtitle: const Text('Downloads all files in the torrent'),
                     value: 'all',

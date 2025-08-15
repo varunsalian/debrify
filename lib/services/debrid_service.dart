@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../models/debrid_download.dart';
 import '../models/rd_torrent.dart';
 import '../services/storage_service.dart';
+import '../utils/file_utils.dart';
 
 class DebridService {
   static const String _baseUrl = 'https://api.real-debrid.com/rest/1.0';
@@ -314,15 +315,23 @@ class DebridService {
       if (fileSelection == 'all') {
         // Select all files
         fileIdsToSelect = files.map((file) => file['id'] as int).toList();
+      } else if (fileSelection == 'video') {
+        // Select all video files
+        final videoFiles = files.where((file) {
+          final fileName = file['name'] as String?;
+          return fileName != null && FileUtils.isVideoFile(fileName);
+        }).toList();
+        fileIdsToSelect = videoFiles.map((file) => file['id'] as int).toList();
       } else {
         // Select largest file (default behavior)
-        int largestFileId = files[0]['id'];
-        int largestSize = files[0]['bytes'];
+        int largestFileId = files[0]['id'] as int;
+        int largestSize = files[0]['bytes'] as int;
 
         for (final file in files) {
-          if (file['bytes'] > largestSize) {
-            largestSize = file['bytes'];
-            largestFileId = file['id'];
+          final fileSize = file['bytes'] as int?;
+          if (fileSize != null && fileSize > largestSize) {
+            largestSize = fileSize;
+            largestFileId = file['id'] as int;
           }
         }
         fileIdsToSelect = [largestFileId];
@@ -343,7 +352,12 @@ class DebridService {
 
       // Step 6: Unrestrict the link
       final unrestrictResponse = await unrestrictLink(apiKey, links[0]);
-      final downloadLink = unrestrictResponse['download'];
+      final downloadLink = unrestrictResponse['download'] as String?;
+      
+      if (downloadLink == null) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('Failed to get download link from Real Debrid');
+      }
 
       // Don't delete the torrent - let the user keep it in their Real Debrid account
       // The torrent will remain available for future downloads
