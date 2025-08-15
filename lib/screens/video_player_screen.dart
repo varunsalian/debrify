@@ -9,6 +9,8 @@ import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
+import '../models/series_playlist.dart';
+import '../widgets/series_browser.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -27,6 +29,11 @@ class VideoPlayerScreen extends StatefulWidget {
 		this.playlist,
 		this.startIndex,
 	}) : super(key: key);
+
+	SeriesPlaylist? get _seriesPlaylist {
+		if (playlist == null || playlist!.isEmpty) return null;
+		return SeriesPlaylist.fromPlaylistEntries(playlist!);
+	}
 
 	@override
 	State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -461,50 +468,69 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	Future<void> _showPlaylistSheet(BuildContext context) async {
 		if (widget.playlist == null || widget.playlist!.isEmpty) return;
+		
+		final seriesPlaylist = widget._seriesPlaylist;
+		
 		await showModalBottomSheet(
 			context: context,
 			backgroundColor: const Color(0xFF0F172A),
+			isScrollControlled: true,
 			shape: const RoundedRectangleBorder(
 				borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
 			),
 			builder: (context) {
 				return SafeArea(
 					top: false,
-					child: Column(
-						mainAxisSize: MainAxisSize.min,
-						children: [
-							Container(
-								padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-								child: Row(
-									children: [
-										const Icon(Icons.playlist_play_rounded, color: Colors.white),
-										const SizedBox(width: 8),
-										const Text('All files', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-									],
-								),
-							),
-							Flexible(
-								child: ListView.builder(
-									shrinkWrap: true,
-									itemCount: widget.playlist!.length,
-									itemBuilder: (context, index) {
-										final entry = widget.playlist![index];
-										final active = index == _currentIndex;
-										return ListTile(
-											onTap: () async {
-												Navigator.of(context).pop();
-												await _loadPlaylistIndex(index, autoplay: true);
-											},
-											title: Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
-											leading: Icon(active ? Icons.play_arrow_rounded : Icons.movie_rounded, color: active ? Colors.greenAccent : Colors.white70),
-										);
-									},
-								),
-							),
-						],
+					child: Container(
+						height: MediaQuery.of(context).size.height * 0.8,
+						child: seriesPlaylist != null && seriesPlaylist.isSeries
+							? SeriesBrowser(
+								seriesPlaylist: seriesPlaylist,
+								currentEpisodeIndex: _currentIndex,
+								onEpisodeSelected: (episodeIndex) async {
+									await _loadPlaylistIndex(episodeIndex, autoplay: true);
+								},
+							  )
+							: _buildSimplePlaylist(),
 					),
 				);
 			},
+		);
+	}
+
+	Widget _buildSimplePlaylist() {
+		return Column(
+			mainAxisSize: MainAxisSize.min,
+			children: [
+				Container(
+					padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+					child: Row(
+						children: [
+							const Icon(Icons.playlist_play_rounded, color: Colors.white),
+							const SizedBox(width: 8),
+							const Text('All files', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+						],
+					),
+				),
+				Flexible(
+					child: ListView.builder(
+						shrinkWrap: true,
+						itemCount: widget.playlist!.length,
+						itemBuilder: (context, index) {
+							final entry = widget.playlist![index];
+							final active = index == _currentIndex;
+							return ListTile(
+								onTap: () async {
+									Navigator.of(context).pop();
+									await _loadPlaylistIndex(index, autoplay: true);
+								},
+								title: Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
+								leading: Icon(active ? Icons.play_arrow_rounded : Icons.movie_rounded, color: active ? Colors.greenAccent : Colors.white70),
+							);
+						},
+					),
+				),
+			],
 		);
 	}
 
