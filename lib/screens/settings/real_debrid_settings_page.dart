@@ -12,7 +12,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   final TextEditingController _apiKeyController = TextEditingController();
   String? _savedApiKey;
   String _fileSelection = 'largest';
-  String _postTorrentAction = 'copy';
+  String _postTorrentAction = 'none';
   bool _isEditing = false;
   bool _obscure = true;
   bool _loading = true;
@@ -308,9 +308,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   RadioListTile<String>(
-                    title: const Text('Copy to clipboard'),
-                    subtitle: const Text('Copy download link to clipboard (default)'),
-                    value: 'copy',
+                    title: const Text('None'),
+                    subtitle: const Text('Do nothing after adding torrent (default)'),
+                    value: 'none',
                     groupValue: _postTorrentAction,
                     onChanged: (v) => v == null ? null : _savePostAction(v),
                     contentPadding: EdgeInsets.zero,

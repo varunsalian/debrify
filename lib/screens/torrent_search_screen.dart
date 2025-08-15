@@ -917,8 +917,43 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final links = result['links'] as List<dynamic>;
 
     switch (postAction) {
+      case 'none':
+        // Do nothing - just show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Torrent added to Real Debrid successfully!',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        break;
       case 'copy':
-        // Copy to clipboard (default behavior)
+        // Copy to clipboard
         Clipboard.setData(ClipboardData(text: downloadLink));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
