@@ -1653,6 +1653,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           setState(() {
                             _selectedSearchEngine = newValue;
                           });
+                          
+                          // If there's a search query and we have searched before, trigger a new search
+                          if (_searchController.text.trim().isNotEmpty && _hasSearched) {
+                            // Add a small delay to avoid rapid API calls
+                            Future.delayed(const Duration(milliseconds: 300), () {
+                              if (mounted) {
+                                _searchTorrents(_searchController.text);
+                              }
+                            });
+                          }
                         }
                       },
                       style: const TextStyle(color: Colors.white),
