@@ -353,14 +353,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    String? selectedOption;
+
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Dialog(
+        return Dialog(
               backgroundColor: Colors.transparent,
               child: Container(
                 decoration: BoxDecoration(
@@ -467,11 +465,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             subtitle: 'Ideal for web series and stuff',
                             icon: Icons.video_library_rounded,
                             value: 'video',
-                            selectedOption: selectedOption,
+                            selectedOption: null,
                             onChanged: (value) {
-                              setState(() {
-                                selectedOption = value;
-                              });
+                              Navigator.of(context).pop();
+                              _addToRealDebridWithSelection(infohash, torrentName, value!);
                             },
                             gradient: const LinearGradient(
                               colors: [Color(0xFF10B981), Color(0xFF059669)],
@@ -484,11 +481,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             subtitle: 'Ideal for movies',
                             icon: Icons.movie_rounded,
                             value: 'largest',
-                            selectedOption: selectedOption,
+                            selectedOption: null,
                             onChanged: (value) {
-                              setState(() {
-                                selectedOption = value;
-                              });
+                              Navigator.of(context).pop();
+                              _addToRealDebridWithSelection(infohash, torrentName, value!);
                             },
                             gradient: const LinearGradient(
                               colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
@@ -501,130 +497,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             subtitle: 'Ideal for apps, games, archives etc',
                             icon: Icons.folder_rounded,
                             value: 'all',
-                            selectedOption: selectedOption,
+                            selectedOption: null,
                             onChanged: (value) {
-                              setState(() {
-                                selectedOption = value;
-                              });
+                              Navigator.of(context).pop();
+                              _addToRealDebridWithSelection(infohash, torrentName, value!);
                             },
                             gradient: const LinearGradient(
                               colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
                             ),
-                          ),
-                          
-                          const SizedBox(height: 24),
-                          
-                          // Action buttons
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.grey.withValues(alpha: 0.2),
-                                        Colors.grey.withValues(alpha: 0.1),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.grey.withValues(alpha: 0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      onTap: () => Navigator.of(context).pop(),
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 16),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.close_rounded,
-                                              color: Colors.grey[400],
-                                              size: 18,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'Cancel',
-                                              style: TextStyle(
-                                                color: Colors.grey[400],
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: selectedOption == null
-                                        ? LinearGradient(
-                                            colors: [
-                                              Colors.grey.withValues(alpha: 0.3),
-                                              Colors.grey.withValues(alpha: 0.2),
-                                            ],
-                                          )
-                                        : const LinearGradient(
-                                            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                                          ),
-                                    borderRadius: BorderRadius.circular(12),
-                                    boxShadow: selectedOption == null
-                                        ? null
-                                        : [
-                                            BoxShadow(
-                                              color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ],
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      onTap: selectedOption == null
-                                          ? null
-                                          : () {
-                                              Navigator.of(context).pop();
-                                              _addToRealDebridWithSelection(infohash, torrentName, selectedOption!);
-                                            },
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 16),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.download_rounded,
-                                              color: selectedOption == null ? Colors.grey[600] : Colors.white,
-                                              size: 18,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'Add to Debrid',
-                                              style: TextStyle(
-                                                color: selectedOption == null ? Colors.grey[600] : Colors.white,
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
                           ),
                         ],
                       ),
@@ -633,8 +513,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 ),
               ),
             );
-          },
-        );
       },
     );
   }
