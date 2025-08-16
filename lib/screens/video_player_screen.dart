@@ -111,17 +111,40 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_landscapeLocked = true;
 		WakelockPlus.enable();
 		// System volume UI not modified
-		// Determine the initial URL
+		
+		// Determine the initial URL and index
 		String initialUrl = widget.videoUrl;
+		int initialIndex = 0;
+		
 		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
-			final startIndex = widget.startIndex ?? 0;
-			final entry = widget.playlist![startIndex];
-			if (entry.url.isNotEmpty) {
-				initialUrl = entry.url;
+			// Check if this is a series and we should find the first episode by season/episode
+			final seriesPlaylist = widget._seriesPlaylist;
+			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+				// Find the first episode (lowest season, lowest episode)
+				final firstEpisodeIndex = seriesPlaylist.getFirstEpisodeOriginalIndex();
+				if (firstEpisodeIndex != -1) {
+					initialIndex = firstEpisodeIndex;
+					print('Using first episode at index $initialIndex');
+				} else {
+					print('Failed to find first episode, using startIndex: ${widget.startIndex ?? 0}');
+					initialIndex = widget.startIndex ?? 0;
+				}
+			} else {
+				// Not a series or no series playlist, use the provided startIndex
+				initialIndex = widget.startIndex ?? 0;
+				print('Using provided startIndex: $initialIndex');
+			}
+			
+			// Get the initial URL from the determined index
+			if (initialIndex < widget.playlist!.length) {
+				final entry = widget.playlist![initialIndex];
+				if (entry.url.isNotEmpty) {
+					initialUrl = entry.url;
+				}
 			}
 		}
 		
-		_currentIndex = widget.playlist != null ? (widget.startIndex ?? 0) : 0;
+		_currentIndex = initialIndex;
 		_player = mk.Player(configuration: mk.PlayerConfiguration(ready: () {
 			_isReady = true;
 			if (mounted) setState(() {});
@@ -570,8 +593,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						? SeriesBrowser(
 							seriesPlaylist: seriesPlaylist,
 							currentEpisodeIndex: _currentIndex,
-							onEpisodeSelected: (episodeIndex) async {
-								await _loadPlaylistIndex(episodeIndex, autoplay: true);
+							onEpisodeSelected: (season, episode) async {
+								// Find the original index in the PlaylistEntry array
+								final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(season, episode);
+								if (originalIndex != -1) {
+									await _loadPlaylistIndex(originalIndex, autoplay: true);
+								} else {
+									print('Failed to find original index for S${season}E${episode}');
+									// Show error message to user
+									if (mounted) {
+										ScaffoldMessenger.of(context).showSnackBar(
+											SnackBar(
+												content: Text('Failed to find episode S${season}E${episode}', style: const TextStyle(color: Colors.white)),
+												backgroundColor: const Color(0xFFEF4444),
+												duration: const Duration(seconds: 3),
+											),
+										);
+									}
+								}
 							},
 						  )
 						: _buildSimplePlaylist(),

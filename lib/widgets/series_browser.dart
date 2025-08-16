@@ -5,7 +5,7 @@ import '../services/episode_info_service.dart';
 
 class SeriesBrowser extends StatefulWidget {
   final SeriesPlaylist seriesPlaylist;
-  final Function(int) onEpisodeSelected;
+  final Function(int season, int episode) onEpisodeSelected;
   final int currentEpisodeIndex;
 
   const SeriesBrowser({
@@ -39,9 +39,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   void _initializeSeason() {
     if (widget.seriesPlaylist.seasons.isNotEmpty) {
       // Find the current episode from the currentEpisodeIndex
-      if (widget.currentEpisodeIndex >= 0 && 
-          widget.currentEpisodeIndex < widget.seriesPlaylist.allEpisodes.length) {
-        final currentEpisode = widget.seriesPlaylist.allEpisodes[widget.currentEpisodeIndex];
+      if (widget.currentEpisodeIndex >= 0) {
+        // Find the episode with the matching original index
+        final currentEpisode = widget.seriesPlaylist.allEpisodes.firstWhere(
+          (episode) => episode.originalIndex == widget.currentEpisodeIndex,
+          orElse: () => widget.seriesPlaylist.allEpisodes.first, // Fallback to first episode
+        );
+        
         if (currentEpisode.seriesInfo.season != null) {
           _selectedSeason = currentEpisode.seriesInfo.season!;
           print('Auto-selected season ${_selectedSeason} for current episode S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode}');
@@ -284,7 +288,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     itemCount: episodes.length,
                     itemBuilder: (context, index) {
                       final episode = episodes[index];
-                      final isCurrentEpisode = widget.seriesPlaylist.allEpisodes.indexOf(episode) == widget.currentEpisodeIndex;
+                      // Fix: Compare original indices instead of sorted indices
+                      final isCurrentEpisode = episode.originalIndex == widget.currentEpisodeIndex;
                       
                       return Container(
                         width: MediaQuery.of(context).size.width * 0.42, // Slightly smaller for better fit
@@ -303,18 +308,16 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     return GestureDetector(
       onTap: () {
         print('DEBUG: Card tapped! Episode: ${episode.title}');
-        // Find the correct index in allEpisodes list
-        final allEpisodesIndex = widget.seriesPlaylist.allEpisodes.indexOf(episode);
-        print('DEBUG: Found index: $allEpisodesIndex');
         
-        if (allEpisodesIndex != -1) {
-          print('Playing episode at index: $allEpisodesIndex (${episode.title})');
+        // Use season/episode directly instead of finding index
+        if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+          print('Playing episode S${episode.seriesInfo.season}E${episode.seriesInfo.episode} (${episode.title})');
           // Close the modal bottom sheet first
           Navigator.of(context).pop();
-          // Then trigger the episode selection
-          widget.onEpisodeSelected(allEpisodesIndex);
+          // Then trigger the episode selection with season/episode
+          widget.onEpisodeSelected(episode.seriesInfo.season!, episode.seriesInfo.episode!);
         } else {
-          print('Episode not found in allEpisodes list: ${episode.title}');
+          print('Episode missing season/episode info: ${episode.title}');
         }
       },
       child: Container(

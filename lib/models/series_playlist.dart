@@ -248,4 +248,43 @@ class SeriesPlaylist {
     }
     return null;
   }
+
+  /// Find the original index in the PlaylistEntry array by season and episode
+  /// Returns -1 if not found
+  int findOriginalIndexBySeasonEpisode(int season, int episode) {
+    print('Searching for original index: S${season}E${episode}');
+    
+    for (int i = 0; i < allEpisodes.length; i++) {
+      final episodeInfo = allEpisodes[i];
+      if (episodeInfo.seriesInfo.season == season && 
+          episodeInfo.seriesInfo.episode == episode) {
+        print('Found episode S${season}E${episode} at original index: ${episodeInfo.originalIndex}');
+        return episodeInfo.originalIndex;
+      }
+    }
+    
+    print('Episode S${season}E${episode} not found in playlist');
+    print('Available episodes: ${allEpisodes.map((e) => 'S${e.seriesInfo.season}E${e.seriesInfo.episode}').join(', ')}');
+    return -1;
+  }
+
+  /// Get the original index of the first episode (lowest season, lowest episode)
+  /// Returns -1 if no episodes found
+  int getFirstEpisodeOriginalIndex() {
+    if (allEpisodes.isEmpty) {
+      print('No episodes found in playlist');
+      return -1;
+    }
+    
+    // The allEpisodes list is already sorted by season and episode
+    // So the first episode is the one with lowest season and episode
+    final firstEpisode = allEpisodes.first;
+    if (firstEpisode.seriesInfo.season != null && firstEpisode.seriesInfo.episode != null) {
+      print('First episode is S${firstEpisode.seriesInfo.season}E${firstEpisode.seriesInfo.episode} at original index: ${firstEpisode.originalIndex}');
+      return firstEpisode.originalIndex;
+    }
+    
+    print('First episode missing season/episode info');
+    return -1;
+  }
 } 
