@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
 import '../services/episode_info_service.dart';
 
@@ -22,17 +23,35 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   final Set<String> _loadingEpisodes = {};
   bool _tvmazeAvailable = false;
   int _selectedSeason = 1;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _initializeSeason();
     _checkTVMazeAvailability();
+    // Schedule scrolling to current episode after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToCurrentEpisode();
+    });
   }
 
   void _initializeSeason() {
     if (widget.seriesPlaylist.seasons.isNotEmpty) {
+      // Find the current episode from the currentEpisodeIndex
+      if (widget.currentEpisodeIndex >= 0 && 
+          widget.currentEpisodeIndex < widget.seriesPlaylist.allEpisodes.length) {
+        final currentEpisode = widget.seriesPlaylist.allEpisodes[widget.currentEpisodeIndex];
+        if (currentEpisode.seriesInfo.season != null) {
+          _selectedSeason = currentEpisode.seriesInfo.season!;
+          print('Auto-selected season ${_selectedSeason} for current episode S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode}');
+          return;
+        }
+      }
+      
+      // Fallback to first season if current episode not found or not a series
       _selectedSeason = widget.seriesPlaylist.seasons.first.seasonNumber;
+      print('Fallback to first season: $_selectedSeason');
     }
   }
 
@@ -112,7 +131,38 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToCurrentEpisode() {
+    if (widget.currentEpisodeIndex >= 0 && 
+        widget.currentEpisodeIndex < widget.seriesPlaylist.allEpisodes.length) {
+      final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
+      
+      if (selectedSeason != null) {
+        // Find the index of the current episode within the selected season
+        final episodeIndexInSeason = selectedSeason.episodes.indexWhere(
+          (episode) => episode.originalIndex == widget.currentEpisodeIndex
+        );
+        
+        if (episodeIndexInSeason != -1) {
+          // Calculate scroll position to center the current episode
+          final itemWidth = MediaQuery.of(context).size.width * 0.42 + 8; // card width + margin
+          final scrollPosition = episodeIndexInSeason * itemWidth - 
+                               (MediaQuery.of(context).size.width - itemWidth) / 2;
+          
+          // Animate to the current episode
+          _scrollController.animateTo(
+            scrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeInOut,
+          );
+          
+          print('Scrolled to current episode at index $episodeIndexInSeason in season $_selectedSeason');
+        }
+      }
+    }
   }
 
   @override
@@ -128,7 +178,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     print('DEBUG: episodes: ${episodes.map((e) => e.title).toList()}');
     
     return Container(
-      height: MediaQuery.of(context).size.height * 0.9, // Increased to 90% for more space
+      height: MediaQuery.of(context).size.height * 0.85, // Reduced to 85% for more breathing room
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -184,6 +234,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                             });
                             // Load episode info for the new season
                             _startBackgroundEpisodeInfoLoading();
+                            // Scroll to current episode in the new season
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _scrollToCurrentEpisode();
+                            });
                           }
                         },
                       ),
@@ -224,6 +278,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     ),
                   )
                 : ListView.builder(
+                    controller: _scrollController,
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     itemCount: episodes.length,
@@ -233,7 +288,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                       
                       return Container(
                         width: MediaQuery.of(context).size.width * 0.42, // Slightly smaller for better fit
-                        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), // Reduced vertical margin
                         child: _buildEpisodeCard(episode, index, isCurrentEpisode),
                       );
                     },
@@ -263,8 +318,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         }
       },
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        height: 320, // Significantly reduced height to prevent overflow
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // Reduced vertical margin
+        height: 280, // Further reduced height to prevent overflow
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           gradient: LinearGradient(
@@ -292,57 +347,90 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           children: [
             Column(
               children: [
-                // Episode Poster Image - Compact
+                // Episode Poster Image - Compact with proper caching
                 if (episode.episodeInfo?.poster != null)
                   Container(
-                    height: 140, // Reduced height to fit better
+                    height: 120, // Further reduced height to prevent overflow
                     width: double.infinity,
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      child: Image.network(
-                        episode.episodeInfo!.poster!,
+                      child: CachedNetworkImage(
+                        imageUrl: episode.episodeInfo!.poster!,
                         fit: BoxFit.cover,
-                        // Add caching
-                        cacheWidth: 300,
-                        cacheHeight: 200,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            decoration: BoxDecoration(
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.blue.withValues(alpha: 0.3),
-                                  Colors.purple.withValues(alpha: 0.3),
-                                ],
-                              ),
+                        width: 300,
+                        height: 200,
+                        placeholder: (context, url) => Container(
+                          decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.blue.withValues(alpha: 0.3),
+                                Colors.purple.withValues(alpha: 0.3),
+                              ],
                             ),
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.tv,
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    size: 24,
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.tv,
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  size: 24,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  episode.seasonEpisodeString.isNotEmpty
+                                      ? episode.seasonEpisodeString
+                                      : 'Episode ${index + 1}',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    episode.seasonEpisodeString.isNotEmpty
-                                        ? episode.seasonEpisodeString
-                                        : 'Episode ${index + 1}',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.8),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          );
-                        },
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.blue.withValues(alpha: 0.3),
+                                Colors.purple.withValues(alpha: 0.3),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.tv,
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  size: 24,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  episode.seasonEpisodeString.isNotEmpty
+                                      ? episode.seasonEpisodeString
+                                      : 'Episode ${index + 1}',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -350,7 +438,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                 // Episode Info Section - Compact
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10), // Reduced padding
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -359,14 +447,14 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                           episode.title,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 14,
+                            fontSize: 13, // Slightly smaller font
                             fontWeight: FontWeight.bold,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                         
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6), // Reduced spacing
                         
                         // Metadata Row - Compact
                         Row(
@@ -422,10 +510,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                         
                         const Spacer(),
                         
-                        // Tap to play hint
+                        // Tap to play hint - More compact
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10), // Reduced padding
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
@@ -440,14 +528,14 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                               Icon(
                                 isCurrentEpisode ? Icons.play_arrow : Icons.touch_app,
                                 color: isCurrentEpisode ? Colors.green : Colors.white70,
-                                size: 14,
+                                size: 12, // Smaller icon
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 4), // Reduced spacing
                               Text(
                                 isCurrentEpisode ? 'Now Playing' : 'Tap to Play',
                                 style: TextStyle(
                                   color: isCurrentEpisode ? Colors.green : Colors.white70,
-                                  fontSize: 12,
+                                  fontSize: 11, // Smaller font
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
