@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
 import '../services/episode_info_service.dart';
+import '../services/storage_service.dart';
 
 class SeriesBrowser extends StatefulWidget {
   final SeriesPlaylist seriesPlaylist;
@@ -24,12 +25,14 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   bool _tvmazeAvailable = false;
   int _selectedSeason = 1;
   final ScrollController _scrollController = ScrollController();
+  Map<String, dynamic>? _lastPlayedEpisode;
 
   @override
   void initState() {
     super.initState();
     _initializeSeason();
     _checkTVMazeAvailability();
+    _loadLastPlayedEpisode();
     // Schedule scrolling to current episode after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentEpisode();
@@ -130,6 +133,22 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
         _loadingEpisodes.remove(episodeKey);
       }
+    }
+  }
+
+  /// Load the last played episode for this series
+  Future<void> _loadLastPlayedEpisode() async {
+    try {
+      final lastEpisode = await StorageService.getLastPlayedEpisode(
+        seriesTitle: widget.seriesPlaylist.seriesTitle ?? 'Unknown Series',
+      );
+      if (lastEpisode != null) {
+        setState(() {
+          _lastPlayedEpisode = lastEpisode;
+        });
+      }
+    } catch (e) {
+      print('Error loading last played episode: $e');
     }
   }
 
@@ -291,10 +310,15 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                       // Fix: Compare original indices instead of sorted indices
                       final isCurrentEpisode = episode.originalIndex == widget.currentEpisodeIndex;
                       
+                      // Check if this is the last played episode
+                      final isLastPlayed = _lastPlayedEpisode != null &&
+                          episode.seriesInfo.season == _lastPlayedEpisode!['season'] &&
+                          episode.seriesInfo.episode == _lastPlayedEpisode!['episode'];
+                      
                       return Container(
                         width: MediaQuery.of(context).size.width * 0.42, // Slightly smaller for better fit
                         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), // Reduced vertical margin
-                        child: _buildEpisodeCard(episode, index, isCurrentEpisode),
+                        child: _buildEpisodeCard(episode, index, isCurrentEpisode, isLastPlayed),
                       );
                     },
                   ),
@@ -304,7 +328,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     );
   }
 
-  Widget _buildEpisodeCard(SeriesEpisode episode, int index, bool isCurrentEpisode) {
+  Widget _buildEpisodeCard(SeriesEpisode episode, int index, bool isCurrentEpisode, bool isLastPlayed) {
     return GestureDetector(
       onTap: () {
         print('DEBUG: Card tapped! Episode: ${episode.title}');
@@ -324,262 +348,227 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // Reduced vertical margin
         height: 280, // Further reduced height to prevent overflow
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF1E293B),
-              const Color(0xFF334155),
-              const Color(0xFF475569),
-            ],
+          color: isCurrentEpisode 
+            ? const Color(0xFF6366F1).withOpacity(0.2) // Current episode - indigo background
+            : isLastPlayed 
+              ? const Color(0xFF10B981).withOpacity(0.1) // Last played - emerald background
+              : const Color(0xFF1E293B), // Normal - slate background
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isCurrentEpisode 
+              ? const Color(0xFF6366F1) // Current episode - indigo border
+              : isLastPlayed 
+                ? const Color(0xFF10B981) // Last played - emerald border
+                : Colors.transparent,
+            width: 2,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-          // Add border for currently playing episode
-          border: isCurrentEpisode 
-              ? Border.all(color: Colors.green, width: 2)
-              : null,
         ),
-        child: Stack(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
+            // Episode image with overlay
+            Stack(
               children: [
-                // Episode Poster Image - Compact with proper caching
-                if (episode.episodeInfo?.poster != null)
-                  Container(
-                    height: 120, // Further reduced height to prevent overflow
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                  child: SizedBox(
+                    height: 120, // Reduced height
                     width: double.infinity,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      child: CachedNetworkImage(
-                        imageUrl: episode.episodeInfo!.poster!,
-                        fit: BoxFit.cover,
-                        width: 300,
-                        height: 200,
-                        placeholder: (context, url) => Container(
-                          decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.blue.withValues(alpha: 0.3),
-                                Colors.purple.withValues(alpha: 0.3),
-                              ],
+                    child: episode.episodeInfo?.poster != null
+                        ? CachedNetworkImage(
+                            imageUrl: episode.episodeInfo!.poster!,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: const Color(0xFF334155),
+                              child: const Center(
+                                child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: const Color(0xFF334155),
+                              child: const Center(
+                                child: Icon(Icons.error, color: Colors.white54, size: 32),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            color: const Color(0xFF334155),
+                            child: const Center(
+                              child: Icon(Icons.tv, color: Colors.white54, size: 32),
                             ),
                           ),
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.tv,
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  size: 24,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  episode.seasonEpisodeString.isNotEmpty
-                                      ? episode.seasonEpisodeString
-                                      : 'Episode ${index + 1}',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                  ),
+                ),
+                // Current episode indicator
+                if (isCurrentEpisode)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6366F1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.play_arrow, color: Colors.white, size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'NOW',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.blue.withValues(alpha: 0.3),
-                                Colors.purple.withValues(alpha: 0.3),
-                              ],
-                            ),
-                          ),
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.tv,
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  size: 24,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  episode.seasonEpisodeString.isNotEmpty
-                                      ? episode.seasonEpisodeString
-                                      : 'Episode ${index + 1}',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
-                
-                // Episode Info Section - Compact
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(10), // Reduced padding
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Episode Title - Compact
-                        Text(
-                          episode.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13, // Slightly smaller font
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        
-                        const SizedBox(height: 6), // Reduced spacing
-                        
-                        // Metadata Row - Compact
-                        Row(
-                          children: [
-                            // Season/Episode
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                episode.seasonEpisodeString.isNotEmpty
-                                    ? episode.seasonEpisodeString
-                                    : 'Episode ${index + 1}',
-                                style: const TextStyle(
-                                  color: Colors.blue,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            
-                            const SizedBox(width: 8),
-                            
-                            // Runtime
-                            if (episode.episodeInfo?.runtime != null) ...[
-                              const Icon(Icons.access_time, color: Colors.white70, size: 12),
-                              const SizedBox(width: 2),
-                              Text(
-                                '${episode.episodeInfo!.runtime} min',
-                                style: const TextStyle(color: Colors.white70, fontSize: 10),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            
-                            // Rating
-                            if (episode.episodeInfo?.rating != null) ...[
-                              const Icon(Icons.star, color: Colors.amber, size: 12),
-                              const SizedBox(width: 2),
-                              Text(
-                                episode.episodeInfo!.rating!.toStringAsFixed(1),
-                                style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w600, fontSize: 10),
-                              ),
-                            ] else if (_tvmazeAvailable) ...[
-                              Text(
-                                'No rating',
-                                style: TextStyle(color: Colors.red.withValues(alpha: 0.7), fontSize: 8),
-                              ),
-                            ],
-                          ],
-                        ),
-                        
-                        const Spacer(),
-                        
-                        // Tap to play hint - More compact
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10), // Reduced padding
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: isCurrentEpisode ? Colors.green.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.2),
-                              width: 1,
+                // Last played indicator
+                if (isLastPlayed && !isCurrentEpisode)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.history, color: Colors.white, size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'LAST',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                isCurrentEpisode ? Icons.play_arrow : Icons.touch_app,
-                                color: isCurrentEpisode ? Colors.green : Colors.white70,
-                                size: 12, // Smaller icon
-                              ),
-                              const SizedBox(width: 4), // Reduced spacing
-                              Text(
-                                isCurrentEpisode ? 'Now Playing' : 'Tap to Play',
-                                style: TextStyle(
-                                  color: isCurrentEpisode ? Colors.green : Colors.white70,
-                                  fontSize: 11, // Smaller font
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
             
-            // Currently Playing Indicator
-            if (isCurrentEpisode)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.play_arrow, color: Colors.white, size: 12),
-                      const SizedBox(width: 4),
-                      const Text(
-                        'NOW',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+            // Episode Info Section - Compact
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(10), // Reduced padding
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Episode Title - Compact
+                    Text(
+                      episode.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13, // Slightly smaller font
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    
+                    const SizedBox(height: 6), // Reduced spacing
+                    
+                    // Metadata Row - Compact
+                    Row(
+                      children: [
+                        // Season/Episode
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            episode.seasonEpisodeString.isNotEmpty
+                                ? episode.seasonEpisodeString
+                                : 'Episode ${index + 1}',
+                            style: const TextStyle(
+                              color: Colors.blue,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        
+                        const SizedBox(width: 8),
+                        
+                        // Runtime
+                        if (episode.episodeInfo?.runtime != null) ...[
+                          const Icon(Icons.access_time, color: Colors.white70, size: 12),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${episode.episodeInfo!.runtime} min',
+                            style: const TextStyle(color: Colors.white70, fontSize: 10),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        
+                        // Rating
+                        if (episode.episodeInfo?.rating != null) ...[
+                          const Icon(Icons.star, color: Colors.amber, size: 12),
+                          const SizedBox(width: 2),
+                          Text(
+                            episode.episodeInfo!.rating!.toStringAsFixed(1),
+                            style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w600, fontSize: 10),
+                          ),
+                        ] else if (_tvmazeAvailable) ...[
+                          Text(
+                            'No rating',
+                            style: TextStyle(color: Colors.red.withValues(alpha: 0.7), fontSize: 8),
+                          ),
+                        ],
+                      ],
+                    ),
+                    
+                    const Spacer(),
+                    
+                    // Tap to play hint - More compact
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10), // Reduced padding
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isCurrentEpisode ? Colors.green.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.2),
+                          width: 1,
                         ),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            isCurrentEpisode ? Icons.play_arrow : Icons.touch_app,
+                            color: isCurrentEpisode ? Colors.green : Colors.white70,
+                            size: 12, // Smaller icon
+                          ),
+                          const SizedBox(width: 4), // Reduced spacing
+                          Text(
+                            isCurrentEpisode ? 'Now Playing' : 'Tap to Play',
+                            style: TextStyle(
+                              color: isCurrentEpisode ? Colors.green : Colors.white70,
+                              fontSize: 11, // Smaller font
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            ),
           ],
         ),
       ),

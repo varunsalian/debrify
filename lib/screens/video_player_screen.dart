@@ -112,6 +112,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		WakelockPlus.enable();
 		// System volume UI not modified
 		
+		// Initialize the player asynchronously
+		_initializePlayer();
+	}
+
+	Future<void> _initializePlayer() async {
 		// Determine the initial URL and index
 		String initialUrl = widget.videoUrl;
 		int initialIndex = 0;
@@ -120,14 +125,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			// Check if this is a series and we should find the first episode by season/episode
 			final seriesPlaylist = widget._seriesPlaylist;
 			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-				// Find the first episode (lowest season, lowest episode)
-				final firstEpisodeIndex = seriesPlaylist.getFirstEpisodeOriginalIndex();
-				if (firstEpisodeIndex != -1) {
-					initialIndex = firstEpisodeIndex;
-					print('Using first episode at index $initialIndex');
+				// Try to restore the last played episode first
+				final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
+				if (lastEpisode != null) {
+					initialIndex = lastEpisode['originalIndex'] as int;
+					print('Restoring last played episode at index $initialIndex');
 				} else {
-					print('Failed to find first episode, using startIndex: ${widget.startIndex ?? 0}');
-					initialIndex = widget.startIndex ?? 0;
+					// Find the first episode (lowest season, lowest episode)
+					final firstEpisodeIndex = seriesPlaylist.getFirstEpisodeOriginalIndex();
+					if (firstEpisodeIndex != -1) {
+						initialIndex = firstEpisodeIndex;
+						print('Using first episode at index $initialIndex');
+					} else {
+						print('Failed to find first episode, using startIndex: ${widget.startIndex ?? 0}');
+						initialIndex = widget.startIndex ?? 0;
+					}
 				}
 			} else {
 				// Not a series or no series playlist, use the provided startIndex
@@ -154,6 +166,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		// Only open the player if we have a valid URL
 		if (initialUrl.isNotEmpty) {
 			_player.open(mk.Media(initialUrl)).then((_) async {
+				// Wait for the video to load and duration to be available
+				await _waitForVideoReady();
 				await _maybeRestoreResume();
 				_scheduleAutoHide();
 			});
@@ -184,6 +198,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Preload episode information if this is a series
 		_preloadEpisodeInfo();
+	}
+
+	/// Wait for the video to be ready and duration to be available
+	Future<void> _waitForVideoReady() async {
+		// Wait up to 10 seconds for the video to be ready
+		for (int i = 0; i < 100; i++) {
+			if (_duration > Duration.zero) {
+				print('DEBUG: Video ready after ${i * 100}ms, duration: ${_duration.inSeconds}s');
+				return;
+			}
+			await Future.delayed(const Duration(milliseconds: 100));
+		}
+		print('DEBUG: Video not ready after 10 seconds, proceeding anyway');
+	}
+
+	/// Get the last played episode for a series
+	Future<Map<String, dynamic>?> _getLastPlayedEpisode(SeriesPlaylist seriesPlaylist) async {
+		try {
+			final lastEpisode = await StorageService.getLastPlayedEpisode(
+				seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+			);
+			
+			if (lastEpisode != null) {
+				final season = lastEpisode['season'] as int;
+				final episode = lastEpisode['episode'] as int;
+				
+				// Find the original index for this episode
+				final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(season, episode);
+				if (originalIndex != -1) {
+					return {
+						...lastEpisode,
+						'originalIndex': originalIndex,
+					};
+				}
+			}
+		} catch (e) {
+			print('Error getting last played episode: $e');
+		}
+		return null;
 	}
 
 	void _onVideoUpdate() {
@@ -251,6 +304,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 		
 		await _player.open(mk.Media(videoUrl), play: autoplay);
+		// Wait for the video to load and duration to be available
+		await _waitForVideoReady();
 		await _maybeRestoreResume();
 	}
 
@@ -268,6 +323,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	@override
 	void dispose() {
+		// Save the current state before disposing
 		_saveResume();
 		_hideTimer?.cancel();
 		_autosaveTimer?.cancel();
@@ -306,8 +362,55 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	Future<void> _maybeRestoreResume() async {
+		print('DEBUG: Attempting to restore resume state...');
+		// Try enhanced playback state first
+		final enhancedData = await _getEnhancedPlaybackState();
+		if (enhancedData != null) {
+			print('DEBUG: Using enhanced playback state system');
+			final posMs = (enhancedData['positionMs'] ?? 0) as int;
+			final speed = (enhancedData['speed'] ?? 1.0) as double;
+			final aspect = (enhancedData['aspect'] ?? 'contain') as String;
+			final position = Duration(milliseconds: posMs);
+			final dur = _duration;
+			
+			if (dur > Duration.zero && position > const Duration(seconds: 10) && position < dur * 0.9) {
+				await _player.seek(position);
+				print('Restored position: ${position.inSeconds}s');
+			} else {
+				print('DEBUG: Position not restored - duration: ${dur.inSeconds}s, position: ${position.inSeconds}s');
+			}
+			
+			// restore speed
+			if (speed != 1.0) {
+				await _player.setRate(speed);
+				_playbackSpeed = speed;
+			}
+			
+			// restore aspect
+			switch (aspect) {
+				case 'cover':
+					_aspectMode = _AspectMode.cover;
+					break;
+				case 'fitWidth':
+					_aspectMode = _AspectMode.fitWidth;
+					break;
+				case 'fitHeight':
+					_aspectMode = _AspectMode.fitHeight;
+					break;
+				default:
+					_aspectMode = _AspectMode.contain;
+			}
+			return;
+		}
+		
+		print('DEBUG: Enhanced playback state not found, trying legacy system');
+		// Fallback to legacy resume system
 		final data = await StorageService.getVideoResume(_resumeKey);
-		if (data == null) return;
+		if (data == null) {
+			print('DEBUG: No resume data found in legacy system either');
+			return;
+		}
+		print('DEBUG: Using legacy resume system');
 		final posMs = (data['positionMs'] ?? 0) as int;
 		final speed = (data['speed'] ?? 1.0) as double;
 		final aspect = (data['aspect'] ?? 'contain') as String;
@@ -337,11 +440,48 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 	}
 
+	/// Get enhanced playback state for current content
+	Future<Map<String, dynamic>?> _getEnhancedPlaybackState() async {
+		try {
+			final seriesPlaylist = widget._seriesPlaylist;
+			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+				// For series, get the current episode info
+				if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+					final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+						(episode) => episode.originalIndex == _currentIndex,
+						orElse: () => seriesPlaylist.allEpisodes.first,
+					);
+					
+					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
+						return await StorageService.getSeriesPlaybackState(
+							seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+							season: currentEpisode.seriesInfo.season!,
+							episode: currentEpisode.seriesInfo.episode!,
+						);
+					}
+				}
+			} else {
+				// For non-series content, use the title
+				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+				print('DEBUG: Trying to get video playback state for title: "$videoTitle"');
+				final videoState = await StorageService.getVideoPlaybackState(
+					videoTitle: videoTitle,
+				);
+				print('DEBUG: Retrieved video state: $videoState');
+				return videoState;
+			}
+		} catch (e) {
+			print('Error getting enhanced playback state: $e');
+		}
+		return null;
+	}
+
 	Future<void> _saveResume({bool debounced = false}) async {
 		if (!_isReady) return;
 		final pos = _position;
 		final dur = _duration;
 		if (dur <= Duration.zero) return;
+		
 		final aspectStr = () {
 			switch (_aspectMode) {
 				case _AspectMode.cover:
@@ -355,6 +495,56 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					return 'contain';
 			}
 		}();
+		
+		// Save to enhanced playback state system
+		try {
+			final seriesPlaylist = widget._seriesPlaylist;
+			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+				// For series content
+				if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+					final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+						(episode) => episode.originalIndex == _currentIndex,
+						orElse: () => seriesPlaylist.allEpisodes.first,
+					);
+					
+					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
+						await StorageService.saveSeriesPlaybackState(
+							seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+							season: currentEpisode.seriesInfo.season!,
+							episode: currentEpisode.seriesInfo.episode!,
+							positionMs: pos.inMilliseconds,
+							durationMs: dur.inMilliseconds,
+							speed: _playbackSpeed,
+							aspect: aspectStr,
+						);
+					}
+				}
+			} else {
+				// For non-series content
+				final currentUrl = (widget.playlist != null && widget.playlist!.isNotEmpty)
+					? widget.playlist![_currentIndex].url
+					: widget.videoUrl;
+					
+				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+				print('DEBUG: Saving video playback state for title: "$videoTitle"');
+				print('DEBUG: Current URL: $currentUrl');
+				print('DEBUG: Position: ${pos.inMilliseconds}ms, Duration: ${dur.inMilliseconds}ms');
+				
+				await StorageService.saveVideoPlaybackState(
+					videoTitle: videoTitle,
+					videoUrl: currentUrl,
+					positionMs: pos.inMilliseconds,
+					durationMs: dur.inMilliseconds,
+					speed: _playbackSpeed,
+					aspect: aspectStr,
+				);
+				print('DEBUG: Video playback state saved successfully');
+			}
+		} catch (e) {
+			print('Error saving enhanced playback state: $e');
+		}
+		
+		// Also save to legacy system for backward compatibility
 		await StorageService.upsertVideoResume(_resumeKey, {
 			'positionMs': pos.inMilliseconds,
 			'speed': _playbackSpeed,

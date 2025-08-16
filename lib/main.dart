@@ -5,11 +5,14 @@ import 'screens/debrid_downloads_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'services/android_native_downloader.dart';
+import 'services/storage_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Set a sensible default orientation: phones stay portrait, Android TV uses landscape.
   _initOrientation();
+  // Clean up old playback state data
+  _cleanupPlaybackState();
   runApp(const DebrifyApp());
 }
 
@@ -34,6 +37,14 @@ Future<void> _initOrientation() async {
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
+  }
+}
+
+Future<void> _cleanupPlaybackState() async {
+  try {
+    await StorageService.cleanupOldPlaybackState();
+  } catch (e) {
+    print('Error cleaning up playback state: $e');
   }
 }
 
