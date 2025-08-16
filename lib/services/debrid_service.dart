@@ -367,6 +367,8 @@ class DebridService {
         'torrentId': torrentId,
         'fileSelection': fileSelection,
         'links': links,
+        'files': files, // Add the files information for lazy loading
+        'updatedInfo': updatedInfo, // Add the full updated info
       };
     } catch (e) {
       throw Exception('Failed to add torrent to Real Debrid: $e');

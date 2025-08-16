@@ -198,4 +198,14 @@ class SeriesPlaylist {
       }
     }
   }
+
+  /// Get episode information for a specific episode
+  Future<EpisodeInfo?> getEpisodeInfoForEpisode(String seriesTitle, int season, int episode) async {
+    try {
+      return await EpisodeInfoService.getEpisodeInfoByTitle(seriesTitle, season, episode);
+    } catch (e) {
+      print('Failed to fetch episode info for S${season}E${episode}: $e');
+      return null;
+    }
+  }
 } 

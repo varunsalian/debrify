@@ -21,6 +21,7 @@ class SeriesBrowser extends StatefulWidget {
 class _SeriesBrowserState extends State<SeriesBrowser> {
   int _selectedSeason = 1;
   bool _isLoadingEpisodeInfo = false;
+  Set<String> _loadingEpisodes = {};
 
   @override
   void initState() {
@@ -31,12 +32,12 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       _selectedSeason = currentEpisode.seriesInfo.season!;
     }
     
-    // Check if episode info is already loaded, if not, fetch it
-    _ensureEpisodeInfoLoaded();
+    // Start background loading of episode info
+    _startBackgroundEpisodeInfoLoading();
   }
 
-  Future<void> _ensureEpisodeInfoLoaded() async {
-    print('Checking if episode info is already loaded...');
+  Future<void> _startBackgroundEpisodeInfoLoading() async {
+    print('Starting background episode info loading...');
     
     // Check if any episode already has info loaded
     bool hasLoadedInfo = false;
@@ -51,25 +52,57 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       if (hasLoadedInfo) break;
     }
 
-    // If no episode info is loaded, fetch it
+    // If no episode info is loaded, start background loading
     if (!hasLoadedInfo) {
-      print('No episode info found, fetching...');
-      if (mounted) {
-        setState(() {
-          _isLoadingEpisodeInfo = true;
-        });
-      }
-      
-      await widget.seriesPlaylist.fetchEpisodeInfo();
-      
-      if (mounted) {
-        setState(() {
-          _isLoadingEpisodeInfo = false;
-        });
-      }
-      print('Episode info fetch completed');
+      print('No episode info found, starting background loading...');
+      _loadEpisodeInfoInBackground();
     } else {
-      print('Episode info already loaded, skipping fetch');
+      print('Episode info already loaded, skipping background loading');
+    }
+  }
+
+  Future<void> _loadEpisodeInfoInBackground() async {
+    if (!widget.seriesPlaylist.isSeries || widget.seriesPlaylist.seriesTitle == null) return;
+
+    // Load episode info for all episodes in the background
+    for (final season in widget.seriesPlaylist.seasons) {
+      for (final episode in season.episodes) {
+        if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+          final episodeKey = 'S${episode.seriesInfo.season}E${episode.seriesInfo.episode}';
+          
+          // Skip if already loaded or currently loading
+          if (episode.episodeInfo != null || _loadingEpisodes.contains(episodeKey)) {
+            continue;
+          }
+
+          // Mark as loading
+          setState(() {
+            _loadingEpisodes.add(episodeKey);
+          });
+
+          try {
+            final episodeInfo = await widget.seriesPlaylist.getEpisodeInfoForEpisode(
+              widget.seriesPlaylist.seriesTitle!,
+              episode.seriesInfo.season!,
+              episode.seriesInfo.episode!,
+            );
+            
+            if (mounted) {
+              setState(() {
+                episode.episodeInfo = episodeInfo;
+                _loadingEpisodes.remove(episodeKey);
+              });
+            }
+          } catch (e) {
+            print('Failed to fetch episode info for $episodeKey: $e');
+            if (mounted) {
+              setState(() {
+                _loadingEpisodes.remove(episodeKey);
+              });
+            }
+          }
+        }
+      }
     }
   }
 
@@ -78,106 +111,96 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     return Container(
       color: const Color(0xFF0F172A),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Text(
-                  widget.seriesPlaylist.seriesTitle ?? 'Series',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                const Icon(Icons.tv_rounded, color: Colors.white, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.seriesPlaylist.seriesTitle ?? 'Series',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (widget.seriesPlaylist.allEpisodes.isNotEmpty)
+                        Text(
+                          '${widget.seriesPlaylist.allEpisodes.length} episodes',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '${widget.seriesPlaylist.seasonCount} Season${widget.seriesPlaylist.seasonCount > 1 ? 's' : ''} • ${widget.seriesPlaylist.totalEpisodes} Episode${widget.seriesPlaylist.totalEpisodes > 1 ? 's' : ''}',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 16,
-                  ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white),
                 ),
               ],
             ),
           ),
           
           // Season selector
-          Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: widget.seriesPlaylist.seasons.length,
-              itemBuilder: (context, index) {
-                final season = widget.seriesPlaylist.seasons[index];
-                final isSelected = season.seasonNumber == _selectedSeason;
-                
-                return Container(
-                  margin: const EdgeInsets.only(right: 12),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _selectedSeason = season.seasonNumber;
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF334155),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Season ${season.seasonNumber}',
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white70,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          if (widget.seriesPlaylist.seasons.length > 1) ...[
+            Container(
+              height: 50,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: widget.seriesPlaylist.seasons.length,
+                itemBuilder: (context, index) {
+                  final season = widget.seriesPlaylist.seasons[index];
+                  final isSelected = season.seasonNumber == _selectedSeason;
+                  
+                  return Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedSeason = season.seasonNumber;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF334155),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Season ${season.seasonNumber}',
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.white70,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
+            const SizedBox(height: 16),
+          ],
           
-          const SizedBox(height: 20),
-          
-          // Episodes horizontal list
+          // Episodes list
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _isLoadingEpisodeInfo
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(
-                            color: Colors.white70,
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'Loading episode information...',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : _buildEpisodesHorizontalList(),
-            ),
+            child: _buildEpisodesHorizontalList(),
           ),
         ],
       ),
@@ -201,6 +224,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       itemBuilder: (context, index) {
         final episode = selectedSeason.episodes[index];
         final isCurrentEpisode = episode.originalIndex == widget.currentEpisodeIndex;
+        final episodeKey = 'S${episode.seriesInfo.season}E${episode.seriesInfo.episode}';
+        final isLoading = _loadingEpisodes.contains(episodeKey);
         
         return Container(
           width: 200, // Fixed width for each episode card
@@ -208,6 +233,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           child: _EpisodeCard(
             episode: episode,
             isCurrentEpisode: isCurrentEpisode,
+            isLoading: isLoading,
             onTap: () {
               widget.onEpisodeSelected(episode.originalIndex);
               Navigator.of(context).pop();
@@ -222,11 +248,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 class _EpisodeCard extends StatelessWidget {
   final SeriesEpisode episode;
   final bool isCurrentEpisode;
+  final bool isLoading;
   final VoidCallback onTap;
 
   const _EpisodeCard({
     required this.episode,
     required this.isCurrentEpisode,
+    required this.isLoading,
     required this.onTap,
   });
 
@@ -295,12 +323,17 @@ class _EpisodeCard extends StatelessWidget {
                               )
                             : Container(
                                 color: const Color(0xFF334155),
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.play_circle_outline,
-                                    size: 48,
-                                    color: Colors.white70,
-                                  ),
+                                child: Center(
+                                  child: isLoading
+                                      ? const CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white70,
+                                        )
+                                      : const Icon(
+                                          Icons.play_circle_outline,
+                                          size: 48,
+                                          color: Colors.white70,
+                                        ),
                                 ),
                               ),
                       ),
@@ -309,7 +342,7 @@ class _EpisodeCard extends StatelessWidget {
                       if (isCurrentEpisode)
                         Positioned(
                           top: 8,
-                          right: 8,
+                          left: 8,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
@@ -321,41 +354,30 @@ class _EpisodeCard extends StatelessWidget {
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
                         ),
                       
-                      // Rating
-                      if (episode.episodeInfo?.rating != null)
+                      // Loading indicator overlay
+                      if (isLoading)
                         Positioned(
-                          bottom: 8,
-                          left: 8,
+                          top: 8,
+                          right: 8,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.7),
-                              borderRadius: BorderRadius.circular(4),
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.star,
-                                  color: Color(0xFFFFD700),
-                                  size: 12,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  episode.episodeInfo!.rating!,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            child: const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),

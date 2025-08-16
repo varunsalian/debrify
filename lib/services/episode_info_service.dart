@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 
 class EpisodeInfo {
@@ -46,6 +47,21 @@ class EpisodeInfoService {
   static final Map<String, EpisodeInfo> _cache = {};
   static final Map<String, int> _seriesIdCache = {};
   
+  // Rate limiting - only allow 1 request per 100ms to avoid overwhelming the API
+  static DateTime? _lastRequestTime;
+  static const Duration _minRequestInterval = Duration(milliseconds: 100);
+  
+  /// Rate limiting helper
+  static Future<void> _rateLimit() async {
+    if (_lastRequestTime != null) {
+      final timeSinceLastRequest = DateTime.now().difference(_lastRequestTime!);
+      if (timeSinceLastRequest < _minRequestInterval) {
+        await Future.delayed(_minRequestInterval - timeSinceLastRequest);
+      }
+    }
+    _lastRequestTime = DateTime.now();
+  }
+  
   /// Search for a series by title
   static Future<int?> searchSeriesId(String seriesTitle) async {
     // Check cache first
@@ -54,6 +70,8 @@ class EpisodeInfoService {
     }
 
     try {
+      await _rateLimit();
+      
       final response = await http.get(
         Uri.parse('$_baseUrl/search/tv?query=${Uri.encodeComponent(seriesTitle)}&api_key=$_apiKey'),
       );
@@ -82,6 +100,8 @@ class EpisodeInfoService {
     }
 
     try {
+      await _rateLimit();
+      
       final response = await http.get(
         Uri.parse('$_baseUrl/tv/$seriesId/season/$season/episode/$episode?api_key=$_apiKey'),
       );

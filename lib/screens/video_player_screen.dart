@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
+import '../services/debrid_service.dart';
 import '../models/series_playlist.dart';
 import '../widgets/series_browser.dart';
 import 'package:media_kit/media_kit.dart' as mk;
@@ -42,7 +43,14 @@ class VideoPlayerScreen extends StatefulWidget {
 class PlaylistEntry {
 	final String url;
 	final String title;
-	const PlaylistEntry({required this.url, required this.title});
+	final String? restrictedLink; // The original restricted link from debrid
+	final String? apiKey; // API key for unrestricting
+	const PlaylistEntry({
+		required this.url, 
+		required this.title, 
+		this.restrictedLink,
+		this.apiKey,
+	});
 }
 
 enum _GestureMode { none, seek, volume, brightness }
@@ -103,19 +111,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_landscapeLocked = true;
 		WakelockPlus.enable();
 		// System volume UI not modified
-		final initialUrl = (widget.playlist != null && widget.playlist!.isNotEmpty)
-			? widget.playlist![widget.startIndex ?? 0].url
-			: widget.videoUrl;
+		// Determine the initial URL
+		String initialUrl = widget.videoUrl;
+		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+			final startIndex = widget.startIndex ?? 0;
+			final entry = widget.playlist![startIndex];
+			if (entry.url.isNotEmpty) {
+				initialUrl = entry.url;
+			}
+		}
+		
 		_currentIndex = widget.playlist != null ? (widget.startIndex ?? 0) : 0;
 		_player = mk.Player(configuration: mk.PlayerConfiguration(ready: () {
 			_isReady = true;
 			if (mounted) setState(() {});
 		}));
 		_videoController = mkv.VideoController(_player);
-		_player.open(mk.Media(initialUrl)).then((_) async {
-			await _maybeRestoreResume();
-			_scheduleAutoHide();
-		});
+		
+		// Only open the player if we have a valid URL
+		if (initialUrl.isNotEmpty) {
+			_player.open(mk.Media(initialUrl)).then((_) async {
+				await _maybeRestoreResume();
+				_scheduleAutoHide();
+			});
+		} else {
+			// If no valid URL, try to load the first playlist entry
+			if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+				_loadPlaylistIndex(_currentIndex, autoplay: false);
+			}
+		}
 		_posSub = _player.stream.position.listen((d) {
 			_position = d;
 			// throttle UI updates
@@ -157,7 +181,53 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		await _saveResume();
 		final entry = widget.playlist![index];
 		_currentIndex = index;
-		await _player.open(mk.Media(entry.url), play: autoplay);
+		
+		// Check if we need to unrestrict this link
+		String videoUrl = entry.url;
+		if (entry.restrictedLink != null && entry.apiKey != null) {
+			try {
+				// Show loading indicator
+				if (mounted) {
+					ScaffoldMessenger.of(context).showSnackBar(
+						SnackBar(
+							content: Row(
+								children: [
+									const SizedBox(
+										width: 16,
+										height: 16,
+										child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+									),
+									const SizedBox(width: 12),
+									const Text('Unrestricting video...', style: TextStyle(color: Colors.white)),
+								],
+							),
+							backgroundColor: const Color(0xFF1E293B),
+							duration: const Duration(seconds: 2),
+						),
+					);
+				}
+				
+				final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
+				videoUrl = unrestrictResult['download'] ?? entry.url;
+				
+				// Update the playlist entry with the unrestricted URL
+				// Note: We can't modify the const PlaylistEntry, so we'll use the unrestricted URL directly
+			} catch (e) {
+				if (mounted) {
+					ScaffoldMessenger.of(context).showSnackBar(
+						SnackBar(
+							content: Text('Failed to unrestrict video: ${e.toString()}', style: const TextStyle(color: Colors.white)),
+							backgroundColor: const Color(0xFFEF4444),
+							duration: const Duration(seconds: 3),
+						),
+					);
+				}
+				// Fall back to the original URL
+				videoUrl = entry.url;
+			}
+		}
+		
+		await _player.open(mk.Media(videoUrl), play: autoplay);
 		await _maybeRestoreResume();
 	}
 

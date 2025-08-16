@@ -7,6 +7,7 @@ import '../services/storage_service.dart';
 import '../services/download_service.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
+import '../utils/series_parser.dart';
 import '../widgets/stat_chip.dart';
 import 'video_player_screen.dart';
 
@@ -793,6 +794,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final downloadLink = result['downloadLink'] as String;
     final fileSelection = result['fileSelection'] as String;
     final links = result['links'] as List<dynamic>;
+    final files = result['files'] as List<dynamic>?;
+    final updatedInfo = result['updatedInfo'] as Map<String, dynamic>?;
 
     switch (postAction) {
       case 'none':
@@ -869,8 +872,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       case 'play':
         // Play video - check if it's actually a video file first
         if (fileSelection == 'video' && links.length > 1) {
-          // Multiple video files - create playlist
-          await _handlePlayMultiFileTorrent(links, torrentName, apiKey);
+          // Multiple video files - create playlist with true lazy loading
+          await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey);
         } else {
           // Single file - check MIME type after unrestricting
           try {
@@ -971,7 +974,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _handlePlayMultiFileTorrent(List<dynamic> links, String torrentName, String apiKey) async {
+  Future<void> _handlePlayMultiFileTorrentWithInfo(List<dynamic> links, List<dynamic>? files, Map<String, dynamic>? updatedInfo, String torrentName, String apiKey) async {
     try {
       // Show loading dialog
       showDialog(
@@ -992,21 +995,256 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       );
 
+      // Use file information from torrent info for true lazy loading
+      if (files == null || updatedInfo == null) {
+        if (mounted) Navigator.of(context).pop(); // close loading
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.error,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Failed to get file information from torrent.',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get selected files from the torrent info
+      final selectedFiles = files.where((file) => file['selected'] == 1).toList();
+      
+      // If no selected files, use all files (they might all be selected by default)
+      final filesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
+      
+      // Check if this is an archive (multiple files, single link)
+      bool isArchive = false;
+      if (filesToUse.length > 1 && links.length == 1) {
+        isArchive = true;
+      }
+
+      if (isArchive) {
+        if (mounted) Navigator.of(context).pop(); // close loading
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.error,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'This is an archived torrent. Please extract it first.',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Multiple individual files - create playlist with true lazy loading
       final List<PlaylistEntry> entries = [];
-      for (final link in links) {
-        try {
-          final res = await DebridService.unrestrictLink(apiKey, link);
-          final url = (res['download'] ?? '').toString();
-          final fname = (res['filename'] ?? '').toString();
-          final mime = (res['mimeType'] ?? '').toString();
-          if (url.isEmpty) continue;
-          // Filter to videos only
-          if (FileUtils.isVideoMimeType(mime) || FileUtils.isVideoFile(fname)) {
-            entries.add(PlaylistEntry(url: url, title: fname.isNotEmpty ? fname : torrentName));
+      
+      // Get filenames from files with null safety
+      final filenames = filesToUse.map((file) {
+        String? name = file['name']?.toString() ?? 
+                      file['filename']?.toString() ?? 
+                      file['path']?.toString();
+        
+        // If we got a path, extract just the filename
+        if (name != null && name.startsWith('/')) {
+          name = name.split('/').last;
+        }
+        
+        return name ?? 'Unknown File';
+      }).toList();
+      
+      // Check if this is a series
+      final isSeries = SeriesParser.isSeriesPlaylist(filenames);
+      
+      if (isSeries) {
+        // For series: find the first episode and unrestrict only that one
+        final seriesInfos = SeriesParser.parsePlaylist(filenames);
+        
+        // Find the first episode (lowest season, lowest episode)
+        int firstEpisodeIndex = 0;
+        int lowestSeason = 999;
+        int lowestEpisode = 999;
+        
+        for (int i = 0; i < seriesInfos.length; i++) {
+          final info = seriesInfos[i];
+          if (info.isSeries && info.season != null && info.episode != null) {
+            if (info.season! < lowestSeason || 
+                (info.season! == lowestSeason && info.episode! < lowestEpisode)) {
+              lowestSeason = info.season!;
+              lowestEpisode = info.episode!;
+              firstEpisodeIndex = i;
+            }
           }
-        } catch (_) {
-          // Skip problematic item
-          continue;
+        }
+        
+        // Create playlist entries with true lazy loading
+        for (int i = 0; i < filesToUse.length; i++) {
+          final file = filesToUse[i];
+          String? filename = file['name']?.toString() ?? 
+                            file['filename']?.toString() ?? 
+                            file['path']?.toString();
+          
+          // If we got a path, extract just the filename
+          if (filename != null && filename.startsWith('/')) {
+            filename = filename.split('/').last;
+          }
+          
+          final finalFilename = filename ?? 'Unknown File';
+          
+          // Check if we have a corresponding link
+          if (i >= links.length) {
+            // Skip if no corresponding link
+            continue;
+          }
+          
+          if (i == firstEpisodeIndex) {
+            // First episode: try to unrestrict for immediate playback
+            try {
+              final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
+              final url = unrestrictResult['download']?.toString() ?? '';
+              if (url.isNotEmpty) {
+                entries.add(PlaylistEntry(
+                  url: url,
+                  title: finalFilename,
+                ));
+              } else {
+                // If unrestriction failed or returned empty URL, add as restricted link
+                entries.add(PlaylistEntry(
+                  url: '', // Empty URL - will be filled when unrestricted
+                  title: finalFilename,
+                  restrictedLink: links[i],
+                  apiKey: apiKey,
+                ));
+              }
+            } catch (e) {
+              // If unrestriction fails, add as restricted link for lazy loading
+              print('Failed to unrestrict first episode: $e');
+              entries.add(PlaylistEntry(
+                url: '', // Empty URL - will be filled when unrestricted
+                title: finalFilename,
+                restrictedLink: links[i],
+                apiKey: apiKey,
+              ));
+            }
+          } else {
+            // Other episodes: keep restricted links for lazy loading
+            entries.add(PlaylistEntry(
+              url: '', // Empty URL - will be filled when unrestricted
+              title: finalFilename,
+              restrictedLink: links[i],
+              apiKey: apiKey,
+            ));
+          }
+        }
+      } else {
+        // For movies: unrestrict only the first video
+        for (int i = 0; i < filesToUse.length; i++) {
+          final file = filesToUse[i];
+          String? filename = file['name']?.toString() ?? 
+                            file['filename']?.toString() ?? 
+                            file['path']?.toString();
+          
+          // If we got a path, extract just the filename
+          if (filename != null && filename.startsWith('/')) {
+            filename = filename.split('/').last;
+          }
+          
+          final finalFilename = filename ?? 'Unknown File';
+          
+          // Check if we have a corresponding link
+          if (i >= links.length) {
+            // Skip if no corresponding link
+            continue;
+          }
+          
+          if (i == 0) {
+            // First video: try to unrestrict for immediate playback
+            try {
+              final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
+              final url = unrestrictResult['download']?.toString() ?? '';
+              if (url.isNotEmpty) {
+                entries.add(PlaylistEntry(
+                  url: url,
+                  title: finalFilename,
+                ));
+              } else {
+                // If unrestriction failed or returned empty URL, add as restricted link
+                entries.add(PlaylistEntry(
+                  url: '', // Empty URL - will be filled when unrestricted
+                  title: finalFilename,
+                  restrictedLink: links[i],
+                  apiKey: apiKey,
+                ));
+              }
+            } catch (e) {
+              // If unrestriction fails, add as restricted link for lazy loading
+              print('Failed to unrestrict first video: $e');
+              entries.add(PlaylistEntry(
+                url: '', // Empty URL - will be filled when unrestricted
+                title: finalFilename,
+                restrictedLink: links[i],
+                apiKey: apiKey,
+              ));
+            }
+          } else {
+            // Other videos: keep restricted links for lazy loading
+            entries.add(PlaylistEntry(
+              url: '', // Empty URL - will be filled when unrestricted
+              title: finalFilename,
+              restrictedLink: links[i],
+              apiKey: apiKey,
+            ));
+          }
         }
       }
 
@@ -1051,10 +1289,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       if (!mounted) return;
+      
+      // Determine the initial video URL - use the first unrestricted URL or empty string
+      String initialVideoUrl = '';
+      if (entries.isNotEmpty && entries.first.url.isNotEmpty) {
+        initialVideoUrl = entries.first.url;
+      }
+      
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => VideoPlayerScreen(
-            videoUrl: entries.first.url,
+            videoUrl: initialVideoUrl,
             title: torrentName,
             subtitle: '${entries.length} files',
             playlist: entries.isNotEmpty ? entries : null,
