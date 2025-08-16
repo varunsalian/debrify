@@ -267,6 +267,57 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		await _loadPlaylistIndex(nextIndex, autoplay: true);
 	}
 
+	/// Get the current episode title for display
+	String _getCurrentEpisodeTitle() {
+		final seriesPlaylist = widget._seriesPlaylist;
+		if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+			// Find the current episode info
+			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+				final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+					(episode) => episode.originalIndex == _currentIndex,
+					orElse: () => seriesPlaylist.allEpisodes.first,
+				);
+				
+				// Return episode title if available, otherwise use the playlist entry title
+				if (currentEpisode.episodeInfo?.title != null && currentEpisode.episodeInfo!.title!.isNotEmpty) {
+					return currentEpisode.episodeInfo!.title!;
+				} else if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
+					return 'Episode ${currentEpisode.seriesInfo.episode}';
+				}
+			}
+		}
+		
+		// Fallback to the current playlist entry title
+		if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+			return widget.playlist![_currentIndex].title;
+		}
+		
+		// Final fallback to the widget title
+		return widget.title;
+	}
+
+	/// Get the current episode subtitle for display
+	String? _getCurrentEpisodeSubtitle() {
+		final seriesPlaylist = widget._seriesPlaylist;
+		if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+			// Find the current episode info
+			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+				final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+					(episode) => episode.originalIndex == _currentIndex,
+					orElse: () => seriesPlaylist.allEpisodes.first,
+				);
+				
+				// Return season/episode info as subtitle
+				if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
+					return 'Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
+				}
+			}
+		}
+		
+		// Fallback to the widget subtitle
+		return widget.subtitle;
+	}
+
 	/// Find the next logical episode index for auto-advance
 	int _findNextEpisodeIndex() {
 		final seriesPlaylist = widget._seriesPlaylist;
@@ -1143,8 +1194,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 										child: IgnorePointer(
 											ignoring: !visible,
 											child: _Controls(
-												title: widget.title,
-												subtitle: widget.subtitle,
+												title: _getCurrentEpisodeTitle(),
+												subtitle: _getCurrentEpisodeSubtitle(),
 												duration: duration,
 												position: pos,
 												isPlaying: _isPlaying,
