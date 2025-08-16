@@ -1039,7 +1039,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final selectedFiles = files.where((file) => file['selected'] == 1).toList();
       
       // If no selected files, use all files (they might all be selected by default)
-      final filesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
+      final allFilesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
+      
+      // Filter to only video files
+      final filesToUse = allFilesToUse.where((file) {
+        String? filename = file['name']?.toString() ?? 
+                          file['filename']?.toString() ?? 
+                          file['path']?.toString();
+        
+        // If we got a path, extract just the filename
+        if (filename != null && filename.startsWith('/')) {
+          filename = filename.split('/').last;
+        }
+        
+        return filename != null && FileUtils.isVideoFile(filename);
+      }).toList();
       
       // Check if this is an archive (multiple files, single link)
       bool isArchive = false;
