@@ -516,11 +516,41 @@ class DownloadService {
       // Public Downloads is not directly accessible; keep using app docs for any local-only ops
       return Directory((await getApplicationDocumentsDirectory()).path);
     }
+    if (Platform.isMacOS) {
+      // On macOS, use the user's actual Downloads folder
+      try {
+        final Directory? downloadsDir = await getDownloadsDirectory();
+        if (downloadsDir != null) {
+          return downloadsDir;
+        }
+      } catch (e) {
+        // Fallback to app documents if Downloads directory is not accessible
+        print('Could not access Downloads directory: $e');
+      }
+    }
     return Directory((await getApplicationDocumentsDirectory()).path);
   }
 
   Future<String> _appDownloadsSubdir() async {
-    // Use a stable, app-specific downloads directory under Documents
+    if (Platform.isMacOS) {
+      // On macOS, use the user's actual Downloads folder
+      try {
+        final Directory? downloadsDir = await getDownloadsDirectory();
+        if (downloadsDir != null) {
+          // Create a subfolder for the app to organize downloads
+          final Directory appDownloadsDir = Directory('${downloadsDir.path}/Debrify');
+          if (!await appDownloadsDir.exists()) {
+            await appDownloadsDir.create(recursive: true);
+          }
+          return appDownloadsDir.path;
+        }
+      } catch (e) {
+        // Fallback to app documents if Downloads directory is not accessible
+        print('Could not access Downloads directory: $e');
+      }
+    }
+    
+    // Fallback: Use a stable, app-specific downloads directory under Documents
     final Directory docs = await getApplicationDocumentsDirectory();
     final Directory dlDir = Directory('${docs.path}/downloads');
     if (!await dlDir.exists()) {

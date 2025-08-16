@@ -174,7 +174,6 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       }
 
       // Destination preview: if Android SAF folder set, show a human-readable path
-      final docs = await getApplicationDocumentsDirectory();
       String sanitize(String s) => s
           .replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ')
           .replaceAll(RegExp(r'\s+'), ' ')
@@ -183,7 +182,21 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       final folder = sanitize(dot > 0 ? filename.substring(0, dot) : filename);
       if (Platform.isAndroid) {
         destPath = 'Download/Debrify/$filename';
+      } else if (Platform.isMacOS) {
+        try {
+          final Directory? downloadsDir = await getDownloadsDirectory();
+          if (downloadsDir != null) {
+            destPath = 'Downloads/Debrify/$folder/$filename';
+          } else {
+            final docs = await getApplicationDocumentsDirectory();
+            destPath = '${docs.path}/downloads/$folder/$filename';
+          }
+        } catch (e) {
+          final docs = await getApplicationDocumentsDirectory();
+          destPath = '${docs.path}/downloads/$folder/$filename';
+        }
       } else {
+        final docs = await getApplicationDocumentsDirectory();
         destPath = '${docs.path}/downloads/$folder/$filename';
       }
 
