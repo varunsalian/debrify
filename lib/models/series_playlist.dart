@@ -2,6 +2,41 @@ import '../utils/series_parser.dart';
 import '../screens/video_player_screen.dart';
 import '../services/episode_info_service.dart';
 
+class EpisodeInfo {
+  final String? title;
+  final String? plot;
+  final String? poster;
+  final double? rating;
+  final String? year;
+  final String? episodeNumber;
+  final String? seasonNumber;
+  final int? runtime;
+
+  const EpisodeInfo({
+    this.title,
+    this.plot,
+    this.poster,
+    this.rating,
+    this.year,
+    this.episodeNumber,
+    this.seasonNumber,
+    this.runtime,
+  });
+
+  factory EpisodeInfo.fromTVMaze(Map<String, dynamic> json) {
+    return EpisodeInfo(
+      title: json['name'],
+      plot: json['summary']?.toString().replaceAll(RegExp(r'<[^>]*>'), ''), // Remove HTML tags
+      poster: json['image']?['medium'],
+      rating: json['rating']?['average']?.toDouble(),
+      year: json['airdate']?.toString().substring(0, 4),
+      episodeNumber: json['number']?.toString(),
+      seasonNumber: json['season']?.toString(),
+      runtime: json['runtime'],
+    );
+  }
+}
+
 class SeriesEpisode {
   final String url;
   final String title;
@@ -184,12 +219,14 @@ class SeriesPlaylist {
       for (final episode in season.episodes) {
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
           try {
-            final episodeInfo = await EpisodeInfoService.getEpisodeInfoByTitle(
+            final episodeData = await EpisodeInfoService.getEpisodeInfo(
               seriesTitle!,
               episode.seriesInfo.season!,
               episode.seriesInfo.episode!,
             );
-            episode.episodeInfo = episodeInfo;
+            if (episodeData != null) {
+              episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData);
+            }
           } catch (e) {
             // Silently fail - episode info is optional
             print('Failed to fetch episode info: $e');
@@ -202,10 +239,13 @@ class SeriesPlaylist {
   /// Get episode information for a specific episode
   Future<EpisodeInfo?> getEpisodeInfoForEpisode(String seriesTitle, int season, int episode) async {
     try {
-      return await EpisodeInfoService.getEpisodeInfoByTitle(seriesTitle, season, episode);
+      final episodeData = await EpisodeInfoService.getEpisodeInfo(seriesTitle, season, episode);
+      if (episodeData != null) {
+        return EpisodeInfo.fromTVMaze(episodeData);
+      }
     } catch (e) {
       print('Failed to fetch episode info for S${season}E${episode}: $e');
-      return null;
     }
+    return null;
   }
 } 
