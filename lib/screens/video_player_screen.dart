@@ -270,25 +270,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	/// Get the current episode title for display
 	String _getCurrentEpisodeTitle() {
 		final seriesPlaylist = widget._seriesPlaylist;
-		if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+		if (seriesPlaylist != null && seriesPlaylist.isSeries && widget.playlist != null) {
 			// Find the current episode info
 			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
-				final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-					(episode) => episode.originalIndex == _currentIndex,
-					orElse: () => seriesPlaylist.allEpisodes.first,
-				);
-				
-				// Return episode title if available, otherwise use the playlist entry title
-				if (currentEpisode.episodeInfo?.title != null && currentEpisode.episodeInfo!.title!.isNotEmpty) {
-					return currentEpisode.episodeInfo!.title!;
-				} else if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
-					return 'Episode ${currentEpisode.seriesInfo.episode}';
+				try {
+					final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+						(episode) => episode.originalIndex == _currentIndex,
+						orElse: () => seriesPlaylist.allEpisodes.first,
+					);
+					
+					// Return episode title if available, otherwise use the playlist entry title
+					if (currentEpisode.episodeInfo?.title != null && currentEpisode.episodeInfo!.title!.isNotEmpty) {
+						return currentEpisode.episodeInfo!.title!;
+					} else if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
+						return 'Episode ${currentEpisode.seriesInfo.episode}';
+					}
+				} catch (e) {
+					print('Error getting episode title: $e');
 				}
 			}
 		}
 		
 		// Fallback to the current playlist entry title
-		if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+		if (widget.playlist != null && _currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
 			return widget.playlist![_currentIndex].title;
 		}
 		
@@ -299,17 +303,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	/// Get the current episode subtitle for display
 	String? _getCurrentEpisodeSubtitle() {
 		final seriesPlaylist = widget._seriesPlaylist;
-		if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+		if (seriesPlaylist != null && seriesPlaylist.isSeries && widget.playlist != null) {
 			// Find the current episode info
 			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
-				final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-					(episode) => episode.originalIndex == _currentIndex,
-					orElse: () => seriesPlaylist.allEpisodes.first,
-				);
-				
-				// Return season/episode info as subtitle
-				if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
-					return 'Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
+				try {
+					final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+						(episode) => episode.originalIndex == _currentIndex,
+						orElse: () => seriesPlaylist.allEpisodes.first,
+					);
+					
+					// Return season/episode info as subtitle
+					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
+						return 'Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
+					}
+				} catch (e) {
+					print('Error getting episode subtitle: $e');
 				}
 			}
 		}
