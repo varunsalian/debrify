@@ -67,6 +67,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	bool _panIgnore = false;
 	int _currentIndex = 0;
 	Offset? _lastTapLocal;
+	bool _isManualEpisodeSelection = false; // Track if episode was manually selected
+	bool _isAutoAdvancing = false; // Track if episode is auto-advancing
 
 	// media_kit state
 	bool _isReady = false;
@@ -170,6 +172,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				await _waitForVideoReady();
 				await _maybeRestoreResume();
 				_scheduleAutoHide();
+				// Restore audio and subtitle track preferences
+				await _restoreTrackPreferences();
 			});
 		} else {
 			// If no valid URL, try to load the first playlist entry
@@ -249,6 +253,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Future<void> _onPlaybackEnded() async {
 		if (widget.playlist == null || widget.playlist!.isEmpty) return;
 		if (_currentIndex + 1 >= widget.playlist!.length) return; // end
+		// Mark this as auto-advancing to the next episode
+		_isAutoAdvancing = true;
 		await _loadPlaylistIndex(_currentIndex + 1, autoplay: true);
 	}
 
@@ -307,6 +313,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		// Wait for the video to load and duration to be available
 		await _waitForVideoReady();
 		await _maybeRestoreResume();
+		// Restore audio and subtitle track preferences
+		await _restoreTrackPreferences();
 	}
 
 	/// Preload episode information in the background
@@ -363,6 +371,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	Future<void> _maybeRestoreResume() async {
 		print('DEBUG: Attempting to restore resume state...');
+		
+		// If this is a manual episode selection or auto-advancing, don't restore position
+		if (_isManualEpisodeSelection || _isAutoAdvancing) {
+			print('DEBUG: ${_isManualEpisodeSelection ? "Manual episode selection" : "Auto-advancing"} detected, skipping position restoration');
+			_isManualEpisodeSelection = false; // Reset the flag
+			_isAutoAdvancing = false; // Reset the flag
+			return;
+		}
+		
 		// Try enhanced playback state first
 		final enhancedData = await _getEnhancedPlaybackState();
 		if (enhancedData != null) {
@@ -453,6 +470,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					);
 					
 					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
+						// Only restore position for the exact same episode
 						return await StorageService.getSeriesPlaybackState(
 							seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
 							season: currentEpisode.seriesInfo.season!,
@@ -787,6 +805,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								// Find the original index in the PlaylistEntry array
 								final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(season, episode);
 								if (originalIndex != -1) {
+									// Mark this as a manual episode selection
+									_isManualEpisodeSelection = true;
 									await _loadPlaylistIndex(originalIndex, autoplay: true);
 								} else {
 									print('Failed to find original index for S${season}E${episode}');
@@ -833,6 +853,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							return ListTile(
 								onTap: () async {
 									Navigator.of(context).pop();
+									// Mark this as a manual episode selection
+									_isManualEpisodeSelection = true;
 									await _loadPlaylistIndex(index, autoplay: true);
 								},
 								title: Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
@@ -1383,8 +1405,6 @@ bool _shouldToggleForTap(Offset pos, Size size, {required bool controlsVisible})
 	return true;
 }
 
-Future<void> _persistTrackChoice(String audio, String subtitle) async {}
-
 extension on _VideoPlayerScreenState {
 	String _niceLanguage(String? codeOrTitle) {
 		final v = (codeOrTitle ?? '').toLowerCase();
@@ -1481,6 +1501,8 @@ extension on _VideoPlayerScreenState {
 																							onChanged: (v) async {
 																								setModalState(() { selectedAudio = ''; });
 																								await _player.setAudioTrack(mk.AudioTrack.auto());
+																								// Persist the track choice
+																								await _persistTrackChoice('', selectedSub);
 																							},
 																						);
 																					}
@@ -1494,6 +1516,8 @@ extension on _VideoPlayerScreenState {
 																							if (v == null) return;
 																							setModalState(() { selectedAudio = v; });
 																							await _player.setAudioTrack(a);
+																							// Persist the track choice
+																							await _persistTrackChoice(v, selectedSub);
 																						},
 																					);
 																				},
@@ -1537,6 +1561,8 @@ extension on _VideoPlayerScreenState {
 																							onChanged: (v) async {
 																								setModalState(() { selectedSub = ''; });
 																								await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+																								// Persist the track choice
+																								await _persistTrackChoice(selectedAudio, '');
 																							},
 																						);
 																					}
@@ -1550,6 +1576,8 @@ extension on _VideoPlayerScreenState {
 																							if (v == null) return;
 																							setModalState(() { selectedSub = v; });
 																							await _player.setSubtitleTrack(s);
+																							// Persist the track choice
+																							await _persistTrackChoice(selectedAudio, v);
 																						},
 																					);
 																				},
@@ -1571,5 +1599,83 @@ extension on _VideoPlayerScreenState {
 				);
 			},
 		);
+	}
+
+	/// Restore audio and subtitle track preferences
+	Future<void> _restoreTrackPreferences() async {
+		try {
+			final seriesPlaylist = widget._seriesPlaylist;
+			Map<String, dynamic>? trackPreferences;
+			
+			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+				// For series content, get preferences for the entire series
+				trackPreferences = await StorageService.getSeriesTrackPreferences(
+					seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+				);
+			} else {
+				// For non-series content, get preferences for this specific video
+				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+				trackPreferences = await StorageService.getVideoTrackPreferences(
+					videoTitle: videoTitle,
+				);
+			}
+			
+			if (trackPreferences != null) {
+				final audioTrackId = trackPreferences['audioTrackId'] as String?;
+				final subtitleTrackId = trackPreferences['subtitleTrackId'] as String?;
+				
+				print('DEBUG: Restoring track preferences - Audio: $audioTrackId, Subtitle: $subtitleTrackId');
+				
+				// Apply audio track preference
+				if (audioTrackId != null && audioTrackId.isNotEmpty && audioTrackId != 'auto') {
+					final tracks = _player.state.tracks;
+					final audioTrack = tracks.audio.firstWhere(
+						(track) => track.id == audioTrackId,
+						orElse: () => tracks.audio.first,
+					);
+					await _player.setAudioTrack(audioTrack);
+					print('DEBUG: Applied audio track: $audioTrackId');
+				}
+				
+				// Apply subtitle track preference
+				if (subtitleTrackId != null && subtitleTrackId.isNotEmpty) {
+					final tracks = _player.state.tracks;
+					final subtitleTrack = tracks.subtitle.firstWhere(
+						(track) => track.id == subtitleTrackId,
+						orElse: () => mk.SubtitleTrack.no(),
+					);
+					await _player.setSubtitleTrack(subtitleTrack);
+					print('DEBUG: Applied subtitle track: $subtitleTrackId');
+				}
+			}
+		} catch (e) {
+			print('Error restoring track preferences: $e');
+		}
+	}
+
+	Future<void> _persistTrackChoice(String audio, String subtitle) async {
+		try {
+			final seriesPlaylist = widget._seriesPlaylist;
+			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+				// For series content, save preferences for the entire series
+				await StorageService.saveSeriesTrackPreferences(
+					seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+					audioTrackId: audio,
+					subtitleTrackId: subtitle,
+				);
+				print('DEBUG: Saved series track preferences - Audio: $audio, Subtitle: $subtitle');
+			} else {
+				// For non-series content, save preferences for this specific video
+				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+				await StorageService.saveVideoTrackPreferences(
+					videoTitle: videoTitle,
+					audioTrackId: audio,
+					subtitleTrackId: subtitle,
+				);
+				print('DEBUG: Saved video track preferences - Audio: $audio, Subtitle: $subtitle');
+			}
+		} catch (e) {
+			print('Error saving track preferences: $e');
+		}
 	}
 } 
