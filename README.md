@@ -6,6 +6,8 @@ A modern torrent search and debrid management app built with Flutter.
 
 - **Torrent Search**: Search for torrents across multiple sources
 - **Debrid Downloads**: Manage your debrid downloads and transfers
+- **Video Player**: Advanced video player with playlist support
+- **Episode Tracking**: Track finished episodes with visual indicators
 - **Modern UI**: Beautiful Material Design 3 interface with dark theme
 - **Cross-platform**: Works on Android, iOS, and other platforms
 
@@ -93,6 +95,25 @@ lib/
 - `http`: HTTP client for API requests
 - `intl`: Internationalization support
 - `shared_preferences`: Local data storage
+- `media_kit`: Advanced video player
+- `cached_network_image`: Image caching for episode posters
+
+## Episode Tracking
+
+The app includes a comprehensive episode tracking system for series content:
+
+### Features
+- **Automatic Tracking**: Episodes are automatically marked as finished when they complete
+- **Visual Indicators**: Finished episodes show a green checkmark and "DONE" badge
+- **Playlist Integration**: Episode status is displayed in both series browser and simple playlists
+- **Persistent Storage**: Episode completion status is saved locally and persists across app sessions
+- **Season Management**: Track episodes across different seasons of a series
+
+### How It Works
+1. When watching a series, the app automatically detects episode completion
+2. Completed episodes are marked with a green checkmark icon and "DONE" label
+3. Episode status is saved to local storage and restored when reopening the series
+4. The series browser shows different visual states for current, last played, and finished episodes
 
 ## Contributing
 

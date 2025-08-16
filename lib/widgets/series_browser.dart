@@ -26,6 +26,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   int _selectedSeason = 1;
   final ScrollController _scrollController = ScrollController();
   Map<String, dynamic>? _lastPlayedEpisode;
+  Map<String, Set<int>> _finishedEpisodes = {}; // Map of season -> Set of episode numbers
 
   @override
   void initState() {
@@ -33,10 +34,18 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     _initializeSeason();
     _checkTVMazeAvailability();
     _loadLastPlayedEpisode();
+    _loadFinishedEpisodes();
     // Schedule scrolling to current episode after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentEpisode();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh finished episodes when dependencies change (e.g., when modal is shown)
+    _loadFinishedEpisodes();
   }
 
   void _initializeSeason() {
@@ -152,6 +161,22 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     }
   }
 
+  /// Load finished episodes for the entire series
+  Future<void> _loadFinishedEpisodes() async {
+    try {
+      if (widget.seriesPlaylist.isSeries && widget.seriesPlaylist.seriesTitle != null) {
+        final allFinishedEpisodes = await StorageService.getFinishedEpisodes(
+          seriesTitle: widget.seriesPlaylist.seriesTitle!,
+        );
+        setState(() {
+          _finishedEpisodes = allFinishedEpisodes;
+        });
+      }
+    } catch (e) {
+      print('Error loading finished episodes: $e');
+    }
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -257,6 +282,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                             });
                             // Load episode info for the new season
                             _startBackgroundEpisodeInfoLoading();
+                            // Load finished episodes for the new season
+                            _loadFinishedEpisodes();
                             // Scroll to current episode in the new season
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               _scrollToCurrentEpisode();
@@ -315,10 +342,15 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                           episode.seriesInfo.season == _lastPlayedEpisode!['season'] &&
                           episode.seriesInfo.episode == _lastPlayedEpisode!['episode'];
                       
+                      // Check if this episode is finished
+                      final isFinished = episode.seriesInfo.season != null && 
+                          episode.seriesInfo.episode != null &&
+                          _finishedEpisodes[episode.seriesInfo.season.toString()]?.contains(episode.seriesInfo.episode) == true;
+                      
                       return Container(
                         width: MediaQuery.of(context).size.width * 0.42, // Slightly smaller for better fit
                         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), // Reduced vertical margin
-                        child: _buildEpisodeCard(episode, index, isCurrentEpisode, isLastPlayed),
+                        child: _buildEpisodeCard(episode, index, isCurrentEpisode, isLastPlayed, isFinished),
                       );
                     },
                   ),
@@ -328,7 +360,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     );
   }
 
-  Widget _buildEpisodeCard(SeriesEpisode episode, int index, bool isCurrentEpisode, bool isLastPlayed) {
+  Widget _buildEpisodeCard(SeriesEpisode episode, int index, bool isCurrentEpisode, bool isLastPlayed, bool isFinished) {
     return GestureDetector(
       onTap: () {
         print('DEBUG: Card tapped! Episode: ${episode.title}');
@@ -352,14 +384,18 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
             ? const Color(0xFF6366F1).withOpacity(0.2) // Current episode - indigo background
             : isLastPlayed 
               ? const Color(0xFF10B981).withOpacity(0.1) // Last played - emerald background
-              : const Color(0xFF1E293B), // Normal - slate background
+              : isFinished
+                ? const Color(0xFF059669).withOpacity(0.1) // Finished - emerald background
+                : const Color(0xFF1E293B), // Normal - slate background
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCurrentEpisode 
               ? const Color(0xFF6366F1) // Current episode - indigo border
               : isLastPlayed 
                 ? const Color(0xFF10B981) // Last played - emerald border
-                : Colors.transparent,
+                : isFinished
+                  ? const Color(0xFF059669) // Finished - emerald border
+                  : Colors.transparent,
             width: 2,
           ),
         ),
@@ -445,6 +481,34 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                           SizedBox(width: 4),
                           Text(
                             'LAST',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                // Finished episode indicator
+                if (isFinished && !isCurrentEpisode && !isLastPlayed)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF059669),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.white, size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'DONE',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 10,
@@ -541,7 +605,11 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                         color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: isCurrentEpisode ? Colors.green.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.2),
+                          color: isCurrentEpisode 
+                            ? Colors.green.withValues(alpha: 0.3) 
+                            : isFinished
+                              ? const Color(0xFF059669).withValues(alpha: 0.3)
+                              : Colors.white.withValues(alpha: 0.2),
                           width: 1,
                         ),
                       ),
@@ -549,15 +617,31 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            isCurrentEpisode ? Icons.play_arrow : Icons.touch_app,
-                            color: isCurrentEpisode ? Colors.green : Colors.white70,
+                            isCurrentEpisode 
+                              ? Icons.play_arrow 
+                              : isFinished
+                                ? Icons.replay
+                                : Icons.touch_app,
+                            color: isCurrentEpisode 
+                              ? Colors.green 
+                              : isFinished
+                                ? const Color(0xFF059669)
+                                : Colors.white70,
                             size: 12, // Smaller icon
                           ),
                           const SizedBox(width: 4), // Reduced spacing
                           Text(
-                            isCurrentEpisode ? 'Now Playing' : 'Tap to Play',
+                            isCurrentEpisode 
+                              ? 'Now Playing' 
+                              : isFinished
+                                ? 'Replay'
+                                : 'Tap to Play',
                             style: TextStyle(
-                              color: isCurrentEpisode ? Colors.green : Colors.white70,
+                              color: isCurrentEpisode 
+                                ? Colors.green 
+                                : isFinished
+                                  ? const Color(0xFF059669)
+                                  : Colors.white70,
                               fontSize: 11, // Smaller font
                               fontWeight: FontWeight.w600,
                             ),

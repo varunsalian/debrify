@@ -185,6 +185,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			_position = d;
 			// throttle UI updates
 			if (mounted) setState(() {});
+			// Check if episode should be marked as finished (for manual seeking)
+			_checkAndMarkEpisodeAsFinished();
 		});
 		_durSub = _player.stream.duration.listen((d) {
 			_duration = d;
@@ -251,12 +253,102 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	Future<void> _onPlaybackEnded() async {
+		// Mark the current episode as finished if it's a series
+		await _markCurrentEpisodeAsFinished();
+		
 		if (widget.playlist == null || widget.playlist!.isEmpty) return;
-		if (_currentIndex + 1 >= widget.playlist!.length) return; // end
+		
+		// Find the next logical episode
+		final nextIndex = _findNextEpisodeIndex();
+		if (nextIndex == -1) return; // No next episode found
+		
 		// Mark this as auto-advancing to the next episode
 		_isAutoAdvancing = true;
-		await _loadPlaylistIndex(_currentIndex + 1, autoplay: true);
+		await _loadPlaylistIndex(nextIndex, autoplay: true);
 	}
+
+	/// Find the next logical episode index for auto-advance
+	int _findNextEpisodeIndex() {
+		final seriesPlaylist = widget._seriesPlaylist;
+		if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
+			// For non-series content, just advance to next index
+			if (_currentIndex + 1 < widget.playlist!.length) {
+				print('DEBUG: Non-series content, advancing to next index: ${_currentIndex + 1}');
+				return _currentIndex + 1;
+			}
+			print('DEBUG: No more episodes in non-series content');
+			return -1;
+		}
+
+		print('DEBUG: Finding next episode for series: ${seriesPlaylist.seriesTitle}');
+		print('DEBUG: Current index: $_currentIndex');
+		print('DEBUG: All episodes: ${seriesPlaylist.allEpisodes.map((e) => 'S${e.seriesInfo.season}E${e.seriesInfo.episode}').join(', ')}');
+
+		// Find current episode in the sorted allEpisodes list
+		final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+			(episode) => episode.originalIndex == _currentIndex,
+			orElse: () => seriesPlaylist.allEpisodes.first,
+		);
+
+		print('DEBUG: Current episode: S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode} (original index: ${currentEpisode.originalIndex})');
+
+		// Find the index of current episode in allEpisodes
+		final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(currentEpisode);
+		print('DEBUG: Current episode index in sorted list: $currentEpisodeIndex');
+		
+		if (currentEpisodeIndex == -1 || currentEpisodeIndex + 1 >= seriesPlaylist.allEpisodes.length) {
+			// No next episode found
+			print('DEBUG: No next episode found (currentEpisodeIndex: $currentEpisodeIndex, total episodes: ${seriesPlaylist.allEpisodes.length})');
+			return -1;
+		}
+
+		// Get the next episode from the sorted list
+		final nextEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex + 1];
+		print('DEBUG: Auto-advancing from S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode} to S${nextEpisode.seriesInfo.season}E${nextEpisode.seriesInfo.episode} (original index: ${nextEpisode.originalIndex})');
+		
+		return nextEpisode.originalIndex;
+	}
+
+	/// Mark the current episode as finished if it's a series
+	Future<void> _markCurrentEpisodeAsFinished() async {
+		final seriesPlaylist = widget._seriesPlaylist;
+		if (seriesPlaylist != null && seriesPlaylist.isSeries && seriesPlaylist.seriesTitle != null) {
+			try {
+				// Find the current episode info
+				if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+					final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+						(episode) => episode.originalIndex == _currentIndex,
+						orElse: () => seriesPlaylist.allEpisodes.first,
+					);
+					
+					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
+						await StorageService.markEpisodeAsFinished(
+							seriesTitle: seriesPlaylist.seriesTitle!,
+							season: currentEpisode.seriesInfo.season!,
+							episode: currentEpisode.seriesInfo.episode!,
+						);
+						print('Marked episode S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode} as finished');
+					}
+				}
+			} catch (e) {
+				print('Error marking episode as finished: $e');
+			}
+		}
+	}
+
+	/// Check if current episode should be marked as finished (for manual seeking)
+	Future<void> _checkAndMarkEpisodeAsFinished() async {
+		// Only check if we're near the end of the video (within last 30 seconds)
+		if (_duration > Duration.zero && _position > Duration.zero) {
+			final timeRemaining = _duration - _position;
+			if (timeRemaining <= const Duration(seconds: 30)) {
+				print('DEBUG: Near end of video (${timeRemaining.inSeconds}s remaining), marking as finished');
+				await _markCurrentEpisodeAsFinished();
+			}
+		}
+	}
+
+
 
 	Future<void> _loadPlaylistIndex(int index, {bool autoplay = false}) async {
 		if (widget.playlist == null || index < 0 || index >= widget.playlist!.length) return;
@@ -844,27 +936,66 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					),
 				),
 				Flexible(
-					child: ListView.builder(
-						shrinkWrap: true,
-						itemCount: widget.playlist!.length,
-						itemBuilder: (context, index) {
-							final entry = widget.playlist![index];
-							final active = index == _currentIndex;
-							return ListTile(
-								onTap: () async {
-									Navigator.of(context).pop();
-									// Mark this as a manual episode selection
-									_isManualEpisodeSelection = true;
-									await _loadPlaylistIndex(index, autoplay: true);
+					child: FutureBuilder<Set<int>>(
+						future: _getFinishedEpisodesForSimplePlaylist(),
+						builder: (context, snapshot) {
+							final finishedEpisodes = snapshot.data ?? <int>{};
+							
+							return ListView.builder(
+								shrinkWrap: true,
+								itemCount: widget.playlist!.length,
+								itemBuilder: (context, index) {
+									final entry = widget.playlist![index];
+									final active = index == _currentIndex;
+									final isFinished = finishedEpisodes.contains(index);
+									
+									return ListTile(
+										onTap: () async {
+											Navigator.of(context).pop();
+											// Mark this as a manual episode selection
+											_isManualEpisodeSelection = true;
+											await _loadPlaylistIndex(index, autoplay: true);
+										},
+										title: Row(
+											children: [
+												Expanded(
+													child: Text(
+														entry.title, 
+														maxLines: 2, 
+														overflow: TextOverflow.ellipsis, 
+														style: TextStyle(
+															color: Colors.white,
+															decoration: isFinished ? TextDecoration.lineThrough : null,
+														),
+													),
+												),
+												if (isFinished)
+													const Icon(
+														Icons.check_circle,
+														color: Color(0xFF059669),
+														size: 16,
+													),
+											],
+										),
+										leading: Icon(
+											active ? Icons.play_arrow_rounded : Icons.movie_rounded, 
+											color: active ? Colors.greenAccent : Colors.white70,
+										),
+									);
 								},
-								title: Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
-								leading: Icon(active ? Icons.play_arrow_rounded : Icons.movie_rounded, color: active ? Colors.greenAccent : Colors.white70),
 							);
 						},
 					),
 				),
 			],
 		);
+	}
+
+	/// Get finished episodes for simple playlist (non-series content)
+	Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
+		// For simple playlists, we don't track finished episodes
+		// This is mainly for series content
+		return <int>{};
 	}
 
 	@override
@@ -1191,6 +1322,7 @@ class _Controls extends StatelessWidget {
 												onPressed: onShowPlaylist,
 												tooltip: 'Playlist',
 											),
+
 										IconButton(
 											icon: Icon(isLandscape ? Icons.stay_current_landscape_rounded : Icons.screen_rotation_rounded, color: Colors.white),
 											onPressed: onRotate,

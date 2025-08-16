@@ -114,6 +114,94 @@ class StorageService {
     await _savePlaybackStateMap(map);
   }
 
+  /// Mark an episode as finished (watched completely)
+  static Future<void> markEpisodeAsFinished({
+    required String seriesTitle,
+    required int season,
+    required int episode,
+  }) async {
+    final map = await _getPlaybackStateMap();
+    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    
+    if (!map.containsKey(key)) {
+      map[key] = {
+        'type': 'series',
+        'title': seriesTitle,
+        'seasons': {},
+        'finishedEpisodes': {},
+      };
+    }
+    
+    final seriesData = map[key] as Map<String, dynamic>;
+    if (!seriesData.containsKey('finishedEpisodes')) {
+      seriesData['finishedEpisodes'] = {};
+    }
+    
+    if (!seriesData['finishedEpisodes'].containsKey(season.toString())) {
+      seriesData['finishedEpisodes'][season.toString()] = {};
+    }
+    
+    seriesData['finishedEpisodes'][season.toString()][episode.toString()] = {
+      'finishedAt': DateTime.now().millisecondsSinceEpoch,
+    };
+    
+    await _savePlaybackStateMap(map);
+  }
+
+  /// Check if an episode is marked as finished
+  static Future<bool> isEpisodeFinished({
+    required String seriesTitle,
+    required int season,
+    required int episode,
+  }) async {
+    final map = await _getPlaybackStateMap();
+    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    
+    final seriesData = map[key];
+    if (seriesData == null || seriesData['type'] != 'series') return false;
+    
+    final finishedEpisodes = seriesData['finishedEpisodes'];
+    if (finishedEpisodes == null) return false;
+    
+    final seasonData = finishedEpisodes[season.toString()];
+    if (seasonData == null) return false;
+    
+    return seasonData.containsKey(episode.toString());
+  }
+
+  /// Get all finished episodes for a series
+  static Future<Map<String, Set<int>>> getFinishedEpisodes({
+    required String seriesTitle,
+  }) async {
+    final map = await _getPlaybackStateMap();
+    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    
+    final seriesData = map[key];
+    if (seriesData == null || seriesData['type'] != 'series') return {};
+    
+    final finishedEpisodes = seriesData['finishedEpisodes'];
+    if (finishedEpisodes == null) return {};
+    
+    final result = <String, Set<int>>{};
+    
+    for (final seasonEntry in finishedEpisodes.entries) {
+      final season = seasonEntry.key;
+      final episodes = seasonEntry.value as Map<String, dynamic>;
+      result[season] = episodes.keys.map((e) => int.parse(e)).toSet();
+    }
+    
+    return result;
+  }
+
+  /// Get finished episodes for a specific season
+  static Future<Set<int>> getFinishedEpisodesForSeason({
+    required String seriesTitle,
+    required int season,
+  }) async {
+    final allFinished = await getFinishedEpisodes(seriesTitle: seriesTitle);
+    return allFinished[season.toString()] ?? <int>{};
+  }
+
   /// Get playback state for series content
   static Future<Map<String, dynamic>?> getSeriesPlaybackState({
     required String seriesTitle,
