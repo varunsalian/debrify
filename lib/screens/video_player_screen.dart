@@ -566,18 +566,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			builder: (context) {
 				return SafeArea(
 					top: false,
-					child: Container(
-						height: MediaQuery.of(context).size.height * 0.8,
-						child: seriesPlaylist != null && seriesPlaylist.isSeries
-							? SeriesBrowser(
-								seriesPlaylist: seriesPlaylist,
-								currentEpisodeIndex: _currentIndex,
-								onEpisodeSelected: (episodeIndex) async {
-									await _loadPlaylistIndex(episodeIndex, autoplay: true);
-								},
-							  )
-							: _buildSimplePlaylist(),
-					),
+					child: seriesPlaylist != null && seriesPlaylist.isSeries
+						? SeriesBrowser(
+							seriesPlaylist: seriesPlaylist,
+							currentEpisodeIndex: _currentIndex,
+							onEpisodeSelected: (episodeIndex) async {
+								await _loadPlaylistIndex(episodeIndex, autoplay: true);
+							},
+						  )
+						: _buildSimplePlaylist(),
 				);
 			},
 		);
