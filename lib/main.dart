@@ -21,7 +21,7 @@ void main() {
 
 Future<void> _initOrientation() async {
   try {
-    // If running on Android TV, prefer landscape. Otherwise keep portrait.
+    // If running on Android TV, prefer landscape. Otherwise allow all orientations (respect auto-rotate).
     final isTv = await AndroidNativeDownloader.isTelevision();
     if (isTv) {
       await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
@@ -29,16 +29,21 @@ Future<void> _initOrientation() async {
         DeviceOrientation.landscapeRight,
       ]);
     } else {
+      // Allow all orientations to respect device auto-rotate setting
       await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
       ]);
     }
   } catch (_) {
-    // Fallback to portrait if detection fails
+    // Fallback to all orientations if detection fails
     await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
     ]);
   }
 }
