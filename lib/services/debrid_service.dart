@@ -2,11 +2,48 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/debrid_download.dart';
 import '../models/rd_torrent.dart';
+import '../models/rd_user.dart';
 import '../services/storage_service.dart';
 import '../utils/file_utils.dart';
 
 class DebridService {
   static const String _baseUrl = 'https://api.real-debrid.com/rest/1.0';
+
+  // Get user information
+  static Future<RDUser> getUserInfo(String apiKey) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/user'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return RDUser.fromJson(data);
+      } else if (response.statusCode == 401) {
+        throw Exception('Invalid API key');
+      } else if (response.statusCode == 403) {
+        throw Exception('Account locked');
+      } else {
+        throw Exception('Failed to get user info: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  // Validate API key by calling user endpoint
+  static Future<bool> validateApiKey(String apiKey) async {
+    try {
+      await getUserInfo(apiKey);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
   // Get downloads list with pagination
   static Future<Map<String, dynamic>> getDownloads(String apiKey, {

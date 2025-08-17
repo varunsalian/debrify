@@ -6,6 +6,9 @@ import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
+import 'services/account_service.dart';
+import 'widgets/api_key_validation_dialog.dart';
+import 'widgets/account_status_widget.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -255,6 +258,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   int _selectedIndex = 0;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  bool _isValidatingApi = false;
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
@@ -265,7 +269,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   final List<String> _titles = [
     'Torrent Search',
-    'RD Downloads',
+    'Real Debrid',
     'Downloads',
     'Settings',
   ];
@@ -292,6 +296,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       curve: Curves.easeInOut,
     ));
     _animationController.forward();
+    
+    // Validate API key on app launch
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _validateApiKeyOnLaunch();
+    });
   }
 
   @override
@@ -306,6 +315,91 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     });
     _animationController.reset();
     _animationController.forward();
+  }
+
+  Future<void> _validateApiKeyOnLaunch() async {
+    if (_isValidatingApi) return;
+    
+    setState(() {
+      _isValidatingApi = true;
+    });
+
+    try {
+      final isValid = await AccountService.isApiKeyValid();
+      
+      if (!isValid && mounted) {
+        // Show API key validation dialog
+        final result = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const ApiKeyValidationDialog(isInitialSetup: true),
+        );
+        
+        if (result == true && mounted) {
+          setState(() {}); // Refresh UI to show account status
+        }
+      }
+    } catch (e) {
+      // Handle any errors silently
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isValidatingApi = false;
+        });
+      }
+    }
+  }
+
+  void _showAccountInfo() {
+    final user = AccountService.currentUser;
+    if (user != null) {
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 300, maxHeight: 400),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Account',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                AccountStatusWidget(user: user),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else {
+      // Show API key validation dialog
+      showDialog(
+        context: context,
+        builder: (context) => const ApiKeyValidationDialog(),
+      ).then((result) {
+        if (result == true) {
+          setState(() {}); // Refresh UI
+        }
+      });
+    }
   }
 
   @override
@@ -358,12 +452,34 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
               color: const Color(0xFF1E293B), // Slate 800
               borderRadius: BorderRadius.circular(12),
             ),
-            child: IconButton(
-              icon: const Icon(Icons.notifications_outlined, size: 24),
-              onPressed: () {
-                // TODO: Add notifications
-              },
-              tooltip: 'Notifications',
+            child: Stack(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    AccountService.currentUser != null 
+                        ? Icons.account_circle 
+                        : Icons.account_circle_outlined,
+                    size: 24,
+                  ),
+                  onPressed: _showAccountInfo,
+                  tooltip: AccountService.currentUser != null 
+                      ? 'Account Information' 
+                      : 'Add API Key',
+                ),
+                if (_isValidatingApi)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.amber,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -512,14 +628,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           fontSize: 11,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Made with ❤️ using Flutter',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 11,
-                        ),
-                      ),
+
                     ],
                   ),
                 ),

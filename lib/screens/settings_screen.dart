@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import '../services/account_service.dart';
 import 'settings/real_debrid_settings_page.dart';
 import '../services/android_native_downloader.dart';
 
@@ -22,10 +23,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadSummaries() async {
     final apiKey = await StorageService.getApiKey();
-    setState(() {
-      _apiKeySummary = apiKey == null ? 'Not connected' : 'Connected';
-      _loading = false;
-    });
+    if (apiKey != null && apiKey.isNotEmpty) {
+      // Refresh user info to get current status
+      await AccountService.refreshUserInfo();
+      final user = AccountService.currentUser;
+      setState(() {
+        _apiKeySummary = user != null ? user.premiumStatusText : 'Connected';
+        _loading = false;
+      });
+    } else {
+      setState(() {
+        _apiKeySummary = 'Not connected';
+        _loading = false;
+      });
+    }
   }
 
   @override

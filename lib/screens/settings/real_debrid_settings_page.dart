@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/storage_service.dart';
+import '../../services/account_service.dart';
+import '../../widgets/account_status_widget.dart';
 
 class RealDebridSettingsPage extends StatefulWidget {
   const RealDebridSettingsPage({super.key});
@@ -33,6 +35,12 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       _postTorrentAction = postAction;
       _loading = false;
     });
+    
+    // Refresh user info if API key exists
+    if (apiKey != null && apiKey.isNotEmpty) {
+      await AccountService.refreshUserInfo();
+      setState(() {});
+    }
   }
 
   @override
@@ -53,17 +61,26 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       _snack('Please enter a valid API key', err: true);
       return;
     }
+    
+    // Validate the API key
+    final isValid = await AccountService.validateAndGetUserInfo(txt);
+    if (!isValid) {
+      _snack('Invalid API key. Please check and try again.', err: true);
+      return;
+    }
+    
     await StorageService.saveApiKey(txt);
     setState(() {
       _savedApiKey = txt;
       _isEditing = false;
       _apiKeyController.clear();
     });
-    _snack('API key saved');
+    _snack('API key saved and validated');
   }
 
   Future<void> _deleteKey() async {
     await StorageService.deleteApiKey();
+    AccountService.clearUserInfo();
     setState(() {
       _savedApiKey = null;
       _isEditing = false;
@@ -220,6 +237,38 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
             ),
           ),
           const SizedBox(height: 16),
+          
+          // Account Information Card
+          if (AccountService.currentUser != null) ...[
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.account_circle,
+                            color: Theme.of(context).colorScheme.primary, size: 20),
+                        const SizedBox(width: 8),
+                        Text('Account Information',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    AccountStatusWidget(user: AccountService.currentUser!),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -358,10 +407,10 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '1. Go to real-debrid.com and log in\n'
-                    '2. Navigate to your account settings\n'
-                    '3. Find the API section\n'
-                    '4. Copy your API key and paste it above',
+                    '1. Visit: real-debrid.com/devices\n'
+                    '2. Log in if prompted\n'
+                    '3. Scroll down to find your API key\n'
+                    '4. Copy the API key and paste it above',
                     style: Theme.of(context)
                         .textTheme
                         .bodyMedium
