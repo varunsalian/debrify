@@ -55,7 +55,18 @@ class PlaylistEntry {
 
 enum _GestureMode { none, seek, volume, brightness }
 
-enum _AspectMode { contain, cover, fitWidth, fitHeight }
+enum _AspectMode { 
+  contain, 
+  cover, 
+  fitWidth, 
+  fitHeight,
+  aspect16_9,
+  aspect4_3,
+  aspect21_9,
+  aspect1_1,
+  aspect3_2,
+  aspect5_4,
+}
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProviderStateMixin {
 	late mk.Player _player;
@@ -92,6 +103,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	// HUD state
 	final ValueNotifier<_SeekHudState?> _seekHud = ValueNotifier<_SeekHudState?>(null);
 	final ValueNotifier<_VerticalHudState?> _verticalHud = ValueNotifier<_VerticalHudState?>(null);
+	final ValueNotifier<_AspectRatioHudState?> _aspectRatioHud = ValueNotifier<_AspectRatioHudState?>(null);
 
 	// Aspect / speed
 	_AspectMode _aspectMode = _AspectMode.contain;
@@ -565,6 +577,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				case 'fitHeight':
 					_aspectMode = _AspectMode.fitHeight;
 					break;
+				case '16:9':
+					_aspectMode = _AspectMode.aspect16_9;
+					break;
+				case '4:3':
+					_aspectMode = _AspectMode.aspect4_3;
+					break;
+				case '21:9':
+					_aspectMode = _AspectMode.aspect21_9;
+					break;
+				case '1:1':
+					_aspectMode = _AspectMode.aspect1_1;
+					break;
+				case '3:2':
+					_aspectMode = _AspectMode.aspect3_2;
+					break;
+				case '5:4':
+					_aspectMode = _AspectMode.aspect5_4;
+					break;
 				default:
 					_aspectMode = _AspectMode.contain;
 			}
@@ -602,6 +632,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				break;
 			case 'fitHeight':
 				_aspectMode = _AspectMode.fitHeight;
+				break;
+			case '16:9':
+				_aspectMode = _AspectMode.aspect16_9;
+				break;
+			case '4:3':
+				_aspectMode = _AspectMode.aspect4_3;
+				break;
+			case '21:9':
+				_aspectMode = _AspectMode.aspect21_9;
+				break;
+			case '1:1':
+				_aspectMode = _AspectMode.aspect1_1;
+				break;
+			case '3:2':
+				_aspectMode = _AspectMode.aspect3_2;
+				break;
+			case '5:4':
+				_aspectMode = _AspectMode.aspect5_4;
 				break;
 			default:
 				_aspectMode = _AspectMode.contain;
@@ -659,6 +707,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					return 'fitWidth';
 				case _AspectMode.fitHeight:
 					return 'fitHeight';
+				case _AspectMode.aspect16_9:
+					return '16:9';
+				case _AspectMode.aspect4_3:
+					return '4:3';
+				case _AspectMode.aspect21_9:
+					return '21:9';
+				case _AspectMode.aspect1_1:
+					return '1:1';
+				case _AspectMode.aspect3_2:
+					return '3:2';
+				case _AspectMode.aspect5_4:
+					return '5:4';
 				case _AspectMode.contain:
 				default:
 					return 'contain';
@@ -875,21 +935,78 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	void _cycleAspectMode() {
+		_AspectMode newMode;
+		String modeName;
+		IconData modeIcon;
+		
+		switch (_aspectMode) {
+			case _AspectMode.contain:
+				newMode = _AspectMode.cover;
+				modeName = 'Cover';
+				modeIcon = Icons.crop_free_rounded;
+				break;
+			case _AspectMode.cover:
+				newMode = _AspectMode.fitWidth;
+				modeName = 'Fit Width';
+				modeIcon = Icons.fit_screen_rounded;
+				break;
+			case _AspectMode.fitWidth:
+				newMode = _AspectMode.fitHeight;
+				modeName = 'Fit Height';
+				modeIcon = Icons.fit_screen_rounded;
+				break;
+			case _AspectMode.fitHeight:
+				newMode = _AspectMode.aspect16_9;
+				modeName = '16:9';
+				modeIcon = Icons.aspect_ratio_rounded;
+				break;
+			case _AspectMode.aspect16_9:
+				newMode = _AspectMode.aspect4_3;
+				modeName = '4:3';
+				modeIcon = Icons.aspect_ratio_rounded;
+				break;
+			case _AspectMode.aspect4_3:
+				newMode = _AspectMode.aspect21_9;
+				modeName = '21:9';
+				modeIcon = Icons.aspect_ratio_rounded;
+				break;
+			case _AspectMode.aspect21_9:
+				newMode = _AspectMode.aspect1_1;
+				modeName = '1:1';
+				modeIcon = Icons.crop_square_rounded;
+				break;
+			case _AspectMode.aspect1_1:
+				newMode = _AspectMode.aspect3_2;
+				modeName = '3:2';
+				modeIcon = Icons.aspect_ratio_rounded;
+				break;
+			case _AspectMode.aspect3_2:
+				newMode = _AspectMode.aspect5_4;
+				modeName = '5:4';
+				modeIcon = Icons.aspect_ratio_rounded;
+				break;
+			case _AspectMode.aspect5_4:
+				newMode = _AspectMode.contain;
+				modeName = 'Contain';
+				modeIcon = Icons.crop_free_rounded;
+				break;
+		}
+		
 		setState(() {
-			switch (_aspectMode) {
-				case _AspectMode.contain:
-					_aspectMode = _AspectMode.cover;
-					break;
-				case _AspectMode.cover:
-					_aspectMode = _AspectMode.fitWidth;
-					break;
-				case _AspectMode.fitWidth:
-					_aspectMode = _AspectMode.fitHeight;
-					break;
-				case _AspectMode.fitHeight:
-					_aspectMode = _AspectMode.contain;
-			}
+			_aspectMode = newMode;
 		});
+		
+		// Show elegant HUD feedback
+		_aspectRatioHud.value = _AspectRatioHudState(
+			aspectRatio: modeName,
+			icon: modeIcon,
+		);
+		
+		// Auto-hide the HUD after 1.5 seconds
+		Future.delayed(const Duration(milliseconds: 1500), () {
+			_aspectRatioHud.value = null;
+		});
+		
 		_scheduleAutoHide();
 		_saveResume();
 	}
@@ -930,6 +1047,64 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				return BoxFit.fitWidth;
 			case _AspectMode.fitHeight:
 				return BoxFit.fitHeight;
+			case _AspectMode.aspect16_9:
+			case _AspectMode.aspect4_3:
+			case _AspectMode.aspect21_9:
+			case _AspectMode.aspect1_1:
+			case _AspectMode.aspect3_2:
+			case _AspectMode.aspect5_4:
+				return BoxFit.cover; // We'll handle custom aspect ratios in the widget
+		}
+	}
+	
+	// Build video with custom aspect ratio
+	Widget _buildCustomAspectRatioVideo() {
+		final aspectRatio = _getCustomAspectRatio();
+		if (aspectRatio == null) {
+			return FittedBox(
+				fit: _currentFit(),
+				child: SizedBox(
+					width: 1920,
+					height: 1080,
+					child: mkv.Video(controller: _videoController, controls: null),
+				),
+			);
+		}
+		
+		return Center(
+			child: AspectRatio(
+				aspectRatio: aspectRatio,
+				child: ClipRect(
+					child: FittedBox(
+						fit: BoxFit.cover,
+						child: SizedBox(
+							width: 1920,
+							height: 1080,
+							child: mkv.Video(controller: _videoController, controls: null),
+						),
+					),
+				),
+			),
+		);
+	}
+	
+	// Get the custom aspect ratio for specific modes
+	double? _getCustomAspectRatio() {
+		switch (_aspectMode) {
+			case _AspectMode.aspect16_9:
+				return 16.0 / 9.0;
+			case _AspectMode.aspect4_3:
+				return 4.0 / 3.0;
+			case _AspectMode.aspect21_9:
+				return 21.0 / 9.0;
+			case _AspectMode.aspect1_1:
+				return 1.0;
+			case _AspectMode.aspect3_2:
+				return 3.0 / 2.0;
+			case _AspectMode.aspect5_4:
+				return 5.0 / 4.0;
+			default:
+				return null;
 		}
 	}
 
@@ -1123,14 +1298,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						children: [
 							// Video texture (media_kit renderer)
 							if (isReady)
-								FittedBox(
-									fit: _currentFit(),
-									child: SizedBox(
-										width: 1920,
-										height: 1080,
-										child: mkv.Video(controller: _videoController, controls: null),
-									),
-								)
+								_getCustomAspectRatio() != null
+									? _buildCustomAspectRatioVideo()
+									: FittedBox(
+										fit: _currentFit(),
+										child: SizedBox(
+											width: 1920,
+											height: 1080,
+											child: mkv.Video(controller: _videoController, controls: null),
+										),
+									)
 							else
 								const Center(child: CircularProgressIndicator(color: Colors.white)),
 							// Double-tap ripple
@@ -1167,6 +1344,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 												child: Padding(
 													padding: const EdgeInsets.only(right: 24),
 													child: hud == null ? const SizedBox.shrink() : _VerticalHud(hud: hud),
+												),
+											),
+										),
+									);
+								},
+							),
+							ValueListenableBuilder<_AspectRatioHudState?>(
+								valueListenable: _aspectRatioHud,
+								builder: (context, hud, _) {
+									return IgnorePointer(
+										ignoring: true,
+										child: AnimatedOpacity(
+											opacity: hud == null ? 0 : 1,
+											duration: const Duration(milliseconds: 200),
+											child: Align(
+												alignment: Alignment.topRight,
+												child: Padding(
+													padding: const EdgeInsets.only(top: 80, right: 24),
+													child: hud == null ? const SizedBox.shrink() : _AspectRatioHud(hud: hud),
 												),
 											),
 										),
@@ -1213,6 +1409,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 												onAspect: _cycleAspectMode,
 												onSpeed: _changeSpeed,
 												speed: _playbackSpeed,
+												aspectMode: _aspectMode,
 												isLandscape: _landscapeLocked,
 												onRotate: _toggleOrientation,
 												hasPlaylist: widget.playlist != null && widget.playlist!.isNotEmpty,
@@ -1254,6 +1451,7 @@ class _Controls extends StatelessWidget {
 	final VoidCallback onAspect;
 	final VoidCallback onSpeed;
 	final double speed;
+	final _AspectMode aspectMode;
 	final bool isLandscape;
 	final VoidCallback onRotate;
 	final VoidCallback onShowPlaylist;
@@ -1275,6 +1473,7 @@ class _Controls extends StatelessWidget {
 		required this.onAspect,
 		required this.onSpeed,
 		required this.speed,
+		required this.aspectMode,
 		required this.isLandscape,
 		required this.onRotate,
 		required this.onShowPlaylist,
@@ -1284,6 +1483,31 @@ class _Controls extends StatelessWidget {
 		required this.onSeekBarChanged,
 		required this.onSeekBarChangeEnd,
 	});
+	
+	String _getAspectRatioName() {
+		switch (aspectMode) {
+			case _AspectMode.contain:
+				return 'Contain';
+			case _AspectMode.cover:
+				return 'Cover';
+			case _AspectMode.fitWidth:
+				return 'Fit Width';
+			case _AspectMode.fitHeight:
+				return 'Fit Height';
+			case _AspectMode.aspect16_9:
+				return '16:9';
+			case _AspectMode.aspect4_3:
+				return '4:3';
+			case _AspectMode.aspect21_9:
+				return '21:9';
+			case _AspectMode.aspect1_1:
+				return '1:1';
+			case _AspectMode.aspect3_2:
+				return '3:2';
+			case _AspectMode.aspect5_4:
+				return '5:4';
+		}
+	}
 
 	String _format(Duration d) {
 		final sign = d.isNegative ? '-' : '';
@@ -1369,6 +1593,7 @@ class _Controls extends StatelessWidget {
 										IconButton(
 											icon: const Icon(Icons.crop_free_rounded, color: Colors.white),
 											onPressed: onAspect,
+											tooltip: 'Aspect Ratio: ${_getAspectRatioName()}',
 										),
 										IconButton(
 											icon: const Icon(Icons.closed_caption_off_rounded, color: Colors.white),
@@ -1504,6 +1729,12 @@ class _VerticalHudState {
 	_VerticalHudState({required this.kind, required this.value});
 }
 
+class _AspectRatioHudState {
+	final String aspectRatio;
+	final IconData icon;
+	const _AspectRatioHudState({required this.aspectRatio, required this.icon});
+}
+
 class _VerticalHud extends StatelessWidget {
 	final _VerticalHudState hud;
 	const _VerticalHud({required this.hud});
@@ -1539,6 +1770,44 @@ class _VerticalHud extends StatelessWidget {
 					),
 					const SizedBox(height: 8),
 					Text('$label%', style: const TextStyle(color: Colors.white)),
+				],
+			),
+		);
+	}
+}
+
+class _AspectRatioHud extends StatelessWidget {
+	final _AspectRatioHudState hud;
+	const _AspectRatioHud({required this.hud});
+	
+	@override
+	Widget build(BuildContext context) {
+		return Container(
+			padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+			decoration: BoxDecoration(
+				color: Colors.black.withOpacity(0.7),
+				borderRadius: BorderRadius.circular(16),
+				boxShadow: [
+					BoxShadow(
+						color: Colors.black.withOpacity(0.3),
+						blurRadius: 12,
+						offset: const Offset(0, 4),
+					),
+				],
+			),
+			child: Row(
+				mainAxisSize: MainAxisSize.min,
+				children: [
+					Icon(hud.icon, color: Colors.white, size: 20),
+					const SizedBox(width: 8),
+					Text(
+						hud.aspectRatio,
+						style: const TextStyle(
+							color: Colors.white,
+							fontSize: 16,
+							fontWeight: FontWeight.w600,
+						),
+					),
 				],
 			),
 		);
