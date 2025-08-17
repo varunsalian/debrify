@@ -122,6 +122,30 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     // Legacy callers expect an exception to stop flow; we now proceed
   }
 
+  // Check if a URL is a download link by looking for file extensions
+  bool _isDownloadLink(String url) {
+    if (url.isEmpty) return false;
+    
+    // Common file extensions that indicate downloadable content
+    final downloadExtensions = [
+      '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v',
+      '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma',
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+      '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2',
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.svg',
+      '.exe', '.dmg', '.pkg', '.deb', '.rpm', '.apk',
+      '.iso', '.img', '.bin',
+      '.txt', '.csv', '.json', '.xml', '.html', '.css', '.js',
+      '.torrent', '.magnet'
+    ];
+    
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    
+    final path = uri.path.toLowerCase();
+    return downloadExtensions.any((ext) => path.endsWith(ext));
+  }
+
   Future<void> _showAddDialog({String? initialUrl}) async {
     try {
       await _ensureDefaultLocationOrRedirect();
@@ -461,7 +485,32 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           child: Align(
             alignment: Alignment.bottomRight,
             child: FloatingActionButton.extended(
-              onPressed: _showAddDialog,
+              onPressed: () async {
+                // Check clipboard for download links first
+                final data = await Clipboard.getData('text/plain');
+                String? clipboardUrl;
+                
+                if (data?.text != null && data!.text!.isNotEmpty) {
+                  final url = data.text!.trim();
+                  if (_isDownloadLink(url)) {
+                    clipboardUrl = url;
+                    // Show a brief message that a download link was found
+                    if (mounted) {
+                      final uri = Uri.tryParse(url);
+                      final fileName = uri?.path.split('/').last ?? 'file';
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Found download link in clipboard: $fileName'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
+                }
+                
+                // Show dialog with clipboard URL if it's a download link
+                await _showAddDialog(initialUrl: clipboardUrl);
+              },
               icon: const Icon(Icons.add),
               label: const Text('Add'),
             ),
