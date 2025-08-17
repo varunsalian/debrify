@@ -20,6 +20,7 @@ class DebridDownloadsScreen extends StatefulWidget {
 
 class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with TickerProviderStateMixin {
   late TabController _tabController;
+  int _selectedIndex = 0;
   
   // Torrent Downloads data
   final List<RDTorrent> _torrents = [];
@@ -41,11 +42,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   
   String? _apiKey;
   static const int _limit = 50;
+  
+  // Magnet input
+  final TextEditingController _magnetController = TextEditingController();
+  bool _isAddingMagnet = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      setState(() {
+        _selectedIndex = _tabController.index;
+      });
+    });
     _loadApiKeyAndData();
     _torrentScrollController.addListener(_onTorrentScroll);
     _downloadScrollController.addListener(_onDownloadScroll);
@@ -56,6 +66,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     _tabController.dispose();
     _torrentScrollController.dispose();
     _downloadScrollController.dispose();
+    _magnetController.dispose();
     super.dispose();
   }
 
@@ -829,12 +840,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   String _getUserFriendlyErrorMessage(dynamic error) {
     final errorString = error.toString().toLowerCase();
     
-    if (errorString.contains('invalid api key') || errorString.contains('401')) {
+    if (errorString.contains('file is not readily available in real debrid')) {
+      return 'This torrent is not available on Real Debrid servers. Try a different torrent.';
+    } else if (errorString.contains('invalid api key') || errorString.contains('401')) {
       return 'Invalid API key. Please check your Real Debrid settings.';
+    } else if (errorString.contains('account locked') || errorString.contains('403')) {
+      return 'Your Real Debrid account is locked. Please check your account status.';
     } else if (errorString.contains('network error') || errorString.contains('connection')) {
       return 'Network connection error. Please check your internet connection.';
     } else if (errorString.contains('timeout')) {
       return 'Request timed out. Please try again.';
+    } else if (errorString.contains('no files found in torrent')) {
+      return 'No files found in this torrent.';
+    } else if (errorString.contains('failed to get download link')) {
+      return 'Unable to get download link. The torrent may not be available.';
     } else if (errorString.contains('long') || errorString.contains('int')) {
       return 'Data format error. Please refresh and try again.';
     } else if (errorString.contains('json')) {
@@ -842,7 +861,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     } else if (errorString.contains('failed to load torrents') || errorString.contains('failed to load downloads')) {
       return 'Unable to load downloads. Please check your connection and try again.';
     } else {
-      return 'Something went wrong. Please try again.';
+      return 'Failed to add torrent. Please try again.';
     }
   }
 
@@ -914,8 +933,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             ),
           ),
           
-
-          
           // Content
           Expanded(
             child: TabBarView(
@@ -928,6 +945,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           ),
         ],
       ),
+      floatingActionButton: _selectedIndex == 0 ? FloatingActionButton(
+        onPressed: _showAddMagnetDialog,
+        backgroundColor: const Color(0xFF6366F1),
+        child: const Icon(Icons.add, color: Colors.white),
+      ) : null,
     );
   }
 
@@ -1933,4 +1955,364 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       }
     }
   }
+
+  void _showAddMagnetDialog() {
+    // Auto-paste if clipboard has magnet link
+    _autoPasteMagnetLink();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Magnet Link'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF334155),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF475569).withValues(alpha: 0.3),
+                ),
+              ),
+              child: TextField(
+                controller: _magnetController,
+                decoration: const InputDecoration(
+                  hintText: 'Paste magnet link here...',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(16),
+                ),
+                maxLines: 3,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: Color(0xFF475569)),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _showAdvancedMagnetDialog,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: Color(0xFF475569)),
+                    ),
+                    child: const Text('Advanced'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _isAddingMagnet ? null : _addMagnetWithDefaultSelection,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: const Color(0xFF6366F1),
+                    ),
+                    child: _isAddingMagnet
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Add'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _autoPasteMagnetLink() async {
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (clipboardData?.text != null) {
+      final text = clipboardData!.text!.trim();
+      if (text.startsWith('magnet:?')) {
+        _magnetController.text = text;
+      }
+    }
+  }
+
+  bool _isValidMagnetLink(String link) {
+    final trimmedLink = link.trim();
+    if (!trimmedLink.startsWith('magnet:?')) {
+      return false;
+    }
+    
+    // Check for required magnet link components
+    if (!trimmedLink.contains('xt=urn:btih:')) {
+      return false;
+    }
+    
+    // Basic length check (magnet links are typically longer than 50 characters)
+    if (trimmedLink.length < 50) {
+      return false;
+    }
+    
+    return true;
+  }
+
+
+
+  Future<void> _pasteMagnetLink() async {
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (clipboardData?.text != null) {
+      final text = clipboardData!.text!.trim();
+      if (_isValidMagnetLink(text)) {
+        _magnetController.text = text;
+      } else {
+        _showError('Clipboard does not contain a valid magnet link');
+      }
+    } else {
+      _showError('No text found in clipboard');
+    }
+  }
+
+  Future<void> _addMagnetWithDefaultSelection() async {
+    final magnetLink = _magnetController.text.trim();
+    if (magnetLink.isEmpty) {
+      _showError('Please enter a magnet link');
+      return;
+    }
+
+    if (!_isValidMagnetLink(magnetLink)) {
+      _showError('Please enter a valid magnet link');
+      return;
+    }
+
+    Navigator.of(context).pop(); // Close the dialog
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Adding Torrent'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text('Processing magnet link...'),
+            const SizedBox(height: 8),
+            Text(
+              'This may take a few moments',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    setState(() {
+      _isAddingMagnet = true;
+    });
+
+    try {
+      // Get the default file selection preference
+      final fileSelection = await StorageService.getFileSelection();
+      
+      // Add the magnet using the same logic as the torrent search screen
+      final result = await DebridService.addTorrentToDebrid(
+        _apiKey!,
+        magnetLink,
+        tempFileSelection: fileSelection,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Clear the input
+      _magnetController.clear();
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Magnet added successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // Refresh the torrent list
+      await _fetchTorrents(_apiKey!, reset: true);
+
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        _showError(_getUserFriendlyErrorMessage(e.toString()));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAddingMagnet = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showAdvancedMagnetDialog() async {
+    final magnetLink = _magnetController.text.trim();
+    if (magnetLink.isEmpty) {
+      _showError('Please enter a magnet link first');
+      return;
+    }
+
+    if (!_isValidMagnetLink(magnetLink)) {
+      _showError('Please enter a valid magnet link');
+      return;
+    }
+
+    Navigator.of(context).pop(); // Close the first dialog
+
+    // Show file selection dialog similar to torrent search screen
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select File Type'),
+        content: const Text('Choose how to handle files in this torrent:'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'largest'),
+            child: _isAddingMagnet
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Largest File'),
+          ),
+          TextButton(
+            onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'video'),
+            child: _isAddingMagnet
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Video Files'),
+          ),
+          TextButton(
+            onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'all'),
+            child: _isAddingMagnet
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('All Files'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addMagnetWithSelection(String magnetLink, String fileSelection) async {
+    Navigator.of(context).pop(); // Close the dialog
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Adding Torrent'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text('Processing magnet link...'),
+            const SizedBox(height: 8),
+            Text(
+              'This may take a few moments',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    setState(() {
+      _isAddingMagnet = true;
+    });
+
+    try {
+      // Add the magnet with the selected file preference
+      final result = await DebridService.addTorrentToDebrid(
+        _apiKey!,
+        magnetLink,
+        tempFileSelection: fileSelection,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Clear the input
+      _magnetController.clear();
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Magnet added successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // Refresh the torrent list
+      await _fetchTorrents(_apiKey!, reset: true);
+
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        _showError(_getUserFriendlyErrorMessage(e.toString()));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAddingMagnet = false;
+        });
+      }
+    }
+  }
+
 } 
