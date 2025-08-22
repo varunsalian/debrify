@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/storage_service.dart';
+import '../../services/android_native_downloader.dart';
 
 class DownloadSettingsPage extends StatefulWidget {
 	const DownloadSettingsPage({super.key});
@@ -76,6 +77,60 @@ class _DownloadSettingsPageState extends State<DownloadSettingsPage> {
 							),
 						),
 					),
+					const SizedBox(height: 12),
+					Card(
+						child: Padding(
+							padding: const EdgeInsets.all(16),
+							child: Column(
+								crossAxisAlignment: CrossAxisAlignment.start,
+								children: [
+									Row(
+										children: [
+											Container(
+												padding: const EdgeInsets.all(10),
+												decoration: BoxDecoration(
+													color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+													borderRadius: BorderRadius.circular(12),
+												),
+												child: Icon(Icons.battery_saver, color: Theme.of(context).colorScheme.primary),
+											),
+											const SizedBox(width: 12),
+											Expanded(
+												child: Column(
+													crossAxisAlignment: CrossAxisAlignment.start,
+																								children: const [
+												Text('Allow background downloads', style: TextStyle(fontWeight: FontWeight.w600)),
+												SizedBox(height: 4),
+												Text('Open system settings to ignore battery optimizations for reliable downloads', style: TextStyle(fontSize: 12)),
+											],
+										),
+									),
+									FilledButton(
+										onPressed: () async {
+											final ok = await showDialog<bool>(
+												context: context,
+												builder: (ctx) => AlertDialog(
+													title: const Text('Allow background downloads'),
+													content: const Text('Open system settings to allow this app to ignore battery optimizations?'),
+													actions: [
+														TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+														FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Open')),
+													],
+												),
+											) ?? false;
+											if (ok) {
+												await StorageService.setBatteryOptimizationStatus('denied');
+												await AndroidNativeDownloader.openBatteryOptimizationSettings();
+											}
+									},
+									child: const Text('Open settings'),
+								),
+								], // end Row children
+								), // end Row
+							], // end Column children
+							), // end Column
+						), // end Padding
+					), // end Card
 				],
 			),
 		);

@@ -117,39 +117,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 12),
           _SectionTile(
-            icon: Icons.battery_saver,
-            title: 'Allow background downloads',
-            subtitle: 'Optimize reliability in background',
-            onTap: () async {
-              final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Allow background downloads'),
-                      content: const Text(
-                          'Open system settings to allow this app to ignore battery optimizations?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('Open'),
-                        ),
-                      ],
-                    ),
-                  ) ??
-                  false;
-              if (ok) {
-                await StorageService.setBatteryOptimizationStatus('denied');
-                // Let next download prompt again if needed, and also open settings now
-                await AndroidNativeDownloader.openBatteryOptimizationSettings();
-              }
-            },
-          ),
-
-          const SizedBox(height: 12),
-          _SectionTile(
             icon: Icons.tune_rounded,
             title: 'Download Settings',
             subtitle: 'Parallel downloads and more',
