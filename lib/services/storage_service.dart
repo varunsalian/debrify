@@ -8,6 +8,7 @@ class StorageService {
   static const String _batteryOptStatusKey = 'battery_opt_status_v1'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
+  static const String _maxParallelDownloadsKey = 'max_parallel_downloads_v1';
   
   // API Key methods
   static Future<String?> getApiKey() async {
@@ -56,6 +57,19 @@ class StorageService {
   static Future<void> setBatteryOptimizationStatus(String status) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_batteryOptStatusKey, status);
+  }
+
+  // Download settings
+  static Future<int> getMaxParallelDownloads() async {
+    final prefs = await SharedPreferences.getInstance();
+    final val = prefs.getInt(_maxParallelDownloadsKey);
+    if (val == null || val <= 0) return 2; // default
+    return val;
+  }
+
+  static Future<void> setMaxParallelDownloads(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_maxParallelDownloadsKey, value.clamp(1, 8));
   }
 
   // Enhanced Playback State methods

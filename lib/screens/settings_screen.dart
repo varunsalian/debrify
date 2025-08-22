@@ -3,6 +3,7 @@ import '../services/storage_service.dart';
 import '../services/account_service.dart';
 import 'settings/real_debrid_settings_page.dart';
 import '../services/android_native_downloader.dart';
+import 'settings/download_settings_page.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -144,6 +145,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // Let next download prompt again if needed, and also open settings now
                 await AndroidNativeDownloader.openBatteryOptimizationSettings();
               }
+            },
+          ),
+
+          const SizedBox(height: 12),
+          _SectionTile(
+            icon: Icons.tune_rounded,
+            title: 'Download Settings',
+            subtitle: 'Parallel downloads and more',
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DownloadSettingsPage()),
+              );
+              setState(() {});
             },
           ),
         ],

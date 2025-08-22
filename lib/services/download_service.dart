@@ -69,6 +69,17 @@ class DownloadService {
   StreamSubscription<Map<String, dynamic>>? _androidEventsSub;
   bool _batteryCheckShown = false;
 
+  // Queuing
+  final List<_PendingRequest> _pending = [];
+  final Map<String, _PendingRequest> _pendingById = {};
+  final Map<String, TaskRecord> _nonAndroidQueuedRecords = {};
+  // Resumes awaiting capacity
+  final Set<String> _pendingResumeAndroid = {};
+  final Map<String, DownloadTask> _pendingResumeNonAndroid = {};
+  final Set<String> _nonAndroidResumeQueuedOverlay = {};
+  bool _reevaluating = false;
+  bool _reevaluateScheduled = false;
+
   Future<void> _ensureNotificationPermission() async {
     if (!Platform.isAndroid) return;
     final status = await Permission.notification.status;
@@ -300,6 +311,8 @@ class DownloadService {
           case 'paused':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+            // Paused frees a slot; try to start next
+            _reevaluateQueue();
             break;
           case 'resumed':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
@@ -309,6 +322,7 @@ class DownloadService {
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.canceled, -2.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.canceled));
             _lastFileByTaskId.remove(taskId);
+            _reevaluateQueue();
             break;
           case 'complete':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.complete, 1.0);
@@ -318,11 +332,13 @@ class DownloadService {
             if (uri.isNotEmpty) {
               _lastFileByTaskId[taskId] = (uri, mime);
             }
+            _reevaluateQueue();
             break;
           case 'error':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
             _lastFileByTaskId.remove(taskId);
+            _reevaluateQueue();
             break;
         }
       });
@@ -346,6 +362,12 @@ class DownloadService {
               try {
                 await FileDownloader().database.deleteRecordWithId(update.task.taskId);
               } catch (_) {}
+            }
+            if (update.status == TaskStatus.complete ||
+                update.status == TaskStatus.failed ||
+                update.status == TaskStatus.canceled ||
+                update.status == TaskStatus.paused) {
+              _reevaluateQueue();
             }
         }
       });
@@ -404,62 +426,48 @@ class DownloadService {
   }) async {
     await initialize();
 
-    final (dirAbsPath, filename) = await _smartLocationFor(url, fileName, torrentName);
+    // Always queue first, then start based on concurrency limit
+    final providedName = (fileName?.trim().isNotEmpty ?? false) ? _sanitizeName(fileName!.trim()) : null;
+
+    // Create a queued placeholder task/record for visibility
+    final String queuedId = 'queued-${DateTime.now().millisecondsSinceEpoch}-${url.hashCode}';
+    final String displayName = providedName ?? (() {
+      try {
+        final uri = Uri.parse(url);
+        return _sanitizeName(uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'file');
+      } catch (_) {
+        return 'file';
+      }
+    })();
+
+    final queuedTask = DownloadTask(taskId: queuedId, url: url, filename: displayName);
 
     if (Platform.isAndroid) {
-      final ok = await _ensureBatteryExemptions(context);
-      if (!ok) {
-        throw Exception('battery_optimization_not_granted');
-      }
-      final String name = filename;
-      // Use torrent name for subdirectory if provided, otherwise use 'Debrify'
-      final String subDir = torrentName != null && torrentName.trim().isNotEmpty 
-          ? 'Debrify/${_sanitizeName(torrentName.trim())}'
-          : 'Debrify';
-      final taskId = await AndroidNativeDownloader.start(
-        url: url,
-        fileName: name,
-        subDir: subDir,
-        headers: headers,
-      );
-      if (taskId == null) {
-        throw Exception('Failed to start download');
-      }
-      final task = DownloadTask(taskId: taskId, url: url, filename: name);
-      // Optimistically add to history as enqueued/running
-      AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
-      return DownloadEntry(task: task, displayName: name, directory: '');
+      AndroidDownloadHistory.instance.upsert(queuedTask, TaskStatus.enqueued, 0.0);
+    } else {
+      _nonAndroidQueuedRecords[queuedId] = TaskRecord(queuedTask, TaskStatus.enqueued, 0.0, -1);
     }
+    _statusController.add(TaskStatusUpdate(queuedTask, TaskStatus.enqueued));
 
-    // Non-Android: existing plugin flow
-    // Convert absolute path to baseDirectory + relative directory
-    final (BaseDirectory baseDir, String relativeDir, String relFilename) =
-        await Task.split(
-      filePath: '$dirAbsPath/$filename',
-    );
-
-    final task = DownloadTask(
+    // Add to in-memory pending queue
+    final pending = _PendingRequest(
+      queuedId: queuedId,
       url: url,
+      providedFileName: providedName,
       headers: headers,
-      filename: relFilename,
-      directory: relativeDir,
-      baseDirectory: baseDir,
-      updates: Updates.statusAndProgress,
-      requiresWiFi: wifiOnly,
+      wifiOnly: wifiOnly,
       retries: retries,
-      allowPause: true,
+      meta: meta,
+      context: context,
+      torrentName: torrentName,
     );
+    _pending.add(pending);
+    _pendingById[queuedId] = pending;
 
-    final bool ok = await FileDownloader().enqueue(task);
-    if (!ok) {
-      throw Exception('Failed to enqueue download');
-    }
+    // Try to start if capacity allows
+    unawaited(_reevaluateQueue());
 
-    return DownloadEntry(
-      task: task,
-      displayName: filename,
-      directory: relativeDir,
-    );
+    return DownloadEntry(task: queuedTask, displayName: displayName, directory: '');
   }
 
   Future<void> pause(Task task) async {
@@ -473,16 +481,59 @@ class DownloadService {
   }
 
   Future<bool> resume(Task task) async {
+    // Enforce concurrency: if at capacity, queue the resume
+    final int maxParallel = await StorageService.getMaxParallelDownloads();
+    int runningCount;
     if (Platform.isAndroid) {
+      final list = AndroidDownloadHistory.instance.all();
+      runningCount = list.where((r) => r.status == TaskStatus.running).length;
+      if (runningCount >= maxParallel) {
+        _pendingResumeAndroid.add(task.taskId);
+        // Show as queued
+        AndroidDownloadHistory.instance.upsert(task as DownloadTask, TaskStatus.enqueued, 0.0);
+        _statusController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
+        unawaited(_reevaluateQueue());
+        return true;
+      }
       return AndroidNativeDownloader.resume(task.taskId);
+    } else {
+      final dbList = await FileDownloader().database.allRecords();
+      runningCount = dbList.where((r) => r.status == TaskStatus.running).length;
+      if (runningCount >= maxParallel) {
+        if (task is DownloadTask) {
+          _pendingResumeNonAndroid[task.taskId] = task;
+          _nonAndroidResumeQueuedOverlay.add(task.taskId);
+          _statusController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
+          unawaited(_reevaluateQueue());
+          return true;
+        }
+        return false;
+      }
+      if (task is DownloadTask && await FileDownloader().taskCanResume(task)) {
+        return FileDownloader().resume(task);
+      }
+      return false;
     }
-    if (task is DownloadTask && await FileDownloader().taskCanResume(task)) {
-      return FileDownloader().resume(task);
-    }
-    return false;
   }
 
   Future<void> cancel(Task task) async {
+    // If it's a queued placeholder, remove from our queue and history without touching platform
+    if (_pendingById.containsKey(task.taskId)) {
+      final pending = _pendingById.remove(task.taskId);
+      if (pending != null) {
+        _pending.remove(pending);
+      }
+      if (Platform.isAndroid) {
+        AndroidDownloadHistory.instance.removeById(task.taskId);
+        _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
+      } else {
+        _nonAndroidQueuedRecords.remove(task.taskId);
+        _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
+      }
+      unawaited(_reevaluateQueue());
+      return;
+    }
+
     if (Platform.isAndroid) {
       await AndroidNativeDownloader.cancel(task.taskId);
       AndroidDownloadHistory.instance.removeById(task.taskId);
@@ -500,7 +551,18 @@ class DownloadService {
     if (Platform.isAndroid) {
       return AndroidDownloadHistory.instance.all();
     }
-    return FileDownloader().database.allRecords();
+    final dbRecords = await FileDownloader().database.allRecords();
+    // Overlay queued placeholders and queued-resume status
+    if (_nonAndroidQueuedRecords.isEmpty && _nonAndroidResumeQueuedOverlay.isEmpty) return dbRecords;
+    final List<TaskRecord> adjusted = dbRecords.map((r) {
+      if (_nonAndroidResumeQueuedOverlay.contains(r.taskId)) {
+        return TaskRecord(r.task, TaskStatus.enqueued, r.progress, r.expectedFileSize);
+      }
+      return r;
+    }).toList();
+    final merged = [..._nonAndroidQueuedRecords.values, ...adjusted];
+    merged.sort((a, b) => a.task.creationTime.compareTo(b.task.creationTime));
+    return merged;
   }
 
   Future<void> deleteRecord(TaskRecord record) async {
@@ -569,4 +631,155 @@ class DownloadService {
   }
 
   (String contentUri, String mimeType)? getLastFileForTask(String taskId) => _lastFileByTaskId[taskId];
+
+  Future<void> _reevaluateQueue() async {
+    if (_reevaluating) {
+      _reevaluateScheduled = true;
+      return;
+    }
+    _reevaluating = true;
+    // Determine capacity
+    final int maxParallel = await StorageService.getMaxParallelDownloads();
+
+    int runningCount = 0;
+    if (Platform.isAndroid) {
+      final list = AndroidDownloadHistory.instance.all();
+      runningCount = list.where((r) => r.status == TaskStatus.running).length;
+    } else {
+      final list = await FileDownloader().database.allRecords();
+      runningCount = list.where((r) => r.status == TaskStatus.running).length;
+    }
+
+    // First, process pending resumes up to capacity
+    while (runningCount < maxParallel) {
+      bool resumedSomeone = false;
+      if (Platform.isAndroid && _pendingResumeAndroid.isNotEmpty) {
+        final taskId = _pendingResumeAndroid.first;
+        _pendingResumeAndroid.remove(taskId);
+        final ok = await AndroidNativeDownloader.resume(taskId);
+        if (ok) {
+          resumedSomeone = true;
+          runningCount += 1;
+        }
+      } else if (!Platform.isAndroid && _pendingResumeNonAndroid.isNotEmpty) {
+        final entry = _pendingResumeNonAndroid.entries.first;
+        _pendingResumeNonAndroid.remove(entry.key);
+        _nonAndroidResumeQueuedOverlay.remove(entry.key);
+        final DownloadTask task = entry.value;
+        if (await FileDownloader().taskCanResume(task)) {
+          final ok = await FileDownloader().resume(task);
+          if (ok) {
+            resumedSomeone = true;
+            runningCount += 1;
+          }
+        }
+      }
+      if (!resumedSomeone) break;
+    }
+
+    // Start as many as possible
+    while (runningCount < maxParallel && _pending.isNotEmpty) {
+      final p = _pending.removeAt(0);
+      _pendingById.remove(p.queuedId);
+      try {
+        if (Platform.isAndroid) {
+          // Remove queued placeholder
+          AndroidDownloadHistory.instance.removeById(p.queuedId);
+
+          // Ensure battery exemptions (non-blocking by policy)
+          await _ensureBatteryExemptions(p.context);
+
+          final String name;
+          if (p.providedFileName != null && p.providedFileName!.isNotEmpty) {
+            name = p.providedFileName!;
+          } else {
+            final (_dir, fn) = await _smartLocationFor(p.url, null, p.torrentName);
+            name = fn;
+          }
+
+          final String subDir = p.torrentName != null && p.torrentName!.trim().isNotEmpty 
+              ? 'Debrify/${_sanitizeName(p.torrentName!.trim())}'
+              : 'Debrify';
+
+          final taskId = await AndroidNativeDownloader.start(
+            url: p.url,
+            fileName: name,
+            subDir: subDir,
+            headers: p.headers,
+          );
+          if (taskId == null) {
+            throw Exception('Failed to start download');
+          }
+          final task = DownloadTask(taskId: taskId, url: p.url, filename: name);
+          AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
+          _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+        } else {
+          // Remove queued placeholder from our in-memory list
+          _nonAndroidQueuedRecords.remove(p.queuedId);
+
+          final (dirAbsPath, filename) = await _smartLocationFor(p.url, p.providedFileName, p.torrentName);
+          final (BaseDirectory baseDir, String relativeDir, String relFilename) = await Task.split(
+            filePath: '$dirAbsPath/$filename',
+          );
+          final task = DownloadTask(
+            url: p.url,
+            headers: p.headers,
+            filename: relFilename,
+            directory: relativeDir,
+            baseDirectory: baseDir,
+            updates: Updates.statusAndProgress,
+            requiresWiFi: p.wifiOnly,
+            retries: p.retries,
+            allowPause: true,
+          );
+          final bool ok = await FileDownloader().enqueue(task);
+          if (!ok) {
+            throw Exception('Failed to enqueue download');
+          }
+        }
+        runningCount += 1;
+      } catch (e) {
+        // Mark failed
+        if (Platform.isAndroid) {
+          final failTask = DownloadTask(taskId: p.queuedId, url: p.url, filename: p.providedFileName ?? 'download');
+          AndroidDownloadHistory.instance.upsert(failTask, TaskStatus.failed, -1.0);
+          _statusController.add(TaskStatusUpdate(failTask, TaskStatus.failed));
+        } else {
+          final failTask = DownloadTask(taskId: p.queuedId, url: p.url, filename: p.providedFileName ?? 'download');
+          _nonAndroidQueuedRecords[p.queuedId] = TaskRecord(failTask, TaskStatus.failed, -1.0, -1);
+          _statusController.add(TaskStatusUpdate(failTask, TaskStatus.failed));
+        }
+      }
+    }
+    _reevaluating = false;
+    if (_reevaluateScheduled) {
+      _reevaluateScheduled = false;
+      // Schedule a new pass
+      unawaited(_reevaluateQueue());
+    }
+  }
+}
+
+class _PendingRequest {
+  final String queuedId;
+  final String url;
+  final String? providedFileName;
+  final Map<String, String>? headers;
+  final bool wifiOnly;
+  final int retries;
+  final String? meta;
+  final BuildContext? context;
+  final String? torrentName;
+
+  _PendingRequest({
+    required this.queuedId,
+    required this.url,
+    required this.providedFileName,
+    required this.headers,
+    required this.wifiOnly,
+    required this.retries,
+    required this.meta,
+    required this.context,
+    required this.torrentName,
+  });
 } 
