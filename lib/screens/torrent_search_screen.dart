@@ -327,6 +327,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Future<void> _showFileSelectionDialog(String infohash, String torrentName) async {
+    print('DEBUG: _showFileSelectionDialog called with infohash: $infohash, name: $torrentName');
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -367,172 +368,161 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
 
 
-    showGeneralDialog(
+    showDialog(
       context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
-      transitionDuration: const Duration(milliseconds: 240),
-      transitionBuilder: (context, animation, secondary, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
-        return FadeTransition(
-          opacity: curved,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero).animate(curved),
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF1E293B),
-                      Color(0xFF334155),
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF1E293B),
+                  Color(0xFF334155),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with gradient background
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF6366F1),
+                        Color(0xFF8B5CF6),
+                      ],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.folder_open_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Select Files to Download',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          torrentName,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header with gradient background
-                    Container(
-                      decoration: BoxDecoration(
+                
+                // Content
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      // File selection options with beautiful cards
+                      _buildOptionCard(
+                        context: context,
+                        title: 'All video files',
+                        subtitle: 'Ideal for web series and stuff',
+                        icon: Icons.video_library_rounded,
+                        value: 'video',
+                        selectedOption: null,
+                        onChanged: (value) {
+                          Navigator.of(context).pop();
+                          _addToRealDebridWithSelection(infohash, torrentName, value!);
+                        },
                         gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFF6366F1),
-                            Color(0xFF8B5CF6),
-                          ],
-                        ),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
+                          colors: [Color(0xFF10B981), Color(0xFF059669)],
                         ),
                       ),
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
-                                width: 1,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.folder_open_rounded,
-                              color: Colors.white,
-                              size: 32,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Select Files to Download',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              torrentName,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 12),
+                      _buildOptionCard(
+                        context: context,
+                        title: 'File with highest size',
+                        subtitle: 'Ideal for movies',
+                        icon: Icons.movie_rounded,
+                        value: 'largest',
+                        selectedOption: null,
+                        onChanged: (value) {
+                          Navigator.of(context).pop();
+                          _addToRealDebridWithSelection(infohash, torrentName, value!);
+                        },
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                        ),
                       ),
-                    ),
-                    
-                    // Content
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          // File selection options with beautiful cards
-                          _buildOptionCard(
-                            context: context,
-                            title: 'All video files',
-                            subtitle: 'Ideal for web series and stuff',
-                            icon: Icons.video_library_rounded,
-                            value: 'video',
-                            selectedOption: null,
-                            onChanged: (value) {
-                              Navigator.of(context).pop();
-                              _addToRealDebridWithSelection(infohash, torrentName, value!);
-                            },
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF10B981), Color(0xFF059669)],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildOptionCard(
-                            context: context,
-                            title: 'File with highest size',
-                            subtitle: 'Ideal for movies',
-                            icon: Icons.movie_rounded,
-                            value: 'largest',
-                            selectedOption: null,
-                            onChanged: (value) {
-                              Navigator.of(context).pop();
-                              _addToRealDebridWithSelection(infohash, torrentName, value!);
-                            },
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildOptionCard(
-                            context: context,
-                            title: 'All files',
-                            subtitle: 'Ideal for apps, games, archives etc',
-                            icon: Icons.folder_rounded,
-                            value: 'all',
-                            selectedOption: null,
-                            onChanged: (value) {
-                              Navigator.of(context).pop();
-                              _addToRealDebridWithSelection(infohash, torrentName, value!);
-                            },
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 12),
+                      _buildOptionCard(
+                        context: context,
+                        title: 'All files',
+                        subtitle: 'Ideal for apps, games, archives etc',
+                        icon: Icons.folder_rounded,
+                        value: 'all',
+                        selectedOption: null,
+                        onChanged: (value) {
+                          Navigator.of(context).pop();
+                          _addToRealDebridWithSelection(infohash, torrentName, value!);
+                        },
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         );
@@ -2334,120 +2324,190 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           offset: Offset(0, 50 * (1 - value)),
           child: Opacity(
             opacity: value,
-            child: PressableScale(
-              onTap: () {},
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF1E293B), // Slate 800
-                      Color(0xFF334155), // Slate 700
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
-                    ),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF1E293B), // Slate 800
+                    Color(0xFF334155), // Slate 700
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title Row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              torrent.name,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Stats Grid
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          StatChip(
-                            icon: Icons.storage_rounded,
-                            text: Formatters.formatFileSize(torrent.sizeBytes),
-                            color: const Color(0xFF3B82F6), // Blue
-                          ),
-                          StatChip(
-                            icon: Icons.upload_rounded,
-                            text: '${torrent.seeders}',
-                            color: const Color(0xFF10B981), // Emerald
-                          ),
-                          StatChip(
-                            icon: Icons.download_rounded,
-                            text: '${torrent.leechers}',
-                            color: const Color(0xFFF59E0B), // Amber
-                          ),
-                          StatChip(
-                            icon: Icons.check_circle_rounded,
-                            text: '${torrent.completed}',
-                            color: const Color(0xFF8B5CF6), // Violet
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      // Date
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.schedule_rounded,
-                            color: Colors.white.withValues(alpha: 0.6),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            Formatters.formatDate(torrent.createdUnix),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Action Buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () => _addToRealDebrid(torrent.infohash, torrent.name),
-                              icon: const Icon(Icons.cloud_download_rounded),
-                              label: const Text('Real Debrid'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => _copyMagnetLink(torrent.infohash),
-                              icon: const Icon(Icons.link_rounded),
-                              label: const Text('Magnet'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
                   ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title Row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            torrent.name,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Stats Grid
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        StatChip(
+                          icon: Icons.storage_rounded,
+                          text: Formatters.formatFileSize(torrent.sizeBytes),
+                          color: const Color(0xFF3B82F6), // Blue
+                        ),
+                        StatChip(
+                          icon: Icons.upload_rounded,
+                          text: '${torrent.seeders}',
+                          color: const Color(0xFF10B981), // Emerald
+                        ),
+                        StatChip(
+                          icon: Icons.download_rounded,
+                          text: '${torrent.leechers}',
+                          color: const Color(0xFFF59E0B), // Amber
+                        ),
+                        StatChip(
+                          icon: Icons.check_circle_rounded,
+                          text: '${torrent.completed}',
+                          color: const Color(0xFF8B5CF6), // Violet
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    
+                    // Date
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.schedule_rounded,
+                          color: Colors.white.withValues(alpha: 0.6),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          Formatters.formatDate(torrent.createdUnix),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Action Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _copyMagnetLink(torrent.infohash),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.copy_rounded,
+                                    color: const Color(0xFF6366F1),
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Copy Magnet',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: const Color(0xFF6366F1),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _addToRealDebrid(torrent.infohash, torrent.name),
+                            onLongPress: () {
+                              print('DEBUG: Long press detected!');
+                              _showFileSelectionDialog(torrent.infohash, torrent.name);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.download_rounded,
+                                    color: const Color(0xFF10B981),
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Add to Debrid',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: const Color(0xFF10B981),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Icon(
+                                    Icons.more_horiz,
+                                    color: const Color(0xFF10B981),
+                                    size: 10,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
