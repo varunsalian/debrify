@@ -4,6 +4,7 @@ import '../services/account_service.dart';
 import 'settings/real_debrid_settings_page.dart';
 import '../services/android_native_downloader.dart';
 import 'settings/download_settings_page.dart';
+import '../widgets/shimmer.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -43,8 +44,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(),
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Shimmer(width: 120, height: 18),
+                  SizedBox(height: 8),
+                  Shimmer(width: 220, height: 14),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: const [
+                    Shimmer(width: 36, height: 36, borderRadius: BorderRadius.all(Radius.circular(8))),
+                    SizedBox(width: 12),
+                    Expanded(child: Shimmer(height: 16)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: const [
+                    Shimmer(width: 36, height: 36, borderRadius: BorderRadius.all(Radius.circular(8))),
+                    SizedBox(width: 12),
+                    Expanded(child: Shimmer(height: 16)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
 

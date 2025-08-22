@@ -10,6 +10,7 @@ import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import 'settings_screen.dart';
 import '../services/android_native_downloader.dart';
+import '../widgets/shimmer.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -248,6 +249,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     final res = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
       backgroundColor: const Color(0xFF0B1220),
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
@@ -259,7 +262,9 @@ class _DownloadsScreenState extends State<DownloadsScreen>
             // schedule to avoid calling setState during build
             Future.microtask(() => recompute(setLocal));
           }
-          return Padding(
+          return AnimatedPadding(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
             padding: EdgeInsets.only(bottom: kb),
             child: SafeArea(
               top: false,
@@ -457,7 +462,27 @@ class _DownloadsScreenState extends State<DownloadsScreen>
         ),
         Expanded(
           child: _loading
-              ? const Center(child: CircularProgressIndicator())
+              ? ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: 6,
+                  itemBuilder: (context, index) => Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0B1220),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Shimmer(width: double.infinity, height: 16),
+                        SizedBox(height: 8),
+                        Shimmer(width: 160, height: 14),
+                      ],
+                    ),
+                  ),
+                )
               : TabBarView(
                   controller: _tabController,
                   children: [
@@ -666,14 +691,16 @@ class _DownloadList extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       itemCount: records.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => _DownloadTile(
-        record: records[index],
-        onChanged: onChanged,
-        progress: progressByTaskId[records[index].task.taskId],
-        moveProgress: moveProgressByTaskId[records[index].task.taskId],
-        moveFailed: moveFailed.contains(records[index].task.taskId),
-        rawBytes: rawBytes[records[index].task.taskId]?.$1,
-        rawTotal: rawBytes[records[index].task.taskId]?.$2,
+      itemBuilder: (context, index) => PressableScale(
+        child: _DownloadTile(
+          record: records[index],
+          onChanged: onChanged,
+          progress: progressByTaskId[records[index].task.taskId],
+          moveProgress: moveProgressByTaskId[records[index].task.taskId],
+          moveFailed: moveFailed.contains(records[index].task.taskId),
+          rawBytes: rawBytes[records[index].task.taskId]?.$1,
+          rawTotal: rawBytes[records[index].task.taskId]?.$2,
+        ),
       ),
     );
   }

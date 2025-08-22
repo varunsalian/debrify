@@ -361,6 +361,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   }
 
   Widget _buildEpisodeCard(SeriesEpisode episode, int index, bool isCurrentEpisode, bool isLastPlayed, bool isFinished) {
+    final tag = 'poster-${widget.seriesPlaylist.seriesTitle}-${episode.seriesInfo.season}-${episode.seriesInfo.episode}';
+    final scrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+    final parallax = ((index * 40.0 - scrollOffset) / MediaQuery.of(context).size.width).clamp(-8.0, 8.0);
     return GestureDetector(
       onTap: () {
         print('DEBUG: Card tapped! Episode: ${episode.title}');
@@ -410,29 +413,35 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                   child: SizedBox(
                     height: 120, // Reduced height
                     width: double.infinity,
-                    child: episode.episodeInfo?.poster != null
-                        ? CachedNetworkImage(
-                            imageUrl: episode.episodeInfo!.poster!,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(
-                              color: const Color(0xFF334155),
-                              child: const Center(
-                                child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                    child: Transform.translate(
+                      offset: Offset(parallax, 0),
+                      child: Hero(
+                        tag: tag,
+                        child: episode.episodeInfo?.poster != null
+                            ? CachedNetworkImage(
+                                imageUrl: episode.episodeInfo!.poster!,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: const Color(0xFF334155),
+                                  child: const Center(
+                                    child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: const Color(0xFF334155),
+                                  child: const Center(
+                                    child: Icon(Icons.error, color: Colors.white54, size: 32),
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                color: const Color(0xFF334155),
+                                child: const Center(
+                                  child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                                ),
                               ),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              color: const Color(0xFF334155),
-                              child: const Center(
-                                child: Icon(Icons.error, color: Colors.white54, size: 32),
-                              ),
-                            ),
-                          )
-                        : Container(
-                            color: const Color(0xFF334155),
-                            child: const Center(
-                              child: Icon(Icons.tv, color: Colors.white54, size: 32),
-                            ),
-                          ),
+                      ),
+                    ),
                   ),
                 ),
                 // Current episode indicator
