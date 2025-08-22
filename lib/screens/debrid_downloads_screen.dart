@@ -10,6 +10,7 @@ import '../utils/series_parser.dart';
 import '../widgets/stat_chip.dart';
 import 'video_player_screen.dart';
 import '../services/download_service.dart';
+import 'dart:ui'; // Added for ImageFilter
 
 class DebridDownloadsScreen extends StatefulWidget {
   const DebridDownloadsScreen({super.key});
@@ -527,260 +528,451 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0B1220),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return FutureBuilder<List<Map<String, dynamic>>>(
-          future: DebridService.unrestrictLinks(_apiKey!, torrent.links),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    SizedBox(height: 8),
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Unrestricting download links...'),
-                    SizedBox(height: 8),
-                  ],
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF0F172A).withValues(alpha: 0.98),
+                  const Color(0xFF1E293B).withValues(alpha: 0.98),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border.all(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 30,
+                  offset: const Offset(0, -10),
                 ),
-              );
-            }
-            if (snapshot.hasError) {
-              return Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Failed to unrestrict links'),
-                    const SizedBox(height: 12),
-                    Text(snapshot.error.toString(),
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Close'),
-                    ),
-                  ],
+                BoxShadow(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 0),
                 ),
-              );
-            }
-
-            final unrestrictedLinks = snapshot.data!;
-            bool downloadingAll = false;
-            int addCount = 0;
-            final Set<int> added = {};
-            return StatefulBuilder(
-              builder: (context, setLocal) {
-                final kb = MediaQuery.of(context).viewInsets.bottom;
-                return Padding(
-                  padding: EdgeInsets.only(bottom: kb),
-                  child: SafeArea(
-                    top: false,
+              ],
+            ),
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: DebridService.unrestrictLinks(_apiKey!, torrent.links),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Container(
+                    padding: const EdgeInsets.all(32),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Header
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  showPlayButtons ? Icons.play_circle_fill : Icons.file_download,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'File Options',
-                                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${torrent.filename} • ${unrestrictedLinks.length} files',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              FilledButton.icon(
-                                onPressed: downloadingAll
-                                    ? null
-                                    : () async {
-                                        setLocal(() {
-                                          downloadingAll = true;
-                                          addCount = 0;
-                                        });
-                                        for (var i = 0; i < unrestrictedLinks.length; i++) {
-                                          final link = unrestrictedLinks[i];
-                                          final url = (link['download'] ?? '').toString();
-                                          final fileName = (link['filename'] ?? 'file').toString();
-                                          if (url.isEmpty) continue;
-                                          await DownloadService.instance.enqueueDownload(
-                                            url: url,
-                                            fileName: fileName,
-                                            context: context,
-                                            torrentName: torrent.filename,
-                                          );
-                                          setLocal(() {
-                                            added.add(i);
-                                            addCount = i + 1;
-                                          });
-                                        }
-                                        setLocal(() => downloadingAll = false);
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Added ${unrestrictedLinks.length} downloads')),
-                                          );
-                                        }
-                                      },
-                                icon: downloadingAll
-                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : const Icon(Icons.download_rounded),
-                                label: Text(downloadingAll ? 'Adding $addCount/${unrestrictedLinks.length}…' : 'Download All'),
+                        // Drag handle
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[600],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                blurRadius: 15,
+                                offset: const Offset(0, 8),
                               ),
                             ],
                           ),
+                          child: const CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            strokeWidth: 3,
+                          ),
                         ),
-
-                        if (downloadingAll) ...[
-                          const SizedBox(height: 8),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: LinearProgressIndicator(
-                                minHeight: 6,
-                                value: unrestrictedLinks.isEmpty ? null : (addCount / unrestrictedLinks.length).clamp(0.0, 1.0),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Preparing Files',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Unrestricting download links...',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Container(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Drag handle
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[600],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                                blurRadius: 15,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.error_outline_rounded,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Failed to Load Files',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          snapshot.error.toString(),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[400],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF6366F1),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
                               ),
                             ),
-                          ),
-                        ],
-
-                        const SizedBox(height: 12),
-
-                        // File list
-                        Flexible(
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            shrinkWrap: true,
-                            itemCount: unrestrictedLinks.length,
-                            separatorBuilder: (_, __) => Divider(
-                              height: 1,
-                              color: const Color(0xFF223047),
-                            ),
-                            itemBuilder: (context, index) {
-                              final link = unrestrictedLinks[index];
-                              final fileName = (link['filename'] ?? 'Unknown file').toString();
-                              final fileSize = (link['filesize'] ?? 0) as int;
-                              final mimeType = (link['mimeType'] ?? '').toString();
-                              final isVideo = FileUtils.isVideoMimeType(mimeType);
-                              final isAdded = added.contains(index);
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: (isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B)).withValues(alpha: 0.18),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Icon(isVideo ? Icons.play_arrow : Icons.insert_drive_file,
-                                          color: isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B)),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            fileName,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            Formatters.formatFileSize(fileSize),
-                                            style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    if (showPlayButtons && isVideo) ...[
-                                      OutlinedButton.icon(
-                                        onPressed: () => _playUnrestricted(link),
-                                        icon: const Icon(Icons.play_arrow),
-                                        label: const Text('Play'),
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
-                                    FilledButton.tonalIcon(
-                                      onPressed: isAdded
-                                          ? null
-                                          : () async {
-                                              final url = (link['download'] ?? '').toString();
-                                              if (url.isEmpty) return;
-                                              setLocal(() => added.add(index));
-                                              await DownloadService.instance.enqueueDownload(
-                                                url: url,
-                                                fileName: fileName,
-                                                context: context,
-                                                torrentName: torrent.filename,
-                                              );
-                                            },
-                                      icon: Icon(isAdded ? Icons.check_circle : Icons.download_rounded),
-                                      label: Text(isAdded ? 'Added' : 'Download'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-
-                        // Footer
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              child: const Text('Close'),
+                            child: const Text(
+                              'Close',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ),
+                  );
+                }
+
+                final unrestrictedLinks = snapshot.data!;
+                bool downloadingAll = false;
+                int addCount = 0;
+                final Set<int> added = {};
+                return StatefulBuilder(
+                  builder: (context, setLocal) {
+                    return Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.9,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Minimal header with just drag handle and title
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+                            child: Column(
+                              children: [
+                                // Drag handle
+                                Container(
+                                  width: 40,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[600],
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                // Simple title
+                                Text(
+                                  '${torrent.filename} (${unrestrictedLinks.length} files)',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          if (downloadingAll) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.download_rounded,
+                                        color: Color(0xFF10B981),
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Downloading files...',
+                                        style: TextStyle(
+                                          color: Colors.grey[300],
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Text(
+                                        '$addCount/${unrestrictedLinks.length}',
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: LinearProgressIndicator(
+                                      minHeight: 8,
+                                      value: unrestrictedLinks.isEmpty ? null : (addCount / unrestrictedLinks.length).clamp(0.0, 1.0),
+                                      backgroundColor: Colors.grey[800],
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          // File List - now with more space
+                          Flexible(
+                            child: ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                              shrinkWrap: true,
+                              itemCount: unrestrictedLinks.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final link = unrestrictedLinks[index];
+                                final fileName = (link['filename'] ?? 'Unknown file').toString();
+                                final fileSize = (link['filesize'] ?? 0) as int;
+                                final mimeType = (link['mimeType'] ?? '').toString();
+                                final isVideo = FileUtils.isVideoMimeType(mimeType);
+                                final isAdded = added.contains(index);
+
+                                return _buildModernFileCard(
+                                  fileName: fileName,
+                                  fileSize: fileSize,
+                                  isVideo: isVideo,
+                                  isAdded: isAdded,
+                                  showPlayButtons: showPlayButtons,
+                                  onPlay: () => _playUnrestricted(link),
+                                  onDownload: () async {
+                                    final url = (link['download'] ?? '').toString();
+                                    if (url.isEmpty) return;
+                                    setLocal(() => added.add(index));
+                                    await DownloadService.instance.enqueueDownload(
+                                      url: url,
+                                      fileName: fileName,
+                                      context: context,
+                                      torrentName: torrent.filename,
+                                    );
+                                  },
+                                  index: index,
+                                );
+                              },
+                            ),
+                          ),
+
+                          // Compact footer with Download All and Close buttons
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A).withValues(alpha: 0.5),
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(28),
+                                bottomRight: Radius.circular(28),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                // Download All button
+                                Expanded(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFF10B981), Color(0xFF059669)],
+                                      ),
+                                      borderRadius: BorderRadius.circular(16),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: FilledButton.icon(
+                                      onPressed: downloadingAll
+                                          ? null
+                                          : () async {
+                                              setLocal(() {
+                                                downloadingAll = true;
+                                                addCount = 0;
+                                              });
+                                              for (var i = 0; i < unrestrictedLinks.length; i++) {
+                                                final link = unrestrictedLinks[i];
+                                                final url = (link['download'] ?? '').toString();
+                                                final fileName = (link['filename'] ?? 'file').toString();
+                                                if (url.isEmpty) continue;
+                                                await DownloadService.instance.enqueueDownload(
+                                                  url: url,
+                                                  fileName: fileName,
+                                                  context: context,
+                                                  torrentName: torrent.filename,
+                                                );
+                                                setLocal(() {
+                                                  added.add(i);
+                                                  addCount = i + 1;
+                                                });
+                                              }
+                                              setLocal(() => downloadingAll = false);
+                                              if (mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Row(
+                                                      children: [
+                                                        Container(
+                                                          padding: const EdgeInsets.all(8),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFF10B981),
+                                                            borderRadius: BorderRadius.circular(8),
+                                                          ),
+                                                          child: const Icon(
+                                                            Icons.check,
+                                                            color: Colors.white,
+                                                            size: 16,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 12),
+                                                        Expanded(
+                                                          child: Text(
+                                                            'Added ${unrestrictedLinks.length} downloads',
+                                                            style: const TextStyle(fontWeight: FontWeight.w500),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    backgroundColor: const Color(0xFF1E293B),
+                                                    behavior: SnackBarBehavior.floating,
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                    margin: const EdgeInsets.all(16),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                      icon: downloadingAll
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                            )
+                                          : const Icon(Icons.download_rounded, color: Colors.white),
+                                      label: Text(
+                                        downloadingAll ? 'Adding $addCount/${unrestrictedLinks.length}…' : 'Download All',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Colors.transparent,
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // Close button
+                                SizedBox(
+                                  width: 100,
+                                  child: TextButton(
+                                    onPressed: () => Navigator.of(context).pop(),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Close',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF6366F1),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 );
               },
-            );
-          },
+            ),
+          ),
         );
       },
     );
@@ -2313,6 +2505,231 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         });
       }
     }
+  }
+
+  Widget _buildModernFileCard({
+    required String fileName,
+    required int fileSize,
+    required bool isVideo,
+    required bool isAdded,
+    required bool showPlayButtons,
+    required VoidCallback onPlay,
+    required VoidCallback onDownload,
+    required int index,
+  }) {
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 300 + (index * 50)),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 20 * (1 - value)),
+          child: Opacity(
+            opacity: value,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFF1E293B).withValues(alpha: 0.8),
+                    const Color(0xFF334155).withValues(alpha: 0.4),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFF475569).withValues(alpha: 0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {},
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Top section with icon and file info
+                        Row(
+                          children: [
+                            // Enhanced file icon
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: isVideo 
+                                      ? [const Color(0xFFE50914), const Color(0xFFDC2626)]
+                                      : [const Color(0xFFF59E0B), const Color(0xFFD97706)],
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B)).withValues(alpha: 0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                isVideo ? Icons.play_arrow_rounded : Icons.insert_drive_file_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            
+                            // File details
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    fileName,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF475569).withValues(alpha: 0.3),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: const Color(0xFF64748B).withValues(alpha: 0.3),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      Formatters.formatFileSize(fileSize),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey[300],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        // Bottom section with action buttons
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (showPlayButtons && isVideo) ...[
+                              Container(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: FilledButton.icon(
+                                  onPressed: onPlay,
+                                  icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                                  label: const Text(
+                                    'Play',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: isAdded 
+                                      ? [const Color(0xFF10B981), const Color(0xFF059669)]
+                                      : [const Color(0xFF1E293B), const Color(0xFF334155)],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isAdded 
+                                      ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                                      : const Color(0xFF475569).withValues(alpha: 0.5),
+                                  width: 1,
+                                ),
+                                boxShadow: isAdded ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ] : null,
+                              ),
+                              child: FilledButton.icon(
+                                onPressed: isAdded ? null : onDownload,
+                                icon: Icon(
+                                  isAdded ? Icons.check_circle_rounded : Icons.download_rounded,
+                                  color: isAdded ? Colors.white : Colors.grey[300],
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  isAdded ? 'Added' : 'Download',
+                                  style: TextStyle(
+                                    color: isAdded ? Colors.white : Colors.grey[300],
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
 } 
