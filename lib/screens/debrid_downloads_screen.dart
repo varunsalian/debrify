@@ -705,6 +705,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 bool downloadingAll = false;
                 int addCount = 0;
                 final Set<int> added = {};
+                final Set<int> selectedFiles = {}; // Track selected files
                 return StatefulBuilder(
                   builder: (context, setLocal) {
                     return Container(
@@ -804,12 +805,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                 final mimeType = (link['mimeType'] ?? '').toString();
                                 final isVideo = FileUtils.isVideoMimeType(mimeType);
                                 final isAdded = added.contains(index);
+                                final isSelected = selectedFiles.contains(index);
 
                                 return _buildModernFileCard(
                                   fileName: fileName,
                                   fileSize: fileSize,
                                   isVideo: isVideo,
                                   isAdded: isAdded,
+                                  isSelected: isSelected,
                                   showPlayButtons: showPlayButtons,
                                   onPlay: () => _playUnrestricted(link),
                                   onDownload: () async {
@@ -823,13 +826,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                       torrentName: torrent.filename,
                                     );
                                   },
+                                  onSelect: () {
+                                    setLocal(() {
+                                      if (isSelected) {
+                                        selectedFiles.remove(index);
+                                      } else {
+                                        selectedFiles.add(index);
+                                      }
+                                    });
+                                  },
                                   index: index,
                                 );
                               },
                             ),
                           ),
 
-                          // Compact footer with Download All and Close buttons
+                          // Compact footer with Download All, Download Selected, and Close buttons
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
@@ -839,19 +851,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                 bottomRight: Radius.circular(28),
                               ),
                             ),
-                            child: Row(
+                            child: Column(
                               children: [
-                                // Download All button
-                                Expanded(
-                                  child: Container(
+                                // Download Selected button (only show when files are selected)
+                                if (selectedFiles.isNotEmpty) ...[
+                                  Container(
+                                    width: double.infinity,
                                     decoration: BoxDecoration(
                                       gradient: const LinearGradient(
-                                        colors: [Color(0xFF10B981), Color(0xFF059669)],
+                                        colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
                                       ),
                                       borderRadius: BorderRadius.circular(16),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
                                           blurRadius: 12,
                                           offset: const Offset(0, 6),
                                         ),
@@ -865,8 +878,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                 downloadingAll = true;
                                                 addCount = 0;
                                               });
-                                              for (var i = 0; i < unrestrictedLinks.length; i++) {
-                                                final link = unrestrictedLinks[i];
+                                              final selectedIndices = selectedFiles.toList();
+                                              for (var i = 0; i < selectedIndices.length; i++) {
+                                                final index = selectedIndices[i];
+                                                final link = unrestrictedLinks[index];
                                                 final url = (link['download'] ?? '').toString();
                                                 final fileName = (link['filename'] ?? 'file').toString();
                                                 if (url.isEmpty) continue;
@@ -877,11 +892,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                   torrentName: torrent.filename,
                                                 );
                                                 setLocal(() {
-                                                  added.add(i);
+                                                  added.add(index);
                                                   addCount = i + 1;
                                                 });
                                               }
-                                              setLocal(() => downloadingAll = false);
+                                              setLocal(() {
+                                                downloadingAll = false;
+                                                selectedFiles.clear(); // Clear selection after download
+                                              });
                                               if (mounted) {
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   SnackBar(
@@ -890,7 +908,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                         Container(
                                                           padding: const EdgeInsets.all(8),
                                                           decoration: BoxDecoration(
-                                                            color: const Color(0xFF10B981),
+                                                            color: const Color(0xFF8B5CF6),
                                                             borderRadius: BorderRadius.circular(8),
                                                           ),
                                                           child: const Icon(
@@ -902,7 +920,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                         const SizedBox(width: 12),
                                                         Expanded(
                                                           child: Text(
-                                                            'Added ${unrestrictedLinks.length} downloads',
+                                                            'Added ${selectedIndices.length} selected downloads',
                                                             style: const TextStyle(fontWeight: FontWeight.w500),
                                                           ),
                                                         ),
@@ -924,7 +942,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                             )
                                           : const Icon(Icons.download_rounded, color: Colors.white),
                                       label: Text(
-                                        downloadingAll ? 'Adding $addCount/${unrestrictedLinks.length}…' : 'Download All',
+                                        downloadingAll 
+                                            ? 'Adding $addCount/${selectedFiles.length}…' 
+                                            : 'Download Selected (${selectedFiles.length})',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.w600,
@@ -939,28 +959,133 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                       ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                // Close button
-                                SizedBox(
-                                  width: 100,
-                                  child: TextButton(
-                                    onPressed: () => Navigator.of(context).pop(),
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
+                                  const SizedBox(height: 12),
+                                ],
+                                // Bottom row with Download All and Close buttons
+                                Row(
+                                  children: [
+                                    // Download All button
+                                    Expanded(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [Color(0xFF10B981), Color(0xFF059669)],
+                                          ),
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 6),
+                                            ),
+                                          ],
+                                        ),
+                                        child: FilledButton.icon(
+                                          onPressed: downloadingAll
+                                              ? null
+                                              : () async {
+                                                  setLocal(() {
+                                                    downloadingAll = true;
+                                                    addCount = 0;
+                                                  });
+                                                  for (var i = 0; i < unrestrictedLinks.length; i++) {
+                                                    final link = unrestrictedLinks[i];
+                                                    final url = (link['download'] ?? '').toString();
+                                                    final fileName = (link['filename'] ?? 'file').toString();
+                                                    if (url.isEmpty) continue;
+                                                    await DownloadService.instance.enqueueDownload(
+                                                      url: url,
+                                                      fileName: fileName,
+                                                      context: context,
+                                                      torrentName: torrent.filename,
+                                                    );
+                                                    setLocal(() {
+                                                      added.add(i);
+                                                      addCount = i + 1;
+                                                    });
+                                                  }
+                                                  setLocal(() => downloadingAll = false);
+                                                  if (mounted) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(
+                                                        content: Row(
+                                                          children: [
+                                                            Container(
+                                                              padding: const EdgeInsets.all(8),
+                                                              decoration: BoxDecoration(
+                                                                color: const Color(0xFF10B981),
+                                                                borderRadius: BorderRadius.circular(8),
+                                                              ),
+                                                              child: const Icon(
+                                                                Icons.check,
+                                                                color: Colors.white,
+                                                                size: 16,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 12),
+                                                            Expanded(
+                                                              child: Text(
+                                                                'Added ${unrestrictedLinks.length} downloads',
+                                                                style: const TextStyle(fontWeight: FontWeight.w500),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        backgroundColor: const Color(0xFF1E293B),
+                                                        behavior: SnackBarBehavior.floating,
+                                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                        margin: const EdgeInsets.all(16),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                          icon: downloadingAll
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                                )
+                                              : const Icon(Icons.download_rounded, color: Colors.white),
+                                          label: Text(
+                                            downloadingAll ? 'Adding $addCount/${unrestrictedLinks.length}…' : 'Download All',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    child: const Text(
-                                      'Close',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF6366F1),
+                                    const SizedBox(width: 12),
+                                    // Close button
+                                    SizedBox(
+                                      width: 100,
+                                      child: TextButton(
+                                        onPressed: () => Navigator.of(context).pop(),
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Close',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF6366F1),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -2512,9 +2637,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     required int fileSize,
     required bool isVideo,
     required bool isAdded,
+    required bool isSelected,
     required bool showPlayButtons,
     required VoidCallback onPlay,
     required VoidCallback onDownload,
+    required VoidCallback onSelect,
     required int index,
   }) {
     return TweenAnimationBuilder<double>(
@@ -2537,12 +2664,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 ),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: const Color(0xFF475569).withValues(alpha: 0.3),
-                  width: 1,
+                  color: isSelected 
+                      ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
+                      : const Color(0xFF475569).withValues(alpha: 0.3),
+                  width: isSelected ? 2 : 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
+                    color: isSelected 
+                        ? const Color(0xFF8B5CF6).withValues(alpha: 0.2)
+                        : Colors.black.withValues(alpha: 0.2),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -2551,14 +2682,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () {},
+                  onTap: onSelect, // Make entire card selectable
                   borderRadius: BorderRadius.circular(20),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Top section with icon and file info
+                        // Top section with icon, file info, and selection checkbox
                         Row(
                           children: [
                             // Enhanced file icon
@@ -2625,6 +2756,38 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                   ),
                                 ],
                               ),
+                            ),
+                            
+                            // Selection checkbox
+                            Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isSelected 
+                                    ? const Color(0xFF8B5CF6)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: isSelected 
+                                      ? const Color(0xFF8B5CF6)
+                                      : Colors.grey[600]!,
+                                  width: 2,
+                                ),
+                                boxShadow: isSelected ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ] : null,
+                              ),
+                              child: isSelected
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: Colors.white,
+                                      size: 16,
+                                    )
+                                  : null,
                             ),
                           ],
                         ),
