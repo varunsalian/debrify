@@ -446,7 +446,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 									const Text('Unrestricting video...', style: TextStyle(color: Colors.white)),
 								],
 							),
-							backgroundColor: const Color(0xFF1E293B),
+							backgroundColor: Theme.of(context).colorScheme.surface,
 							duration: const Duration(seconds: 2),
 						),
 					);
@@ -462,7 +462,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					ScaffoldMessenger.of(context).showSnackBar(
 						SnackBar(
 							content: Text('Failed to unrestrict video: ${e.toString()}', style: const TextStyle(color: Colors.white)),
-							backgroundColor: const Color(0xFFEF4444),
+							backgroundColor: Theme.of(context).colorScheme.error,
 							duration: const Duration(seconds: 3),
 						),
 					);

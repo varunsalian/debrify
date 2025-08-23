@@ -437,7 +437,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
         Container(
           margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
+            color: Theme.of(context).colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: TabBar(
@@ -449,11 +449,11 @@ class _DownloadsScreenState extends State<DownloadsScreen>
             labelPadding: const EdgeInsets.symmetric(vertical: 10),
             overlayColor: MaterialStateProperty.all(Colors.transparent),
             indicator: BoxDecoration(
-              color: const Color(0xFF6366F1),
+              color: Theme.of(context).colorScheme.primary,
               borderRadius: BorderRadius.circular(10),
             ),
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
+            labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
+            unselectedLabelColor: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
             tabs: const [
               Tab(text: 'In Progress'),
               Tab(text: 'Finished'),
@@ -469,9 +469,9 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0B1220),
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF334155)),
+                      border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,6 +510,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           child: Align(
             alignment: Alignment.bottomRight,
             child: FloatingActionButton.extended(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
               onPressed: () async {
                 // Check clipboard for download links first
                 final data = await Clipboard.getData('text/plain');

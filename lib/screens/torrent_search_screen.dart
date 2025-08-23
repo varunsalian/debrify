@@ -130,12 +130,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981),
+                color: Theme.of(context).colorScheme.tertiary,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.check,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onTertiary,
                 size: 16,
               ),
             ),
@@ -148,7 +148,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -225,7 +225,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           child: ScaleTransition(
             scale: Tween(begin: 0.95, end: 1.0).animate(curved),
             child: Dialog(
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: Theme.of(context).colorScheme.surface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -235,38 +235,36 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.download_rounded,
-                        color: Color(0xFF6366F1),
+                        color: Theme.of(context).colorScheme.primary,
                         size: 32,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Adding to Real Debrid...',
-                      style: TextStyle(
-                        fontSize: 18,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       torrentName,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.7),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 20),
-                    const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
                     ),
                   ],
                 ),
@@ -1761,13 +1759,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF020617), // Slate 950
-            Color(0xFF0F172A), // Slate 900
+            Theme.of(context).colorScheme.surface,
+            Theme.of(context).colorScheme.surfaceVariant,
           ],
         ),
       ),
@@ -1780,12 +1778,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               margin: EdgeInsets.all(_isSearchExpanded ? 4 : 8),
               padding: EdgeInsets.all(_isSearchExpanded ? 8 : 12),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Color(0xFF1E293B), // Slate 800
-                    Color(0xFF334155), // Slate 700
+                    Theme.of(context).colorScheme.primaryContainer,
+                    Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.8),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(_isSearchExpanded ? 12 : 16),
@@ -1809,30 +1807,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.search_rounded,
-                              color: Color(0xFF6366F1),
+                              color: Theme.of(context).colorScheme.primary,
                               size: 24,
                             ),
                           ),
                           const SizedBox(height: 10),
-                          const Text(
+                          Text(
                             'Search Torrents',
-                            style: TextStyle(
-                              fontSize: 18,
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Find and download your favorite content',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.7),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -1897,7 +1893,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               borderSide: BorderSide.none,
                             ),
                             filled: true,
-                            fillColor: const Color(0xFF334155),
+                            fillColor: Theme.of(context).colorScheme.surfaceVariant,
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 10,
@@ -1936,15 +1932,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           }
                         }
                       },
-                      style: const TextStyle(color: Colors.white),
-                      dropdownColor: const Color(0xFF1E293B),
-                      decoration: const InputDecoration(
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                      dropdownColor: Theme.of(context).colorScheme.surface,
+                      decoration: InputDecoration(
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.all(Radius.circular(12)),
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: Color(0xFF334155),
+                        fillColor: Theme.of(context).colorScheme.surfaceVariant,
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                         isDense: false,
                       ),
@@ -1956,12 +1952,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.search_rounded,
-                                  color: Color(0xFF6366F1),
+                                  color: Theme.of(context).colorScheme.primary,
                                   size: 16,
                                 ),
                               ),
@@ -1977,12 +1973,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                                  color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.sailing_rounded,
-                                  color: Color(0xFFF59E0B),
+                                  color: Theme.of(context).colorScheme.secondary,
                                   size: 16,
                                 ),
                               ),
@@ -2011,14 +2007,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF6366F1),
-                          foregroundColor: Colors.white,
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                           elevation: 8,
-                          shadowColor: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                          shadowColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
                         ),
                       ),
                     ),

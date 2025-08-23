@@ -1226,7 +1226,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
+              color: Theme.of(context).colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(12),
             ),
             child: TabBar(
@@ -1238,11 +1238,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               labelPadding: const EdgeInsets.symmetric(vertical: 10),
               overlayColor: MaterialStateProperty.all(Colors.transparent),
               indicator: BoxDecoration(
-                color: const Color(0xFF6366F1),
+                color: Theme.of(context).colorScheme.primary,
                 borderRadius: BorderRadius.circular(10),
               ),
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
+              labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
+              unselectedLabelColor: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
               tabs: const [
                 Tab(text: 'Torrent Downloads'),
                 Tab(text: 'Downloads'),
@@ -1264,8 +1264,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       ),
       floatingActionButton: _selectedIndex == 0 ? FloatingActionButton(
         onPressed: _showAddMagnetDialog,
-        backgroundColor: const Color(0xFF6366F1),
-        child: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        child: const Icon(Icons.add),
       ) : null,
     );
   }

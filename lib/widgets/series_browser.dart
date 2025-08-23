@@ -384,20 +384,20 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         height: 280, // Further reduced height to prevent overflow
         decoration: BoxDecoration(
           color: isCurrentEpisode 
-            ? const Color(0xFF6366F1).withOpacity(0.2) // Current episode - indigo background
+            ? Theme.of(context).colorScheme.primary.withOpacity(0.2) // Current episode - primary background
             : isLastPlayed 
-              ? const Color(0xFF10B981).withOpacity(0.1) // Last played - emerald background
+              ? Theme.of(context).colorScheme.tertiary.withOpacity(0.1) // Last played - tertiary background
               : isFinished
-                ? const Color(0xFF059669).withOpacity(0.1) // Finished - emerald background
-                : const Color(0xFF1E293B), // Normal - slate background
+                ? Theme.of(context).colorScheme.tertiary.withOpacity(0.1) // Finished - tertiary background
+                : Theme.of(context).colorScheme.surface, // Normal - surface background
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCurrentEpisode 
-              ? const Color(0xFF6366F1) // Current episode - indigo border
+              ? Theme.of(context).colorScheme.primary // Current episode - primary border
               : isLastPlayed 
-                ? const Color(0xFF10B981) // Last played - emerald border
+                ? Theme.of(context).colorScheme.tertiary // Last played - tertiary border
                 : isFinished
-                  ? const Color(0xFF059669) // Finished - emerald border
+                  ? Theme.of(context).colorScheme.tertiary // Finished - tertiary border
                   : Colors.transparent,
             width: 2,
           ),
@@ -422,22 +422,22 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                                 imageUrl: episode.episodeInfo!.poster!,
                                 fit: BoxFit.cover,
                                 placeholder: (context, url) => Container(
-                                  color: const Color(0xFF334155),
-                                  child: const Center(
-                                    child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                                  color: Theme.of(context).colorScheme.surfaceVariant,
+                                  child: Center(
+                                    child: Icon(Icons.tv, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 32),
                                   ),
                                 ),
                                 errorWidget: (context, url, error) => Container(
-                                  color: const Color(0xFF334155),
-                                  child: const Center(
-                                    child: Icon(Icons.error, color: Colors.white54, size: 32),
+                                  color: Theme.of(context).colorScheme.surfaceVariant,
+                                  child: Center(
+                                    child: Icon(Icons.error, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 32),
                                   ),
                                 ),
                               )
                             : Container(
-                                color: const Color(0xFF334155),
-                                child: const Center(
-                                  child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                                color: Theme.of(context).colorScheme.surfaceVariant,
+                                child: Center(
+                                  child: Icon(Icons.tv, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 32),
                                 ),
                               ),
                       ),
@@ -452,24 +452,24 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6366F1),
+                        color: Theme.of(context).colorScheme.primary,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.play_arrow, color: Colors.white, size: 16),
-                          SizedBox(width: 4),
-                          Text(
-                            'NOW',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                                              child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.play_arrow, color: Theme.of(context).colorScheme.onPrimary, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              'NOW',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onPrimary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                     ),
                   ),
                 // Last played indicator
@@ -480,18 +480,18 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF10B981),
+                        color: Theme.of(context).colorScheme.tertiary,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.history, color: Colors.white, size: 16),
-                          SizedBox(width: 4),
+                          Icon(Icons.history, color: Theme.of(context).colorScheme.onTertiary, size: 16),
+                          const SizedBox(width: 4),
                           Text(
                             'LAST',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Theme.of(context).colorScheme.onTertiary,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
@@ -508,18 +508,18 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF059669),
+                        color: Theme.of(context).colorScheme.tertiary,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.check_circle, color: Colors.white, size: 16),
-                          SizedBox(width: 4),
+                          Icon(Icons.check_circle, color: Theme.of(context).colorScheme.onTertiary, size: 16),
+                          const SizedBox(width: 4),
                           Text(
                             'DONE',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Theme.of(context).colorScheme.onTertiary,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
@@ -541,10 +541,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     // Episode Title - Compact
                     Text(
                       episode.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13, // Slightly smaller font
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -559,15 +558,15 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.blue.withValues(alpha: 0.2),
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             episode.seasonEpisodeString.isNotEmpty
                                 ? episode.seasonEpisodeString
                                 : 'Episode ${index + 1}',
-                            style: const TextStyle(
-                              color: Colors.blue,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),
