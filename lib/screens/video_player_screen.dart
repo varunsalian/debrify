@@ -80,6 +80,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Offset? _lastTapLocal;
 	bool _isManualEpisodeSelection = false; // Track if episode was manually selected
 	bool _isAutoAdvancing = false; // Track if episode is auto-advancing
+	Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
 
 	// media_kit state
 	bool _isReady = false;
@@ -136,6 +137,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		int initialIndex = 0;
 		
 		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+			for (int i = 0; i < widget.playlist!.length; i++) {
+				final entry = widget.playlist![i];
+			}
+			
 			// Check if this is a series and we should find the first episode by season/episode
 			final seriesPlaylist = widget._seriesPlaylist;
 			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
@@ -143,45 +148,73 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
 				if (lastEpisode != null) {
 					initialIndex = lastEpisode['originalIndex'] as int;
-					print('Restoring last played episode at index $initialIndex');
 				} else {
 					// Find the first episode (lowest season, lowest episode)
 					final firstEpisodeIndex = seriesPlaylist.getFirstEpisodeOriginalIndex();
 					if (firstEpisodeIndex != -1) {
 						initialIndex = firstEpisodeIndex;
-						print('Using first episode at index $initialIndex');
 					} else {
-						print('Failed to find first episode, using startIndex: ${widget.startIndex ?? 0}');
 						initialIndex = widget.startIndex ?? 0;
 					}
 				}
 			} else {
-				// Not a series or no series playlist, use the provided startIndex
-				initialIndex = widget.startIndex ?? 0;
-				print('Using provided startIndex: $initialIndex');
-			}
-			
-			// Get the initial URL from the determined index
-			if (initialIndex < widget.playlist!.length) {
-				final entry = widget.playlist![initialIndex];
-				if (entry.url.isNotEmpty) {
-					initialUrl = entry.url;
-				} else if (entry.restrictedLink != null && entry.apiKey != null) {
-					try {
-						final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
-						initialUrl = unrestrictResult['download'] ?? '';
-					} catch (e) {
-						print('Failed to unrestrict initial episode: $e');
-						// Only fall back to widget.videoUrl if unrestriction fails
-						if (widget.videoUrl.isNotEmpty) {
-							initialUrl = widget.videoUrl;
+				// For non-series playlists, try to restore the last played video
+				if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+					// Try to find the last played video by checking each playlist entry
+					int lastPlayedIndex = -1;
+					Map<String, dynamic>? lastPlayedState;
+					
+					for (int i = 0; i < widget.playlist!.length; i++) {
+						final entry = widget.playlist![i];
+						String videoFilename = entry.title;
+						
+						if (videoFilename.isNotEmpty) {
+							// Generate stable hash from filename
+							final filenameHash = _generateFilenameHash(videoFilename);
+							
+							final state = await StorageService.getVideoPlaybackState(videoTitle: filenameHash);
+							if (state != null) {
+								final updatedAt = state['updatedAt'] as int? ?? 0;
+								if (lastPlayedState == null || updatedAt > (lastPlayedState['updatedAt'] as int? ?? 0)) {
+									lastPlayedState = state;
+									lastPlayedIndex = i;
+								}
+							}
 						}
 					}
+					
+					if (lastPlayedIndex != -1) {
+						initialIndex = lastPlayedIndex;
+					} else {
+						initialIndex = widget.startIndex ?? 0;
+					}
 				} else {
-					// Only fall back to widget.videoUrl if no other option
+					// Not a series or no series playlist, use the provided startIndex
+					initialIndex = widget.startIndex ?? 0;
+				}
+			}
+		} else {
+		}
+		
+		// Get the initial URL from the determined index
+		if (widget.playlist != null && widget.playlist!.isNotEmpty && initialIndex < widget.playlist!.length) {
+			final entry = widget.playlist![initialIndex];
+			if (entry.url.isNotEmpty) {
+				initialUrl = entry.url;
+			} else if (entry.restrictedLink != null && entry.apiKey != null) {
+				try {
+					final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
+					initialUrl = unrestrictResult['download'] ?? '';
+				} catch (e) {
+					// Only fall back to widget.videoUrl if unrestriction fails
 					if (widget.videoUrl.isNotEmpty) {
 						initialUrl = widget.videoUrl;
 					}
+				}
+			} else {
+				// Only fall back to widget.videoUrl if no other option
+				if (widget.videoUrl.isNotEmpty) {
+					initialUrl = widget.videoUrl;
 				}
 			}
 		}
@@ -234,18 +267,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_preloadEpisodeInfo();
 	}
 
-	/// Wait for the video to be ready and duration to be available
-	Future<void> _waitForVideoReady() async {
-		// Wait up to 10 seconds for the video to be ready
-		for (int i = 0; i < 100; i++) {
-			if (_duration > Duration.zero) {
-				print('DEBUG: Video ready after ${i * 100}ms, duration: ${_duration.inSeconds}s');
-				return;
+		// Wait for the video to be ready and duration to be available
+		Future<void> _waitForVideoReady() async {
+			// Wait up to 10 seconds for the video to be ready
+			for (int i = 0; i < 100; i++) {
+				if (_duration > Duration.zero) {
+					return;
+				}
+				await Future.delayed(const Duration(milliseconds: 100));
 			}
-			await Future.delayed(const Duration(milliseconds: 100));
 		}
-		print('DEBUG: Video not ready after 10 seconds, proceeding anyway');
-	}
+		
+		// Wait for duration to be available before attempting position restoration
+		Future<void> _waitForDuration() async {
+			// Wait up to 20 seconds for duration to be available
+			for (int i = 0; i < 200; i++) {
+				if (_duration > Duration.zero) {
+					return;
+				}
+				await Future.delayed(const Duration(milliseconds: 100));
+			}
+		}
 
 	/// Get the last played episode for a series
 	Future<Map<String, dynamic>?> _getLastPlayedEpisode(SeriesPlaylist seriesPlaylist) async {
@@ -515,6 +557,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_saveResume();
 		_hideTimer?.cancel();
 		_autosaveTimer?.cancel();
+		_manualSelectionResetTimer?.cancel();
 		_controlsVisible.dispose();
 		_seekHud.dispose();
 		_verticalHud.dispose();
@@ -543,32 +586,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		final url = (widget.playlist != null && widget.playlist!.isNotEmpty)
 			? widget.playlist![_currentIndex].url
 			: widget.videoUrl;
+		
 		final uri = Uri.tryParse(url);
-		if (uri == null) return widget.videoUrl;
+		if (uri == null) {
+			return widget.videoUrl;
+		}
 		final base = uri.replace(queryParameters: {});
-		return base.toString();
+		final resumeKey = base.toString();
+		return resumeKey;
 	}
 
 	Future<void> _maybeRestoreResume() async {
 		// If this is a manual episode selection or auto-advancing, don't restore position
 		if (_isManualEpisodeSelection || _isAutoAdvancing) {
-			_isManualEpisodeSelection = false; // Reset the flag
 			_isAutoAdvancing = false; // Reset the flag
+			// Don't reset _isManualEpisodeSelection here - let it be reset after a delay
 			return;
 		}
 		
 		// Try enhanced playback state first
 		final enhancedData = await _getEnhancedPlaybackState();
 		if (enhancedData != null) {
+			// Wait for duration to be available before attempting position restoration
+			await _waitForDuration();
+			
 			final posMs = (enhancedData['positionMs'] ?? 0) as int;
 			final speed = (enhancedData['speed'] ?? 1.0) as double;
 			final aspect = (enhancedData['aspect'] ?? 'contain') as String;
 			final position = Duration(milliseconds: posMs);
 			final dur = _duration;
 			
-			if (dur > Duration.zero && position > const Duration(seconds: 10) && position < dur * 0.9) {
+			if (dur > Duration.zero && position > const Duration(seconds: 2) && position < dur * 0.9) {
 				await _player.seek(position);
-				print('Restored position: ${position.inSeconds}s');
 			}
 			
 			// restore speed
@@ -611,8 +660,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			}
 			return;
 		}
-		
 		// Fallback to legacy resume system
+		// Wait for duration to be available before attempting position restoration
+		await _waitForDuration();
 		final data = await StorageService.getVideoResume(_resumeKey);
 		if (data == null) {
 			return;
@@ -623,9 +673,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		final aspect = (data['aspect'] ?? 'contain') as String;
 		final position = Duration(milliseconds: posMs);
 		final dur = _duration;
-		if (dur > Duration.zero && position > const Duration(seconds: 10) && position < dur * 0.9) {
+		
+		if (dur > Duration.zero && position > const Duration(seconds: 2) && position < dur * 0.9) {
 			await _player.seek(position);
 		}
+		
 		// restore speed
 		if (speed != 1.0) {
 			await _player.setRate(speed);
@@ -679,33 +731,71 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					
 					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
 						// Only restore position for the exact same episode
-						return await StorageService.getSeriesPlaybackState(
+						final playbackState = await StorageService.getSeriesPlaybackState(
 							seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
 							season: currentEpisode.seriesInfo.season!,
 							episode: currentEpisode.seriesInfo.episode!,
 						);
+						
+						return playbackState;
 					}
 				}
 			} else {
-				// For non-series content, use the title
+				
+				// For non-series content, check if we have a playlist
+				if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+					// Get the current video filename for state checking
+					String currentVideoFilename = '';
+					if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+						final entry = widget.playlist![_currentIndex];
+						currentVideoFilename = entry.title;
+					}
+					
+					if (currentVideoFilename.isNotEmpty) {
+						// Generate stable hash from filename
+						final filenameHash = _generateFilenameHash(currentVideoFilename);
+						
+						// Try to get playback state for this specific video filename hash
+						final videoState = await StorageService.getVideoPlaybackState(
+							videoTitle: filenameHash, // Use filename hash as the key for specific video tracking
+						);
+						
+						if (videoState != null) {
+							return videoState;
+						}
+					}
+				}
+				
+				// Fallback to collection-based state (legacy behavior)
 				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+				
 				final videoState = await StorageService.getVideoPlaybackState(
 					videoTitle: videoTitle,
 				);
+				
 				return videoState;
 			}
 		} catch (e) {
-			print('Error getting enhanced playback state: $e');
 		}
 		return null;
 	}
 
 	Future<void> _saveResume({bool debounced = false}) async {
-		if (!_isReady) return;
+		if (!_isReady) {
+			return;
+		}
+		
+		// If this is a manual episode selection and it's been less than 30 seconds, skip saving
+		// This gives the user time to seek to where they want
+		if (_isManualEpisodeSelection && debounced) {
+			return;
+		}
 		
 		final pos = _position;
 		final dur = _duration;
-		if (dur <= Duration.zero) return;
+		if (dur <= Duration.zero) {
+			return;
+		}
 		
 		final aspectStr = () {
 			switch (_aspectMode) {
@@ -758,23 +848,57 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				}
 			} else {
 				// For non-series content
-				final currentUrl = (widget.playlist != null && widget.playlist!.isNotEmpty)
-					? widget.playlist![_currentIndex].url
-					: widget.videoUrl;
+				if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+					// Get the current video filename and entry for state saving
+					String currentVideoFilename = '';
+					PlaylistEntry? currentEntry;
+					if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+						currentEntry = widget.playlist![_currentIndex];
+						currentVideoFilename = currentEntry.title;
+					}
 					
-				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
-				
-				await StorageService.saveVideoPlaybackState(
-					videoTitle: videoTitle,
-					videoUrl: currentUrl,
-					positionMs: pos.inMilliseconds,
-					durationMs: dur.inMilliseconds,
-					speed: _playbackSpeed,
-					aspect: aspectStr,
-				);
+					if (currentVideoFilename.isNotEmpty && currentEntry != null) {
+						// Generate stable hash from filename
+						final filenameHash = _generateFilenameHash(currentVideoFilename);
+						
+						// Get the current video URL for the videoUrl field (still needed for some functionality)
+						String currentVideoUrl = '';
+						if (currentEntry.url.isNotEmpty) {
+							currentVideoUrl = currentEntry.url;
+						} else if (currentEntry.restrictedLink != null && currentEntry.apiKey != null) {
+							try {
+								final unrestrictResult = await DebridService.unrestrictLink(currentEntry.apiKey!, currentEntry.restrictedLink!);
+								currentVideoUrl = unrestrictResult['download'] ?? '';
+							} catch (e) {
+							}
+						}
+						
+						// Save state for this specific video filename hash
+						await StorageService.saveVideoPlaybackState(
+							videoTitle: filenameHash, // Use filename hash as the key for specific video tracking
+							videoUrl: currentVideoUrl,
+							positionMs: pos.inMilliseconds,
+							durationMs: dur.inMilliseconds,
+							speed: _playbackSpeed,
+							aspect: aspectStr,
+						);
+					}
+				} else {
+					// Single video file (no playlist)
+					final currentUrl = widget.videoUrl;
+					final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+					
+					await StorageService.saveVideoPlaybackState(
+						videoTitle: videoTitle,
+						videoUrl: currentUrl,
+						positionMs: pos.inMilliseconds,
+						durationMs: dur.inMilliseconds,
+						speed: _playbackSpeed,
+						aspect: aspectStr,
+					);
+				}
 			}
 		} catch (e) {
-			print('Error saving enhanced playback state: $e');
 		}
 		
 		// Also save to legacy system for backward compatibility
@@ -828,7 +952,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		);
 		setState(() {});
 		Future.delayed(const Duration(milliseconds: 450), () {
-			if (mounted) setState(() => _ripple = null);
+			if (mounted) setState(() =>
+			 _ripple = null);
 		});
 	}
 
@@ -1137,6 +1262,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								if (originalIndex != -1) {
 									// Mark this as a manual episode selection
 									_isManualEpisodeSelection = true;
+									// Reset the flag after 30 seconds to allow position saving
+									_manualSelectionResetTimer?.cancel();
+									_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+										_isManualEpisodeSelection = false;
+									});
 									await _loadPlaylistIndex(originalIndex, autoplay: true);
 								} else {
 									print('Failed to find original index for S${season}E${episode}');
@@ -1192,6 +1322,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 											Navigator.of(context).pop();
 											// Mark this as a manual episode selection
 											_isManualEpisodeSelection = true;
+											// Reset the flag after 30 seconds to allow position saving
+											_manualSelectionResetTimer?.cancel();
+											_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+												_isManualEpisodeSelection = false;
+											});
 											await _loadPlaylistIndex(index, autoplay: true);
 										},
 										title: Row(
@@ -2141,5 +2276,14 @@ extension on _VideoPlayerScreenState {
 		} catch (e) {
 			print('Error saving track preferences: $e');
 		}
+	}
+
+	/// Generate a stable hash from filename for non-series playlist state tracking
+	String _generateFilenameHash(String filename) {
+		// Remove file extension and normalize
+		final nameWithoutExt = filename.replaceAll(RegExp(r'\.[^.]*$'), '');
+		// Create a simple hash (we could use a proper hash function, but this is sufficient for our needs)
+		final hash = nameWithoutExt.hashCode.toString();
+		return hash;
 	}
 } 
