@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
 import '../services/episode_info_service.dart';
@@ -226,52 +227,71 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     print('DEBUG: episodes: ${episodes.map((e) => e.title).toList()}');
     
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85, // Reduced to 85% for more breathing room
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.grey[900]!,
-            Colors.black,
-            Colors.grey[800]!,
-          ],
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).colorScheme.surface,
+              Theme.of(context).colorScheme.surfaceVariant,
+              Theme.of(context).colorScheme.surface,
+            ],
+          ),
         ),
-      ),
       child: Column(
         children: [
-          // Top Controls Bar - Made more compact
+          // Top Controls Bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Row(
               children: [
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                  icon: Icon(
+                    Icons.close, 
+                    color: Theme.of(context).colorScheme.onSurface, 
+                    size: 20
+                  ),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  constraints: const BoxConstraints(
+                    minWidth: 40, 
+                    minHeight: 40
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
+                      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3)
+                      ),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<int>(
                         value: _selectedSeason,
-                        dropdownColor: Colors.grey[850],
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 20),
+                        dropdownColor: Theme.of(context).colorScheme.surface,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface, 
+                          fontSize: 12
+                        ),
+                        icon: Icon(
+                          Icons.keyboard_arrow_down, 
+                          color: Theme.of(context).colorScheme.onSurface, 
+                          size: 16
+                        ),
                         items: widget.seriesPlaylist.seasons.map((season) {
                           return DropdownMenuItem(
                             value: season.seasonNumber,
                             child: Text(
                               'Season ${season.seasonNumber}',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
                             ),
                           );
                         }).toList(),
@@ -296,20 +316,26 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                 ),
                 const SizedBox(width: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
-                    color: _tvmazeAvailable ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
+                    color: _tvmazeAvailable 
+                        ? Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.2) 
+                        : Theme.of(context).colorScheme.error.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: _tvmazeAvailable ? Colors.green : Colors.red,
+                      color: _tvmazeAvailable 
+                          ? Theme.of(context).colorScheme.tertiary 
+                          : Theme.of(context).colorScheme.error,
                       width: 1,
                     ),
                   ),
                   child: Text(
                     _tvmazeAvailable ? 'TVMaze ✓' : 'TVMaze ✗',
                     style: TextStyle(
-                      color: _tvmazeAvailable ? Colors.green : Colors.red,
-                      fontSize: 10,
+                      color: _tvmazeAvailable 
+                          ? Theme.of(context).colorScheme.tertiary 
+                          : Theme.of(context).colorScheme.error,
+                      fontSize: 9,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -318,40 +344,40 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
             ),
           ),
           
-          // Horizontal Episode Carousel - Takes most of the space
+          // Horizontal Episode Carousel
           Expanded(
             child: episodes.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'No episodes found',
-                      style: TextStyle(color: Colors.white70, fontSize: 18),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant, 
+                        fontSize: 18
+                      ),
                     ),
                   )
-                : ListView.builder(
+                : GridView.builder(
                     controller: _scrollController,
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    padding: const EdgeInsets.all(12),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 0.7,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
                     itemCount: episodes.length,
                     itemBuilder: (context, index) {
                       final episode = episodes[index];
-                      // Fix: Compare original indices instead of sorted indices
                       final isCurrentEpisode = episode.originalIndex == widget.currentEpisodeIndex;
-                      
-                      // Check if this is the last played episode
                       final isLastPlayed = _lastPlayedEpisode != null &&
                           episode.seriesInfo.season == _lastPlayedEpisode!['season'] &&
                           episode.seriesInfo.episode == _lastPlayedEpisode!['episode'];
-                      
-                      // Check if this episode is finished
                       final isFinished = episode.seriesInfo.season != null && 
                           episode.seriesInfo.episode != null &&
                           _finishedEpisodes[episode.seriesInfo.season.toString()]?.contains(episode.seriesInfo.episode) == true;
                       
-                      return Container(
-                        width: MediaQuery.of(context).size.width * 0.42, // Slightly smaller for better fit
-                        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), // Reduced vertical margin
-                        child: _buildEpisodeCard(episode, index, isCurrentEpisode, isLastPlayed, isFinished),
-                      );
+                      return _buildEpisodeCard(episode, index, isCurrentEpisode, isLastPlayed, isFinished);
                     },
                   ),
           ),
@@ -362,201 +388,223 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
   Widget _buildEpisodeCard(SeriesEpisode episode, int index, bool isCurrentEpisode, bool isLastPlayed, bool isFinished) {
     final tag = 'poster-${widget.seriesPlaylist.seriesTitle}-${episode.seriesInfo.season}-${episode.seriesInfo.episode}';
-    final scrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
-    final parallax = ((index * 40.0 - scrollOffset) / MediaQuery.of(context).size.width).clamp(-8.0, 8.0);
+    
     return GestureDetector(
       onTap: () {
         print('DEBUG: Card tapped! Episode: ${episode.title}');
         
-        // Use season/episode directly instead of finding index
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
           print('Playing episode S${episode.seriesInfo.season}E${episode.seriesInfo.episode} (${episode.title})');
-          // Close the modal bottom sheet first
           Navigator.of(context).pop();
-          // Then trigger the episode selection with season/episode
           widget.onEpisodeSelected(episode.seriesInfo.season!, episode.seriesInfo.episode!);
         } else {
           print('Episode missing season/episode info: ${episode.title}');
         }
       },
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // Reduced vertical margin
-        height: 280, // Further reduced height to prevent overflow
         decoration: BoxDecoration(
           color: isCurrentEpisode 
-            ? Theme.of(context).colorScheme.primary.withOpacity(0.2) // Current episode - primary background
+            ? Theme.of(context).colorScheme.primary.withOpacity(0.2)
             : isLastPlayed 
-              ? Theme.of(context).colorScheme.tertiary.withOpacity(0.1) // Last played - tertiary background
+              ? Theme.of(context).colorScheme.tertiary.withOpacity(0.1)
               : isFinished
-                ? Theme.of(context).colorScheme.tertiary.withOpacity(0.1) // Finished - tertiary background
-                : Theme.of(context).colorScheme.surface, // Normal - surface background
+                ? Theme.of(context).colorScheme.tertiary.withOpacity(0.1)
+                : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCurrentEpisode 
-              ? Theme.of(context).colorScheme.primary // Current episode - primary border
+              ? Theme.of(context).colorScheme.primary
               : isLastPlayed 
-                ? Theme.of(context).colorScheme.tertiary // Last played - tertiary border
+                ? Theme.of(context).colorScheme.tertiary
                 : isFinished
-                  ? Theme.of(context).colorScheme.tertiary // Finished - tertiary border
+                  ? Theme.of(context).colorScheme.tertiary
                   : Colors.transparent,
             width: 2,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: isCurrentEpisode 
+                ? Theme.of(context).colorScheme.primary.withOpacity(0.3)
+                : Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Episode image with overlay
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                  child: SizedBox(
-                    height: 120, // Reduced height
+            // Episode image
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+              child: Stack(
+                children: [
+                  SizedBox(
+                    height: 120,
                     width: double.infinity,
-                    child: Transform.translate(
-                      offset: Offset(parallax, 0),
-                      child: Hero(
-                        tag: tag,
-                        child: episode.episodeInfo?.poster != null
-                            ? CachedNetworkImage(
-                                imageUrl: episode.episodeInfo!.poster!,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: Theme.of(context).colorScheme.surfaceVariant,
-                                  child: Center(
-                                    child: Icon(Icons.tv, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 32),
-                                  ),
-                                ),
-                                errorWidget: (context, url, error) => Container(
-                                  color: Theme.of(context).colorScheme.surfaceVariant,
-                                  child: Center(
-                                    child: Icon(Icons.error, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 32),
-                                  ),
-                                ),
-                              )
-                            : Container(
+                    child: Hero(
+                      tag: tag,
+                      child: episode.episodeInfo?.poster != null
+                          ? CachedNetworkImage(
+                              imageUrl: episode.episodeInfo!.poster!,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
                                 color: Theme.of(context).colorScheme.surfaceVariant,
                                 child: Center(
-                                  child: Icon(Icons.tv, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 32),
+                                  child: Icon(Icons.tv, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 24),
                                 ),
                               ),
-                      ),
+                              errorWidget: (context, url, error) => Container(
+                                color: Theme.of(context).colorScheme.surfaceVariant,
+                                child: Center(
+                                  child: Icon(Icons.error, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 24),
+                                ),
+                              ),
+                            )
+                          : Container(
+                              color: Theme.of(context).colorScheme.surfaceVariant,
+                              child: Center(
+                                child: Icon(Icons.tv, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 24),
+                              ),
+                            ),
                     ),
                   ),
-                ),
-                // Current episode indicator
-                if (isCurrentEpisode)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                                              child: Row(
+                  // Current episode indicator
+                  if (isCurrentEpisode)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.play_arrow, color: Theme.of(context).colorScheme.onPrimary, size: 16),
-                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.play_arrow,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 2),
                             Text(
                               'NOW',
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.onPrimary,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
                         ),
-                    ),
-                  ),
-                // Last played indicator
-                if (isLastPlayed && !isCurrentEpisode)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.tertiary,
-                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.history, color: Theme.of(context).colorScheme.onTertiary, size: 16),
-                          const SizedBox(width: 4),
-                          Text(
-                            'LAST',
-                            style: TextStyle(
+                    ),
+                  // Last played indicator
+                  if (isLastPlayed && !isCurrentEpisode)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.tertiary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.replay,
                               color: Theme.of(context).colorScheme.onTertiary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                              size: 12,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 2),
+                            Text(
+                              'LAST',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onTertiary,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                // Finished episode indicator
-                if (isFinished && !isCurrentEpisode && !isLastPlayed)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.tertiary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle, color: Theme.of(context).colorScheme.onTertiary, size: 16),
-                          const SizedBox(width: 4),
-                          Text(
-                            'DONE',
-                            style: TextStyle(
+                  // Finished indicator
+                  if (isFinished && !isCurrentEpisode && !isLastPlayed)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.tertiary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check,
                               color: Theme.of(context).colorScheme.onTertiary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                              size: 12,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 2),
+                            Text(
+                              'DONE',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onTertiary,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             
-            // Episode Info Section - Compact
+            // Episode info
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(10), // Reduced padding
+              child: Padding(
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Episode Title - Compact
-                    Text(
-                      episode.title,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
+                    // Episode title
+                    Flexible(
+                      child: Text(
+                        episode.filename,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontSize: 12,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     
-                    const SizedBox(height: 6), // Reduced spacing
+                    const SizedBox(height: 8),
                     
-                    // Metadata Row - Compact
+                    // Metadata Row
                     Row(
                       children: [
                         // Season/Episode
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                           decoration: BoxDecoration(
                             color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
@@ -573,31 +621,22 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                           ),
                         ),
                         
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         
                         // Runtime
                         if (episode.episodeInfo?.runtime != null) ...[
-                          const Icon(Icons.access_time, color: Colors.white70, size: 12),
+                          Icon(
+                            Icons.access_time, 
+                            color: Theme.of(context).colorScheme.onSurfaceVariant, 
+                            size: 10
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             '${episode.episodeInfo!.runtime} min',
-                            style: const TextStyle(color: Colors.white70, fontSize: 10),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        
-                        // Rating
-                        if (episode.episodeInfo?.rating != null) ...[
-                          const Icon(Icons.star, color: Colors.amber, size: 12),
-                          const SizedBox(width: 2),
-                          Text(
-                            episode.episodeInfo!.rating!.toStringAsFixed(1),
-                            style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w600, fontSize: 10),
-                          ),
-                        ] else if (_tvmazeAvailable) ...[
-                          Text(
-                            'No rating',
-                            style: TextStyle(color: Colors.red.withValues(alpha: 0.7), fontSize: 8),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant, 
+                              fontSize: 10
+                            ),
                           ),
                         ],
                       ],
@@ -605,52 +644,58 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     
                     const Spacer(),
                     
-                    // Tap to play hint - More compact
+                    // Play button
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10), // Reduced padding
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isCurrentEpisode 
-                            ? Colors.green.withValues(alpha: 0.3) 
-                            : isFinished
-                              ? const Color(0xFF059669).withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.2),
-                          width: 1,
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: isCurrentEpisode
+                              ? [
+                                  Theme.of(context).colorScheme.primary,
+                                  Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                                ]
+                              : isFinished
+                                  ? [
+                                      Theme.of(context).colorScheme.tertiary,
+                                      Theme.of(context).colorScheme.tertiary.withOpacity(0.8),
+                                    ]
+                                  : [
+                                      Theme.of(context).colorScheme.surfaceVariant,
+                                      Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.8),
+                                    ],
                         ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isCurrentEpisode
+                                ? Theme.of(context).colorScheme.primary.withOpacity(0.3)
+                                : Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            isCurrentEpisode 
-                              ? Icons.play_arrow 
-                              : isFinished
-                                ? Icons.replay
-                                : Icons.touch_app,
+                            isCurrentEpisode ? Icons.play_arrow : Icons.play_arrow,
                             color: isCurrentEpisode 
-                              ? Colors.green 
-                              : isFinished
-                                ? const Color(0xFF059669)
-                                : Colors.white70,
-                            size: 12, // Smaller icon
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                            size: 14,
                           ),
-                          const SizedBox(width: 4), // Reduced spacing
+                          const SizedBox(width: 4),
                           Text(
-                            isCurrentEpisode 
-                              ? 'Now Playing' 
-                              : isFinished
-                                ? 'Replay'
-                                : 'Tap to Play',
+                            isCurrentEpisode ? 'Now Playing' : 'Play',
                             style: TextStyle(
                               color: isCurrentEpisode 
-                                ? Colors.green 
-                                : isFinished
-                                  ? const Color(0xFF059669)
-                                  : Colors.white70,
-                              fontSize: 11, // Smaller font
+                                  ? Theme.of(context).colorScheme.onPrimary
+                                  : Theme.of(context).colorScheme.onSurfaceVariant,
+                              fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -665,5 +710,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         ),
       ),
     );
+  }
+
+  String _cleanSummary(String summary) {
+    // Remove HTML tags and extra whitespace
+    return summary.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll(RegExp(r'\s{2,}'), ' ').trim();
   }
 } 
