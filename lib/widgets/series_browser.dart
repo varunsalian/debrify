@@ -362,7 +362,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 3,
-                      childAspectRatio: 0.7,
+                      childAspectRatio: 0.65,
                       crossAxisSpacing: 16,
                       mainAxisSpacing: 16,
                     ),
@@ -440,7 +440,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
               child: Stack(
                 children: [
                   SizedBox(
-                    height: 120,
+                    height: 110,
                     width: double.infinity,
                     child: Hero(
                       tag: tag,
@@ -579,7 +579,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
             // Episode info
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -590,14 +590,15 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: 12,
+                          fontSize: 11,
+                          height: 1.2,
                         ),
-                        maxLines: 3,
+                        maxLines: 4,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     
                     // Metadata Row
                     Row(
