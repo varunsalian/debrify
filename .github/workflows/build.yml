@@ -2,9 +2,9 @@ name: Build and Upload APK
 
 on:
   push:
-    branches: [ main, master, ui_changes ]
+    branches: [ main, master]
   pull_request:
-    branches: [ main, master, ui_changes ]
+    branches: [ main, master]
 
 jobs:
   build:
@@ -49,4 +49,4 @@ jobs:
       with:
         name: debrify-release
         path: build/app/outputs/flutter-apk/app-release.apk
-        retention-days: 30 
+        retention-days: 2
