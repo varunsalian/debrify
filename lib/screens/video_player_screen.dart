@@ -131,58 +131,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	Future<void> _initializePlayer() async {
-		print('=== VIDEO PLAYER INITIALIZATION START ===');
-		print('Widget videoUrl: ${widget.videoUrl}');
-		print('Widget title: ${widget.title}');
-		print('Widget startIndex: ${widget.startIndex}');
-		print('Widget playlist length: ${widget.playlist?.length ?? 0}');
-		
 		// Determine the initial URL and index
 		String initialUrl = widget.videoUrl;
 		int initialIndex = 0;
 		
 		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
-			print('Playlist detected, analyzing...');
-			print('Playlist entries:');
-			for (int i = 0; i < widget.playlist!.length; i++) {
-				final entry = widget.playlist![i];
-				print('  Index $i: "${entry.title}" - URL: ${entry.url.isNotEmpty ? "SET" : "EMPTY"}');
-			}
-			
 			// Check if this is a series and we should find the first episode by season/episode
 			final seriesPlaylist = widget._seriesPlaylist;
 			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-				print('Series playlist detected: ${seriesPlaylist.seriesTitle}');
-				print('Series has ${seriesPlaylist.allEpisodes.length} total episodes');
-				print('Series seasons: ${seriesPlaylist.seasons.map((s) => s.seasonNumber).toList()}');
-				
-				// Print all episodes with their details
-				print('All episodes in series:');
-				for (int i = 0; i < seriesPlaylist.allEpisodes.length; i++) {
-					final episode = seriesPlaylist.allEpisodes[i];
-					print('  Episode $i: S${episode.seriesInfo.season}E${episode.seriesInfo.episode} - "${episode.title}" - Original Index: ${episode.originalIndex}');
-				}
-				
 				// Try to restore the last played episode first
-				print('Attempting to get last played episode...');
 				final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
 				if (lastEpisode != null) {
 					initialIndex = lastEpisode['originalIndex'] as int;
-					print('✅ Last played episode found: S${lastEpisode['season']}E${lastEpisode['episode']} at original index $initialIndex');
+					print('Restoring last played episode at index $initialIndex');
 				} else {
-					print('❌ No last played episode found, looking for first episode...');
 					// Find the first episode (lowest season, lowest episode)
 					final firstEpisodeIndex = seriesPlaylist.getFirstEpisodeOriginalIndex();
 					if (firstEpisodeIndex != -1) {
 						initialIndex = firstEpisodeIndex;
-						print('✅ Using first episode at index $initialIndex');
+						print('Using first episode at index $initialIndex');
 					} else {
-						print('❌ Failed to find first episode, using startIndex: ${widget.startIndex ?? 0}');
+						print('Failed to find first episode, using startIndex: ${widget.startIndex ?? 0}');
 						initialIndex = widget.startIndex ?? 0;
 					}
 				}
 			} else {
-				print('Not a series or no series playlist detected');
 				// Not a series or no series playlist, use the provided startIndex
 				initialIndex = widget.startIndex ?? 0;
 				print('Using provided startIndex: $initialIndex');
@@ -193,43 +166,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				final entry = widget.playlist![initialIndex];
 				if (entry.url.isNotEmpty) {
 					initialUrl = entry.url;
-					print('✅ Using URL from playlist index $initialIndex: "${entry.title}"');
 				} else if (entry.restrictedLink != null && entry.apiKey != null) {
-					print('🔄 Playlist entry at index $initialIndex has restricted link, unrestricting...');
 					try {
 						final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
 						initialUrl = unrestrictResult['download'] ?? '';
-						if (initialUrl.isNotEmpty) {
-							print('✅ Successfully unrestricted URL for "${entry.title}"');
-						} else {
-							print('❌ Unrestriction returned empty URL for "${entry.title}"');
-						}
 					} catch (e) {
-						print('❌ Failed to unrestrict initial episode: $e');
+						print('Failed to unrestrict initial episode: $e');
 						// Only fall back to widget.videoUrl if unrestriction fails
 						if (widget.videoUrl.isNotEmpty) {
 							initialUrl = widget.videoUrl;
-							print('⚠️ Falling back to widget.videoUrl due to unrestriction failure');
 						}
 					}
 				} else {
-					print('❌ Playlist entry at index $initialIndex has no URL or restricted link');
 					// Only fall back to widget.videoUrl if no other option
 					if (widget.videoUrl.isNotEmpty) {
 						initialUrl = widget.videoUrl;
-						print('⚠️ Falling back to widget.videoUrl - no URL or restricted link available');
 					}
 				}
-			} else {
-				print('❌ Initial index $initialIndex is out of bounds for playlist length ${widget.playlist!.length}');
 			}
-		} else {
-			print('No playlist provided, using widget videoUrl directly');
 		}
-		
-		print('Final initialIndex: $initialIndex');
-		print('Final initialUrl: ${initialUrl.isNotEmpty ? "SET" : "EMPTY"}');
-		print('=== VIDEO PLAYER INITIALIZATION END ===');
 		
 		_currentIndex = initialIndex;
 		_player = mk.Player(configuration: mk.PlayerConfiguration(ready: () {
@@ -240,19 +195,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Only open the player if we have a valid URL
 		if (initialUrl.isNotEmpty) {
-			print('Opening player with URL...');
 			_player.open(mk.Media(initialUrl)).then((_) async {
-				print('Player opened successfully, waiting for video ready...');
 				// Wait for the video to load and duration to be available
 				await _waitForVideoReady();
-				print('Video ready, attempting to restore resume state...');
 				await _maybeRestoreResume();
 				_scheduleAutoHide();
 				// Restore audio and subtitle track preferences
 				await _restoreTrackPreferences();
 			});
 		} else {
-			print('No valid URL, trying to load playlist entry at index $_currentIndex');
 			// If no valid URL, try to load the first playlist entry
 			if (widget.playlist != null && widget.playlist!.isNotEmpty) {
 				_loadPlaylistIndex(_currentIndex, autoplay: false);
@@ -298,9 +249,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Get the last played episode for a series
 	Future<Map<String, dynamic>?> _getLastPlayedEpisode(SeriesPlaylist seriesPlaylist) async {
-		print('=== GETTING LAST PLAYED EPISODE ===');
-		print('Series title: ${seriesPlaylist.seriesTitle}');
-		
 		try {
 			final lastEpisode = await StorageService.getLastPlayedEpisode(
 				seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
@@ -309,37 +257,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			if (lastEpisode != null) {
 				final season = lastEpisode['season'] as int;
 				final episode = lastEpisode['episode'] as int;
-				final positionMs = lastEpisode['positionMs'] as int?;
-				final updatedAt = lastEpisode['updatedAt'] as int?;
-				
-				print('✅ Last played episode found in storage:');
-				print('  Season: $season');
-				print('  Episode: $episode');
-				print('  Position: ${positionMs != null ? "${positionMs}ms" : "N/A"}');
-				print('  Updated at: ${updatedAt != null ? DateTime.fromMillisecondsSinceEpoch(updatedAt) : "N/A"}');
 				
 				// Find the original index for this episode
 				final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(season, episode);
 				if (originalIndex != -1) {
-					print('✅ Found original index $originalIndex for S${season}E${episode}');
 					return {
 						...lastEpisode,
 						'originalIndex': originalIndex,
 					};
-				} else {
-					print('❌ Could not find original index for S${season}E${episode}');
-					print('Available episodes:');
-					for (final ep in seriesPlaylist.allEpisodes) {
-						print('  S${ep.seriesInfo.season}E${ep.seriesInfo.episode} -> Original Index: ${ep.originalIndex}');
-					}
 				}
-			} else {
-				print('❌ No last played episode found in storage');
 			}
 		} catch (e) {
-			print('❌ Error getting last played episode: $e');
+			print('Error getting last played episode: $e');
 		}
-		print('=== END GETTING LAST PLAYED EPISODE ===');
 		return null;
 	}
 
@@ -508,32 +438,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 
 	Future<void> _loadPlaylistIndex(int index, {bool autoplay = false}) async {
-		print('=== LOADING PLAYLIST INDEX ===');
-		print('Requested index: $index');
-		print('Autoplay: $autoplay');
-		print('Current index before: $_currentIndex');
-		print('Playlist length: ${widget.playlist?.length ?? 0}');
-		
-		if (widget.playlist == null || index < 0 || index >= widget.playlist!.length) {
-			print('❌ Invalid playlist or index out of bounds');
-			print('=== END LOADING PLAYLIST INDEX (FAILED) ===');
-			return;
-		}
+		if (widget.playlist == null || index < 0 || index >= widget.playlist!.length) return;
 		
 		await _saveResume();
 		final entry = widget.playlist![index];
 		_currentIndex = index;
 		
-		print('✅ Loading playlist entry:');
-		print('  Title: "${entry.title}"');
-		print('  URL: ${entry.url.isNotEmpty ? "SET" : "EMPTY"}');
-		print('  Has restricted link: ${entry.restrictedLink != null}');
-		print('  Has API key: ${entry.apiKey != null}');
-		
 		// Check if we need to unrestrict this link
 		String videoUrl = entry.url;
 		if (entry.restrictedLink != null && entry.apiKey != null) {
-			print('Unrestricting link...');
 			try {
 				// Show loading indicator
 				if (mounted) {
@@ -558,12 +471,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				
 				final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
 				videoUrl = unrestrictResult['download'] ?? entry.url;
-				print('✅ Unrestriction successful, new URL: ${videoUrl.isNotEmpty ? "SET" : "EMPTY"}');
 				
 				// Update the playlist entry with the unrestricted URL
 				// Note: We can't modify the const PlaylistEntry, so we'll use the unrestricted URL directly
 			} catch (e) {
-				print('❌ Unrestriction failed: $e');
 				if (mounted) {
 					ScaffoldMessenger.of(context).showSnackBar(
 						SnackBar(
@@ -576,22 +487,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				// Fall back to the original URL
 				videoUrl = entry.url;
 			}
-		} else {
-			print('No unrestriction needed, using existing URL');
 		}
 		
-		print('Opening player with final URL...');
 		await _player.open(mk.Media(videoUrl), play: autoplay);
-		print('✅ Player opened successfully');
-		
 		// Wait for the video to load and duration to be available
-		print('Waiting for video to be ready...');
 		await _waitForVideoReady();
-		print('Video ready, attempting to restore resume state...');
 		await _maybeRestoreResume();
 		// Restore audio and subtitle track preferences
 		await _restoreTrackPreferences();
-		print('=== END LOADING PLAYLIST INDEX ===');
 	}
 
 	/// Preload episode information in the background
@@ -647,50 +550,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	Future<void> _maybeRestoreResume() async {
-		print('=== ATTEMPTING TO RESTORE RESUME STATE ===');
-		print('Current index: $_currentIndex');
-		print('Is manual episode selection: $_isManualEpisodeSelection');
-		print('Is auto-advancing: $_isAutoAdvancing');
-		
 		// If this is a manual episode selection or auto-advancing, don't restore position
 		if (_isManualEpisodeSelection || _isAutoAdvancing) {
-			print('❌ ${_isManualEpisodeSelection ? "Manual episode selection" : "Auto-advancing"} detected, skipping position restoration');
 			_isManualEpisodeSelection = false; // Reset the flag
 			_isAutoAdvancing = false; // Reset the flag
 			return;
 		}
 		
 		// Try enhanced playback state first
-		print('Trying enhanced playback state system...');
 		final enhancedData = await _getEnhancedPlaybackState();
 		if (enhancedData != null) {
-			print('✅ Enhanced playback state found:');
-			print('  Data: $enhancedData');
-			
 			final posMs = (enhancedData['positionMs'] ?? 0) as int;
 			final speed = (enhancedData['speed'] ?? 1.0) as double;
 			final aspect = (enhancedData['aspect'] ?? 'contain') as String;
 			final position = Duration(milliseconds: posMs);
 			final dur = _duration;
 			
-			print('  Position: ${position.inSeconds}s');
-			print('  Duration: ${dur.inSeconds}s');
-			print('  Speed: $speed');
-			print('  Aspect: $aspect');
-			
 			if (dur > Duration.zero && position > const Duration(seconds: 10) && position < dur * 0.9) {
 				await _player.seek(position);
-				print('✅ Restored position: ${position.inSeconds}s');
-			} else {
-				print('❌ Position not restored - duration: ${dur.inSeconds}s, position: ${position.inSeconds}s');
-				print('  Conditions: dur > 0: ${dur > Duration.zero}, pos > 10s: ${position > const Duration(seconds: 10)}, pos < 90%: ${position < dur * 0.9}');
+				print('Restored position: ${position.inSeconds}s');
 			}
 			
 			// restore speed
 			if (speed != 1.0) {
 				await _player.setRate(speed);
 				_playbackSpeed = speed;
-				print('✅ Restored speed: $speed');
 			}
 			
 			// restore aspect
@@ -725,45 +609,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				default:
 					_aspectMode = _AspectMode.contain;
 			}
-			print('✅ Restored aspect mode: $aspect');
-			print('=== END RESTORE RESUME (ENHANCED) ===');
 			return;
 		}
 		
-		print('❌ Enhanced playback state not found, trying legacy system');
 		// Fallback to legacy resume system
 		final data = await StorageService.getVideoResume(_resumeKey);
 		if (data == null) {
-			print('❌ No resume data found in legacy system either');
-			print('=== END RESTORE RESUME (NO DATA) ===');
 			return;
 		}
-		print('✅ Legacy resume data found:');
-		print('  Data: $data');
 		
 		final posMs = (data['positionMs'] ?? 0) as int;
 		final speed = (data['speed'] ?? 1.0) as double;
 		final aspect = (data['aspect'] ?? 'contain') as String;
 		final position = Duration(milliseconds: posMs);
 		final dur = _duration;
-		
-		print('  Position: ${position.inSeconds}s');
-		print('  Duration: ${dur.inSeconds}s');
-		print('  Speed: $speed');
-		print('  Aspect: $aspect');
-		
 		if (dur > Duration.zero && position > const Duration(seconds: 10) && position < dur * 0.9) {
 			await _player.seek(position);
-			print('✅ Restored position from legacy: ${position.inSeconds}s');
-		} else {
-			print('❌ Position not restored from legacy - duration: ${dur.inSeconds}s, position: ${position.inSeconds}s');
 		}
-		
 		// restore speed
 		if (speed != 1.0) {
 			await _player.setRate(speed);
 			_playbackSpeed = speed;
-			print('✅ Restored speed from legacy: $speed');
 		}
 		// restore aspect
 		switch (aspect) {
@@ -797,106 +663,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			default:
 				_aspectMode = _AspectMode.contain;
 		}
-		print('✅ Restored aspect mode from legacy: $aspect');
-		print('=== END RESTORE RESUME (LEGACY) ===');
 	}
 
 	/// Get enhanced playback state for current content
 	Future<Map<String, dynamic>?> _getEnhancedPlaybackState() async {
-		print('=== GETTING ENHANCED PLAYBACK STATE ===');
-		print('Current index: $_currentIndex');
-		
 		try {
 			final seriesPlaylist = widget._seriesPlaylist;
 			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-				print('Series detected: ${seriesPlaylist.seriesTitle}');
-				print('Playlist length: ${widget.playlist?.length ?? 0}');
-				
 				// For series, get the current episode info
 				if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
-					print('Current index $_currentIndex is within playlist bounds');
-					
 					final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
 						(episode) => episode.originalIndex == _currentIndex,
 						orElse: () => seriesPlaylist.allEpisodes.first,
 					);
 					
-					print('Current episode found:');
-					print('  Season: ${currentEpisode.seriesInfo.season}');
-					print('  Episode: ${currentEpisode.seriesInfo.episode}');
-					print('  Title: ${currentEpisode.title}');
-					print('  Original Index: ${currentEpisode.originalIndex}');
-					
 					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
-						print('✅ Episode has valid season/episode info, getting playback state...');
 						// Only restore position for the exact same episode
-						final playbackState = await StorageService.getSeriesPlaybackState(
+						return await StorageService.getSeriesPlaybackState(
 							seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
 							season: currentEpisode.seriesInfo.season!,
 							episode: currentEpisode.seriesInfo.episode!,
 						);
-						
-						if (playbackState != null) {
-							print('✅ Playback state found for S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode}:');
-							print('  State: $playbackState');
-						} else {
-							print('❌ No playback state found for S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode}');
-						}
-						
-						return playbackState;
-					} else {
-						print('❌ Current episode missing season/episode info');
 					}
-				} else {
-					print('❌ Current index $_currentIndex is out of bounds');
 				}
 			} else {
-				print('Not a series, trying video playback state...');
 				// For non-series content, use the title
 				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
-				print('Video title: "$videoTitle"');
-				
 				final videoState = await StorageService.getVideoPlaybackState(
 					videoTitle: videoTitle,
 				);
-				
-				if (videoState != null) {
-					print('✅ Video playback state found:');
-					print('  State: $videoState');
-				} else {
-					print('❌ No video playback state found');
-				}
-				
 				return videoState;
 			}
 		} catch (e) {
-			print('❌ Error getting enhanced playback state: $e');
+			print('Error getting enhanced playback state: $e');
 		}
-		print('=== END GETTING ENHANCED PLAYBACK STATE ===');
 		return null;
 	}
 
 	Future<void> _saveResume({bool debounced = false}) async {
-		print('=== SAVING RESUME STATE ===');
-		print('Is ready: $_isReady');
-		print('Current position: ${_position.inMilliseconds}ms');
-		print('Current duration: ${_duration.inMilliseconds}ms');
-		print('Current index: $_currentIndex');
-		print('Debounced: $debounced');
-		
-		if (!_isReady) {
-			print('❌ Player not ready, skipping save');
-			print('=== END SAVING RESUME STATE (NOT READY) ===');
-			return;
-		}
+		if (!_isReady) return;
 		
 		final pos = _position;
 		final dur = _duration;
-		if (dur <= Duration.zero) {
-			print('❌ Duration is zero, skipping save');
-			print('=== END SAVING RESUME STATE (ZERO DURATION) ===');
-			return;
-		}
+		if (dur <= Duration.zero) return;
 		
 		final aspectStr = () {
 			switch (_aspectMode) {
@@ -924,22 +733,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			}
 		}();
 		
-		print('Saving with aspect: $aspectStr, speed: $_playbackSpeed');
-		
 		// Save to enhanced playback state system
 		try {
 			final seriesPlaylist = widget._seriesPlaylist;
 			if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-				print('Saving series playback state...');
 				// For series content
 				if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
 					final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
 						(episode) => episode.originalIndex == _currentIndex,
 						orElse: () => seriesPlaylist.allEpisodes.first,
 					);
-					
-					print('Current episode: S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode}');
-					print('Episode title: "${currentEpisode.title}"');
 					
 					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
 						await StorageService.saveSeriesPlaybackState(
@@ -951,24 +754,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							speed: _playbackSpeed,
 							aspect: aspectStr,
 						);
-						print('✅ Series playback state saved for S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode}');
-					} else {
-						print('❌ Episode missing season/episode info');
 					}
-				} else {
-					print('❌ Current index $_currentIndex is out of bounds');
 				}
 			} else {
-				print('Saving video playback state...');
 				// For non-series content
 				final currentUrl = (widget.playlist != null && widget.playlist!.isNotEmpty)
 					? widget.playlist![_currentIndex].url
 					: widget.videoUrl;
 					
 				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
-				print('Video title: "$videoTitle"');
-				print('Video URL: ${currentUrl.isNotEmpty ? "SET" : "EMPTY"}');
-				print('Position: ${pos.inMilliseconds}ms, Duration: ${dur.inMilliseconds}ms');
 				
 				await StorageService.saveVideoPlaybackState(
 					videoTitle: videoTitle,
@@ -978,14 +772,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					speed: _playbackSpeed,
 					aspect: aspectStr,
 				);
-				print('✅ Video playback state saved successfully');
 			}
 		} catch (e) {
-			print('❌ Error saving enhanced playback state: $e');
+			print('Error saving enhanced playback state: $e');
 		}
 		
 		// Also save to legacy system for backward compatibility
-		print('Saving to legacy system...');
 		await StorageService.upsertVideoResume(_resumeKey, {
 			'positionMs': pos.inMilliseconds,
 			'speed': _playbackSpeed,
@@ -993,8 +785,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			'durationMs': dur.inMilliseconds,
 			'updatedAt': DateTime.now().millisecondsSinceEpoch,
 		});
-		print('✅ Legacy resume state saved');
-		print('=== END SAVING RESUME STATE ===');
 	}
 
 	void _scheduleAutoHide() {
@@ -1342,20 +1132,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							seriesPlaylist: seriesPlaylist,
 							currentEpisodeIndex: _currentIndex,
 							onEpisodeSelected: (season, episode) async {
-								print('=== EPISODE SELECTED FROM SERIES BROWSER ===');
-								print('Selected: S${season}E${episode}');
-								print('Current index before: $_currentIndex');
-								
 								// Find the original index in the PlaylistEntry array
 								final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(season, episode);
 								if (originalIndex != -1) {
-									print('✅ Found original index: $originalIndex');
 									// Mark this as a manual episode selection
 									_isManualEpisodeSelection = true;
-									print('✅ Set _isManualEpisodeSelection = true');
 									await _loadPlaylistIndex(originalIndex, autoplay: true);
 								} else {
-									print('❌ Failed to find original index for S${season}E${episode}');
+									print('Failed to find original index for S${season}E${episode}');
 									// Show error message to user
 									if (mounted) {
 										ScaffoldMessenger.of(context).showSnackBar(
@@ -1367,7 +1151,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 										);
 									}
 								}
-								print('=== END EPISODE SELECTED FROM SERIES BROWSER ===');
 							},
 						  )
 						: _buildSimplePlaylist(),
@@ -1406,17 +1189,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 									
 									return ListTile(
 										onTap: () async {
-											print('=== EPISODE SELECTED FROM SIMPLE PLAYLIST ===');
-											print('Selected index: $index');
-											print('Episode title: "${entry.title}"');
-											print('Current index before: $_currentIndex');
-											
 											Navigator.of(context).pop();
 											// Mark this as a manual episode selection
 											_isManualEpisodeSelection = true;
-											print('✅ Set _isManualEpisodeSelection = true');
 											await _loadPlaylistIndex(index, autoplay: true);
-											print('=== END EPISODE SELECTED FROM SIMPLE PLAYLIST ===');
 										},
 										title: Row(
 											children: [

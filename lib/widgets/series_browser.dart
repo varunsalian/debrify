@@ -391,23 +391,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     
     return GestureDetector(
       onTap: () {
-        print('=== EPISODE CARD TAPPED ===');
-        print('Episode: ${episode.title}');
-        print('Season: ${episode.seriesInfo.season}');
-        print('Episode: ${episode.seriesInfo.episode}');
-        print('Original Index: ${episode.originalIndex}');
-        print('Is current episode: $isCurrentEpisode');
-        print('Is last played: $isLastPlayed');
-        print('Is finished: $isFinished');
-        
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
-          print('✅ Playing episode S${episode.seriesInfo.season}E${episode.seriesInfo.episode} (${episode.title})');
+          print('Playing episode S${episode.seriesInfo.season}E${episode.seriesInfo.episode} (${episode.title})');
           Navigator.of(context).pop();
           widget.onEpisodeSelected(episode.seriesInfo.season!, episode.seriesInfo.episode!);
         } else {
-          print('❌ Episode missing season/episode info: ${episode.title}');
+          print('Episode missing season/episode info: ${episode.title}');
         }
-        print('=== END EPISODE CARD TAPPED ===');
       },
       child: Container(
         decoration: BoxDecoration(
