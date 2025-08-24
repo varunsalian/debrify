@@ -15,6 +15,18 @@ import '../widgets/series_browser.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
+/// A full-featured video player screen with playlist support and navigation controls.
+/// 
+/// Features:
+/// - Play/pause controls
+/// - Next/Previous episode navigation (when playlist is available)
+/// - Gesture controls for seeking, volume, and brightness
+/// - Aspect ratio controls
+/// - Playback speed controls
+/// - Audio and subtitle track selection
+/// - Auto-advance to next episode when current episode ends
+/// - Resume playback from last position
+/// - Series-aware episode ordering and tracking
 class VideoPlayerScreen extends StatefulWidget {
 	final String videoUrl;
 	final String title;
@@ -436,6 +448,118 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		print('DEBUG: Auto-advancing from S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode} to S${nextEpisode.seriesInfo.season}E${nextEpisode.seriesInfo.episode} (original index: ${nextEpisode.originalIndex})');
 		
 		return nextEpisode.originalIndex;
+	}
+
+	/// Find the previous logical episode index
+	int _findPreviousEpisodeIndex() {
+		final seriesPlaylist = widget._seriesPlaylist;
+		if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
+			// For non-series content, just go to previous index
+			if (_currentIndex > 0) {
+				return _currentIndex - 1;
+			}
+			return -1;
+		}
+
+		// Find current episode in the sorted allEpisodes list
+		final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+			(episode) => episode.originalIndex == _currentIndex,
+			orElse: () => seriesPlaylist.allEpisodes.first,
+		);
+
+		// Find the index of current episode in allEpisodes
+		final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(currentEpisode);
+		
+		if (currentEpisodeIndex <= 0) {
+			// No previous episode found
+			return -1;
+		}
+
+		// Get the previous episode from the sorted list
+		final previousEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex - 1];
+		return previousEpisode.originalIndex;
+	}
+
+	/// Check if there's a next episode available
+	bool _hasNextEpisode() {
+		return _findNextEpisodeIndex() != -1;
+	}
+
+	/// Check if there's a previous episode available
+	bool _hasPreviousEpisode() {
+		return _findPreviousEpisodeIndex() != -1;
+	}
+
+	/// Navigate to next episode
+	Future<void> _goToNextEpisode() async {
+		final nextIndex = _findNextEpisodeIndex();
+		if (nextIndex != -1) {
+			// Show loading indicator
+			if (mounted) {
+				ScaffoldMessenger.of(context).showSnackBar(
+					SnackBar(
+						content: Row(
+							children: [
+								const SizedBox(
+									width: 16,
+									height: 16,
+									child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+								),
+								const SizedBox(width: 12),
+								const Text('Loading next episode...', style: TextStyle(color: Colors.white)),
+							],
+						),
+						backgroundColor: Theme.of(context).colorScheme.surface,
+						duration: const Duration(seconds: 2),
+					),
+				);
+			}
+			
+			// Mark this as a manual episode selection
+			_isManualEpisodeSelection = true;
+			// Reset the flag after 30 seconds to allow position saving
+			_manualSelectionResetTimer?.cancel();
+			_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+				_isManualEpisodeSelection = false;
+			});
+			await _loadPlaylistIndex(nextIndex, autoplay: true);
+		}
+	}
+
+	/// Navigate to previous episode
+	Future<void> _goToPreviousEpisode() async {
+		final previousIndex = _findPreviousEpisodeIndex();
+		if (previousIndex != -1) {
+			// Show loading indicator
+			if (mounted) {
+				ScaffoldMessenger.of(context).showSnackBar(
+					SnackBar(
+						content: Row(
+							children: [
+								const SizedBox(
+									width: 16,
+									height: 16,
+									child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+								),
+								const SizedBox(width: 12),
+								const Text('Loading previous episode...', style: TextStyle(color: Colors.white)),
+							],
+						),
+						backgroundColor: Theme.of(context).colorScheme.surface,
+						duration: const Duration(seconds: 2),
+					),
+				);
+			}
+			
+			// Mark this as a manual episode selection
+			_isManualEpisodeSelection = true;
+			// Reset the flag after 30 seconds to allow position saving
+			_manualSelectionResetTimer?.cancel();
+			_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+				_isManualEpisodeSelection = false;
+			});
+			await _loadPlaylistIndex(previousIndex, autoplay: true);
+		}
 	}
 
 	/// Mark the current episode as finished if it's a series
@@ -1430,6 +1554,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							_togglePlay();
 							return KeyEventResult.handled;
 						}
+
+						// Next/Previous episode navigation
+						if (key == LogicalKeyboardKey.mediaSkipForward) {
+							if (_hasNextEpisode()) {
+								_goToNextEpisode();
+								return KeyEventResult.handled;
+							}
+						}
+						if (key == LogicalKeyboardKey.mediaSkipBackward) {
+							if (_hasPreviousEpisode()) {
+								_goToPreviousEpisode();
+								return KeyEventResult.handled;
+							}
+						}
 						return KeyEventResult.ignored;
 					},
 					child: Stack(
@@ -1565,6 +1703,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 													_isSeekingWithSlider = false;
 													_scheduleAutoHide();
 												},
+												onNext: _goToNextEpisode,
+												onPrevious: _goToPreviousEpisode,
+												hasNext: _hasNextEpisode(),
+												hasPrevious: _hasPreviousEpisode(),
 											),
 										),
 									);
@@ -1599,6 +1741,10 @@ class _Controls extends StatelessWidget {
 	final VoidCallback onSeekBarChangedStart;
 	final ValueChanged<double> onSeekBarChanged;
 	final VoidCallback onSeekBarChangeEnd;
+	final VoidCallback? onNext;
+	final VoidCallback? onPrevious;
+	final bool hasNext;
+	final bool hasPrevious;
 
 	const _Controls({
 		required this.title,
@@ -1621,6 +1767,10 @@ class _Controls extends StatelessWidget {
 		required this.onSeekBarChangedStart,
 		required this.onSeekBarChanged,
 		required this.onSeekBarChangeEnd,
+		this.onNext,
+		this.onPrevious,
+		this.hasNext = false,
+		this.hasPrevious = false,
 	});
 	
 	String _getAspectRatioName() {
@@ -1756,27 +1906,77 @@ class _Controls extends StatelessWidget {
 							],
 						),
 
-						// Center play/pause
+						// Center play/pause with navigation buttons
 						if (isReady)
 						Row(
 							mainAxisAlignment: MainAxisAlignment.center,
 							children: [
-								InkWell(
-									onTap: onPlayPause,
-									customBorder: const CircleBorder(),
-									child: Container(
-										padding: const EdgeInsets.all(14),
-										decoration: BoxDecoration(
-											shape: BoxShape.circle,
-											color: Colors.black.withOpacity(0.4),
+								// Previous button
+								if (hasPrevious)
+									Material(
+										color: Colors.transparent,
+										child: InkWell(
+											onTap: onPrevious,
+											customBorder: const CircleBorder(),
+											child: Container(
+												padding: const EdgeInsets.all(12),
+												decoration: BoxDecoration(
+													shape: BoxShape.circle,
+													color: Colors.black.withOpacity(0.4),
+												),
+												child: const Icon(
+													Icons.skip_previous_rounded,
+													color: Colors.white,
+													size: 32,
+												),
+											),
 										),
-										child: Icon(
-											isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-											color: Colors.white,
-											size: 42,
+									),
+								if (hasPrevious)
+									const SizedBox(width: 16),
+								// Play/Pause button
+								Material(
+									color: Colors.transparent,
+									child: InkWell(
+										onTap: onPlayPause,
+										customBorder: const CircleBorder(),
+										child: Container(
+											padding: const EdgeInsets.all(14),
+											decoration: BoxDecoration(
+												shape: BoxShape.circle,
+												color: Colors.black.withOpacity(0.4),
+											),
+											child: Icon(
+												isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+												color: Colors.white,
+												size: 42,
+											),
 										),
 									),
 								),
+								// Next button
+								if (hasNext)
+									const SizedBox(width: 16),
+								if (hasNext)
+									Material(
+										color: Colors.transparent,
+										child: InkWell(
+											onTap: onNext,
+											customBorder: const CircleBorder(),
+											child: Container(
+												padding: const EdgeInsets.all(12),
+												decoration: BoxDecoration(
+													shape: BoxShape.circle,
+													color: Colors.black.withOpacity(0.4),
+												),
+												child: const Icon(
+													Icons.skip_next_rounded,
+													color: Colors.white,
+													size: 32,
+												),
+											),
+										),
+									),
 							],
 						),
 
