@@ -2054,79 +2054,46 @@ class _Controls extends StatelessWidget {
 		return '$sign${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 	}
 
-	// Simple metadata row with consistent styling
+	// Simple rating badge for top-right
 	Widget _buildMetadataRow(Map<String, dynamic> metadata) {
-		final List<Widget> items = [];
-		
-		// Rating
-		if (metadata['rating'] != null && metadata['rating'] > 0) {
-			items.add(_buildMetadataItem('⭐ ${metadata['rating'].toStringAsFixed(1)}'));
+		// Only show rating
+		if (metadata['rating'] == null || metadata['rating'] <= 0) {
+			return const SizedBox.shrink();
 		}
 		
-		// Year
-		if (metadata['year'] != null && metadata['year'].isNotEmpty) {
-			items.add(_buildMetadataItem(metadata['year']));
-		}
-		
-		// Genres
-		if (metadata['genres'] != null && (metadata['genres'] as List).isNotEmpty) {
-			final genres = metadata['genres'] as List;
-			final displayGenres = genres.take(2).join(', ');
-			items.add(_buildMetadataItem(displayGenres));
-		}
-		
-		if (items.isEmpty) return const SizedBox.shrink();
-		
-		return Center(
-			child: Container(
-				padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-				decoration: BoxDecoration(
-					color: Colors.black.withOpacity(0.7),
-					borderRadius: BorderRadius.circular(20),
-					border: Border.all(
-						color: Colors.white.withOpacity(0.2),
-						width: 1,
+		return Container(
+			padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+			decoration: BoxDecoration(
+				color: Colors.black.withOpacity(0.7),
+				borderRadius: BorderRadius.circular(16),
+				border: Border.all(
+					color: Colors.white.withOpacity(0.2),
+					width: 1,
+				),
+			),
+			child: Row(
+				mainAxisSize: MainAxisSize.min,
+				children: [
+					const Icon(
+						Icons.star_rounded,
+						color: Colors.amber,
+						size: 16,
 					),
-				),
-				child: Row(
-					mainAxisSize: MainAxisSize.min,
-					children: items.asMap().entries.map((entry) {
-						final index = entry.key;
-						final item = entry.value;
-						return Row(
-							mainAxisSize: MainAxisSize.min,
-							children: [
-								item,
-								if (index < items.length - 1)
-									const Padding(
-										padding: EdgeInsets.symmetric(horizontal: 8),
-										child: Text(
-											'•',
-											style: TextStyle(
-												color: Colors.white70,
-												fontSize: 12,
-												fontWeight: FontWeight.bold,
-											),
-										),
-									),
-							],
-						);
-					}).toList(),
-				),
+					const SizedBox(width: 4),
+					Text(
+						metadata['rating'].toStringAsFixed(1),
+						style: const TextStyle(
+							color: Colors.white,
+							fontSize: 14,
+							fontWeight: FontWeight.w600,
+						),
+					),
+				],
 			),
 		);
 	}
 	
-	Widget _buildMetadataItem(String text) {
-		return Text(
-			text,
-			style: const TextStyle(
-				color: Colors.white,
-				fontSize: 12,
-				fontWeight: FontWeight.w500,
-			),
-		);
-	}
+
 
 	@override
 	Widget build(BuildContext context) {
