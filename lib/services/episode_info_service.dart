@@ -32,12 +32,17 @@ class EpisodeInfoService {
       final cached = _cache[cacheKey];
       if (cached is Map<String, dynamic>) {
         return cached;
+      } else if (cached == null) {
+        // Return null for cached failures
+        return null;
       }
     }
 
     // Check if TVMaze is available
     if (!TVMazeService.currentAvailability) {
       print('TVMaze not available, skipping episode info fetch');
+      // Cache the failure to prevent repeated checks
+      _cache[cacheKey] = null;
       return null;
     }
 
@@ -53,12 +58,18 @@ class EpisodeInfoService {
       if (episodeInfo != null) {
         _cache[cacheKey] = episodeInfo;
         return episodeInfo;
+      } else {
+        // Cache the failure to prevent repeated API calls
+        print('No episode info found for ${seriesTitle} S${season}E${episode}');
+        _cache[cacheKey] = null;
+        return null;
       }
     } catch (e) {
       print('Failed to get episode info: $e');
+      // Cache the failure to prevent repeated API calls
+      _cache[cacheKey] = null;
+      return null;
     }
-
-    return null;
   }
 
   /// Get series information from TVMaze with fallback
@@ -70,12 +81,17 @@ class EpisodeInfoService {
       final cached = _cache[cacheKey];
       if (cached is Map<String, dynamic>) {
         return cached;
+      } else if (cached == null) {
+        // Return null for cached failures
+        return null;
       }
     }
 
     // Check if TVMaze is available
     if (!TVMazeService.currentAvailability) {
       print('TVMaze not available, skipping series info fetch');
+      // Cache the failure to prevent repeated checks
+      _cache[cacheKey] = null;
       return null;
     }
 
@@ -87,12 +103,18 @@ class EpisodeInfoService {
       if (seriesInfo != null) {
         _cache[cacheKey] = seriesInfo;
         return seriesInfo;
+      } else {
+        // Cache the failure to prevent repeated API calls
+        print('No series info found for: $seriesTitle');
+        _cache[cacheKey] = null;
+        return null;
       }
     } catch (e) {
       print('Failed to get series info: $e');
+      // Cache the failure to prevent repeated API calls
+      _cache[cacheKey] = null;
+      return null;
     }
-
-    return null;
   }
 
   /// Get all episodes for a series with fallback
@@ -104,12 +126,17 @@ class EpisodeInfoService {
       final cached = _cache[cacheKey];
       if (cached is List) {
         return List<Map<String, dynamic>>.from(cached);
+      } else if (cached == null) {
+        // Return empty list for cached failures
+        return [];
       }
     }
 
     // Check if TVMaze is available
     if (!TVMazeService.currentAvailability) {
       print('TVMaze not available, skipping episodes fetch');
+      // Cache the failure to prevent repeated checks
+      _cache[cacheKey] = null;
       return [];
     }
 
@@ -122,12 +149,18 @@ class EpisodeInfoService {
         final episodes = await TVMazeService.getEpisodes(seriesInfo['id'] as int);
         _cache[cacheKey] = episodes;
         return episodes;
+      } else {
+        // Cache the failure to prevent repeated API calls
+        print('No series info found for episodes fetch: $seriesTitle');
+        _cache[cacheKey] = null;
+        return [];
       }
     } catch (e) {
       print('Failed to get all episodes: $e');
+      // Cache the failure to prevent repeated API calls
+      _cache[cacheKey] = null;
+      return [];
     }
-
-    return [];
   }
 
   /// Force refresh TVMaze availability
@@ -138,10 +171,24 @@ class EpisodeInfoService {
   /// Get current TVMaze availability status
   static bool get isTVMazeAvailable => TVMazeService.currentAvailability;
 
-  /// Clear cache
+  /// Clear all cached data
   static void clearCache() {
     _cache.clear();
-    _seriesIdCache.clear();
+    print('EpisodeInfoService cache cleared');
+  }
+
+  /// Clear cache for a specific series
+  static void clearSeriesCache(String seriesTitle) {
+    final keysToRemove = <String>[];
+    for (final key in _cache.keys) {
+      if (key.startsWith('${seriesTitle}_') || key == 'series_$seriesTitle' || key == 'all_episodes_$seriesTitle') {
+        keysToRemove.add(key);
+      }
+    }
+    for (final key in keysToRemove) {
+      _cache.remove(key);
+    }
+    print('Cleared cache for series: $seriesTitle (${keysToRemove.length} entries)');
   }
 
   /// Dispose resources

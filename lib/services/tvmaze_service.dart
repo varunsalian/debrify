@@ -91,6 +91,8 @@ class TVMazeService {
         _seriesIdCache[cleanName.toLowerCase()] = alternativeResult['id'] as int;
         return alternativeResult;
       }
+      // Cache the failure to prevent repeated API calls
+      _cache[cacheKey] = null;
       return null;
     }
 
@@ -120,6 +122,11 @@ class TVMazeService {
             _cache[cacheKey] = show;
             _seriesIdCache[cleanName.toLowerCase()] = show['id'] as int;
             return show;
+          } else {
+            // Cache the failure to prevent repeated API calls
+            print('TVMaze search returned no results for: $cleanName');
+            _cache[cacheKey] = null;
+            return null;
           }
         } else if (response.statusCode == 429) {
           // Rate limited, wait and retry
@@ -161,6 +168,8 @@ class TVMazeService {
       return alternativeResult;
     }
     
+    // Cache the failure to prevent repeated API calls
+    _cache[cacheKey] = null;
     return null;
   }
 
@@ -282,5 +291,18 @@ class TVMazeService {
     _cache.clear();
     _seriesIdCache.clear();
     _lastAvailabilityCheck = null;
+    print('TVMazeService cache cleared');
+  }
+
+  /// Clear cache for a specific series
+  static void clearSeriesCache(String seriesTitle) {
+    final cleanName = _cleanShowName(seriesTitle);
+    final searchKey = 'search_$cleanName';
+    final seriesIdKey = cleanName.toLowerCase();
+    
+    _cache.remove(searchKey);
+    _seriesIdCache.remove(seriesIdKey);
+    
+    print('Cleared TVMaze cache for series: $seriesTitle');
   }
 } 
