@@ -28,6 +28,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   final ScrollController _scrollController = ScrollController();
   Map<String, dynamic>? _lastPlayedEpisode;
   Map<String, Set<int>> _finishedEpisodes = {}; // Map of season -> Set of episode numbers
+  Map<String, Map<String, dynamic>> _episodeProgress = {}; // Map of "season_episode" -> progress data
 
   @override
   void initState() {
@@ -36,6 +37,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     _checkTVMazeAvailability();
     _loadLastPlayedEpisode();
     _loadFinishedEpisodes();
+    _loadEpisodeProgress();
     // Schedule scrolling to current episode after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentEpisode();
@@ -47,6 +49,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     super.didChangeDependencies();
     // Refresh finished episodes when dependencies change (e.g., when modal is shown)
     _loadFinishedEpisodes();
+    _loadEpisodeProgress();
   }
 
   void _initializeSeason() {
@@ -175,6 +178,22 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       }
     } catch (e) {
       print('Error loading finished episodes: $e');
+    }
+  }
+
+  /// Load episode progress for the entire series
+  Future<void> _loadEpisodeProgress() async {
+    try {
+      if (widget.seriesPlaylist.isSeries && widget.seriesPlaylist.seriesTitle != null) {
+        final allEpisodeProgress = await StorageService.getEpisodeProgress(
+          seriesTitle: widget.seriesPlaylist.seriesTitle!,
+        );
+        setState(() {
+          _episodeProgress = allEpisodeProgress;
+        });
+      }
+    } catch (e) {
+      print('Error loading episode progress: $e');
     }
   }
 
@@ -315,6 +334,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                             _startBackgroundEpisodeInfoLoading();
                             // Load finished episodes for the new season
                             _loadFinishedEpisodes();
+                            // Load episode progress for the new season
+                            _loadEpisodeProgress();
                             // Scroll to current episode in the new season
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               _scrollToCurrentEpisode();
@@ -400,6 +421,20 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Widget _buildEpisodeCard(SeriesEpisode episode, int index, bool isCurrentEpisode, bool isLastPlayed, bool isFinished) {
     final tag = 'poster-${widget.seriesPlaylist.seriesTitle}-${episode.seriesInfo.season}-${episode.seriesInfo.episode}';
     
+    // Get progress data for this episode
+    double progress = 0.0;
+    if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+      final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
+      final progressData = _episodeProgress[episodeKey];
+      if (progressData != null) {
+        final positionMs = progressData['positionMs'] as int? ?? 0;
+        final durationMs = progressData['durationMs'] as int? ?? 1;
+        if (durationMs > 0) {
+          progress = (positionMs / durationMs).clamp(0.0, 1.0);
+        }
+      }
+    }
+    
     return GestureDetector(
       onTap: () {
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
@@ -478,6 +513,72 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                             ),
                     ),
                   ),
+                  // Progress bar at the bottom of the image
+                  if (progress > 0.0 && !isFinished)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: progress,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFFE50914),
+                                  const Color(0xFFE50914).withValues(alpha: 0.8),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFE50914).withValues(alpha: 0.5),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 0),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Progress percentage indicator (only show if progress > 10%)
+                  if (progress > 0.1 && !isFinished)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: const Color(0xFFE50914).withValues(alpha: 0.8),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          '${(progress * 100).round()}%',
+                          style: const TextStyle(
+                            color: Color(0xFFE50914),
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
                   // Current episode indicator
                   if (isCurrentEpisode)
                     Positioned(

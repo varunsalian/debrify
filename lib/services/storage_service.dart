@@ -207,6 +207,36 @@ class StorageService {
     return result;
   }
 
+  /// Get episode progress for a series
+  static Future<Map<String, Map<String, dynamic>>> getEpisodeProgress({
+    required String seriesTitle,
+  }) async {
+    final map = await _getPlaybackStateMap();
+    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    
+    final seriesData = map[key];
+    if (seriesData == null || seriesData['type'] != 'series') return {};
+    
+    final seasons = seriesData['seasons'];
+    if (seasons == null) return {};
+    
+    final result = <String, Map<String, dynamic>>{};
+    
+    for (final seasonEntry in seasons.entries) {
+      final season = seasonEntry.key;
+      final episodes = seasonEntry.value as Map<String, dynamic>;
+      
+      for (final episodeEntry in episodes.entries) {
+        final episode = episodeEntry.key;
+        final episodeData = episodeEntry.value as Map<String, dynamic>;
+        final episodeKey = '${season}_$episode';
+        result[episodeKey] = episodeData;
+      }
+    }
+    
+    return result;
+  }
+
   /// Get finished episodes for a specific season
   static Future<Set<int>> getFinishedEpisodesForSeason({
     required String seriesTitle,
