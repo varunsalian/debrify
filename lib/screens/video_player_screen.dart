@@ -169,6 +169,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	// Cache for played torrents
 	List<PlayedTorrentCache> _playedTorrentsCache = [];
 	
+	// Track failed torrents to avoid retrying them
+	Set<String> _failedTorrentInfohashes = {};
+	
 	SeriesPlaylist? get _seriesPlaylist {
 		if (widget.playlist == null || widget.playlist!.isEmpty) return null;
 		if (_cachedSeriesPlaylist == null) {
@@ -472,8 +475,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return widget.playlist![_currentIndex].title;
 		}
 		
-		// Final fallback to the widget title
-		return widget.title;
+		// Final fallback to the current title or widget title
+		return _currentTitle.isNotEmpty ? _currentTitle : widget.title;
 	}
 
 	/// Get the current episode subtitle for display
@@ -499,8 +502,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			}
 		}
 		
-		// Fallback to the widget subtitle
-		return widget.subtitle;
+		// Fallback to the current subtitle or widget subtitle
+		return _currentSubtitle ?? widget.subtitle;
 	}
 
 	/// Get enhanced metadata for OTT-style display
@@ -1072,7 +1075,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				}
 				
 				// Fallback to collection-based state (legacy behavior)
-				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+				final videoTitle = _currentTitle.isNotEmpty ? _currentTitle : (widget.title.isNotEmpty ? widget.title : 'Unknown Video');
 				
 				final videoState = await StorageService.getVideoPlaybackState(
 					videoTitle: videoTitle,
@@ -1191,7 +1194,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				} else {
 					// Single video file (no playlist)
 					final currentUrl = widget.videoUrl;
-					final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+					final videoTitle = _currentTitle.isNotEmpty ? _currentTitle : (widget.title.isNotEmpty ? widget.title : 'Unknown Video');
 					
 					await StorageService.saveVideoPlaybackState(
 						videoTitle: videoTitle,
@@ -2075,16 +2078,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 
 		// Try to find the next playable torrent
-		int currentTryIndex = widget.currentTorrentIndex! + 1;
+		final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex ?? 0;
+		int currentTryIndex = currentIndex + 1;
 		final maxIndex = widget.searchResults!.length - 1;
 		
-		print('DEBUG: Starting torrent retry logic. Current index: ${widget.currentTorrentIndex}, Total results: ${widget.searchResults!.length}');
+		print('DEBUG: Starting torrent retry logic. Current index: $currentIndex, Total results: ${widget.searchResults!.length}');
 		
 		while (currentTryIndex <= maxIndex && mounted) {
 			print('DEBUG: Trying torrent at index $currentTryIndex (${currentTryIndex + 1}/${widget.searchResults!.length})');
+			
+			// Get the current torrent to try
+			final nextTorrent = widget.searchResults![currentTryIndex];
+			
+			// Extract torrent info to check if it's already failed
+			String infohash;
+			if (nextTorrent is Map<String, dynamic>) {
+				infohash = nextTorrent['infohash'] ?? nextTorrent['hash'] ?? '';
+			} else if (nextTorrent is Torrent) {
+				infohash = nextTorrent.infohash;
+			} else {
+				infohash = '';
+			}
+			
+			// Skip if this torrent has already failed
+			if (infohash.isNotEmpty && _failedTorrentInfohashes.contains(infohash)) {
+				print('DEBUG: Skipping already failed torrent at index $currentTryIndex (infohash: $infohash)');
+				currentTryIndex++;
+				continue;
+			}
+			
 			try {
-				// Get the current torrent to try
-				final nextTorrent = widget.searchResults![currentTryIndex];
 				
 				// Extract torrent info (handle both Torrent objects and maps)
 				String infohash;
@@ -2141,24 +2164,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					
 					print('DEBUG: Single file torrent. MIME type: $mimeType, isVideo: ${FileUtils.isVideoMimeType(mimeType)}');
 					
-					// Check if it's actually a video using MIME type
+										// Check if it's actually a video using MIME type
 					if (FileUtils.isVideoMimeType(mimeType)) {
-						print('DEBUG: Video file confirmed, navigating to new player');
-											// Navigate to the new video player with updated context
-					if (mounted) {
-						Navigator.of(context).pushReplacement(
-							MaterialPageRoute(
-								builder: (context) => VideoPlayerScreen(
-									videoUrl: videoUrl,
-									title: torrentName,
-									searchResults: widget.searchResults,
-									currentTorrentIndex: currentTryIndex,
-									searchQuery: widget.searchQuery,
-									playedTorrentsCache: _playedTorrentsCache,
-								),
-							),
-						);
-					}
+						print('DEBUG: Video file confirmed, updating player state');
+						
+						// Add to cache first
+						_addTorrentToCache(currentTryIndex, torrentName, videoUrl, null, null, null);
+						
+						// Update player state instead of creating new screen
+						await _updatePlayerToNextTorrent(currentTryIndex, videoUrl, torrentName);
 						return; // Success, exit the loop
 					} else {
 						throw Exception('This file is not a video (MIME type: $mimeType)');
@@ -2166,6 +2180,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				}
 			} catch (e) {
 				print('DEBUG: Failed to load torrent at index $currentTryIndex: ${e.toString()}');
+				
+				// Add this torrent to failed set to avoid retrying it
+				if (infohash.isNotEmpty) {
+					_failedTorrentInfohashes.add(infohash);
+					print('DEBUG: Added torrent to failed set: $infohash');
+				}
 				
 				// Check if widget is still mounted before continuing
 				if (!mounted) {
@@ -2219,14 +2239,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Check if there's a next torrent available
 	bool _hasNextTorrent() {
-		if (widget.searchResults == null || widget.currentTorrentIndex == null) return false;
-		return widget.currentTorrentIndex! + 1 < widget.searchResults!.length;
+		if (widget.searchResults == null) return false;
+		final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex;
+		if (currentIndex == null) return false;
+		
+		// Check if there are any non-failed torrents after the current index
+		for (int i = currentIndex + 1; i < widget.searchResults!.length; i++) {
+			final torrent = widget.searchResults![i];
+			String infohash;
+			
+			if (torrent is Map<String, dynamic>) {
+				infohash = torrent['infohash'] ?? torrent['hash'] ?? '';
+			} else if (torrent is Torrent) {
+				infohash = torrent.infohash;
+			} else {
+				continue;
+			}
+			
+			// If this torrent hasn't failed, we have a next torrent
+			if (!_failedTorrentInfohashes.contains(infohash)) {
+				return true;
+			}
+		}
+		
+		return false;
 	}
 
 	/// Check if there's a previous torrent available
 	bool _hasPreviousTorrent() {
-		if (widget.searchResults == null || widget.currentTorrentIndex == null) return false;
-		return widget.currentTorrentIndex! > 0;
+		if (widget.searchResults == null) return false;
+		final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex;
+		if (currentIndex == null) return false;
+		return currentIndex > 0;
 	}
 
 	/// Initialize torrent cache from widget or create new one
@@ -2234,6 +2278,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		if (widget.playedTorrentsCache != null) {
 			_playedTorrentsCache = List.from(widget.playedTorrentsCache!);
 		}
+		
+		// Initialize current torrent index
+		_currentTorrentIndex = widget.currentTorrentIndex;
+		
+		// Initialize current title and subtitle
+		_currentTitle = widget.title;
+		_currentSubtitle = widget.subtitle;
+		
+		// Initialize failed torrents set (empty for new sessions)
+		_failedTorrentInfohashes.clear();
 		
 		// Add current torrent to cache if it's from search results
 		if (widget.searchResults != null && widget.currentTorrentIndex != null) {
@@ -2267,8 +2321,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				infohash: infohash,
 				torrentName: torrentName,
 				videoUrl: widget.videoUrl,
-				title: widget.title,
-				subtitle: widget.subtitle,
+				title: _currentTitle.isNotEmpty ? _currentTitle : widget.title,
+				subtitle: _currentSubtitle ?? widget.subtitle,
 				playlist: widget.playlist, // Include playlist if available
 				startIndex: widget.startIndex,
 				originalIndex: widget.currentTorrentIndex!,
@@ -2350,24 +2404,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 
 		try {
-			// Navigate to the cached torrent
-			if (mounted) {
-				Navigator.of(context).pushReplacement(
-					MaterialPageRoute(
-						builder: (context) => VideoPlayerScreen(
-							videoUrl: previousCache.videoUrl,
-							title: previousCache.title,
-							subtitle: previousCache.subtitle,
-							playlist: previousCache.playlist,
-							startIndex: previousCache.startIndex,
-							searchResults: widget.searchResults,
-							currentTorrentIndex: previousCache.originalIndex,
-							searchQuery: widget.searchQuery,
-							playedTorrentsCache: _playedTorrentsCache,
-						),
-					),
-				);
-			}
+			// Update player state instead of creating new screen
+			await _updatePlayerToCachedTorrent(previousCache);
 		} catch (e) {
 			print('DEBUG: Failed to load previous torrent from cache: ${e.toString()}');
 			if (mounted) {
@@ -2384,9 +2422,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Get current torrent infohash
 	String? _getCurrentTorrentInfohash() {
-		if (widget.searchResults == null || widget.currentTorrentIndex == null) return null;
+		if (widget.searchResults == null) return null;
+		final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex;
+		if (currentIndex == null) return null;
 		
-		final currentTorrent = widget.searchResults![widget.currentTorrentIndex!];
+		final currentTorrent = widget.searchResults![currentIndex];
 		
 		if (currentTorrent is Map<String, dynamic>) {
 			return currentTorrent['infohash'] ?? currentTorrent['hash'] ?? null;
@@ -2394,6 +2434,172 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return currentTorrent.infohash;
 		}
 		return null;
+	}
+
+	/// Update player to cached torrent (single player approach)
+	Future<void> _updatePlayerToCachedTorrent(PlayedTorrentCache cache) async {
+		print('DEBUG: Updating player to cached torrent: ${cache.torrentName}');
+		
+		// Update widget state
+		_playedTorrentsCache = List.from(_playedTorrentsCache);
+		
+		// Update current torrent index
+		_currentTorrentIndex = cache.originalIndex;
+		
+		// Update title and subtitle
+		_currentTitle = cache.title;
+		_currentSubtitle = cache.subtitle;
+		
+		// Update player source
+		if (cache.playlist != null) {
+			// Handle playlist
+			await _updatePlayerPlaylist(cache.playlist!, cache.startIndex ?? 0);
+		} else {
+			// Handle single file
+			await _updatePlayerSource(cache.videoUrl);
+		}
+		
+		// Update UI
+		if (mounted) {
+			setState(() {
+				// Trigger rebuild with new title/subtitle
+			});
+		}
+	}
+
+	/// Update player source for single file
+	Future<void> _updatePlayerSource(String videoUrl) async {
+		print('DEBUG: Updating player source to: $videoUrl');
+		
+		// Stop current playback
+		await _player.stop();
+		
+		// Set new media
+		await _player.open(mk.Media(videoUrl));
+		
+		// Start playback
+		await _player.play();
+	}
+
+	/// Update player playlist
+	Future<void> _updatePlayerPlaylist(List<PlaylistEntry> playlist, int startIndex) async {
+		print('DEBUG: Updating player playlist with ${playlist.length} entries, start at $startIndex');
+		
+		// Stop current playback
+		await _player.stop();
+		
+		// Convert playlist entries to media items
+		final mediaItems = playlist.map((entry) {
+			if (entry.url.isNotEmpty) {
+				return mk.Media(entry.url, httpHeaders: const {});
+			} else if (entry.restrictedLink != null && entry.apiKey != null) {
+				// For restricted links, we'll need to unrestrict them when accessed
+				// For now, create a placeholder - this will be handled by the player's lazy loading
+				return mk.Media('placeholder://${entry.restrictedLink}', httpHeaders: const {});
+			}
+			return mk.Media('', httpHeaders: const {});
+		}).toList();
+		
+		// Set new playlist
+		await _player.open(mk.Playlist(mediaItems));
+		
+		// Set the initial index if needed
+		if (startIndex > 0 && startIndex < mediaItems.length) {
+			await _player.jump(startIndex);
+		}
+		
+		// Start playback
+		await _player.play();
+	}
+
+	// Current torrent index for state management
+	int? _currentTorrentIndex;
+	
+	// Current title and subtitle for state management
+	String _currentTitle = '';
+	String? _currentSubtitle;
+
+	/// Add torrent to cache with all necessary data
+	void _addTorrentToCache(int index, String torrentName, String videoUrl, String? subtitle, List<PlaylistEntry>? playlist, int? startIndex) {
+		if (widget.searchResults == null) return;
+		
+		final torrent = widget.searchResults![index];
+		String infohash;
+		
+		if (torrent is Map<String, dynamic>) {
+			infohash = torrent['infohash'] ?? torrent['hash'] ?? '';
+		} else if (torrent is Torrent) {
+			infohash = torrent.infohash;
+		} else {
+			return;
+		}
+		
+		// Check if this torrent is already in cache
+		final existingIndex = _playedTorrentsCache.indexWhere((cache) => cache.infohash == infohash);
+		if (existingIndex == -1) {
+			// Add to cache
+			final cacheEntry = PlayedTorrentCache(
+				infohash: infohash,
+				torrentName: torrentName,
+				videoUrl: videoUrl,
+				title: torrentName,
+				subtitle: subtitle,
+				playlist: playlist,
+				startIndex: startIndex,
+				originalIndex: index,
+				playedAt: DateTime.now(),
+			);
+			_playedTorrentsCache.add(cacheEntry);
+			print('DEBUG: Added torrent to cache: $torrentName (${cacheEntry.infohash}) - Has playlist: ${playlist != null}');
+		}
+	}
+
+	/// Update player to next torrent
+	Future<void> _updatePlayerToNextTorrent(int newIndex, String videoUrl, String title) async {
+		print('DEBUG: Updating player to next torrent at index $newIndex: $title');
+		
+		// Update current torrent index
+		_currentTorrentIndex = newIndex;
+		
+		// Update title
+		_currentTitle = title;
+		_currentSubtitle = null;
+		
+		// Update player source
+		await _updatePlayerSource(videoUrl);
+		
+		// Update UI
+		if (mounted) {
+			setState(() {
+				// Trigger rebuild with new title
+			});
+		}
+	}
+
+	/// Update player to next torrent with playlist
+	Future<void> _updatePlayerToNextTorrentWithPlaylist(int newIndex, String videoUrl, String title, String subtitle, List<PlaylistEntry>? playlist, int startIndex) async {
+		print('DEBUG: Updating player to next torrent with playlist at index $newIndex: $title');
+		
+		// Update current torrent index
+		_currentTorrentIndex = newIndex;
+		
+		// Update title and subtitle
+		_currentTitle = title;
+		_currentSubtitle = subtitle;
+		
+		// Update player source
+		if (playlist != null) {
+			await _updatePlayerPlaylist(playlist, startIndex);
+		} else {
+			await _updatePlayerSource(videoUrl);
+		}
+		
+		// Update UI
+		if (mounted) {
+			setState(() {
+				// Trigger rebuild with new title/subtitle
+			});
+		}
 	}
 
 	/// Handle multi-file torrent playback (copied from torrent search screen)
@@ -2619,22 +2825,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				initialVideoUrl = entries.first.url;
 			}
 			
-			// Navigate to the new video player with updated context
-			Navigator.of(context).pushReplacement(
-				MaterialPageRoute(
-					builder: (context) => VideoPlayerScreen(
-						videoUrl: initialVideoUrl,
-						title: torrentName,
-						subtitle: '${entries.length} files',
-						playlist: entries.isNotEmpty ? entries : null,
-						startIndex: 0,
-						searchResults: widget.searchResults,
-						currentTorrentIndex: widget.currentTorrentIndex! + 1,
-						searchQuery: widget.searchQuery,
-						playedTorrentsCache: _playedTorrentsCache,
-					),
-				),
-			);
+			// Update player state instead of creating new screen
+			final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex ?? 0;
+			final newIndex = currentIndex + 1;
+			
+			// Add to cache first
+			_addTorrentToCache(newIndex, torrentName, initialVideoUrl, '${entries.length} files', entries.isNotEmpty ? entries : null, 0);
+			
+			// Update player state
+			await _updatePlayerToNextTorrentWithPlaylist(newIndex, initialVideoUrl, torrentName, '${entries.length} files', entries.isNotEmpty ? entries : null, 0);
 		} catch (e) {
 			if (mounted) {
 				if (Navigator.of(context).canPop()) {
@@ -3509,7 +3708,7 @@ extension on _VideoPlayerScreenState {
 				);
 			} else {
 				// For non-series content, get preferences for this specific video
-				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+				final videoTitle = _currentTitle.isNotEmpty ? _currentTitle : (widget.title.isNotEmpty ? widget.title : 'Unknown Video');
 				trackPreferences = await StorageService.getVideoTrackPreferences(
 					videoTitle: videoTitle,
 				);
@@ -3561,7 +3760,7 @@ extension on _VideoPlayerScreenState {
 				print('DEBUG: Saved series track preferences - Audio: $audio, Subtitle: $subtitle');
 			} else {
 				// For non-series content, save preferences for this specific video
-				final videoTitle = widget.title.isNotEmpty ? widget.title : 'Unknown Video';
+				final videoTitle = _currentTitle.isNotEmpty ? _currentTitle : (widget.title.isNotEmpty ? widget.title : 'Unknown Video');
 				await StorageService.saveVideoTrackPreferences(
 					videoTitle: videoTitle,
 					audioTrackId: audio,
