@@ -1845,7 +1845,7 @@ class _Controls extends StatelessWidget {
 				child: Column(
 					mainAxisAlignment: MainAxisAlignment.spaceBetween,
 					children: [
-						// Top bar
+						// Netflix-style Top Bar - Just back button and title
 						Row(
 							children: [
 								IconButton(
@@ -1872,143 +1872,159 @@ class _Controls extends StatelessWidget {
 										],
 									),
 								),
-								Row(
-									children: [
-										Text('${speed}x', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-										IconButton(
-											icon: const Icon(Icons.slow_motion_video_rounded, color: Colors.white),
-											onPressed: onSpeed,
-										),
-										IconButton(
-											icon: const Icon(Icons.crop_free_rounded, color: Colors.white),
-											onPressed: onAspect,
-											tooltip: 'Aspect Ratio: ${_getAspectRatioName()}',
-										),
-										IconButton(
-											icon: const Icon(Icons.closed_caption_off_rounded, color: Colors.white),
-											onPressed: onShowTracks,
-											tooltip: 'Audio & Subtitles',
-										),
-										if (hasPlaylist)
-											IconButton(
-												icon: const Icon(Icons.playlist_play_rounded, color: Colors.white),
-												onPressed: onShowPlaylist,
-												tooltip: 'Playlist',
-											),
-
-										IconButton(
-											icon: Icon(isLandscape ? Icons.stay_current_landscape_rounded : Icons.screen_rotation_rounded, color: Colors.white),
-											onPressed: onRotate,
-											tooltip: isLandscape ? 'Portrait' : 'Rotate',
-										),
-									],
-								),
 							],
 						),
 
-						// Center play/pause with navigation buttons
+						// Netflix-style Center - Just play/pause button
 						if (isReady)
-						Row(
-							mainAxisAlignment: MainAxisAlignment.center,
-							children: [
-								// Previous button
-								if (hasPrevious)
-									Material(
-										color: Colors.transparent,
-										child: InkWell(
-											onTap: onPrevious,
-											customBorder: const CircleBorder(),
-											child: Container(
-												padding: const EdgeInsets.all(12),
-												decoration: BoxDecoration(
-													shape: BoxShape.circle,
-													color: Colors.black.withOpacity(0.4),
-												),
-												child: const Icon(
-													Icons.skip_previous_rounded,
-													color: Colors.white,
-													size: 32,
-												),
-											),
-										),
-									),
-								if (hasPrevious)
-									const SizedBox(width: 16),
-								// Play/Pause button
-								Material(
+							Center(
+								child: Material(
 									color: Colors.transparent,
 									child: InkWell(
 										onTap: onPlayPause,
 										customBorder: const CircleBorder(),
 										child: Container(
-											padding: const EdgeInsets.all(14),
+											padding: const EdgeInsets.all(16),
 											decoration: BoxDecoration(
 												shape: BoxShape.circle,
-												color: Colors.black.withOpacity(0.4),
+												color: const Color(0xFFE50914).withOpacity(0.9),
+												border: Border.all(
+													color: const Color(0xFFE50914),
+													width: 2,
+												),
 											),
 											child: Icon(
 												isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
 												color: Colors.white,
-												size: 42,
+												size: 40,
 											),
 										),
 									),
 								),
-								// Next button
-								if (hasNext)
-									const SizedBox(width: 16),
-								if (hasNext)
-									Material(
-										color: Colors.transparent,
-										child: InkWell(
-											onTap: onNext,
-											customBorder: const CircleBorder(),
-											child: Container(
-												padding: const EdgeInsets.all(12),
-												decoration: BoxDecoration(
-													shape: BoxShape.circle,
-													color: Colors.black.withOpacity(0.4),
-												),
-												child: const Icon(
-													Icons.skip_next_rounded,
-													color: Colors.white,
-													size: 32,
-												),
-											),
-										),
-									),
-							],
-						),
+							),
 
-						// Bottom bar
-						Padding(
-							padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+						// Netflix-style Bottom Bar with all controls
+						Container(
+							padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
 							child: Column(
 								mainAxisSize: MainAxisSize.min,
 								children: [
+									// Progress bar with time indicators
 									Row(
 										children: [
-											Text(_format(position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
-											const SizedBox(width: 8),
+											Text(
+												_format(position),
+												style: const TextStyle(
+													color: Colors.white,
+													fontSize: 14,
+													fontWeight: FontWeight.w500,
+												),
+											),
+											const SizedBox(width: 12),
 											Expanded(
 												child: SliderTheme(
 													data: SliderTheme.of(context).copyWith(
-														trackHeight: 3,
-														thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+														trackHeight: 4,
+														activeTrackColor: const Color(0xFFE50914),
+														inactiveTrackColor: Colors.white.withOpacity(0.3),
+														thumbShape: const RoundSliderThumbShape(
+															enabledThumbRadius: 6,
+															elevation: 2,
+														),
+														thumbColor: const Color(0xFFE50914),
+														overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
 													),
-												child: Slider(
-													min: 0,
-													max: 1,
-													value: progress.toDouble(),
-													onChangeStart: (_) => onSeekBarChangedStart(),
-													onChanged: (v) => onSeekBarChanged(v),
-													onChangeEnd: (_) => onSeekBarChangeEnd(),
+													child: Slider(
+														min: 0,
+														max: 1,
+														value: progress.toDouble(),
+														onChangeStart: (_) => onSeekBarChangedStart(),
+														onChanged: (v) => onSeekBarChanged(v),
+														onChangeEnd: (_) => onSeekBarChangeEnd(),
+													),
 												),
 											),
-										),
-										const SizedBox(width: 8),
-										Text(_format(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
-									],
+											const SizedBox(width: 12),
+											Text(
+												_format(duration),
+												style: const TextStyle(
+													color: Colors.white,
+													fontSize: 14,
+													fontWeight: FontWeight.w500,
+												),
+											),
+										],
+									),
+									
+									const SizedBox(height: 16),
+									
+									// Netflix-style control buttons row
+									Row(
+										children: [
+											// Previous episode button
+											if (hasPrevious)
+												_NetflixControlButton(
+													icon: Icons.skip_previous_rounded,
+													label: 'Previous',
+													onPressed: onPrevious!,
+												),
+											
+											// Play/Pause button
+											_NetflixControlButton(
+												icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+												label: isPlaying ? 'Pause' : 'Play',
+												onPressed: onPlayPause,
+												isPrimary: true,
+											),
+											
+											// Next episode button
+											if (hasNext)
+												_NetflixControlButton(
+													icon: Icons.skip_next_rounded,
+													label: 'Next',
+													onPressed: onNext!,
+												),
+											
+											const Spacer(),
+											
+											// Speed indicator and button
+											_NetflixControlButton(
+												icon: Icons.speed_rounded,
+												label: '${speed}x',
+												onPressed: onSpeed,
+											),
+											
+											// Aspect ratio button
+											_NetflixControlButton(
+												icon: Icons.aspect_ratio_rounded,
+												label: _getAspectRatioName(),
+												onPressed: onAspect,
+											),
+											
+											// Audio & subtitles button
+											_NetflixControlButton(
+												icon: Icons.subtitles_rounded,
+												label: 'Audio & Subtitles',
+												onPressed: onShowTracks,
+											),
+											
+											// Playlist button
+											if (hasPlaylist)
+												_NetflixControlButton(
+													icon: Icons.playlist_play_rounded,
+													label: 'Episodes',
+													onPressed: onShowPlaylist,
+												),
+											
+											// Orientation button
+											_NetflixControlButton(
+												icon: isLandscape 
+													? Icons.fullscreen_exit_rounded 
+													: Icons.fullscreen_rounded,
+												label: isLandscape ? 'Exit Fullscreen' : 'Fullscreen',
+												onPressed: onRotate,
+											),
+										],
 									),
 								],
 							),
@@ -2485,5 +2501,68 @@ extension on _VideoPlayerScreenState {
 		// Create a simple hash (we could use a proper hash function, but this is sufficient for our needs)
 		final hash = nameWithoutExt.hashCode.toString();
 		return hash;
+	}
+}
+
+// Netflix-style control button widget
+class _NetflixControlButton extends StatelessWidget {
+	final IconData icon;
+	final String label;
+	final VoidCallback onPressed;
+	final bool isPrimary;
+
+	const _NetflixControlButton({
+		required this.icon,
+		required this.label,
+		required this.onPressed,
+		this.isPrimary = false,
+	});
+
+	@override
+	Widget build(BuildContext context) {
+		return Container(
+			margin: const EdgeInsets.only(right: 16),
+			child: Material(
+				color: Colors.transparent,
+				child: InkWell(
+					onTap: onPressed,
+					borderRadius: BorderRadius.circular(8),
+					child: Container(
+						padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+						decoration: BoxDecoration(
+							color: isPrimary 
+								? const Color(0xFFE50914).withOpacity(0.9)
+								: Colors.black.withOpacity(0.6),
+							borderRadius: BorderRadius.circular(8),
+							border: Border.all(
+								color: isPrimary 
+									? const Color(0xFFE50914)
+									: Colors.white.withOpacity(0.2),
+								width: 1,
+							),
+						),
+						child: Row(
+							mainAxisSize: MainAxisSize.min,
+							children: [
+								Icon(
+									icon,
+									color: Colors.white,
+									size: 18,
+								),
+								const SizedBox(width: 6),
+								Text(
+									label,
+									style: const TextStyle(
+										color: Colors.white,
+										fontSize: 12,
+										fontWeight: FontWeight.w500,
+									),
+								),
+							],
+						),
+					),
+				),
+			),
+		);
 	}
 } 
