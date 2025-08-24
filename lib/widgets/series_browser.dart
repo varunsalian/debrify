@@ -696,7 +696,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     // Episode title
                     Flexible(
                       child: Text(
-                        episode.filename,
+                        episode.displayTitle,
                         style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           color: Colors.white,

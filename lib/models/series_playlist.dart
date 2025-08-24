@@ -55,9 +55,17 @@ class SeriesEpisode {
   });
 
   String get displayTitle {
+    // If we have TVMaze episode info with a title, use that
+    if (episodeInfo?.title != null && episodeInfo!.title!.isNotEmpty) {
+      return episodeInfo!.title!;
+    }
+    
+    // Fallback to episode number for series
     if (seriesInfo.isSeries && seriesInfo.season != null && seriesInfo.episode != null) {
       return 'Episode ${seriesInfo.episode}';
     }
+    
+    // Final fallback to filename/title
     return title;
   }
 
