@@ -1999,7 +1999,7 @@ class _Controls extends StatelessWidget {
 				child: Column(
 					mainAxisAlignment: MainAxisAlignment.spaceBetween,
 					children: [
-						// Netflix-style Top Bar - Just back button and title
+						// Netflix-style Top Bar - Back button and centered title when playing
 						Row(
 							children: [
 								IconButton(
@@ -2008,7 +2008,7 @@ class _Controls extends StatelessWidget {
 								),
 								Expanded(
 									child: Column(
-										crossAxisAlignment: CrossAxisAlignment.start,
+										crossAxisAlignment: CrossAxisAlignment.center,
 										children: [
 											Text(
 												title,
@@ -2026,36 +2026,12 @@ class _Controls extends StatelessWidget {
 										],
 									),
 								),
+								// Empty space to balance the back button
+								const SizedBox(width: 48),
 							],
 						),
 
-						// Netflix-style Center - Just play/pause button
-						if (isReady)
-							Center(
-								child: Material(
-									color: Colors.transparent,
-									child: InkWell(
-										onTap: onPlayPause,
-										customBorder: const CircleBorder(),
-										child: Container(
-											padding: const EdgeInsets.all(16),
-											decoration: BoxDecoration(
-												shape: BoxShape.circle,
-												color: const Color(0xFFE50914).withOpacity(0.9),
-												border: Border.all(
-													color: const Color(0xFFE50914),
-													width: 2,
-												),
-											),
-											child: Icon(
-												isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-												color: Colors.white,
-												size: 40,
-											),
-										),
-									),
-								),
-							),
+
 
 						// Netflix-style Bottom Bar with all controls
 						Container(
