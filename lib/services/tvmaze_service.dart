@@ -54,9 +54,85 @@ class TVMazeService {
     // Remove trailing dots and clean again
     cleaned = cleaned.replaceAll(RegExp(r'\.+$'), '').trim();
     
+    // Remove year patterns like (2023), (2023), 2023
+    cleaned = cleaned.replaceAll(RegExp(r'\((\d{4})\)'), ''); // (2023)
+    cleaned = cleaned.replaceAll(RegExp(r'\s+(\d{4})\s+'), ' '); // 2023 with spaces
+    cleaned = cleaned.replaceAll(RegExp(r'^\d{4}\s+'), ''); // 2023 at start
+    cleaned = cleaned.replaceAll(RegExp(r'\s+\d{4}$'), ''); // 2023 at end
+    
+    // Remove quality indicators
+    cleaned = cleaned.replaceAll(RegExp(r'\b(1080p|720p|480p|2160p|4K|HDRip|BRRip|WEBRip|BluRay|HDTV|DVDRip)\b', caseSensitive: false), '');
+    
+    // Remove audio codecs
+    cleaned = cleaned.replaceAll(RegExp(r'\b(AAC|AC3|DTS|FLAC|MP3|OGG)\b', caseSensitive: false), '');
+    
+    // Remove video codecs
+    cleaned = cleaned.replaceAll(RegExp(r'\b(H\.264|H\.265|HEVC|AVC|XVID|DIVX)\b', caseSensitive: false), '');
+    
+    // Remove release group patterns (usually at the end with -GROUP)
+    cleaned = cleaned.replaceAll(RegExp(r'-[A-Za-z0-9]+$'), '');
+    
+    // Remove season/episode patterns that might be in the title
+    cleaned = cleaned.replaceAll(RegExp(r'\b[Ss](\d{1,2})[Ee](\d{1,2})\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b(\d{1,2})[xX](\d{1,2})\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b(\d{1,2})\.(\d{1,2})\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b[Ss]eason\s*(\d{1,2})\s*[Ee]pisode\s*(\d{1,2})\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b[Ee]pisode\s*(\d{1,2})\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b[Ee]p\s*(\d{1,2})\b'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b[Ee](\d{1,2})\b'), '');
+    
+    // Remove common torrent metadata
+    cleaned = cleaned.replaceAll(RegExp(r'\b(REPACK|PROPER|INTERNAL|EXTENDED|DIRFIX|NFOFIX|SUBFIX)\b', caseSensitive: false), '');
+    
+    // Remove file extensions that might have been missed
+    cleaned = cleaned.replaceAll(RegExp(r'\.[a-zA-Z0-9]{3,4}$'), '');
+    
+    // Clean up any remaining multiple spaces and trim
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+    
     print('Cleaned show name: "$cleaned"');
     
     return cleaned;
+  }
+
+  /// Generate multiple search variations for better matching
+  static List<String> _generateSearchVariations(String cleanName) {
+    final variations = <String>[];
+    
+    // Add the original cleaned name
+    variations.add(cleanName);
+    
+    // Split by common words that might be part of the title
+    final words = cleanName.split(' ').where((word) => word.isNotEmpty).toList();
+    
+    if (words.length > 1) {
+      // Try without the last word (might be a descriptor)
+      final withoutLast = words.take(words.length - 1).join(' ');
+      if (withoutLast.isNotEmpty) {
+        variations.add(withoutLast);
+      }
+      
+      // Try without the first word (might be "The", "A", etc.)
+      if (words.length > 2) {
+        final withoutFirst = words.skip(1).join(' ');
+        variations.add(withoutFirst);
+      }
+    }
+    
+    // Remove common prefixes/suffixes
+    final withoutThe = cleanName.replaceAll(RegExp(r'^[Tt]he\s+'), '');
+    if (withoutThe != cleanName && withoutThe.isNotEmpty) {
+      variations.add(withoutThe);
+    }
+    
+    // Remove common suffixes
+    final withoutSuffixes = cleanName.replaceAll(RegExp(r'\s+(Series|Show|TV|Television)$', caseSensitive: false), '');
+    if (withoutSuffixes != cleanName && withoutSuffixes.isNotEmpty) {
+      variations.add(withoutSuffixes);
+    }
+    
+    // Remove duplicates and empty strings
+    return variations.where((v) => v.isNotEmpty).toSet().toList();
   }
 
   /// Try alternative search method
@@ -96,67 +172,72 @@ class TVMazeService {
       return null;
     }
 
-    for (int attempt = 1; attempt <= _maxRetries; attempt++) {
-      try {
-        // Use proper URL encoding
-        final encodedQuery = Uri.encodeComponent(cleanName);
-        final url = '$_baseUrl/search/shows?q=$encodedQuery';
-        
-        print('TVMaze searching for: $cleanName (encoded: $encodedQuery)');
-        
-        final response = await http.get(
-          Uri.parse(url),
-          headers: {
-            'Accept': 'application/json',
-          },
-        ).timeout(_timeout);
-
-        print('TVMaze response status: ${response.statusCode}');
-
-        if (response.statusCode == 200) {
-          final List<dynamic> results = json.decode(response.body);
-          print('TVMaze found ${results.length} results');
+    // Try multiple search strategies
+    final searchVariations = _generateSearchVariations(cleanName);
+    
+    for (final searchTerm in searchVariations) {
+      print('Trying search variation: "$searchTerm"');
+      
+      for (int attempt = 1; attempt <= _maxRetries; attempt++) {
+        try {
+          // Use proper URL encoding
+          final encodedQuery = Uri.encodeComponent(searchTerm);
+          final url = '$_baseUrl/search/shows?q=$encodedQuery';
           
-          if (results.isNotEmpty) {
-            final show = results.first['show'] as Map<String, dynamic>;
-            _cache[cacheKey] = show;
-            _seriesIdCache[cleanName.toLowerCase()] = show['id'] as int;
-            return show;
+          print('TVMaze searching for: $searchTerm (encoded: $encodedQuery)');
+          
+          final response = await http.get(
+            Uri.parse(url),
+            headers: {
+              'Accept': 'application/json',
+            },
+          ).timeout(_timeout);
+
+          print('TVMaze response status: ${response.statusCode}');
+
+          if (response.statusCode == 200) {
+            final List<dynamic> results = json.decode(response.body);
+            print('TVMaze found ${results.length} results');
+            
+            if (results.isNotEmpty) {
+              final show = results.first['show'] as Map<String, dynamic>;
+              _cache[cacheKey] = show;
+              _seriesIdCache[cleanName.toLowerCase()] = show['id'] as int;
+              return show;
+            }
+          } else if (response.statusCode == 429) {
+            // Rate limited, wait and retry
+            print('TVMaze rate limited, waiting...');
+            await Future.delayed(Duration(seconds: attempt * 2));
+            continue;
           } else {
-            // Cache the failure to prevent repeated API calls
-            print('TVMaze search returned no results for: $cleanName');
-            _cache[cacheKey] = null;
-            return null;
+            print('TVMaze search failed with status: ${response.statusCode}');
+            print('Response body: ${response.body}');
           }
-        } else if (response.statusCode == 429) {
-          // Rate limited, wait and retry
-          print('TVMaze rate limited, waiting...');
-          await Future.delayed(Duration(seconds: attempt * 2));
-          continue;
-        } else {
-          print('TVMaze search failed with status: ${response.statusCode}');
-          print('Response body: ${response.body}');
-        }
-      } catch (e) {
-        print('TVMaze search error (attempt $attempt): $e');
-        
-        // Check if it's a network-related error
-        if (e is SocketException || 
-            e.toString().contains('HandshakeException') ||
-            e.toString().contains('Connection reset') ||
-            e.toString().contains('Connection refused')) {
-          // Mark as unavailable for network errors
-          _isAvailable = false;
-          _lastAvailabilityCheck = DateTime.now();
-          break; // Don't retry network errors
-        }
-        
-        if (attempt < _maxRetries) {
-          // Wait before retrying
-          await Future.delayed(Duration(seconds: attempt));
-          continue;
+        } catch (e) {
+          print('TVMaze search error (attempt $attempt): $e');
+          
+          // Check if it's a network-related error
+          if (e is SocketException || 
+              e.toString().contains('HandshakeException') ||
+              e.toString().contains('Connection reset') ||
+              e.toString().contains('Connection refused')) {
+            // Mark as unavailable for network errors
+            _isAvailable = false;
+            _lastAvailabilityCheck = DateTime.now();
+            break; // Don't retry network errors
+          }
+          
+          if (attempt < _maxRetries) {
+            // Wait before retrying
+            await Future.delayed(Duration(seconds: attempt));
+            continue;
+          }
         }
       }
+      
+      // If we get here, this search variation failed, try the next one
+      print('Search variation "$searchTerm" failed, trying next...');
     }
     
     // If all attempts failed, try alternative search
