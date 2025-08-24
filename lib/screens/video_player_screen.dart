@@ -92,6 +92,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Offset? _lastTapLocal;
 	bool _isManualEpisodeSelection = false; // Track if episode was manually selected
 	bool _isAutoAdvancing = false; // Track if episode is auto-advancing
+	bool _allowResumeForManualSelection = false; // Allow resuming for manual selections with progress
 	Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
 
 	// media_kit state
@@ -517,10 +518,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			
 			// Mark this as a manual episode selection
 			_isManualEpisodeSelection = true;
+			_allowResumeForManualSelection = false; // Don't allow resuming for next/previous navigation
 			// Reset the flag after 30 seconds to allow position saving
 			_manualSelectionResetTimer?.cancel();
 			_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
 				_isManualEpisodeSelection = false;
+				_allowResumeForManualSelection = false;
 			});
 			await _loadPlaylistIndex(nextIndex, autoplay: true);
 		}
@@ -553,10 +556,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			
 			// Mark this as a manual episode selection
 			_isManualEpisodeSelection = true;
+			_allowResumeForManualSelection = false; // Don't allow resuming for next/previous navigation
 			// Reset the flag after 30 seconds to allow position saving
 			_manualSelectionResetTimer?.cancel();
 			_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
 				_isManualEpisodeSelection = false;
+				_allowResumeForManualSelection = false;
 			});
 			await _loadPlaylistIndex(previousIndex, autoplay: true);
 		}
@@ -721,9 +726,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 
 	Future<void> _maybeRestoreResume() async {
-		// If this is a manual episode selection or auto-advancing, don't restore position
-		if (_isManualEpisodeSelection || _isAutoAdvancing) {
+		// If this is auto-advancing, don't restore position
+		if (_isAutoAdvancing) {
 			_isAutoAdvancing = false; // Reset the flag
+			return;
+		}
+		
+		// If this is a manual episode selection, only restore if we have saved progress
+		if (_isManualEpisodeSelection && !_allowResumeForManualSelection) {
 			// Don't reset _isManualEpisodeSelection here - let it be reset after a delay
 			return;
 		}
@@ -1395,12 +1405,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 									// Find the original index in the PlaylistEntry array
 									final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(season, episode);
 									if (originalIndex != -1) {
+										// Check if this episode has saved progress
+										final playbackState = await StorageService.getSeriesPlaybackState(
+											seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+											season: season,
+											episode: episode,
+										);
+										
+										// Allow resuming if the episode has saved progress
+										_allowResumeForManualSelection = playbackState != null;
+										
 										// Mark this as a manual episode selection
 										_isManualEpisodeSelection = true;
 										// Reset the flag after 30 seconds to allow position saving
 										_manualSelectionResetTimer?.cancel();
 										_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
 											_isManualEpisodeSelection = false;
+											_allowResumeForManualSelection = false;
 										});
 										await _loadPlaylistIndex(originalIndex, autoplay: true);
 									} else {
@@ -1521,10 +1542,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 														Navigator.of(context).pop();
 														// Mark this as a manual episode selection
 														_isManualEpisodeSelection = true;
+														_allowResumeForManualSelection = false; // Don't allow resuming for simple playlist navigation
 														// Reset the flag after 30 seconds to allow position saving
 														_manualSelectionResetTimer?.cancel();
 														_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
 															_isManualEpisodeSelection = false;
+															_allowResumeForManualSelection = false;
 														});
 														await _loadPlaylistIndex(index, autoplay: true);
 													},
@@ -2879,5 +2902,5 @@ class _NetflixControlButton extends StatelessWidget {
 				),
 			),
 		);
-	}
-} 
+	} 
+}
