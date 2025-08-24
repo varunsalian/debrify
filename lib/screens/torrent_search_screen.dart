@@ -172,7 +172,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _addToRealDebrid(String infohash, String torrentName) async {
+  Future<void> _addToRealDebrid(String infohash, String torrentName, int index) async {
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -283,7 +283,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       Navigator.of(context).pop();
       
       // Handle post-torrent action
-      await _handlePostTorrentAction(result, torrentName, apiKey);
+      await _handlePostTorrentAction(result, torrentName, apiKey, index);
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
@@ -324,7 +324,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _showFileSelectionDialog(String infohash, String torrentName) async {
+  Future<void> _showFileSelectionDialog(String infohash, String torrentName, int index) async {
     print('DEBUG: _showFileSelectionDialog called with infohash: $infohash, name: $torrentName');
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
@@ -479,7 +479,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         selectedOption: null,
                         onChanged: (value) {
                           Navigator.of(context).pop();
-                          _addToRealDebridWithSelection(infohash, torrentName, value!);
+                          _addToRealDebridWithSelection(infohash, torrentName, value!, index);
                         },
                         gradient: const LinearGradient(
                           colors: [Color(0xFF10B981), Color(0xFF059669)],
@@ -495,7 +495,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         selectedOption: null,
                         onChanged: (value) {
                           Navigator.of(context).pop();
-                          _addToRealDebridWithSelection(infohash, torrentName, value!);
+                          _addToRealDebridWithSelection(infohash, torrentName, value!, index);
                         },
                         gradient: const LinearGradient(
                           colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
@@ -511,7 +511,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         selectedOption: null,
                         onChanged: (value) {
                           Navigator.of(context).pop();
-                          _addToRealDebridWithSelection(infohash, torrentName, value!);
+                          _addToRealDebridWithSelection(infohash, torrentName, value!, index);
                         },
                         gradient: const LinearGradient(
                           colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
@@ -528,7 +528,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  Future<void> _addToRealDebridWithSelection(String infohash, String torrentName, String fileSelection) async {
+  Future<void> _addToRealDebridWithSelection(String infohash, String torrentName, String fileSelection, int index) async {
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -631,7 +631,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       Navigator.of(context).pop();
       
       // Handle post-torrent action
-      await _handlePostTorrentAction(result, torrentName, apiKey);
+              await _handlePostTorrentAction(result, torrentName, apiKey, index);
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
@@ -799,7 +799,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  Future<void> _handlePostTorrentAction(Map<String, dynamic> result, String torrentName, String apiKey) async {
+  Future<void> _handlePostTorrentAction(Map<String, dynamic> result, String torrentName, String apiKey, int index) async {
     final postAction = await StorageService.getPostTorrentAction();
     final downloadLink = result['downloadLink'] as String;
     final fileSelection = result['fileSelection'] as String;
@@ -883,7 +883,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // Play video - check if it's actually a video file first
         if (fileSelection == 'video' && links.length > 1) {
           // Multiple video files - create playlist with true lazy loading
-          await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey);
+          await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey, index);
         } else {
           // Single file - check MIME type after unrestricting
           try {
@@ -893,14 +893,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             
             // Check if it's actually a video using MIME type
             if (FileUtils.isVideoMimeType(mimeType)) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => VideoPlayerScreen(
-                    videoUrl: videoUrl,
-                    title: torrentName,
-                  ),
-                ),
-              );
+              							Navigator.of(context).push(
+								MaterialPageRoute(
+									builder: (context) => VideoPlayerScreen(
+										videoUrl: videoUrl,
+										title: torrentName,
+										searchResults: _torrents,
+										currentTorrentIndex: index,
+										searchQuery: _searchController.text,
+										playedTorrentsCache: [], // Start with empty cache
+									),
+								),
+							);
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -984,7 +988,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _handlePlayMultiFileTorrentWithInfo(List<dynamic> links, List<dynamic>? files, Map<String, dynamic>? updatedInfo, String torrentName, String apiKey) async {
+  Future<void> _handlePlayMultiFileTorrentWithInfo(List<dynamic> links, List<dynamic>? files, Map<String, dynamic>? updatedInfo, String torrentName, String apiKey, int index) async {
     try {
       // Show loading dialog
       showDialog(
@@ -1320,17 +1324,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         initialVideoUrl = entries.first.url;
       }
       
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => VideoPlayerScreen(
-            videoUrl: initialVideoUrl,
-            title: torrentName,
-            subtitle: '${entries.length} files',
-            playlist: entries.isNotEmpty ? entries : null,
-            startIndex: 0,
-          ),
-        ),
-      );
+      			Navigator.of(context).push(
+				MaterialPageRoute(
+					builder: (context) => VideoPlayerScreen(
+						videoUrl: initialVideoUrl,
+						title: torrentName,
+						subtitle: '${entries.length} files',
+						playlist: entries.isNotEmpty ? entries : null,
+						startIndex: 0,
+						searchResults: _torrents,
+						currentTorrentIndex: index,
+						searchQuery: _searchController.text,
+						playedTorrentsCache: [], // Start with empty cache
+					),
+				),
+			);
     } catch (e) {
       if (mounted) {
         if (Navigator.of(context).canPop()) {
@@ -2456,10 +2464,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         const SizedBox(width: 8),
                         Expanded(
                           child: GestureDetector(
-                            onTap: () => _addToRealDebrid(torrent.infohash, torrent.name),
+                            onTap: () => _addToRealDebrid(torrent.infohash, torrent.name, index),
                             onLongPress: () {
                               print('DEBUG: Long press detected!');
-                              _showFileSelectionDialog(torrent.infohash, torrent.name);
+                              _showFileSelectionDialog(torrent.infohash, torrent.name, index);
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(
