@@ -413,7 +413,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		final seriesPlaylist = widget._seriesPlaylist;
 		if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
 			// For non-series content, just advance to next index
-			if (_currentIndex + 1 < widget.playlist!.length) {
+			if (widget.playlist != null && _currentIndex + 1 < widget.playlist!.length) {
 				print('DEBUG: Non-series content, advancing to next index: ${_currentIndex + 1}');
 				return _currentIndex + 1;
 			}
@@ -707,7 +707,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	String get _resumeKey {
 		// Use a canonical key stripping volatile query parts
-		final url = (widget.playlist != null && widget.playlist!.isNotEmpty)
+		final url = (widget.playlist != null && widget.playlist!.isNotEmpty && _currentIndex >= 0 && _currentIndex < widget.playlist!.length)
 			? widget.playlist![_currentIndex].url
 			: widget.videoUrl;
 		
@@ -1368,123 +1368,254 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		await showModalBottomSheet(
 			context: context,
-			backgroundColor: const Color(0xFF0F172A),
+			backgroundColor: const Color(0xFF0F0F0F),
 			isScrollControlled: true,
 			shape: const RoundedRectangleBorder(
-				borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+				borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
 			),
 			builder: (context) {
 				return SafeArea(
 					top: false,
-					child: seriesPlaylist != null && seriesPlaylist.isSeries
-						? SeriesBrowser(
-							seriesPlaylist: seriesPlaylist,
-							currentEpisodeIndex: _currentIndex,
-							onEpisodeSelected: (season, episode) async {
-								// Find the original index in the PlaylistEntry array
-								final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(season, episode);
-								if (originalIndex != -1) {
-									// Mark this as a manual episode selection
-									_isManualEpisodeSelection = true;
-									// Reset the flag after 30 seconds to allow position saving
-									_manualSelectionResetTimer?.cancel();
-									_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
-										_isManualEpisodeSelection = false;
-									});
-									await _loadPlaylistIndex(originalIndex, autoplay: true);
-								} else {
-									print('Failed to find original index for S${season}E${episode}');
-									// Show error message to user
-									if (mounted) {
-										ScaffoldMessenger.of(context).showSnackBar(
-											SnackBar(
-												content: Text('Failed to find episode S${season}E${episode}', style: const TextStyle(color: Colors.white)),
-												backgroundColor: const Color(0xFFEF4444),
-												duration: const Duration(seconds: 3),
-											),
-										);
+					child: Container(
+						decoration: const BoxDecoration(
+							gradient: LinearGradient(
+								begin: Alignment.topCenter,
+								end: Alignment.bottomCenter,
+								colors: [
+									Color(0xFF1A1A1A),
+									Color(0xFF0F0F0F),
+								],
+							),
+						),
+						child: seriesPlaylist != null && seriesPlaylist.isSeries
+							? SeriesBrowser(
+								seriesPlaylist: seriesPlaylist,
+								currentEpisodeIndex: _currentIndex,
+								onEpisodeSelected: (season, episode) async {
+									// Find the original index in the PlaylistEntry array
+									final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(season, episode);
+									if (originalIndex != -1) {
+										// Mark this as a manual episode selection
+										_isManualEpisodeSelection = true;
+										// Reset the flag after 30 seconds to allow position saving
+										_manualSelectionResetTimer?.cancel();
+										_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+											_isManualEpisodeSelection = false;
+										});
+										await _loadPlaylistIndex(originalIndex, autoplay: true);
+									} else {
+										print('Failed to find original index for S${season}E${episode}');
+										// Show error message to user
+										if (mounted) {
+											ScaffoldMessenger.of(context).showSnackBar(
+												SnackBar(
+													content: Text('Failed to find episode S${season}E${episode}', style: const TextStyle(color: Colors.white)),
+													backgroundColor: const Color(0xFFEF4444),
+													duration: const Duration(seconds: 3),
+												),
+											);
+										}
 									}
-								}
-							},
-						  )
-						: _buildSimplePlaylist(),
+								},
+							  )
+							: _buildSimplePlaylist(),
+					),
 				);
 			},
 		);
 	}
 
 	Widget _buildSimplePlaylist() {
-		return Column(
-			mainAxisSize: MainAxisSize.min,
-			children: [
-				Container(
-					padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-					child: Row(
+		return Container(
+			height: MediaQuery.of(context).size.height * 0.85,
+			padding: const EdgeInsets.all(20),
+			child: Column(
+				mainAxisSize: MainAxisSize.min,
+				children: [
+					// Netflix-style header
+					Row(
 						children: [
-							const Icon(Icons.playlist_play_rounded, color: Colors.white),
-							const SizedBox(width: 8),
-							const Text('All files', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+							Container(
+								padding: const EdgeInsets.all(8),
+								decoration: BoxDecoration(
+									color: const Color(0xFFE50914).withOpacity(0.2),
+									borderRadius: BorderRadius.circular(8),
+								),
+								child: const Icon(
+									Icons.playlist_play_rounded,
+									color: Color(0xFFE50914),
+									size: 20,
+								),
+							),
+							const SizedBox(width: 12),
+							const Text(
+								'All Files',
+								style: TextStyle(
+									color: Colors.white,
+									fontWeight: FontWeight.w700,
+									fontSize: 18,
+									letterSpacing: 0.5,
+								),
+							),
+							const Spacer(),
+							Container(
+								decoration: BoxDecoration(
+									color: Colors.black.withOpacity(0.4),
+									borderRadius: BorderRadius.circular(8),
+									border: Border.all(
+										color: Colors.white.withOpacity(0.2),
+										width: 1,
+									),
+								),
+								child: IconButton(
+									icon: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+									onPressed: () => Navigator.of(context).pop(),
+									style: IconButton.styleFrom(
+										padding: const EdgeInsets.all(8),
+										minimumSize: const Size(36, 36),
+									),
+								),
+							),
 						],
 					),
-				),
-				Flexible(
-					child: FutureBuilder<Set<int>>(
-						future: _getFinishedEpisodesForSimplePlaylist(),
-						builder: (context, snapshot) {
-							final finishedEpisodes = snapshot.data ?? <int>{};
-							
-							return ListView.builder(
-								shrinkWrap: true,
-								itemCount: widget.playlist!.length,
-								itemBuilder: (context, index) {
-									final entry = widget.playlist![index];
-									final active = index == _currentIndex;
-									final isFinished = finishedEpisodes.contains(index);
-									
-									return ListTile(
-										onTap: () async {
-											Navigator.of(context).pop();
-											// Mark this as a manual episode selection
-											_isManualEpisodeSelection = true;
-											// Reset the flag after 30 seconds to allow position saving
-											_manualSelectionResetTimer?.cancel();
-											_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
-												_isManualEpisodeSelection = false;
-											});
-											await _loadPlaylistIndex(index, autoplay: true);
-										},
-										title: Row(
-											children: [
-												Expanded(
-													child: Text(
-														entry.title, 
-														maxLines: 2, 
-														overflow: TextOverflow.ellipsis, 
-														style: TextStyle(
-															color: Colors.white,
-															decoration: isFinished ? TextDecoration.lineThrough : null,
+					const SizedBox(height: 20),
+					Flexible(
+						child: FutureBuilder<Set<int>>(
+							future: _getFinishedEpisodesForSimplePlaylist(),
+							builder: (context, snapshot) {
+								final finishedEpisodes = snapshot.data ?? <int>{};
+								
+								return ListView.builder(
+									shrinkWrap: true,
+									itemCount: widget.playlist!.length,
+									itemBuilder: (context, index) {
+										final entry = widget.playlist![index];
+										final active = index == _currentIndex;
+										final isFinished = finishedEpisodes.contains(index);
+										
+										return Container(
+											margin: const EdgeInsets.only(bottom: 12),
+											decoration: BoxDecoration(
+												color: active 
+													? const Color(0xFFE50914).withOpacity(0.2)
+													: const Color(0xFF1A1A1A).withOpacity(0.8),
+												borderRadius: BorderRadius.circular(12),
+												border: Border.all(
+													color: active 
+														? const Color(0xFFE50914)
+														: Colors.white.withOpacity(0.1),
+													width: 1,
+												),
+												boxShadow: [
+													BoxShadow(
+														color: Colors.black.withOpacity(0.2),
+														blurRadius: 8,
+														offset: const Offset(0, 2),
+													),
+												],
+											),
+											child: Material(
+												color: Colors.transparent,
+												child: InkWell(
+													onTap: () async {
+														Navigator.of(context).pop();
+														// Mark this as a manual episode selection
+														_isManualEpisodeSelection = true;
+														// Reset the flag after 30 seconds to allow position saving
+														_manualSelectionResetTimer?.cancel();
+														_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+															_isManualEpisodeSelection = false;
+														});
+														await _loadPlaylistIndex(index, autoplay: true);
+													},
+													borderRadius: BorderRadius.circular(12),
+													child: Padding(
+														padding: const EdgeInsets.all(16),
+														child: Row(
+															children: [
+																Container(
+																	padding: const EdgeInsets.all(8),
+																	decoration: BoxDecoration(
+																		color: active 
+																			? const Color(0xFFE50914)
+																			: Colors.white.withOpacity(0.1),
+																		borderRadius: BorderRadius.circular(8),
+																	),
+																	child: Icon(
+																		active ? Icons.play_arrow_rounded : Icons.movie_rounded,
+																		color: active 
+																			? Colors.white
+																			: Colors.white.withOpacity(0.7),
+																		size: 20,
+																	),
+																),
+																const SizedBox(width: 16),
+																Expanded(
+																	child: Column(
+																		crossAxisAlignment: CrossAxisAlignment.start,
+																		children: [
+																			Text(
+																				entry.title,
+																				maxLines: 2,
+																				overflow: TextOverflow.ellipsis,
+																				style: TextStyle(
+																					color: active 
+																						? Colors.white
+																						: Colors.white.withOpacity(0.9),
+																					fontWeight: active 
+																						? FontWeight.w600
+																						: FontWeight.w400,
+																					fontSize: 14,
+																					decoration: isFinished ? TextDecoration.lineThrough : null,
+																				),
+																			),
+																			if (active) ...[
+																				const SizedBox(height: 4),
+																				Container(
+																					padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+																					decoration: BoxDecoration(
+																						color: const Color(0xFFE50914),
+																						borderRadius: BorderRadius.circular(8),
+																					),
+																					child: const Text(
+																						'Now Playing',
+																						style: TextStyle(
+																							color: Colors.white,
+																							fontSize: 10,
+																							fontWeight: FontWeight.w600,
+																						),
+																					),
+																				),
+																			],
+																		],
+																	),
+																),
+																if (isFinished)
+																	Container(
+																		padding: const EdgeInsets.all(6),
+																		decoration: BoxDecoration(
+																			color: const Color(0xFF059669).withOpacity(0.2),
+																			borderRadius: BorderRadius.circular(6),
+																		),
+																		child: const Icon(
+																			Icons.check_circle,
+																			color: Color(0xFF059669),
+																			size: 16,
+																		),
+																	),
+															],
 														),
 													),
 												),
-												if (isFinished)
-													const Icon(
-														Icons.check_circle,
-														color: Color(0xFF059669),
-														size: 16,
-													),
-											],
-										),
-										leading: Icon(
-											active ? Icons.play_arrow_rounded : Icons.movie_rounded, 
-											color: active ? Colors.greenAccent : Colors.white70,
-										),
-									);
-								},
-							);
-						},
+											),
+										);
+									},
+								);
+							},
+						),
 					),
-				),
-			],
+				],
+			),
 		);
 	}
 
@@ -1958,73 +2089,82 @@ class _Controls extends StatelessWidget {
 									
 									const SizedBox(height: 16),
 									
-									// Netflix-style control buttons row
-									Row(
-										children: [
-											// Previous episode button
-											if (hasPrevious)
+									// Netflix-style control buttons row - responsive layout
+									SingleChildScrollView(
+										scrollDirection: Axis.horizontal,
+										child: Row(
+											children: [
+												// Previous episode button
+												if (hasPrevious)
+													_NetflixControlButton(
+														icon: Icons.skip_previous_rounded,
+														label: 'Previous',
+														onPressed: onPrevious!,
+														isCompact: true,
+													),
+												
+												// Play/Pause button
 												_NetflixControlButton(
-													icon: Icons.skip_previous_rounded,
-													label: 'Previous',
-													onPressed: onPrevious!,
+													icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+													label: isPlaying ? 'Pause' : 'Play',
+													onPressed: onPlayPause,
+													isPrimary: true,
+													isCompact: true,
 												),
-											
-											// Play/Pause button
-											_NetflixControlButton(
-												icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-												label: isPlaying ? 'Pause' : 'Play',
-												onPressed: onPlayPause,
-												isPrimary: true,
-											),
-											
-											// Next episode button
-											if (hasNext)
+												
+												// Next episode button
+												if (hasNext)
+													_NetflixControlButton(
+														icon: Icons.skip_next_rounded,
+														label: 'Next',
+														onPressed: onNext!,
+														isCompact: true,
+													),
+												
+												// Speed indicator and button
 												_NetflixControlButton(
-													icon: Icons.skip_next_rounded,
-													label: 'Next',
-													onPressed: onNext!,
+													icon: Icons.speed_rounded,
+													label: '${speed}x',
+													onPressed: onSpeed,
+													isCompact: true,
 												),
-											
-											const Spacer(),
-											
-											// Speed indicator and button
-											_NetflixControlButton(
-												icon: Icons.speed_rounded,
-												label: '${speed}x',
-												onPressed: onSpeed,
-											),
-											
-											// Aspect ratio button
-											_NetflixControlButton(
-												icon: Icons.aspect_ratio_rounded,
-												label: _getAspectRatioName(),
-												onPressed: onAspect,
-											),
-											
-											// Audio & subtitles button
-											_NetflixControlButton(
-												icon: Icons.subtitles_rounded,
-												label: 'Audio & Subtitles',
-												onPressed: onShowTracks,
-											),
-											
-											// Playlist button
-											if (hasPlaylist)
+												
+												// Aspect ratio button
 												_NetflixControlButton(
-													icon: Icons.playlist_play_rounded,
-													label: 'Episodes',
-													onPressed: onShowPlaylist,
+													icon: Icons.aspect_ratio_rounded,
+													label: _getAspectRatioName(),
+													onPressed: onAspect,
+													isCompact: true,
 												),
-											
-											// Orientation button
-											_NetflixControlButton(
-												icon: isLandscape 
-													? Icons.fullscreen_exit_rounded 
-													: Icons.fullscreen_rounded,
-												label: isLandscape ? 'Exit Fullscreen' : 'Fullscreen',
-												onPressed: onRotate,
-											),
-										],
+												
+												// Audio & subtitles button
+												_NetflixControlButton(
+													icon: Icons.subtitles_rounded,
+													label: 'Audio',
+													onPressed: onShowTracks,
+													isCompact: true,
+												),
+												
+												// Playlist button
+												if (hasPlaylist)
+													_NetflixControlButton(
+														icon: Icons.playlist_play_rounded,
+														label: 'Episodes',
+														onPressed: onShowPlaylist,
+														isCompact: true,
+													),
+												
+												// Orientation button
+												_NetflixControlButton(
+													icon: isLandscape 
+														? Icons.fullscreen_exit_rounded 
+														: Icons.fullscreen_rounded,
+													label: isLandscape ? 'Exit' : 'Full',
+													onPressed: onRotate,
+													isCompact: true,
+												),
+											],
+										),
 									),
 								],
 							),
@@ -2251,9 +2391,9 @@ extension on _VideoPlayerScreenState {
 		await showModalBottomSheet(
 			context: context,
 			isScrollControlled: true,
-			backgroundColor: const Color(0xFF0B1222),
+			backgroundColor: const Color(0xFF0F0F0F),
 			shape: const RoundedRectangleBorder(
-				borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+				borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
 			),
 			builder: (context) {
 				return SafeArea(
@@ -2261,7 +2401,7 @@ extension on _VideoPlayerScreenState {
 					child: FractionallySizedBox(
 						heightFactor: 0.7,
 						child: Padding(
-							padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+							padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
 							child: StatefulBuilder(
 								builder: (context, setModalState) {
 									return Column(
@@ -2269,17 +2409,50 @@ extension on _VideoPlayerScreenState {
 										children: [
 											Row(
 												children: [
-													const Icon(Icons.tune_rounded, color: Colors.white),
-													const SizedBox(width: 8),
-													const Text('Audio & Subtitles', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+													Container(
+														padding: const EdgeInsets.all(8),
+														decoration: BoxDecoration(
+															color: const Color(0xFFE50914).withOpacity(0.2),
+															borderRadius: BorderRadius.circular(8),
+														),
+														child: const Icon(
+															Icons.tune_rounded,
+															color: Color(0xFFE50914),
+															size: 20,
+														),
+													),
+													const SizedBox(width: 12),
+													const Text(
+														'Audio & Subtitles',
+														style: TextStyle(
+															color: Colors.white,
+															fontWeight: FontWeight.w700,
+															fontSize: 18,
+															letterSpacing: 0.5,
+														),
+													),
 													const Spacer(),
-													IconButton(
-														icon: const Icon(Icons.close_rounded, color: Colors.white70),
-														onPressed: () => Navigator.of(context).pop(),
+													Container(
+														decoration: BoxDecoration(
+															color: Colors.black.withOpacity(0.4),
+															borderRadius: BorderRadius.circular(8),
+															border: Border.all(
+																color: Colors.white.withOpacity(0.2),
+																width: 1,
+															),
+														),
+														child: IconButton(
+															icon: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+															onPressed: () => Navigator.of(context).pop(),
+															style: IconButton.styleFrom(
+																padding: const EdgeInsets.all(8),
+																minimumSize: const Size(36, 36),
+															),
+														),
 													),
 												],
 											),
-											const SizedBox(height: 10),
+											const SizedBox(height: 20),
 											Expanded(
 												child: Row(
 													children: [
@@ -2287,51 +2460,75 @@ extension on _VideoPlayerScreenState {
 														Expanded(
 															child: Container(
 																decoration: BoxDecoration(
-																	color: const Color(0xFF121B30),
-																	borderRadius: BorderRadius.circular(12),
-																	border: Border.all(color: const Color(0xFF22304F)),
+																	color: const Color(0xFF1A1A1A),
+																	borderRadius: BorderRadius.circular(16),
+																	border: Border.all(
+																		color: const Color(0xFF333333),
+																		width: 1,
+																	),
+																	boxShadow: [
+																		BoxShadow(
+																			color: Colors.black.withOpacity(0.3),
+																			blurRadius: 12,
+																			offset: const Offset(0, 4),
+																		),
+																	],
 																),
-																padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+																padding: const EdgeInsets.all(16),
 																child: Column(
 																	crossAxisAlignment: CrossAxisAlignment.start,
 																	children: [
 																		Row(
-																			children: const [
-																				Icon(Icons.volume_up_rounded, color: Colors.white70, size: 18),
-																				SizedBox(width: 6),
-																				Text('Audio', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+																			children: [
+																				Container(
+																					padding: const EdgeInsets.all(6),
+																					decoration: BoxDecoration(
+																						color: const Color(0xFFE50914).withOpacity(0.2),
+																						borderRadius: BorderRadius.circular(6),
+																					),
+																					child: const Icon(
+																						Icons.volume_up_rounded,
+																						color: Color(0xFFE50914),
+																						size: 16,
+																					),
+																				),
+																				const SizedBox(width: 8),
+																				const Text(
+																					'Audio',
+																					style: TextStyle(
+																						color: Colors.white,
+																						fontWeight: FontWeight.w600,
+																						fontSize: 16,
+																					),
+																				),
 																			],
 																		),
-																		const SizedBox(height: 6),
+																		const SizedBox(height: 12),
 																		Expanded(
 																			child: ListView.builder(
 																				itemCount: audios.length + 1,
 																				itemBuilder: (context, index) {
 																					if (index == 0) {
-																						return RadioListTile<String>(
+																						return _NetflixRadioTile(
 																							value: 'auto',
 																							groupValue: selectedAudio.isEmpty ? 'auto' : selectedAudio,
-																							title: const Text('Auto', style: TextStyle(color: Colors.white)),
-																							dense: true,
+																							title: 'Auto',
 																							onChanged: (v) async {
 																								setModalState(() { selectedAudio = ''; });
 																								await _player.setAudioTrack(mk.AudioTrack.auto());
-																								// Persist the track choice
 																								await _persistTrackChoice('', selectedSub);
 																							},
 																						);
 																					}
 																					final a = audios[index - 1];
-																					return RadioListTile<String>(
+																					return _NetflixRadioTile(
 																						value: a.id ?? '',
 																						groupValue: selectedAudio.isEmpty ? 'auto' : selectedAudio,
-																						title: Text(_labelForTrack(a, index - 1), style: const TextStyle(color: Colors.white)),
-																						dense: true,
+																						title: _labelForTrack(a, index - 1),
 																						onChanged: (v) async {
 																							if (v == null) return;
 																							setModalState(() { selectedAudio = v; });
 																							await _player.setAudioTrack(a);
-																							// Persist the track choice
 																							await _persistTrackChoice(v, selectedSub);
 																						},
 																					);
@@ -2342,56 +2539,80 @@ extension on _VideoPlayerScreenState {
 																),
 															),
 														),
-														const SizedBox(width: 12),
+														const SizedBox(width: 16),
 														// Subtitles pane
 														Expanded(
 															child: Container(
 																decoration: BoxDecoration(
-																	color: const Color(0xFF121B30),
-																	borderRadius: BorderRadius.circular(12),
-																	border: Border.all(color: const Color(0xFF22304F)),
+																	color: const Color(0xFF1A1A1A),
+																	borderRadius: BorderRadius.circular(16),
+																	border: Border.all(
+																		color: const Color(0xFF333333),
+																		width: 1,
+																	),
+																	boxShadow: [
+																		BoxShadow(
+																			color: Colors.black.withOpacity(0.3),
+																			blurRadius: 12,
+																			offset: const Offset(0, 4),
+																		),
+																	],
 																),
-																padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+																padding: const EdgeInsets.all(16),
 																child: Column(
 																	crossAxisAlignment: CrossAxisAlignment.start,
 																	children: [
 																		Row(
-																			children: const [
-																				Icon(Icons.closed_caption_rounded, color: Colors.white70, size: 18),
-																				SizedBox(width: 6),
-																				Text('Subtitles', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+																			children: [
+																				Container(
+																					padding: const EdgeInsets.all(6),
+																					decoration: BoxDecoration(
+																						color: const Color(0xFFE50914).withOpacity(0.2),
+																						borderRadius: BorderRadius.circular(6),
+																					),
+																					child: const Icon(
+																						Icons.closed_caption_rounded,
+																						color: Color(0xFFE50914),
+																						size: 16,
+																					),
+																				),
+																				const SizedBox(width: 8),
+																				const Text(
+																					'Subtitles',
+																					style: TextStyle(
+																						color: Colors.white,
+																						fontWeight: FontWeight.w600,
+																						fontSize: 16,
+																					),
+																				),
 																			],
 																		),
-																		const SizedBox(height: 6),
+																		const SizedBox(height: 12),
 																		Expanded(
 																			child: ListView.builder(
 																				itemCount: subs.length + 1,
 																				itemBuilder: (context, index) {
 																					if (index == 0) {
-																						return RadioListTile<String>(
+																						return _NetflixRadioTile(
 																							value: '',
 																							groupValue: selectedSub,
-																							title: const Text('Off', style: TextStyle(color: Colors.white)),
-																							dense: true,
+																							title: 'Off',
 																							onChanged: (v) async {
 																								setModalState(() { selectedSub = ''; });
 																								await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-																								// Persist the track choice
 																								await _persistTrackChoice(selectedAudio, '');
 																							},
 																						);
 																					}
 																					final s = subs[index - 1];
-																					return RadioListTile<String>(
+																					return _NetflixRadioTile(
 																						value: s.id ?? '',
 																						groupValue: selectedSub,
-																						title: Text(_labelForTrack(s, index - 1), style: const TextStyle(color: Colors.white)),
-																						dense: true,
+																						title: _labelForTrack(s, index - 1),
 																						onChanged: (v) async {
 																							if (v == null) return;
 																							setModalState(() { selectedSub = v; });
 																							await _player.setSubtitleTrack(s);
-																							// Persist the track choice
 																							await _persistTrackChoice(selectedAudio, v);
 																						},
 																					);
@@ -2504,31 +2725,123 @@ extension on _VideoPlayerScreenState {
 	}
 }
 
+// Netflix-style radio tile widget for track selection
+class _NetflixRadioTile extends StatelessWidget {
+	final String value;
+	final String groupValue;
+	final String title;
+	final ValueChanged<String?> onChanged;
+
+	const _NetflixRadioTile({
+		required this.value,
+		required this.groupValue,
+		required this.title,
+		required this.onChanged,
+	});
+
+	@override
+	Widget build(BuildContext context) {
+		final isSelected = value == groupValue;
+		
+		return Container(
+			margin: const EdgeInsets.only(bottom: 8),
+			decoration: BoxDecoration(
+				color: isSelected 
+					? const Color(0xFFE50914).withOpacity(0.2)
+					: Colors.transparent,
+				borderRadius: BorderRadius.circular(12),
+				border: Border.all(
+					color: isSelected 
+						? const Color(0xFFE50914)
+						: Colors.white.withOpacity(0.1),
+					width: 1,
+				),
+			),
+			child: Material(
+				color: Colors.transparent,
+				child: InkWell(
+					onTap: () => onChanged(value),
+					borderRadius: BorderRadius.circular(12),
+					child: Padding(
+						padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+						child: Row(
+							children: [
+								Container(
+									width: 20,
+									height: 20,
+									decoration: BoxDecoration(
+										shape: BoxShape.circle,
+										border: Border.all(
+											color: isSelected 
+												? const Color(0xFFE50914)
+												: Colors.white.withOpacity(0.5),
+											width: 2,
+										),
+									),
+									child: isSelected
+										? Container(
+											margin: const EdgeInsets.all(4),
+											decoration: const BoxDecoration(
+												shape: BoxShape.circle,
+												color: Color(0xFFE50914),
+											),
+										)
+										: null,
+								),
+								const SizedBox(width: 12),
+								Expanded(
+									child: Text(
+										title,
+										style: TextStyle(
+											color: isSelected 
+												? Colors.white
+												: Colors.white.withOpacity(0.8),
+											fontWeight: isSelected 
+												? FontWeight.w600
+												: FontWeight.w400,
+											fontSize: 14,
+										),
+									),
+								),
+							],
+						),
+					),
+				),
+			),
+		);
+	}
+}
+
 // Netflix-style control button widget
 class _NetflixControlButton extends StatelessWidget {
 	final IconData icon;
 	final String label;
 	final VoidCallback onPressed;
 	final bool isPrimary;
+	final bool isCompact;
 
 	const _NetflixControlButton({
 		required this.icon,
 		required this.label,
 		required this.onPressed,
 		this.isPrimary = false,
+		this.isCompact = false,
 	});
 
 	@override
 	Widget build(BuildContext context) {
 		return Container(
-			margin: const EdgeInsets.only(right: 16),
+			margin: EdgeInsets.only(right: isCompact ? 8 : 16),
 			child: Material(
 				color: Colors.transparent,
 				child: InkWell(
 					onTap: onPressed,
 					borderRadius: BorderRadius.circular(8),
 					child: Container(
-						padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+						padding: EdgeInsets.symmetric(
+							horizontal: isCompact ? 8 : 12, 
+							vertical: isCompact ? 6 : 8
+						),
 						decoration: BoxDecoration(
 							color: isPrimary 
 								? const Color(0xFFE50914).withOpacity(0.9)
@@ -2547,17 +2860,19 @@ class _NetflixControlButton extends StatelessWidget {
 								Icon(
 									icon,
 									color: Colors.white,
-									size: 18,
+									size: isCompact ? 16 : 18,
 								),
-								const SizedBox(width: 6),
-								Text(
-									label,
-									style: const TextStyle(
-										color: Colors.white,
-										fontSize: 12,
-										fontWeight: FontWeight.w500,
+								if (!isCompact || label.isNotEmpty) ...[
+									SizedBox(width: isCompact ? 4 : 6),
+									Text(
+										label,
+										style: TextStyle(
+											color: Colors.white,
+											fontSize: isCompact ? 10 : 12,
+											fontWeight: FontWeight.w500,
+										),
 									),
-								),
+								],
 							],
 						),
 					),
