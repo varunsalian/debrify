@@ -11,6 +11,11 @@ class EpisodeInfo {
   final String? episodeNumber;
   final String? seasonNumber;
   final int? runtime;
+  final String? airDate;
+  final String? language;
+  final List<String> genres;
+  final String? network;
+  final String? country;
 
   const EpisodeInfo({
     this.title,
@@ -21,9 +26,31 @@ class EpisodeInfo {
     this.episodeNumber,
     this.seasonNumber,
     this.runtime,
+    this.airDate,
+    this.language,
+    this.genres = const [],
+    this.network,
+    this.country,
   });
 
-  factory EpisodeInfo.fromTVMaze(Map<String, dynamic> json) {
+  factory EpisodeInfo.fromTVMaze(Map<String, dynamic> json, {Map<String, dynamic>? showInfo}) {
+    // Extract genres from the show info if available
+    List<String> genres = [];
+    if (showInfo != null && showInfo['genres'] != null) {
+      genres = List<String>.from(showInfo['genres']);
+    }
+    
+    // Extract language and country from show info
+    String? language;
+    String? country;
+    String? network;
+    
+    if (showInfo != null) {
+      language = showInfo['language'];
+      country = showInfo['network']?['country']?['name'];
+      network = showInfo['network']?['name'];
+    }
+    
     return EpisodeInfo(
       title: json['name'],
       plot: json['summary']?.toString().replaceAll(RegExp(r'<[^>]*>'), ''), // Remove HTML tags
@@ -33,6 +60,11 @@ class EpisodeInfo {
       episodeNumber: json['number']?.toString(),
       seasonNumber: json['season']?.toString(),
       runtime: json['runtime'],
+      airDate: json['airdate'],
+      language: language,
+      genres: genres,
+      network: network,
+      country: country,
     );
   }
 }
@@ -221,35 +253,64 @@ class SeriesPlaylist {
 
   /// Fetch episode information for all episodes in the playlist
   Future<void> fetchEpisodeInfo() async {
-    if (!isSeries || seriesTitle == null) return;
+    print('DEBUG: fetchEpisodeInfo called for series: $seriesTitle');
+    print('DEBUG: isSeries: $isSeries, seriesTitle: $seriesTitle');
+    
+    if (!isSeries || seriesTitle == null) {
+      print('DEBUG: Early return - not a series or no series title');
+      return;
+    }
 
+    // First, get the show information to extract genres, language, network, etc.
+    Map<String, dynamic>? showInfo;
+    try {
+      print('DEBUG: Fetching show info for: $seriesTitle');
+      showInfo = await EpisodeInfoService.getSeriesInfo(seriesTitle!);
+      print('DEBUG: Show info result: ${showInfo != null ? 'SUCCESS' : 'FAILED'}');
+    } catch (e) {
+      print('Failed to fetch show info: $e');
+    }
+
+    print('DEBUG: Processing ${seasons.length} seasons with ${seasons.fold(0, (sum, season) => sum + season.episodes.length)} total episodes');
+    
     for (final season in seasons) {
       for (final episode in season.episodes) {
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
           try {
+            print('DEBUG: Fetching episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}');
             final episodeData = await EpisodeInfoService.getEpisodeInfo(
               seriesTitle!,
               episode.seriesInfo.season!,
               episode.seriesInfo.episode!,
             );
             if (episodeData != null) {
-              episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData);
+              episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
+              print('DEBUG: Successfully fetched episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode} - title: ${episode.episodeInfo?.title}');
+            } else {
+              print('DEBUG: No episode data returned for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}');
             }
           } catch (e) {
             // Silently fail - episode info is optional
-            print('Failed to fetch episode info: $e');
+            print('Failed to fetch episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}: $e');
           }
+        } else {
+          print('DEBUG: Skipping episode - missing season/episode info');
         }
       }
     }
+    
+    print('DEBUG: fetchEpisodeInfo completed');
   }
 
   /// Get episode information for a specific episode
   Future<EpisodeInfo?> getEpisodeInfoForEpisode(String seriesTitle, int season, int episode) async {
     try {
+      // Get show information first
+      final showInfo = await EpisodeInfoService.getSeriesInfo(seriesTitle);
+      
       final episodeData = await EpisodeInfoService.getEpisodeInfo(seriesTitle, season, episode);
       if (episodeData != null) {
-        return EpisodeInfo.fromTVMaze(episodeData);
+        return EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
       }
     } catch (e) {
       print('Failed to fetch episode info for S${season}E${episode}: $e');

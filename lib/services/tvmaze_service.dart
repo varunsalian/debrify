@@ -325,37 +325,54 @@ class TVMazeService {
     int season,
     int episode,
   ) async {
+    print('DEBUG: TVMazeService.getEpisodeInfo called for $showName S${season}E${episode}');
     final cleanName = _cleanShowName(showName);
+    print('DEBUG: Cleaned show name: $cleanName');
     
     // First try to get show ID from cache
     int? showId = _seriesIdCache[cleanName.toLowerCase()];
+    print('DEBUG: Show ID from cache: $showId');
     
     if (showId == null) {
       // Search for the show
+      print('DEBUG: Show not in cache, searching for: $cleanName');
       final show = await searchShow(cleanName);
       if (show != null) {
         showId = show['id'] as int;
+        print('DEBUG: Found show ID: $showId');
+      } else {
+        print('DEBUG: Show not found in search');
       }
     }
 
-    if (showId == null) return null;
+    if (showId == null) {
+      print('DEBUG: No show ID available, returning null');
+      return null;
+    }
 
     // Get all episodes
+    print('DEBUG: Getting episodes for show ID: $showId');
     final episodes = await getEpisodes(showId);
+    print('DEBUG: Got ${episodes.length} episodes');
     
     // Find the specific episode
     for (final ep in episodes) {
       if (ep['season'] == season && ep['number'] == episode) {
+        print('DEBUG: Found episode S${season}E${episode}');
         return ep;
       }
     }
 
+    print('DEBUG: Episode S${season}E${episode} not found in episodes list');
     return null;
   }
 
   /// Get show information by name
   static Future<Map<String, dynamic>?> getShowInfo(String showName) async {
-    return await searchShow(showName);
+    print('DEBUG: TVMazeService.getShowInfo called for: $showName');
+    final result = await searchShow(showName);
+    print('DEBUG: getShowInfo result: ${result != null ? 'SUCCESS' : 'FAILED'}');
+    return result;
   }
 
   /// Force refresh availability status

@@ -26,29 +26,34 @@ class EpisodeInfoService {
     int episode,
   ) async {
     final cacheKey = '${seriesTitle}_${season}_$episode';
+    print('DEBUG: getEpisodeInfo called for $cacheKey');
     
     // Check cache first
     if (_cache.containsKey(cacheKey)) {
       final cached = _cache[cacheKey];
       if (cached is Map<String, dynamic>) {
+        print('DEBUG: Returning cached episode info for $cacheKey');
         return cached;
       } else if (cached == null) {
         // Return null for cached failures
+        print('DEBUG: Returning cached failure for $cacheKey');
         return null;
       }
     }
 
     // Check if TVMaze is available
     if (!TVMazeService.currentAvailability) {
-      print('TVMaze not available, skipping episode info fetch');
+      print('DEBUG: TVMaze not available, skipping episode info fetch for $cacheKey');
       // Cache the failure to prevent repeated checks
       _cache[cacheKey] = null;
       return null;
     }
 
+    print('DEBUG: TVMaze is available, proceeding with API call for $cacheKey');
     await _rateLimit();
 
     try {
+      print('DEBUG: Calling TVMazeService.getEpisodeInfo for $seriesTitle S${season}E${episode}');
       final episodeInfo = await TVMazeService.getEpisodeInfo(
         seriesTitle,
         season,
@@ -56,16 +61,17 @@ class EpisodeInfoService {
       );
 
       if (episodeInfo != null) {
+        print('DEBUG: Successfully got episode info for $cacheKey');
         _cache[cacheKey] = episodeInfo;
         return episodeInfo;
       } else {
         // Cache the failure to prevent repeated API calls
-        print('No episode info found for ${seriesTitle} S${season}E${episode}');
+        print('DEBUG: No episode info found for ${seriesTitle} S${season}E${episode}');
         _cache[cacheKey] = null;
         return null;
       }
     } catch (e) {
-      print('Failed to get episode info: $e');
+      print('DEBUG: Failed to get episode info for $cacheKey: $e');
       // Cache the failure to prevent repeated API calls
       _cache[cacheKey] = null;
       return null;
@@ -75,42 +81,48 @@ class EpisodeInfoService {
   /// Get series information from TVMaze with fallback
   static Future<Map<String, dynamic>?> getSeriesInfo(String seriesTitle) async {
     final cacheKey = 'series_$seriesTitle';
+    print('DEBUG: getSeriesInfo called for $cacheKey');
     
     // Check cache first
     if (_cache.containsKey(cacheKey)) {
       final cached = _cache[cacheKey];
       if (cached is Map<String, dynamic>) {
+        print('DEBUG: Returning cached series info for $cacheKey');
         return cached;
       } else if (cached == null) {
         // Return null for cached failures
+        print('DEBUG: Returning cached failure for $cacheKey');
         return null;
       }
     }
 
     // Check if TVMaze is available
     if (!TVMazeService.currentAvailability) {
-      print('TVMaze not available, skipping series info fetch');
+      print('DEBUG: TVMaze not available, skipping series info fetch for $cacheKey');
       // Cache the failure to prevent repeated checks
       _cache[cacheKey] = null;
       return null;
     }
 
+    print('DEBUG: TVMaze is available, proceeding with API call for $cacheKey');
     await _rateLimit();
 
     try {
+      print('DEBUG: Calling TVMazeService.getShowInfo for $seriesTitle');
       final seriesInfo = await TVMazeService.getShowInfo(seriesTitle);
       
       if (seriesInfo != null) {
+        print('DEBUG: Successfully got series info for $cacheKey');
         _cache[cacheKey] = seriesInfo;
         return seriesInfo;
       } else {
         // Cache the failure to prevent repeated API calls
-        print('No series info found for: $seriesTitle');
+        print('DEBUG: No series info found for: $seriesTitle');
         _cache[cacheKey] = null;
         return null;
       }
     } catch (e) {
-      print('Failed to get series info: $e');
+      print('DEBUG: Failed to get series info for $cacheKey: $e');
       // Cache the failure to prevent repeated API calls
       _cache[cacheKey] = null;
       return null;
