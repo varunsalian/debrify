@@ -12,6 +12,7 @@ import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../models/series_playlist.dart';
 import '../models/torrent.dart';
+import '../models/debrid_download.dart' show TorrentLinkedList, TorrentNode;
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../widgets/series_browser.dart';
@@ -166,8 +167,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	SeriesPlaylist? _cachedSeriesPlaylist;
 	final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
 	
-	// Cache for played torrents
-	List<PlayedTorrentCache> _playedTorrentsCache = [];
+	// Doubly linked list for efficient torrent navigation
+	TorrentLinkedList _torrentList = TorrentLinkedList();
 	
 	// Track failed torrents to avoid retrying them
 	Set<String> _failedTorrentInfohashes = {};
@@ -508,38 +509,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Get enhanced metadata for OTT-style display
 	Map<String, dynamic> _getEnhancedMetadata() {
-		print('DEBUG: _getEnhancedMetadata called for current index: $_currentIndex');
 		final seriesPlaylist = _seriesPlaylist;
-		print('DEBUG: seriesPlaylist: ${seriesPlaylist != null}');
-		print('DEBUG: isSeries: ${seriesPlaylist?.isSeries}');
-		print('DEBUG: playlist length: ${widget.playlist?.length}');
 		
 		if (seriesPlaylist != null && seriesPlaylist.isSeries && widget.playlist != null) {
 			// Find the current episode info
 			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
 				try {
-					print('DEBUG: Looking for episode with originalIndex: $_currentIndex');
-					print('DEBUG: All episodes count: ${seriesPlaylist.allEpisodes.length}');
-					
-					// Debug: Print all episodes and their original indices
-					for (int i = 0; i < seriesPlaylist.allEpisodes.length; i++) {
-						final episode = seriesPlaylist.allEpisodes[i];
-						print('DEBUG: Episode $i: S${episode.seriesInfo.season}E${episode.seriesInfo.episode} (originalIndex: ${episode.originalIndex}) - has episodeInfo: ${episode.episodeInfo != null}');
-					}
-					
 					final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
 						(episode) => episode.originalIndex == _currentIndex,
 						orElse: () => seriesPlaylist.allEpisodes.first,
 					);
 					
-					print('DEBUG: Found episode: ${currentEpisode.seriesInfo.season}x${currentEpisode.seriesInfo.episode}');
-					print('DEBUG: Episode info is null: ${currentEpisode.episodeInfo == null}');
-					
 					if (currentEpisode.episodeInfo != null) {
 						final episodeInfo = currentEpisode.episodeInfo!;
-						print('DEBUG: Episode info title: ${episodeInfo.title}');
-						print('DEBUG: Episode info rating: ${episodeInfo.rating}');
-						print('DEBUG: Episode info runtime: ${episodeInfo.runtime}');
 						
 						final metadata = {
 							'rating': episodeInfo.rating,
@@ -553,11 +535,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							'plot': episodeInfo.plot,
 						};
 						
-						// Debug logging
-						print('Enhanced metadata for episode: $metadata');
 						return metadata;
-					} else {
-						print('No episode info available for current episode');
 					}
 				} catch (e) {
 					print('Error getting enhanced metadata: $e');
@@ -574,16 +552,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
 			// For non-series content, just advance to next index
 			if (widget.playlist != null && _currentIndex + 1 < widget.playlist!.length) {
-				print('DEBUG: Non-series content, advancing to next index: ${_currentIndex + 1}');
 				return _currentIndex + 1;
 			}
-			print('DEBUG: No more episodes in non-series content');
 			return -1;
 		}
-
-		print('DEBUG: Finding next episode for series: ${seriesPlaylist.seriesTitle}');
-		print('DEBUG: Current index: $_currentIndex');
-		print('DEBUG: All episodes: ${seriesPlaylist.allEpisodes.map((e) => 'S${e.seriesInfo.season}E${e.seriesInfo.episode}').join(', ')}');
 
 		// Find current episode in the sorted allEpisodes list
 		final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
@@ -591,21 +563,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			orElse: () => seriesPlaylist.allEpisodes.first,
 		);
 
-		print('DEBUG: Current episode: S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode} (original index: ${currentEpisode.originalIndex})');
-
 		// Find the index of current episode in allEpisodes
 		final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(currentEpisode);
-		print('DEBUG: Current episode index in sorted list: $currentEpisodeIndex');
 		
 		if (currentEpisodeIndex == -1 || currentEpisodeIndex + 1 >= seriesPlaylist.allEpisodes.length) {
 			// No next episode found
-			print('DEBUG: No next episode found (currentEpisodeIndex: $currentEpisodeIndex, total episodes: ${seriesPlaylist.allEpisodes.length})');
 			return -1;
 		}
 
 		// Get the next episode from the sorted list
 		final nextEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex + 1];
-		print('DEBUG: Auto-advancing from S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode} to S${nextEpisode.seriesInfo.season}E${nextEpisode.seriesInfo.episode} (original index: ${nextEpisode.originalIndex})');
 		
 		return nextEpisode.originalIndex;
 	}
@@ -654,27 +621,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Future<void> _goToNextEpisode() async {
 		final nextIndex = _findNextEpisodeIndex();
 		if (nextIndex != -1) {
-			// Show loading indicator
-			if (mounted) {
-				ScaffoldMessenger.of(context).showSnackBar(
-					SnackBar(
-						content: Row(
-							children: [
-								const SizedBox(
-									width: 16,
-									height: 16,
-									child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-								),
-								const SizedBox(width: 12),
-								const Text('Loading next episode...', style: TextStyle(color: Colors.white)),
-							],
-						),
-						backgroundColor: Theme.of(context).colorScheme.surface,
-						duration: const Duration(seconds: 2),
-					),
-				);
-			}
-			
 			// Mark this as a manual episode selection
 			_isManualEpisodeSelection = true;
 			_allowResumeForManualSelection = false; // Don't allow resuming for next/previous navigation
@@ -692,27 +638,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Future<void> _goToPreviousEpisode() async {
 		final previousIndex = _findPreviousEpisodeIndex();
 		if (previousIndex != -1) {
-			// Show loading indicator
-			if (mounted) {
-				ScaffoldMessenger.of(context).showSnackBar(
-					SnackBar(
-						content: Row(
-							children: [
-								const SizedBox(
-									width: 16,
-									height: 16,
-									child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-								),
-								const SizedBox(width: 12),
-								const Text('Loading previous episode...', style: TextStyle(color: Colors.white)),
-							],
-						),
-						backgroundColor: Theme.of(context).colorScheme.surface,
-						duration: const Duration(seconds: 2),
-					),
-				);
-			}
-			
 			// Mark this as a manual episode selection
 			_isManualEpisodeSelection = true;
 			_allowResumeForManualSelection = false; // Don't allow resuming for next/previous navigation
@@ -759,7 +684,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		if (_duration > Duration.zero && _position > Duration.zero) {
 			final timeRemaining = _duration - _position;
 			if (timeRemaining <= const Duration(seconds: 30)) {
-				print('DEBUG: Near end of video (${timeRemaining.inSeconds}s remaining), marking as finished');
 				await _markCurrentEpisodeAsFinished();
 			}
 		}
@@ -778,29 +702,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		String videoUrl = entry.url;
 		if (entry.restrictedLink != null && entry.apiKey != null) {
 			try {
-				// Show loading indicator
-				if (mounted) {
-					ScaffoldMessenger.of(context).showSnackBar(
-						SnackBar(
-							content: Row(
-								children: [
-									const SizedBox(
-										width: 16,
-										height: 16,
-										child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-									),
-									const SizedBox(width: 12),
-									const Text('Unrestricting video...', style: TextStyle(color: Colors.white)),
-								],
-							),
-							backgroundColor: Theme.of(context).colorScheme.surface,
-							duration: const Duration(seconds: 2),
-						),
-					);
-				}
-				
+				print('🔗 LINKED LIST: Unrestricting playlist entry: ${entry.title}');
 				final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
 				videoUrl = unrestrictResult['download'] ?? entry.url;
+				print('🔗 LINKED LIST: Successfully unrestricted playlist entry: $videoUrl');
 				
 				// Update the playlist entry with the unrestricted URL
 				// Note: We can't modify the const PlaylistEntry, so we'll use the unrestricted URL directly
@@ -819,6 +724,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			}
 		}
 		
+		// Log whether we're using cached or unrestricted URL
+		if (entry.restrictedLink == null) {
+			print('🔗 LINKED LIST: Using cached URL for playlist entry: ${entry.title}');
+		}
+		
 		await _player.open(mk.Media(videoUrl), play: autoplay);
 		// Wait for the video to load and duration to be available
 		await _waitForVideoReady();
@@ -829,17 +739,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Preload episode information in the background
 	Future<void> _preloadEpisodeInfo() async {
-		print('DEBUG: _preloadEpisodeInfo called - START');
 		final seriesPlaylist = _seriesPlaylist;
-		print('DEBUG: seriesPlaylist: ${seriesPlaylist != null}');
-		print('DEBUG: isSeries: ${seriesPlaylist?.isSeries}');
-		print('DEBUG: seriesTitle: ${seriesPlaylist?.seriesTitle}');
 		
 		if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-			print('DEBUG: About to call fetchEpisodeInfo');
 			// Preload episode information in the background
 			seriesPlaylist.fetchEpisodeInfo().then((_) {
-				print('DEBUG: Episode info loaded, triggering UI update');
 				// Trigger UI update to show the episode info
 				if (mounted) {
 					setState(() {});
@@ -848,10 +752,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				// Silently handle errors - this is just preloading
 				print('Episode info preload failed: $error');
 			});
-		} else {
-			print('DEBUG: Not calling fetchEpisodeInfo - conditions not met');
 		}
-		print('DEBUG: _preloadEpisodeInfo called - END');
 	}
 
 	@override
@@ -2052,40 +1953,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		);
 	}
 
-	/// Navigate to next torrent in search results
+	/// Navigate to next torrent in search results with sanitization
 	Future<void> _goToNextTorrent() async {
 		if (widget.searchResults == null || widget.currentTorrentIndex == null) return;
 		
-		// Show loading indicator
-		if (mounted) {
-			ScaffoldMessenger.of(context).showSnackBar(
-				SnackBar(
-					content: Row(
-						children: [
-							const SizedBox(
-								width: 16,
-								height: 16,
-								child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-							),
-							const SizedBox(width: 12),
-							const Text('Loading next torrent...', style: TextStyle(color: Colors.white)),
-						],
-					),
-					backgroundColor: Theme.of(context).colorScheme.surface,
-					duration: const Duration(seconds: 2),
-				),
-			);
-		}
+
 
 		// Try to find the next playable torrent
 		final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex ?? 0;
 		int currentTryIndex = currentIndex + 1;
 		final maxIndex = widget.searchResults!.length - 1;
 		
-		print('DEBUG: Starting torrent retry logic. Current index: $currentIndex, Total results: ${widget.searchResults!.length}');
-		
 		while (currentTryIndex <= maxIndex && mounted) {
-			print('DEBUG: Trying torrent at index $currentTryIndex (${currentTryIndex + 1}/${widget.searchResults!.length})');
 			
 			// Get the current torrent to try
 			final nextTorrent = widget.searchResults![currentTryIndex];
@@ -2102,10 +1981,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			
 			// Skip if this torrent has already failed
 			if (infohash.isNotEmpty && _failedTorrentInfohashes.contains(infohash)) {
-				print('DEBUG: Skipping already failed torrent at index $currentTryIndex (infohash: $infohash)');
 				currentTryIndex++;
 				continue;
 			}
+			
+					// Check if this torrent is already in the linked list
+		final existingNode = _torrentList.find(infohash);
+		if (existingNode != null) {
+			// Torrent already processed, use cached data
+			print('🔗 LINKED LIST: Found cached torrent, using existing data: ${existingNode.torrentName}');
+			print('🔗 LINKED LIST: Loading cached video URL: ${existingNode.videoUrl}');
+			
+			// Update player state with cached torrent
+			if (existingNode.playlist != null) {
+				await _updatePlayerToNextTorrentWithPlaylist(
+					existingNode.originalIndex,
+					existingNode.videoUrl,
+					existingNode.title,
+					existingNode.subtitle ?? '',
+					existingNode.playlist,
+					existingNode.startIndex ?? 0,
+				);
+			} else {
+				await _updatePlayerToNextTorrent(
+					existingNode.originalIndex,
+					existingNode.videoUrl,
+					existingNode.title,
+				);
+			}
+			return; // Success, exit the loop
+		}
 			
 			try {
 				
@@ -2148,27 +2053,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					throw Exception('No download links available');
 				}
 
-				print('DEBUG: Successfully added torrent to Real Debrid. Links: ${links.length}, File selection: $fileSelection');
-				
 				// Handle based on file selection
 				if (fileSelection == 'video' && links.length > 1) {
-					print('DEBUG: Multiple video files detected, creating playlist');
 					// Multiple video files - create playlist
 					await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey);
 					return; // Success, exit the loop
 				} else {
 					// Single file - check MIME type after unrestricting
+					print('🔗 LINKED LIST: Unrestricting new torrent link: ${torrentName}');
 					final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[0]);
 					final videoUrl = unrestrictResult['download'];
 					final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
+					print('🔗 LINKED LIST: Successfully unrestricted link: $videoUrl');
 					
-					print('DEBUG: Single file torrent. MIME type: $mimeType, isVideo: ${FileUtils.isVideoMimeType(mimeType)}');
-					
-										// Check if it's actually a video using MIME type
+					// Check if it's actually a video using MIME type
 					if (FileUtils.isVideoMimeType(mimeType)) {
-						print('DEBUG: Video file confirmed, updating player state');
-						
-						// Add to cache first
+						// Add to linked list first
 						_addTorrentToCache(currentTryIndex, torrentName, videoUrl, null, null, null);
 						
 						// Update player state instead of creating new screen
@@ -2179,17 +2079,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					}
 				}
 			} catch (e) {
-				print('DEBUG: Failed to load torrent at index $currentTryIndex: ${e.toString()}');
-				
 				// Add this torrent to failed set to avoid retrying it
 				if (infohash.isNotEmpty) {
 					_failedTorrentInfohashes.add(infohash);
-					print('DEBUG: Added torrent to failed set: $infohash');
 				}
 				
 				// Check if widget is still mounted before continuing
 				if (!mounted) {
-					print('DEBUG: Widget no longer mounted, stopping retry logic');
 					return;
 				}
 				
@@ -2198,7 +2094,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				
 				// If we've tried all torrents, show error
 				if (currentTryIndex > maxIndex) {
-					print('DEBUG: Reached end of search results, no more torrents to try');
 					if (mounted) {
 						ScaffoldMessenger.of(context).showSnackBar(
 							const SnackBar(
@@ -2211,28 +2106,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					return;
 				}
 				
-				print('DEBUG: Moving to next torrent (index $currentTryIndex)');
-				
-				// Update loading message to show we're trying the next one
-				if (mounted) {
-					ScaffoldMessenger.of(context).showSnackBar(
-						SnackBar(
-							content: Row(
-								children: [
-									const SizedBox(
-										width: 16,
-										height: 16,
-										child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-									),
-									const SizedBox(width: 12),
-									Text('Trying torrent ${currentTryIndex + 1}...', style: const TextStyle(color: Colors.white)),
-								],
-							),
-							backgroundColor: Theme.of(context).colorScheme.surface,
-							duration: const Duration(seconds: 2),
-						),
-					);
-				}
+
 			}
 		}
 	}
@@ -2264,21 +2138,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		return false;
 	}
+	
+	/// Remove unplayable torrent from linked list and update current pointer
+	void _removeUnplayableTorrent(String infohash) {
+		final removed = _torrentList.removeNode(infohash);
+		if (removed) {
+			print('🔗 LINKED LIST: Removed unplayable torrent: $infohash');
+			_printLinkedListState();
+		}
+	}
+	
+	/// Print current linked list state for debugging
+	void _printLinkedListState() {
+		print('🔗 LINKED LIST STATE:');
+		print('  Size: ${_torrentList.size}');
+		print('  Current: ${_torrentList.current?.torrentName ?? 'None'}');
+		print('  Has next: ${_torrentList.hasNext()}');
+		print('  Has previous: ${_torrentList.hasPrevious()}');
+		
+		// Print all nodes in order
+		final nodes = _torrentList.getAllNodes();
+		for (int i = 0; i < nodes.length; i++) {
+			final node = nodes[i];
+			final marker = node == _torrentList.current ? ' → ' : '   ';
+			print('  $i$marker${node.torrentName}');
+		}
+		print('');
+	}
 
 	/// Check if there's a previous torrent available
 	bool _hasPreviousTorrent() {
-		if (widget.searchResults == null) return false;
-		final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex;
-		if (currentIndex == null) return false;
-		return currentIndex > 0;
+		if (_torrentList.isEmpty) return false;
+		
+		// Find the current torrent in linked list
+		final currentInfohash = _getCurrentTorrentInfohash();
+		if (currentInfohash == null) return false;
+		
+		// Set current node and check if there's a previous
+		if (!_torrentList.setCurrent(currentInfohash)) return false;
+		return _torrentList.hasPrevious();
 	}
 
-	/// Initialize torrent cache from widget or create new one
+	/// Initialize torrent cache
 	void _initializeTorrentCache() {
-		if (widget.playedTorrentsCache != null) {
-			_playedTorrentsCache = List.from(widget.playedTorrentsCache!);
-		}
-		
 		// Initialize current torrent index
 		_currentTorrentIndex = widget.currentTorrentIndex;
 		
@@ -2313,11 +2215,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return;
 		}
 		
-		// Check if this torrent is already in cache
-		final existingIndex = _playedTorrentsCache.indexWhere((cache) => cache.infohash == infohash);
-		if (existingIndex == -1) {
-			// Add to cache with playlist support
-			final cacheEntry = PlayedTorrentCache(
+		// Check if this torrent is already in linked list
+		final existingNode = _torrentList.find(infohash);
+		if (existingNode == null) {
+			// Add to linked list with playlist support
+			final node = TorrentNode(
 				infohash: infohash,
 				torrentName: torrentName,
 				videoUrl: widget.videoUrl,
@@ -2328,14 +2230,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				originalIndex: widget.currentTorrentIndex!,
 				playedAt: DateTime.now(),
 			);
-			_playedTorrentsCache.add(cacheEntry);
-			print('DEBUG: Added torrent to cache: $torrentName (${cacheEntry.infohash}) - Has playlist: ${widget.playlist != null}');
+			_torrentList.add(node);
+			print('🔗 LINKED LIST: Added torrent: $torrentName');
+			_printLinkedListState();
 		}
 	}
 
-	/// Navigate to previous torrent using cache
+	/// Navigate to previous torrent using linked list
 	Future<void> _goToPreviousTorrent() async {
-		if (_playedTorrentsCache.isEmpty) {
+		if (_torrentList.isEmpty) {
 			if (mounted) {
 				ScaffoldMessenger.of(context).showSnackBar(
 					const SnackBar(
@@ -2348,7 +2251,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return;
 		}
 
-		// Find the current torrent in cache
+		// Find the current torrent in linked list
 		final currentInfohash = _getCurrentTorrentInfohash();
 		if (currentInfohash == null) {
 			if (mounted) {
@@ -2363,9 +2266,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return;
 		}
 
-		// Find current torrent index in cache
-		final currentCacheIndex = _playedTorrentsCache.indexWhere((cache) => cache.infohash == currentInfohash);
-		if (currentCacheIndex == -1 || currentCacheIndex == 0) {
+		// Set current node in linked list
+		if (!_torrentList.setCurrent(currentInfohash)) {
+			if (mounted) {
+				ScaffoldMessenger.of(context).showSnackBar(
+					const SnackBar(
+						content: Text('Current torrent not found in cache'),
+						backgroundColor: Color(0xFFEF4444),
+						duration: Duration(seconds: 2),
+					),
+				);
+			}
+			return;
+		}
+
+		// Check if there's a previous node
+		if (!_torrentList.hasPrevious()) {
 			if (mounted) {
 				ScaffoldMessenger.of(context).showSnackBar(
 					const SnackBar(
@@ -2378,36 +2294,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return;
 		}
 
-		// Get previous torrent from cache
-		final previousCache = _playedTorrentsCache[currentCacheIndex - 1];
-		print('DEBUG: Navigating to previous torrent from cache: ${previousCache.torrentName}');
-
-		// Show loading indicator
-		if (mounted) {
-			ScaffoldMessenger.of(context).showSnackBar(
-				SnackBar(
-					content: Row(
-						children: [
-							const SizedBox(
-								width: 16,
-								height: 16,
-								child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-							),
-							const SizedBox(width: 12),
-							const Text('Loading previous torrent...', style: TextStyle(color: Colors.white)),
-						],
+		// Get previous torrent from linked list
+		final previousNode = _torrentList.previous();
+		if (previousNode == null) {
+			if (mounted) {
+				ScaffoldMessenger.of(context).showSnackBar(
+					const SnackBar(
+						content: Text('No previous torrent available'),
+						backgroundColor: Color(0xFFEF4444),
+						duration: Duration(seconds: 2),
 					),
-					backgroundColor: Theme.of(context).colorScheme.surface,
-					duration: const Duration(seconds: 2),
-				),
-			);
+				);
+			}
+			return;
 		}
+
+		print('🔗 LINKED LIST: Navigating to previous torrent: ${previousNode.torrentName}');
+		_printLinkedListState();
+
+
 
 		try {
 			// Update player state instead of creating new screen
-			await _updatePlayerToCachedTorrent(previousCache);
+			await _updatePlayerToCachedTorrent(previousNode);
 		} catch (e) {
-			print('DEBUG: Failed to load previous torrent from cache: ${e.toString()}');
+			print('❌ Failed to load previous torrent: ${e.toString()}');
 			if (mounted) {
 				ScaffoldMessenger.of(context).showSnackBar(
 					SnackBar(
@@ -2435,28 +2346,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 		return null;
 	}
+	
+
 
 	/// Update player to cached torrent (single player approach)
-	Future<void> _updatePlayerToCachedTorrent(PlayedTorrentCache cache) async {
-		print('DEBUG: Updating player to cached torrent: ${cache.torrentName}');
-		
-		// Update widget state
-		_playedTorrentsCache = List.from(_playedTorrentsCache);
+	Future<void> _updatePlayerToCachedTorrent(TorrentNode node) async {
+		print('🔗 LINKED LIST: Updating player to cached torrent: ${node.torrentName}');
 		
 		// Update current torrent index
-		_currentTorrentIndex = cache.originalIndex;
+		_currentTorrentIndex = node.originalIndex;
 		
 		// Update title and subtitle
-		_currentTitle = cache.title;
-		_currentSubtitle = cache.subtitle;
+		_currentTitle = node.title;
+		_currentSubtitle = node.subtitle;
 		
 		// Update player source
-		if (cache.playlist != null) {
+		if (node.playlist != null) {
 			// Handle playlist
-			await _updatePlayerPlaylist(cache.playlist!, cache.startIndex ?? 0);
+			await _updatePlayerPlaylist(node.playlist!, node.startIndex ?? 0);
 		} else {
 			// Handle single file
-			await _updatePlayerSource(cache.videoUrl);
+			await _updatePlayerSource(node.videoUrl);
 		}
 		
 		// Update UI
@@ -2469,7 +2379,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Update player source for single file
 	Future<void> _updatePlayerSource(String videoUrl) async {
-		print('DEBUG: Updating player source to: $videoUrl');
+		print('🔗 LINKED LIST: Updating player source to: $videoUrl');
 		
 		// Stop current playback
 		await _player.stop();
@@ -2483,7 +2393,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Update player playlist
 	Future<void> _updatePlayerPlaylist(List<PlaylistEntry> playlist, int startIndex) async {
-		print('DEBUG: Updating player playlist with ${playlist.length} entries, start at $startIndex');
+		print('🔗 LINKED LIST: Updating player playlist with ${playlist.length} entries, start at $startIndex');
 		
 		// Stop current playback
 		await _player.stop();
@@ -2534,11 +2444,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return;
 		}
 		
-		// Check if this torrent is already in cache
-		final existingIndex = _playedTorrentsCache.indexWhere((cache) => cache.infohash == infohash);
-		if (existingIndex == -1) {
-			// Add to cache
-			final cacheEntry = PlayedTorrentCache(
+		// Check if this torrent is already in linked list
+		final existingNode = _torrentList.find(infohash);
+		if (existingNode == null) {
+			// Add to linked list
+			final node = TorrentNode(
 				infohash: infohash,
 				torrentName: torrentName,
 				videoUrl: videoUrl,
@@ -2549,14 +2459,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				originalIndex: index,
 				playedAt: DateTime.now(),
 			);
-			_playedTorrentsCache.add(cacheEntry);
-			print('DEBUG: Added torrent to cache: $torrentName (${cacheEntry.infohash}) - Has playlist: ${playlist != null}');
+			_torrentList.add(node);
+			print('🔗 LINKED LIST: Added torrent: $torrentName');
+			_printLinkedListState();
 		}
 	}
 
 	/// Update player to next torrent
 	Future<void> _updatePlayerToNextTorrent(int newIndex, String videoUrl, String title) async {
-		print('DEBUG: Updating player to next torrent at index $newIndex: $title');
+		print('🔗 LINKED LIST: Updating player to next torrent at index $newIndex: $title');
 		
 		// Update current torrent index
 		_currentTorrentIndex = newIndex;
@@ -2578,7 +2489,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Update player to next torrent with playlist
 	Future<void> _updatePlayerToNextTorrentWithPlaylist(int newIndex, String videoUrl, String title, String subtitle, List<PlaylistEntry>? playlist, int startIndex) async {
-		print('DEBUG: Updating player to next torrent with playlist at index $newIndex: $title');
+		print('🔗 LINKED LIST: Updating player to next torrent with playlist at index $newIndex: $title');
 		
 		// Update current torrent index
 		_currentTorrentIndex = newIndex;
@@ -2713,8 +2624,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					if (i == firstEpisodeIndex) {
 						// First episode: try to unrestrict for immediate playback
 						try {
+							print('🔗 LINKED LIST: Unrestricting first episode: $finalFilename');
 							final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
 							final url = unrestrictResult['download']?.toString() ?? '';
+							print('🔗 LINKED LIST: Successfully unrestricted first episode: $url');
 							if (url.isNotEmpty) {
 								entries.add(PlaylistEntry(
 									url: url,
@@ -2773,8 +2686,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					if (i == 0) {
 						// First video: try to unrestrict for immediate playback
 						try {
+							print('🔗 LINKED LIST: Unrestricting first video: $finalFilename');
 							final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
 							final url = unrestrictResult['download']?.toString() ?? '';
+							print('🔗 LINKED LIST: Successfully unrestricted first video: $url');
 							if (url.isNotEmpty) {
 								entries.add(PlaylistEntry(
 									url: url,
@@ -3718,8 +3633,6 @@ extension on _VideoPlayerScreenState {
 				final audioTrackId = trackPreferences['audioTrackId'] as String?;
 				final subtitleTrackId = trackPreferences['subtitleTrackId'] as String?;
 				
-				print('DEBUG: Restoring track preferences - Audio: $audioTrackId, Subtitle: $subtitleTrackId');
-				
 				// Apply audio track preference
 				if (audioTrackId != null && audioTrackId.isNotEmpty && audioTrackId != 'auto') {
 					final tracks = _player.state.tracks;
@@ -3728,7 +3641,6 @@ extension on _VideoPlayerScreenState {
 						orElse: () => tracks.audio.first,
 					);
 					await _player.setAudioTrack(audioTrack);
-					print('DEBUG: Applied audio track: $audioTrackId');
 				}
 				
 				// Apply subtitle track preference
@@ -3739,7 +3651,6 @@ extension on _VideoPlayerScreenState {
 						orElse: () => mk.SubtitleTrack.no(),
 					);
 					await _player.setSubtitleTrack(subtitleTrack);
-					print('DEBUG: Applied subtitle track: $subtitleTrackId');
 				}
 			}
 		} catch (e) {
@@ -3757,7 +3668,6 @@ extension on _VideoPlayerScreenState {
 					audioTrackId: audio,
 					subtitleTrackId: subtitle,
 				);
-				print('DEBUG: Saved series track preferences - Audio: $audio, Subtitle: $subtitle');
 			} else {
 				// For non-series content, save preferences for this specific video
 				final videoTitle = _currentTitle.isNotEmpty ? _currentTitle : (widget.title.isNotEmpty ? widget.title : 'Unknown Video');
@@ -3766,7 +3676,6 @@ extension on _VideoPlayerScreenState {
 					audioTrackId: audio,
 					subtitleTrackId: subtitle,
 				);
-				print('DEBUG: Saved video track preferences - Audio: $audio, Subtitle: $subtitle');
 			}
 		} catch (e) {
 			print('Error saving track preferences: $e');
