@@ -1750,67 +1750,128 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				top: false,
 				right: false,
 				bottom: false,
-				child: Focus(
-					autofocus: true,
-					onKey: (node, event) {
-						if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
-						final key = event.logicalKey;
-						// Center/Enter toggles play or shows controls
-						if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.gameButtonA) {
-							if (_controlsVisible.value) {
+									child: Focus(
+						autofocus: true,
+						onKey: (node, event) {
+							if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
+							final key = event.logicalKey;
+							
+							// A -> Aspect ratio
+							if (key == LogicalKeyboardKey.keyA) {
+								_cycleAspectMode();
+								return KeyEventResult.handled;
+							}
+							
+							// Space -> Pause resume
+							if (key == LogicalKeyboardKey.space) {
 								_togglePlay();
-							} else {
-								_toggleControls();
-							}
-							return KeyEventResult.handled;
-						}
-
-						// DPAD left/right seek 10s
-						if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.mediaRewind) {
-							final candidate = _position - const Duration(seconds: 10);
-							final newPos = candidate < Duration.zero ? Duration.zero : (candidate > _duration ? _duration : candidate);
-							_player.seek(newPos);
-							_controlsVisible.value = true;
-							_scheduleAutoHide();
-							return KeyEventResult.handled;
-						}
-						if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.mediaFastForward) {
-							final candidate = _position + const Duration(seconds: 10);
-							final newPos = candidate < Duration.zero ? Duration.zero : (candidate > _duration ? _duration : candidate);
-							_player.seek(newPos);
-							_controlsVisible.value = true;
-							_scheduleAutoHide();
-							return KeyEventResult.handled;
-						}
-
-						// DPAD up shows controls
-						if (key == LogicalKeyboardKey.arrowUp) {
-							_controlsVisible.value = true;
-							_scheduleAutoHide();
-							return KeyEventResult.handled;
-						}
-
-						// Media play/pause keys
-						if (key == LogicalKeyboardKey.mediaPlayPause || key == LogicalKeyboardKey.mediaPlay || key == LogicalKeyboardKey.mediaPause) {
-							_togglePlay();
-							return KeyEventResult.handled;
-						}
-
-						// Next/Previous episode navigation
-						if (key == LogicalKeyboardKey.mediaSkipForward) {
-							if (_hasNextEpisode()) {
-								_goToNextEpisode();
 								return KeyEventResult.handled;
 							}
-						}
-						if (key == LogicalKeyboardKey.mediaSkipBackward) {
-							if (_hasPreviousEpisode()) {
-								_goToPreviousEpisode();
+							
+							// Up/Down arrow -> Volume
+							if (key == LogicalKeyboardKey.arrowUp) {
+								// Show controls first
+								_controlsVisible.value = true;
+								_scheduleAutoHide();
+								
+								// Increase volume
+								final currentVolume = (_player.state.volume / 100.0).clamp(0.0, 1.0);
+								final newVolume = (currentVolume + 0.1).clamp(0.0, 1.0);
+								_player.setVolume((newVolume * 100).clamp(0.0, 100.0));
+								
+								// Show volume HUD
+								_verticalHud.value = _VerticalHudState(kind: _VerticalKind.volume, value: newVolume);
+								Future.delayed(const Duration(milliseconds: 250), () {
+									_verticalHud.value = null;
+								});
+								
 								return KeyEventResult.handled;
 							}
-						}
-						return KeyEventResult.ignored;
-					},
+							
+							if (key == LogicalKeyboardKey.arrowDown) {
+								// Show controls first
+								_controlsVisible.value = true;
+								_scheduleAutoHide();
+								
+								// Decrease volume
+								final currentVolume = (_player.state.volume / 100.0).clamp(0.0, 1.0);
+								final newVolume = (currentVolume - 0.1).clamp(0.0, 1.0);
+								_player.setVolume((newVolume * 100).clamp(0.0, 100.0));
+								
+								// Show volume HUD
+								_verticalHud.value = _VerticalHudState(kind: _VerticalKind.volume, value: newVolume);
+								Future.delayed(const Duration(milliseconds: 250), () {
+									_verticalHud.value = null;
+								});
+								
+								return KeyEventResult.handled;
+							}
+							
+							// , -> prev torrent (only when applicable)
+							if (key == LogicalKeyboardKey.comma) {
+								if (_hasPreviousTorrent()) {
+									_goToPreviousTorrent();
+									return KeyEventResult.handled;
+								}
+							}
+							
+							// . -> next torrent (only when applicable)
+							if (key == LogicalKeyboardKey.period) {
+								if (_hasNextTorrent()) {
+									_goToNextTorrent();
+									return KeyEventResult.handled;
+								}
+							}
+							
+							// Center/Enter toggles play or shows controls
+							if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.gameButtonA) {
+								if (_controlsVisible.value) {
+									_togglePlay();
+								} else {
+									_toggleControls();
+								}
+								return KeyEventResult.handled;
+							}
+
+							// DPAD left/right seek 10s
+							if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.mediaRewind) {
+								final candidate = _position - const Duration(seconds: 10);
+								final newPos = candidate < Duration.zero ? Duration.zero : (candidate > _duration ? _duration : candidate);
+								_player.seek(newPos);
+								_controlsVisible.value = true;
+								_scheduleAutoHide();
+								return KeyEventResult.handled;
+							}
+							if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.mediaFastForward) {
+								final candidate = _position + const Duration(seconds: 10);
+								final newPos = candidate < Duration.zero ? Duration.zero : (candidate > _duration ? _duration : candidate);
+								_player.seek(newPos);
+								_controlsVisible.value = true;
+								_scheduleAutoHide();
+								return KeyEventResult.handled;
+							}
+
+							// Media play/pause keys
+							if (key == LogicalKeyboardKey.mediaPlayPause || key == LogicalKeyboardKey.mediaPlay || key == LogicalKeyboardKey.mediaPause) {
+								_togglePlay();
+								return KeyEventResult.handled;
+							}
+
+							// Next/Previous episode navigation
+							if (key == LogicalKeyboardKey.mediaSkipForward) {
+								if (_hasNextEpisode()) {
+									_goToNextEpisode();
+									return KeyEventResult.handled;
+								}
+							}
+							if (key == LogicalKeyboardKey.mediaSkipBackward) {
+								if (_hasPreviousEpisode()) {
+									_goToPreviousEpisode();
+									return KeyEventResult.handled;
+								}
+							}
+							return KeyEventResult.ignored;
+						},
 					child: Stack(
 						fit: StackFit.expand,
 						children: [
