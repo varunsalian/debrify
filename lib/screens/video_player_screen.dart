@@ -173,6 +173,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	// Track failed torrents to avoid retrying them
 	Set<String> _failedTorrentInfohashes = {};
 	
+	// Background pre-loading
+	bool _isPreloading = false;
+	static const int _preloadBufferSize = 5;
+	
 	SeriesPlaylist? get _seriesPlaylist {
 		if (widget.playlist == null || widget.playlist!.isEmpty) return null;
 		if (_cachedSeriesPlaylist == null) {
@@ -239,6 +243,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		// Initialize the player asynchronously
 		_initializePlayer();
 		_initializeTorrentCache();
+		
+		// Start background pre-loading for torrent navigation
+		if (widget.searchResults != null) {
+			_preloadTorrents();
+		}
 	}
 
 	Future<void> _initializePlayer() async {
@@ -757,6 +766,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	@override
 	void dispose() {
+		// Stop any ongoing pre-loading
+		_isPreloading = false;
+		
 		// Save the current state before disposing
 		_saveResume();
 		_hideTimer?.cancel();
@@ -2009,6 +2021,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					existingNode.title,
 				);
 			}
+			
+			// Trigger background pre-loading to maintain buffer
+			if (_shouldPreload()) {
+				_preloadTorrents();
+			}
+			
 			return; // Success, exit the loop
 		}
 			
@@ -2073,6 +2091,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						
 						// Update player state instead of creating new screen
 						await _updatePlayerToNextTorrent(currentTryIndex, videoUrl, torrentName);
+						
+						// Trigger background pre-loading to maintain buffer
+						if (_shouldPreload()) {
+							_preloadTorrents();
+						}
+						
 						return; // Success, exit the loop
 					} else {
 						throw Exception('This file is not a video (MIME type: $mimeType)');
@@ -2145,6 +2169,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		if (removed) {
 			print('🔗 LINKED LIST: Removed unplayable torrent: $infohash');
 			_printLinkedListState();
+			
+			// Trigger pre-loading to refill the buffer if needed
+			if (_shouldPreload()) {
+				_preloadTorrents();
+			}
 		}
 	}
 	
@@ -2164,6 +2193,191 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			print('  $i$marker${node.torrentName}');
 		}
 		print('');
+	}
+	
+	/// Check if we need to pre-load more torrents
+	bool _shouldPreload() {
+		// Don't pre-load if already pre-loading
+		if (_isPreloading) return false;
+		
+		// Don't pre-load if we've reached the end of search results
+		if (widget.searchResults == null) return false;
+		
+		// Calculate how many torrents we have ahead of current position
+		final currentInfohash = _getCurrentTorrentInfohash();
+		if (currentInfohash == null) return false;
+		
+		// Set current node in linked list to calculate ahead count
+		if (!_torrentList.setCurrent(currentInfohash)) return false;
+		
+		// Count how many torrents are ahead of current position
+		int aheadCount = 0;
+		TorrentNode? currentNode = _torrentList.current;
+		while (currentNode?.next != null) {
+			aheadCount++;
+			currentNode = currentNode!.next;
+		}
+		
+		// If we have fewer than _preloadBufferSize torrents ahead, we should pre-load
+		if (aheadCount >= _preloadBufferSize) return false;
+		
+		// Check if there are any more torrents in search results to pre-load
+		final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex ?? 0;
+		final nextIndex = currentIndex + 1;
+		
+		// Check if there are any more torrents to pre-load
+		for (int i = nextIndex; i < widget.searchResults!.length; i++) {
+			final torrent = widget.searchResults![i];
+			String infohash;
+			
+			if (torrent is Map<String, dynamic>) {
+				infohash = torrent['infohash'] ?? torrent['hash'] ?? '';
+			} else if (torrent is Torrent) {
+				infohash = torrent.infohash;
+			} else {
+				continue;
+			}
+			
+			// If this torrent hasn't failed and isn't already in the linked list, we can pre-load it
+			if (infohash.isNotEmpty && 
+				!_failedTorrentInfohashes.contains(infohash) &&
+				_torrentList.find(infohash) == null) {
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	/// Pre-load torrents in the background to maintain buffer
+	Future<void> _preloadTorrents() async {
+		if (_isPreloading || widget.searchResults == null) return;
+		
+		// Additional safety check
+		if (!_shouldPreload()) {
+			print('🔗 PRELOAD: Skipping pre-load - conditions not met');
+			return;
+		}
+		
+		_isPreloading = true;
+		print('🔗 PRELOAD: Starting background pre-loading...');
+		
+		try {
+			// Calculate how many torrents we have ahead of current position
+			final currentInfohash = _getCurrentTorrentInfohash();
+			if (currentInfohash == null) return;
+			
+			// Set current node in linked list to calculate ahead count
+			if (!_torrentList.setCurrent(currentInfohash)) return;
+			
+			// Count how many torrents are ahead of current position
+			int aheadCount = 0;
+			TorrentNode? currentNode = _torrentList.current;
+			while (currentNode?.next != null) {
+				aheadCount++;
+				currentNode = currentNode!.next;
+			}
+			
+			// Calculate how many more we need to pre-load
+			final needed = _preloadBufferSize - aheadCount;
+			
+			if (needed <= 0) {
+				print('🔗 PRELOAD: Buffer ahead is full (${aheadCount}/$_preloadBufferSize), skipping pre-load');
+				return;
+			}
+			
+			print('🔗 PRELOAD: Need to pre-load $needed more torrents');
+			
+			// Get current torrent index to know where to start looking
+			final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex ?? 0;
+			int nextIndex = currentIndex + 1;
+			int preloadedCount = 0;
+			
+			// Try to pre-load the needed number of torrents
+			while (preloadedCount < needed && nextIndex < widget.searchResults!.length) {
+				final torrent = widget.searchResults![nextIndex];
+				
+				// Extract torrent info
+				String infohash;
+				String torrentName;
+				
+				if (torrent is Map<String, dynamic>) {
+					infohash = torrent['infohash'] ?? torrent['hash'] ?? '';
+					torrentName = torrent['name'] ?? torrent['title'] ?? 'Unknown Torrent';
+				} else if (torrent is Torrent) {
+					infohash = torrent.infohash;
+					torrentName = torrent.name;
+				} else {
+					nextIndex++;
+					continue;
+				}
+				
+				// Skip if already failed or already in linked list
+				if (infohash.isEmpty || 
+					_failedTorrentInfohashes.contains(infohash) ||
+					_torrentList.find(infohash) != null) {
+					nextIndex++;
+					continue;
+				}
+				
+				// Try to pre-load this torrent
+				try {
+					print('🔗 PRELOAD: Attempting to pre-load torrent $nextIndex: $torrentName');
+					
+					final apiKey = await StorageService.getApiKey();
+					if (apiKey == null) break;
+					
+					final fileSelection = await StorageService.getFileSelection();
+					final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+					
+					// Add torrent to Real Debrid
+					final result = await DebridService.addTorrentToDebrid(apiKey, magnetLink, tempFileSelection: fileSelection);
+					final links = result['links'] as List<dynamic>? ?? [];
+					final files = result['files'] as List<dynamic>? ?? [];
+					final updatedInfo = result['updatedInfo'] as Map<String, dynamic>? ?? {};
+					
+					if (links.isEmpty) {
+						throw Exception('No download links available');
+					}
+					
+					// Handle based on file selection
+					if (fileSelection == 'video' && links.length > 1) {
+						// Multiple video files - create playlist entry
+						await _preloadMultiFileTorrent(links, files, updatedInfo, torrentName, apiKey, nextIndex);
+					} else {
+						// Single file - unrestrict and validate
+						final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[0]);
+						final videoUrl = unrestrictResult['download'];
+						final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
+						
+						if (FileUtils.isVideoMimeType(mimeType)) {
+							_addTorrentToCache(nextIndex, torrentName, videoUrl, null, null, null);
+							print('🔗 PRELOAD: Successfully pre-loaded single file torrent: $torrentName');
+							preloadedCount++;
+						} else {
+							throw Exception('Not a video file');
+						}
+					}
+					
+				} catch (e) {
+					print('🔗 PRELOAD: Failed to pre-load torrent $nextIndex: $e');
+					_failedTorrentInfohashes.add(infohash);
+				}
+				
+				nextIndex++;
+			}
+			
+			print('🔗 PRELOAD: Completed pre-loading $preloadedCount torrents. Buffer ahead: ${aheadCount + preloadedCount}/$_preloadBufferSize');
+			if (preloadedCount > 0) {
+				print('🔗 PRELOAD: Buffer efficiency: ${(((aheadCount + preloadedCount) / _preloadBufferSize) * 100).toStringAsFixed(1)}%');
+			}
+			_printLinkedListState();
+			
+		} catch (e) {
+			print('🔗 PRELOAD: Error during pre-loading: $e');
+		} finally {
+			_isPreloading = false;
+		}
 	}
 
 	/// Check if there's a previous torrent available
@@ -2317,6 +2531,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		try {
 			// Update player state instead of creating new screen
 			await _updatePlayerToCachedTorrent(previousNode);
+			
+			// Trigger background pre-loading to maintain buffer
+			_preloadTorrents();
 		} catch (e) {
 			print('❌ Failed to load previous torrent: ${e.toString()}');
 			if (mounted) {
@@ -2328,6 +2545,172 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					),
 				);
 			}
+		}
+	}
+	
+	/// Pre-load a multi-file torrent (helper method for background pre-loading)
+	Future<void> _preloadMultiFileTorrent(
+		List<dynamic> links, 
+		List<dynamic> files, 
+		Map<String, dynamic> updatedInfo, 
+		String torrentName, 
+		String apiKey, 
+		int originalIndex
+	) async {
+		try {
+			// Get selected files from the torrent info
+			final selectedFiles = files.where((file) => file['selected'] == 1).toList();
+			final allFilesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
+			
+			// Filter to only video files
+			final filesToUse = allFilesToUse.where((file) {
+				String? filename = file['name']?.toString() ?? 
+								  file['filename']?.toString() ?? 
+								  file['path']?.toString();
+				
+				if (filename != null && filename.startsWith('/')) {
+					filename = filename.split('/').last;
+				}
+				
+				return filename != null && FileUtils.isVideoFile(filename);
+			}).toList();
+
+			if (filesToUse.isEmpty) {
+				throw Exception('No video files found in torrent');
+			}
+
+			// Extract filenames
+			final filenames = filesToUse.map((file) {
+				String? filename = file['name']?.toString() ?? 
+								  file['filename']?.toString() ?? 
+								  file['path']?.toString();
+				
+				if (filename != null && filename.startsWith('/')) {
+					filename = filename.split('/').last;
+				}
+				
+				return filename ?? 'Unknown File';
+			}).toList();
+
+			// Check if this is a series
+			final isSeries = SeriesParser.isSeriesPlaylist(filenames);
+			
+			if (isSeries) {
+				// For series: find the first episode and unrestrict only that one
+				final seriesInfos = SeriesParser.parsePlaylist(filenames);
+				
+				// Find the first episode (lowest season, lowest episode)
+				int firstEpisodeIndex = 0;
+				int lowestSeason = 999;
+				int lowestEpisode = 999;
+				
+				for (int i = 0; i < seriesInfos.length; i++) {
+					final info = seriesInfos[i];
+					if (info.isSeries && info.season != null && info.episode != null) {
+						if (info.season! < lowestSeason || 
+							(info.season! == lowestSeason && info.episode! < lowestEpisode)) {
+							lowestSeason = info.season!;
+							lowestEpisode = info.episode!;
+							firstEpisodeIndex = i;
+						}
+					}
+				}
+				
+				// Create playlist entries with true lazy loading
+				final List<PlaylistEntry> entries = [];
+				
+				for (int i = 0; i < filesToUse.length; i++) {
+					final file = filesToUse[i];
+					String? filename = file['name']?.toString() ?? 
+									  file['filename']?.toString() ?? 
+									  file['path']?.toString();
+					
+					if (filename != null && filename.startsWith('/')) {
+						filename = filename.split('/').last;
+					}
+					
+					final finalFilename = filename ?? 'Unknown File';
+					
+					if (i >= links.length) continue;
+					
+					if (i == firstEpisodeIndex) {
+						// First episode: try to unrestrict for immediate playback
+						try {
+							final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
+							final url = unrestrictResult['download']?.toString() ?? '';
+							if (url.isNotEmpty) {
+								entries.add(PlaylistEntry(
+									url: url,
+									title: finalFilename,
+								));
+							} else {
+								entries.add(PlaylistEntry(
+									url: '',
+									title: finalFilename,
+									restrictedLink: links[i],
+									apiKey: apiKey,
+								));
+							}
+						} catch (e) {
+							entries.add(PlaylistEntry(
+								url: '',
+								title: finalFilename,
+								restrictedLink: links[i],
+								apiKey: apiKey,
+							));
+						}
+					} else {
+						entries.add(PlaylistEntry(
+							url: '',
+							title: finalFilename,
+							restrictedLink: links[i],
+							apiKey: apiKey,
+						));
+					}
+				}
+				
+				// Add to cache with playlist
+				_addTorrentToCache(originalIndex, torrentName, entries.first.url, entries.first.title, entries, 0);
+				print('🔗 PRELOAD: Successfully pre-loaded series torrent: $torrentName');
+				
+			} else {
+				// For movies: unrestrict only the first video
+				for (int i = 0; i < filesToUse.length; i++) {
+					final file = filesToUse[i];
+					String? filename = file['name']?.toString() ?? 
+									  file['filename']?.toString() ?? 
+									  file['path']?.toString();
+					
+					if (filename != null && filename.startsWith('/')) {
+						filename = filename.split('/').last;
+					}
+					
+					final finalFilename = filename ?? 'Unknown File';
+					
+					if (i >= links.length) continue;
+					
+					if (i == 0) {
+						// First video: try to unrestrict for immediate playback
+						try {
+							final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
+							final url = unrestrictResult['download']?.toString() ?? '';
+							if (url.isNotEmpty) {
+								_addTorrentToCache(originalIndex, torrentName, url, finalFilename, null, null);
+								print('🔗 PRELOAD: Successfully pre-loaded movie torrent: $torrentName');
+								return;
+							}
+						} catch (e) {
+							// Continue to next file
+						}
+					}
+				}
+				
+				throw Exception('No playable video files found');
+			}
+			
+		} catch (e) {
+			print('🔗 PRELOAD: Failed to pre-load multi-file torrent: $e');
+			rethrow;
 		}
 	}
 
@@ -2749,6 +3132,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			
 			// Update player state
 			await _updatePlayerToNextTorrentWithPlaylist(newIndex, initialVideoUrl, torrentName, '${entries.length} files', entries.isNotEmpty ? entries : null, 0);
+			
+			// Trigger background pre-loading to maintain buffer
+			if (_shouldPreload()) {
+				_preloadTorrents();
+			}
 		} catch (e) {
 			if (mounted) {
 				if (Navigator.of(context).canPop()) {
