@@ -2255,12 +2255,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Additional safety check
 		if (!_shouldPreload()) {
-			print('🔗 PRELOAD: Skipping pre-load - conditions not met');
 			return;
 		}
 		
 		_isPreloading = true;
-		print('🔗 PRELOAD: Starting background pre-loading...');
 		
 		try {
 			// Calculate how many torrents we have ahead of current position
@@ -2282,11 +2280,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			final needed = _preloadBufferSize - aheadCount;
 			
 			if (needed <= 0) {
-				print('🔗 PRELOAD: Buffer ahead is full (${aheadCount}/$_preloadBufferSize), skipping pre-load');
 				return;
 			}
 			
-			print('🔗 PRELOAD: Need to pre-load $needed more torrents');
+
 			
 			// Get current torrent index to know where to start looking
 			final currentIndex = _currentTorrentIndex ?? widget.currentTorrentIndex ?? 0;
@@ -2322,7 +2319,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				
 				// Try to pre-load this torrent
 				try {
-					print('🔗 PRELOAD: Attempting to pre-load torrent $nextIndex: $torrentName');
 					
 					final apiKey = await StorageService.getApiKey();
 					if (apiKey == null) break;
@@ -2352,7 +2348,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						
 						if (FileUtils.isVideoMimeType(mimeType)) {
 							_addTorrentToCache(nextIndex, torrentName, videoUrl, null, null, null);
-							print('🔗 PRELOAD: Successfully pre-loaded single file torrent: $torrentName');
 							preloadedCount++;
 						} else {
 							throw Exception('Not a video file');
@@ -2360,18 +2355,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					}
 					
 				} catch (e) {
-					print('🔗 PRELOAD: Failed to pre-load torrent $nextIndex: $e');
 					_failedTorrentInfohashes.add(infohash);
 				}
 				
 				nextIndex++;
 			}
 			
-			print('🔗 PRELOAD: Completed pre-loading $preloadedCount torrents. Buffer ahead: ${aheadCount + preloadedCount}/$_preloadBufferSize');
-			if (preloadedCount > 0) {
-				print('🔗 PRELOAD: Buffer efficiency: ${(((aheadCount + preloadedCount) / _preloadBufferSize) * 100).toStringAsFixed(1)}%');
-			}
-			_printLinkedListState();
+
 			
 		} catch (e) {
 			print('🔗 PRELOAD: Error during pre-loading: $e');
@@ -2671,7 +2661,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				
 				// Add to cache with playlist
 				_addTorrentToCache(originalIndex, torrentName, entries.first.url, entries.first.title, entries, 0);
-				print('🔗 PRELOAD: Successfully pre-loaded series torrent: $torrentName');
 				
 			} else {
 				// For movies: unrestrict only the first video
@@ -2696,7 +2685,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							final url = unrestrictResult['download']?.toString() ?? '';
 							if (url.isNotEmpty) {
 								_addTorrentToCache(originalIndex, torrentName, url, finalFilename, null, null);
-								print('🔗 PRELOAD: Successfully pre-loaded movie torrent: $torrentName');
 								return;
 							}
 						} catch (e) {
@@ -2709,7 +2697,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			}
 			
 		} catch (e) {
-			print('🔗 PRELOAD: Failed to pre-load multi-file torrent: $e');
 			rethrow;
 		}
 	}
