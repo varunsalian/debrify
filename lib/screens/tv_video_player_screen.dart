@@ -12,6 +12,7 @@ import '../models/tv_channel.dart';
 import '../models/tv_channel_torrent.dart';
 import '../services/tv_playback_service.dart';
 import '../services/storage_service.dart';
+import '../utils/series_parser.dart';
 
 /// A TV mode video player that provides a realistic TV experience
 /// with minimal controls and a "Surprise Me" button for random content
@@ -56,9 +57,11 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
     super.initState();
     print('🎬 [TVVideoPlayer] Initializing TV video player...');
     print('🎬 [TVVideoPlayer] Video URL: ${widget.videoUrl}');
-    print('🎬 [TVVideoPlayer] Title: ${widget.title}');
+    print('🎬 [TVVideoPlayer] Widget title: "${widget.title}"');
+    print('🎬 [TVVideoPlayer] Channel name: "${widget.channel.name}"');
     
     _currentTitle = widget.title;
+    print('🎬 [TVVideoPlayer] Set _currentTitle to: "$_currentTitle"');
     
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -214,6 +217,38 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
     }
   }
 
+  /// Extracts a clean title from a torrent filename
+  String _extractCleanTitle(String torrentName) {
+    print('🎬 [TVVideoPlayer] Cleaning title: "$torrentName"');
+    
+    // Remove file extension first
+    String cleanName = torrentName.replaceAll(RegExp(r'\.[a-zA-Z0-9]{2,4}$'), '');
+    
+    // Try to extract title before year/quality/technical details
+    final parts = cleanName.split(RegExp(r'\s+\d{4}|\s+1080p|\s+720p|\s+WEB|\s+h264|\s+x264|\s+\['));
+    if (parts.isNotEmpty) {
+      final result = parts.first.trim();
+      if (result.isNotEmpty && result.length > 3) {
+        print('🎬 [TVVideoPlayer] Extracted title: "$result"');
+        return result;
+      }
+    }
+    
+    // Fallback: try SeriesParser
+    try {
+      final seriesInfo = SeriesParser.parseFilename(torrentName);
+      if (seriesInfo.title != null && seriesInfo.title!.isNotEmpty) {
+        print('🎬 [TVVideoPlayer] SeriesParser found title: "${seriesInfo.title}"');
+        return seriesInfo.title!;
+      }
+    } catch (e) {
+      print('🎬 [TVVideoPlayer] Error parsing torrent name: $e');
+    }
+    
+    print('🎬 [TVVideoPlayer] Could not clean title, returning original: "$torrentName"');
+    return torrentName;
+  }
+
 
 
   Future<void> _surpriseMe() async {
@@ -245,7 +280,7 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
           
           // Update the widget's video URL and title
           final newVideoUrl = result['downloadLink'];
-          final newTitle = randomTorrent.name;
+          final newTitle = _extractCleanTitle(randomTorrent.name);
           
           // Load the new media in the same player instance
           await _player.open(mk.Media(newVideoUrl));
@@ -263,9 +298,11 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
           });
           
           // Update the UI to reflect the new title
+          print('🎬 [TVVideoPlayer] Updating _currentTitle from "$_currentTitle" to "$newTitle"');
           setState(() {
             _currentTitle = newTitle;
           });
+          print('🎬 [TVVideoPlayer] _currentTitle updated to: "$_currentTitle"');
           
           success = true;
           break;
@@ -320,17 +357,13 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
           autofocus: true,
           onKey: (event) {
             if (event is! RawKeyDownEvent) return;
-            print('🎬 [TVVideoPlayer] Raw key pressed: ${event.logicalKey}');
             
             // Space -> Toggle play/pause
             if (event.logicalKey == LogicalKeyboardKey.space) {
-              print('🎬 [TVVideoPlayer] Space key pressed');
               if (_isReady) {
                 if (_isPlaying) {
-                  print('🎬 [TVVideoPlayer] Pausing video');
                   _player.pause();
                 } else {
-                  print('🎬 [TVVideoPlayer] Playing video');
                   _player.play();
                 }
               }
@@ -338,7 +371,6 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
             
             // Escape -> Go back
             if (event.logicalKey == LogicalKeyboardKey.escape) {
-              print('🎬 [TVVideoPlayer] Escape key pressed - going back');
               if (mounted && Navigator.of(context).canPop()) {
                 // Use a microtask to avoid navigation conflicts
                 Future.microtask(() {
@@ -419,14 +451,22 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                             size: 16,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            widget.channel.name.toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              letterSpacing: 1.0,
-                            ),
+                          Builder(
+                            builder: (context) {
+                              final displayText = _currentTitle.isNotEmpty ? _currentTitle : widget.channel.name;
+                              print('🎬 [TVVideoPlayer] Displaying title: "$displayText" (currentTitle: "$_currentTitle", channelName: "${widget.channel.name}")');
+                              return Text(
+                                displayText,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  letterSpacing: 0.5,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
                           ),
                         ],
                       ),

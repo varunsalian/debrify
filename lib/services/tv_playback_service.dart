@@ -87,6 +87,8 @@ class TVPlaybackService {
         // Verify we got a video file
         if (_isPlayableVideoResult(result)) {
           print('🎬 [TVPlayback] "All videos" attempt successful - playable video found');
+          // Add torrent name to the result
+          result['torrentName'] = torrent.name;
           return result;
         } else {
           print('🎬 [TVPlayback] "All videos" attempt failed - not a playable video');
@@ -113,6 +115,8 @@ class TVPlaybackService {
       // Verify it's actually a video file
       if (_isPlayableVideoResult(result)) {
         print('🎬 [TVPlayback] "Largest file" attempt successful - playable video found');
+        // Add torrent name to the result
+        result['torrentName'] = torrent.name;
         return result;
       } else {
         print('🎬 [TVPlayback] "Largest file" attempt failed - not a playable video');

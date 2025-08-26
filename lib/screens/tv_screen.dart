@@ -3,6 +3,7 @@ import '../models/tv_channel.dart';
 import '../models/tv_channel_torrent.dart';
 import '../services/tv_service.dart';
 import '../utils/formatters.dart';
+import '../utils/series_parser.dart';
 import '../widgets/tv_channel_card.dart';
 import '../widgets/add_channel_dialog.dart';
 import '../screens/tv_video_player_screen.dart';
@@ -156,6 +157,38 @@ class _TVScreenState extends State<TVScreen> {
     }
   }
 
+  /// Extracts a clean title from a torrent filename
+  String _extractCleanTitle(String torrentName) {
+    print('🎬 [TV] Cleaning title: "$torrentName"');
+    
+    // Remove file extension first
+    String cleanName = torrentName.replaceAll(RegExp(r'\.[a-zA-Z0-9]{2,4}$'), '');
+    
+    // Try to extract title before year/quality/technical details
+    final parts = cleanName.split(RegExp(r'\s+\d{4}|\s+1080p|\s+720p|\s+WEB|\s+h264|\s+x264|\s+\['));
+    if (parts.isNotEmpty) {
+      final result = parts.first.trim();
+      if (result.isNotEmpty && result.length > 3) {
+        print('🎬 [TV] Extracted title: "$result"');
+        return result;
+      }
+    }
+    
+    // Fallback: try SeriesParser
+    try {
+      final seriesInfo = SeriesParser.parseFilename(torrentName);
+      if (seriesInfo.title != null && seriesInfo.title!.isNotEmpty) {
+        print('🎬 [TV] SeriesParser found title: "${seriesInfo.title}"');
+        return seriesInfo.title!;
+      }
+    } catch (e) {
+      print('🎬 [TV] Error parsing torrent name: $e');
+    }
+    
+    print('🎬 [TV] Could not clean title, returning original: "$torrentName"');
+    return torrentName;
+  }
+
   Future<void> _onChannelTap(TVChannel channel, List<TVChannelTorrent> torrents) async {
     print('🎬 [TV] Channel tap started for: ${channel.name}');
     print('🎬 [TV] Available torrents: ${torrents.length}');
@@ -207,17 +240,20 @@ class _TVScreenState extends State<TVScreen> {
 
       if (result != null && mounted) {
         print('🎬 [TV] Navigating to TVVideoPlayerScreen...');
+        // Get the torrent name from the result
+        final torrentName = result['torrentName'] ?? (result['files']?.isNotEmpty == true ? result['files'][0]['name'] : channel.name);
+        final cleanTitle = _extractCleanTitle(torrentName);
         print('🎬 [TV] Video URL: ${result['downloadLink']}');
-        print('🎬 [TV] Title: ${result['files']?.isNotEmpty == true ? result['files'][0]['name'] ?? channel.name : channel.name}');
+        print('🎬 [TV] Original torrent name: $torrentName');
+        print('🎬 [TV] Clean title: $cleanTitle');
+        print('🎬 [TV] Files array: ${result['files']}');
         
         // Navigate to TV video player
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => TVVideoPlayerScreen(
               videoUrl: result['downloadLink'],
-              title: result['files']?.isNotEmpty == true 
-                  ? result['files'][0]['name'] ?? channel.name
-                  : channel.name,
+              title: cleanTitle,
               channel: channel,
               torrents: torrents,
               debridResult: result,
