@@ -549,7 +549,7 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                   ),
                 ),
               
-                            // LIVE tag - only visible if enabled (top right)
+                            // Channel name tag - only visible if enabled (top right)
               if (widget.channel.showLiveTag)
                 Positioned(
                   top: 20,
@@ -585,9 +585,9 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                             },
                           ),
                           const SizedBox(width: 6),
-                          const Text(
-                            'LIVE',
-                            style: TextStyle(
+                          Text(
+                            widget.channel.name,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
