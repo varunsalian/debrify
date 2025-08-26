@@ -549,13 +549,39 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                   ),
                 ),
               
-                            // Channel name tag - only visible if enabled (bottom right)
+                                                        // Channel name tag - only visible if enabled (top right)
               if (widget.channel.showLiveTag)
                 Positioned(
-                  bottom: 20,
+                  top: 20,
                   right: 20,
                   child: SafeArea(
-                                          child: Row(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF1E3A8A), // Premium dark blue
+                            Color(0xFF3B82F6), // Premium blue
+                            Color(0xFF1E40AF), // Slightly darker blue
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                          BoxShadow(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 0),
+                          ),
+                        ],
+                      ),
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           AnimatedBuilder(
@@ -565,7 +591,7 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                                 width: 6,
                                 height: 6,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF8B0000).withValues(alpha: _liveDotAnimation.value),
+                                  color: Colors.white.withValues(alpha: _liveDotAnimation.value),
                                   shape: BoxShape.circle,
                                 ),
                               );
@@ -575,21 +601,15 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                           Text(
                             widget.channel.name,
                             style: const TextStyle(
-                              color: Color(0xFF8B0000), // Dark red color
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              letterSpacing: 0.5,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black,
-                                  offset: Offset(1, 1),
-                                  blurRadius: 2,
-                                ),
-                              ],
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600, // Semi-bold for premium look
+                              fontSize: 14,
+                              letterSpacing: 0.8,
                             ),
                           ),
                         ],
                       ),
+                    ),
                   ),
                 ),
               
