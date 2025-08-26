@@ -418,58 +418,29 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                   top: 20,
                   left: 20,
                   child: SafeArea(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.8),
-                            Colors.black.withValues(alpha: 0.6),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                    child: Builder(
+                      builder: (context) {
+                        final displayText = _currentTitle.isNotEmpty ? _currentTitle : widget.channel.name;
+                        print('🎬 [TVVideoPlayer] Displaying title: "$displayText" (currentTitle: "$_currentTitle", channelName: "${widget.channel.name}")');
+                        return Text(
+                          displayText,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6), // Very light, subtle white
+                            fontWeight: FontWeight.w300, // Light weight
+                            fontSize: 14, // Smaller size
+                            letterSpacing: 0.8, // Less spacing for subtlety
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                offset: const Offset(0.5, 0.5),
+                                blurRadius: 1,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.tv_rounded,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Builder(
-                            builder: (context) {
-                              final displayText = _currentTitle.isNotEmpty ? _currentTitle : widget.channel.name;
-                              print('🎬 [TVVideoPlayer] Displaying title: "$displayText" (currentTitle: "$_currentTitle", channelName: "${widget.channel.name}")');
-                              return Text(
-                                displayText,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  letterSpacing: 0.5,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              );
-                            },
-                          ),
-                        ],
-                      ),
+                          maxLines: 1, // Single line for cleaner look
+                          overflow: TextOverflow.ellipsis, // Ellipsis for overflow
+                        );
+                      },
                     ),
                   ),
                 ),
