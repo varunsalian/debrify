@@ -51,6 +51,20 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
   StreamSubscription? _playSub;
+  
+  // Animation controllers for LIVE tag effects
+  late AnimationController _livePulseController;
+  late Animation<double> _livePulseAnimation;
+  late Animation<double> _liveGlowAnimation;
+  
+  // Animation controllers for title folding effect
+  late AnimationController _titleFoldController;
+  late Animation<double> _titleFoldAnimation;
+  late Animation<double> _titleOpacityAnimation;
+  
+  // Animation controller for LIVE dot blinking
+  late AnimationController _liveDotController;
+  late Animation<double> _liveDotAnimation;
 
   @override
   void initState() {
@@ -62,6 +76,73 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
     
     _currentTitle = widget.title;
     print('🎬 [TVVideoPlayer] Set _currentTitle to: "$_currentTitle"');
+    
+    // Initialize LIVE tag animations
+    _livePulseController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    );
+    
+    _livePulseAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.1,
+    ).animate(CurvedAnimation(
+      parent: _livePulseController,
+      curve: Curves.easeInOut,
+    ));
+    
+    _liveGlowAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _livePulseController,
+      curve: Curves.easeInOut,
+    ));
+    
+    // Start the pulse animation
+    _livePulseController.repeat(reverse: true);
+    
+    // Initialize title folding animation
+    _titleFoldController = AnimationController(
+      duration: const Duration(seconds: 20), // Show for 20 seconds, then fold
+      vsync: this,
+    );
+    
+    _titleFoldAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _titleFoldController,
+      curve: const Interval(0.0, 0.3, curve: Curves.easeInOut), // Fold in first 30%
+    ));
+    
+    _titleOpacityAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _titleFoldController,
+      curve: const Interval(0.0, 0.3, curve: Curves.easeInOut), // Fade out with fold
+    ));
+    
+    // Start the title folding animation cycle
+    _startTitleFoldCycle();
+    
+    // Initialize LIVE dot blinking animation
+    _liveDotController = AnimationController(
+      duration: const Duration(milliseconds: 1000), // 1 second blink cycle
+      vsync: this,
+    );
+    
+    _liveDotAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _liveDotController,
+      curve: Curves.easeInOut,
+    ));
+    
+    // Start the dot blinking animation
+    _liveDotController.repeat(reverse: true);
     
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -175,6 +256,9 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
     _posSub?.cancel();
     _durSub?.cancel();
     _playSub?.cancel();
+    _livePulseController.dispose();
+    _titleFoldController.dispose();
+    _liveDotController.dispose();
     _player.dispose();
     
     // Restore system UI and orientation
@@ -215,6 +299,26 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
     } catch (e) {
       print('🎬 [TVVideoPlayer] Error seeking to random timestamp: $e');
     }
+  }
+
+  /// Starts the title folding animation cycle
+  void _startTitleFoldCycle() {
+    // Show title for 20 seconds, then fold it away
+    Future.delayed(const Duration(seconds: 20), () {
+      if (mounted) {
+        _titleFoldController.forward().then((_) {
+          // After folding, wait 3 seconds then unfold
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) {
+              _titleFoldController.reverse().then((_) {
+                // Restart the cycle
+                _startTitleFoldCycle();
+              });
+            }
+          });
+        });
+      }
+    });
   }
 
   /// Extracts a clean title from a torrent filename
@@ -418,34 +522,45 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                   top: 20,
                   left: 20,
                   child: SafeArea(
-                    child: Builder(
-                      builder: (context) {
-                        final displayText = _currentTitle.isNotEmpty ? _currentTitle : widget.channel.name;
-                        print('🎬 [TVVideoPlayer] Displaying title: "$displayText" (currentTitle: "$_currentTitle", channelName: "${widget.channel.name}")');
-                        return Text(
-                          displayText,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6), // Very light, subtle white
-                            fontWeight: FontWeight.w300, // Light weight
-                            fontSize: 14, // Smaller size
-                            letterSpacing: 0.8, // Less spacing for subtlety
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                offset: const Offset(0.5, 0.5),
-                                blurRadius: 1,
-                              ),
-                            ],
+                    child: AnimatedBuilder(
+                      animation: _titleFoldController,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scaleX: _titleFoldAnimation.value,
+                          child: Opacity(
+                            opacity: _titleOpacityAnimation.value,
+                            child: Builder(
+                              builder: (context) {
+                                final displayText = _currentTitle.isNotEmpty ? _currentTitle : widget.channel.name;
+                                print('🎬 [TVVideoPlayer] Displaying title: "$displayText" (currentTitle: "$_currentTitle", channelName: "${widget.channel.name}")');
+                                return Text(
+                                  displayText,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.6), // Very light, subtle white
+                                    fontWeight: FontWeight.w300, // Light weight
+                                    fontSize: 14, // Smaller size
+                                    letterSpacing: 0.8, // Less spacing for subtlety
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.black.withValues(alpha: 0.3),
+                                        offset: const Offset(0.5, 0.5),
+                                        blurRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                  maxLines: 1, // Single line for cleaner look
+                                  overflow: TextOverflow.ellipsis, // Ellipsis for overflow
+                                );
+                              },
+                            ),
                           ),
-                          maxLines: 1, // Single line for cleaner look
-                          overflow: TextOverflow.ellipsis, // Ellipsis for overflow
                         );
                       },
                     ),
                   ),
                 ),
               
-              // LIVE tag - only visible if enabled (top right)
+                            // LIVE tag - only visible if enabled (top right)
               if (widget.channel.showLiveTag)
                 Positioned(
                   top: 20,
@@ -454,7 +569,7 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.red,
+                        color: const Color(0xFF8B0000), // Dark red color
                         borderRadius: BorderRadius.circular(4),
                         boxShadow: [
                           BoxShadow(
@@ -464,14 +579,33 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                           ),
                         ],
                       ),
-                      child: const Text(
-                        'LIVE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          letterSpacing: 0.5,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedBuilder(
+                            animation: _liveDotController,
+                            builder: (context, child) {
+                              return Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: _liveDotAnimation.value),
+                                  shape: BoxShape.circle,
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'LIVE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
