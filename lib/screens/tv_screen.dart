@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/tv_channel.dart';
 import '../models/tv_channel_torrent.dart';
 import '../services/tv_service.dart';
+import '../utils/formatters.dart';
 import '../widgets/tv_channel_card.dart';
 import '../widgets/add_channel_dialog.dart';
 import '../screens/tv_video_player_screen.dart';
@@ -340,10 +341,10 @@ class _TVScreenState extends State<TVScreen> {
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+        crossAxisCount: 4,
+        childAspectRatio: 0.6,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
       itemCount: _channels.length,
       itemBuilder: (context, index) {
@@ -356,8 +357,141 @@ class _TVScreenState extends State<TVScreen> {
           onRefresh: () => _refreshChannel(channel),
           onDelete: () => _deleteChannel(channel),
           onTap: () => _onChannelTap(channel, torrents),
+          onInfo: () => _showChannelInfo(channel, torrents),
         );
       },
+    );
+  }
+
+  void _showChannelInfo(TVChannel channel, List<TVChannelTorrent> torrents) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.tv_rounded,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(channel.name),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Keywords
+              Text(
+                'Keywords',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: channel.keywords.map((keyword) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      keyword,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Recent content
+              Text(
+                'Recent Content (${torrents.length} total)',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (torrents.isNotEmpty) ...[
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: torrents.take(5).length,
+                    itemBuilder: (context, index) {
+                      final torrent = torrents[index];
+                      return ListTile(
+                        dense: true,
+                        leading: Icon(
+                          Icons.video_file,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 20,
+                        ),
+                        title: Text(
+                          torrent.name,
+                          style: Theme.of(context).textTheme.bodySmall,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Text(
+                          '${torrent.seeders}↑',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.secondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  'No content available',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+              
+              const SizedBox(height: 16),
+              
+              // Stats
+              Row(
+                children: [
+                  Icon(
+                    Icons.access_time,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Updated ${Formatters.formatRelativeTime(channel.lastUpdated)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 } 
