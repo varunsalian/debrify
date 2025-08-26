@@ -13,6 +13,9 @@ class _AddChannelDialogState extends State<AddChannelDialog> {
   final _nameController = TextEditingController();
   final _keywordController = TextEditingController();
   final List<String> _keywords = [];
+  bool _showAdvancedOptions = false;
+  bool _showChannelName = true;
+  bool _showLiveTag = true;
 
   @override
   void dispose() {
@@ -45,6 +48,8 @@ class _AddChannelDialogState extends State<AddChannelDialog> {
         keywords: List.from(_keywords),
         createdAt: DateTime.now(),
         lastUpdated: DateTime.now(),
+        showChannelName: _showChannelName,
+        showLiveTag: _showLiveTag,
       );
       Navigator.of(context).pop(channel);
     } else if (_keywords.isEmpty) {
@@ -59,13 +64,14 @@ class _AddChannelDialogState extends State<AddChannelDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
@@ -177,6 +183,102 @@ class _AddChannelDialogState extends State<AddChannelDialog> {
               
               const SizedBox(height: 24),
               
+              // Advanced Options
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _showAdvancedOptions = !_showAdvancedOptions;
+                  });
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.settings,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Advanced Options',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const Spacer(),
+                      Icon(
+                        _showAdvancedOptions ? Icons.expand_less : Icons.expand_more,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Advanced Options Content
+              if (_showAdvancedOptions) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Display Options',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // Show Channel Name Toggle
+                      SwitchListTile(
+                        title: const Text('Show Channel Name'),
+                        subtitle: const Text('Display channel name in video player'),
+                        value: _showChannelName,
+                        onChanged: (value) {
+                          setState(() {
+                            _showChannelName = value;
+                          });
+                        },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      
+                      // Show Live Tag Toggle
+                      SwitchListTile(
+                        title: const Text('Show LIVE Tag'),
+                        subtitle: const Text('Display LIVE indicator in video player'),
+                        value: _showLiveTag,
+                        onChanged: (value) {
+                          setState(() {
+                            _showLiveTag = value;
+                          });
+                        },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              
+              const SizedBox(height: 24),
+              
               // Action Buttons
               Row(
                 children: [
@@ -197,6 +299,7 @@ class _AddChannelDialogState extends State<AddChannelDialog> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

@@ -10,6 +10,8 @@ class TVChannel {
   final String? lastPlayedTorrentId;
   final int? playSuccessCount;
   final int? playFailureCount;
+  final bool showChannelName;
+  final bool showLiveTag;
 
   TVChannel({
     required this.id,
@@ -23,6 +25,8 @@ class TVChannel {
     this.lastPlayedTorrentId,
     this.playSuccessCount,
     this.playFailureCount,
+    this.showChannelName = true,
+    this.showLiveTag = true,
   });
 
   factory TVChannel.fromJson(Map<String, dynamic> json) {
@@ -44,6 +48,8 @@ class TVChannel {
       lastPlayedTorrentId: json['lastPlayedTorrentId'],
       playSuccessCount: json['playSuccessCount'],
       playFailureCount: json['playFailureCount'],
+      showChannelName: json['showChannelName'] ?? true,
+      showLiveTag: json['showLiveTag'] ?? true,
     );
   }
 
@@ -60,6 +66,8 @@ class TVChannel {
       'lastPlayedTorrentId': lastPlayedTorrentId,
       'playSuccessCount': playSuccessCount,
       'playFailureCount': playFailureCount,
+      'showChannelName': showChannelName,
+      'showLiveTag': showLiveTag,
     };
   }
 
@@ -75,6 +83,8 @@ class TVChannel {
     String? lastPlayedTorrentId,
     int? playSuccessCount,
     int? playFailureCount,
+    bool? showChannelName,
+    bool? showLiveTag,
   }) {
     return TVChannel(
       id: id ?? this.id,
@@ -88,6 +98,8 @@ class TVChannel {
       lastPlayedTorrentId: lastPlayedTorrentId ?? this.lastPlayedTorrentId,
       playSuccessCount: playSuccessCount ?? this.playSuccessCount,
       playFailureCount: playFailureCount ?? this.playFailureCount,
+      showChannelName: showChannelName ?? this.showChannelName,
+      showLiveTag: showLiveTag ?? this.showLiveTag,
     );
   }
 } 
