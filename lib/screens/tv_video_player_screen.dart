@@ -529,13 +529,13 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                         return Text(
                           displayText,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6), // Very light, subtle white
+                            color: Colors.white.withValues(alpha: 0.4), // Less visible, more subtle
                             fontWeight: FontWeight.w300, // Light weight
                             fontSize: 14, // Smaller size
                             letterSpacing: 0.8, // Less spacing for subtlety
                             shadows: [
                               Shadow(
-                                color: Colors.black.withValues(alpha: 0.3),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 offset: const Offset(0.5, 0.5),
                                 blurRadius: 1,
                               ),
@@ -549,26 +549,13 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                   ),
                 ),
               
-                            // Channel name tag - only visible if enabled (top right)
+                            // Channel name tag - only visible if enabled (bottom right)
               if (widget.channel.showLiveTag)
                 Positioned(
-                  top: 20,
+                  bottom: 20,
                   right: 20,
                   child: SafeArea(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8B0000), // Dark red color
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
+                                          child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           AnimatedBuilder(
@@ -578,7 +565,7 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                                 width: 6,
                                 height: 6,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: _liveDotAnimation.value),
+                                  color: const Color(0xFF8B0000).withValues(alpha: _liveDotAnimation.value),
                                   shape: BoxShape.circle,
                                 ),
                               );
@@ -588,15 +575,21 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                           Text(
                             widget.channel.name,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: Color(0xFF8B0000), // Dark red color
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                               letterSpacing: 0.5,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black,
+                                  offset: Offset(1, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
                   ),
                 ),
               
