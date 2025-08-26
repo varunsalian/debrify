@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -39,8 +40,8 @@ class TVVideoPlayerScreen extends StatefulWidget {
 class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerProviderStateMixin {
   late mk.Player _player;
   late mkv.VideoController _videoController;
-  final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
   final ValueNotifier<bool> _isLoading = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _showDoubleTapFeedback = ValueNotifier<bool>(false);
 
   Timer? _hideTimer;
   bool _isReady = false;
@@ -96,6 +97,13 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
       print('🎬 [TVVideoPlayer] Starting playback...');
       await _player.play();
       print('🎬 [TVVideoPlayer] Playback started');
+      
+      // Try to seek to random timestamp (fallback if duration not available yet)
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _isReady) {
+          _seekToRandomTimestamp();
+        }
+      });
 
       // Set up stream listeners
       _posSub = _player.stream.position.listen((d) {
@@ -104,6 +112,10 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
 
       _durSub = _player.stream.duration.listen((d) {
         if (mounted) setState(() {});
+        // When duration becomes available, seek to random timestamp
+        if (d != null && d.inSeconds > 60) {
+          _seekToRandomTimestamp(d);
+        }
       });
 
       _playSub = _player.stream.playing.listen((p) {
@@ -115,6 +127,18 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
       // Add error listener
       _player.stream.error.listen((error) {
         print('🎬 [TVVideoPlayer] Player error: $error');
+        
+        // Auto-trigger Surprise Me on file format errors
+        if (error.toString().contains('Failed to recognize file format') || 
+            error.toString().contains('file format') ||
+            error.toString().contains('unsupported format')) {
+          print('🎬 [TVVideoPlayer] File format error detected - auto-triggering Surprise Me');
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) {
+              _surpriseMe();
+            }
+          });
+        }
       });
 
       // Add completion listener
@@ -124,8 +148,7 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
 
       print('🎬 [TVVideoPlayer] Stream listeners set up successfully');
 
-      // Auto-hide controls after 3 seconds
-      _scheduleAutoHide();
+
       print('🎬 [TVVideoPlayer] Player initialization complete');
     } catch (e) {
       print('🎬 [TVVideoPlayer] Error initializing player: $e');
@@ -169,17 +192,25 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
     super.dispose();
   }
 
-  void _scheduleAutoHide() {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
-      _controlsVisible.value = false;
-    });
-  }
 
-  void _toggleControls() {
-    _controlsVisible.value = !_controlsVisible.value;
-    if (_controlsVisible.value) {
-      _scheduleAutoHide();
+
+  void _seekToRandomTimestamp([Duration? duration]) async {
+    if (!mounted || !_isReady) return;
+    
+    try {
+      // Use provided duration or get from player state
+      final videoDuration = duration ?? _player.state.duration;
+      if (videoDuration != null && videoDuration.inSeconds > 60) { // Only if video is longer than 1 minute
+        // Seek to a random position between 10% and 80% of the video
+        final minSeek = (videoDuration.inSeconds * 0.1).round();
+        final maxSeek = (videoDuration.inSeconds * 0.8).round();
+        final randomSeconds = minSeek + (Random().nextInt(maxSeek - minSeek));
+        
+        print('🎬 [TVVideoPlayer] Seeking to random timestamp: ${randomSeconds}s / ${videoDuration.inSeconds}s');
+        await _player.seek(Duration(seconds: randomSeconds));
+      }
+    } catch (e) {
+      print('🎬 [TVVideoPlayer] Error seeking to random timestamp: $e');
     }
   }
 
@@ -191,60 +222,86 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
     _isLoading.value = true;
     print('🎬 [TVVideoPlayer] Surprise Me clicked - finding new content...');
 
-    try {
-      // Get a random torrent from the channel
-      final randomTorrent = TVPlaybackService.getRandomTorrent(widget.channel, widget.torrents);
-      print('🎬 [TVVideoPlayer] Selected random torrent: ${randomTorrent.name}');
-      
-      // Attempt to play it
-      final result = await TVPlaybackService.attemptTorrentPlayback(
-        randomTorrent,
-        await StorageService.getApiKey() ?? '',
-      );
+    // Try multiple torrents until we find a playable one
+    const maxAttempts = 5; // Try up to 5 different torrents
+    bool success = false;
 
-      if (result != null && mounted) {
-        print('🎬 [TVVideoPlayer] Got new content, loading in same player...');
+    for (int attempt = 1; attempt <= maxAttempts && !success; attempt++) {
+      try {
+        print('🎬 [TVVideoPlayer] Attempt $attempt of $maxAttempts...');
         
-        // Update the widget's video URL and title
-        final newVideoUrl = result['downloadLink'];
-        final newTitle = randomTorrent.name;
+        // Get a random torrent from the channel
+        final randomTorrent = TVPlaybackService.getRandomTorrent(widget.channel, widget.torrents);
+        print('🎬 [TVVideoPlayer] Selected random torrent: ${randomTorrent.name}');
         
-        // Load the new media in the same player instance
-        await _player.open(mk.Media(newVideoUrl));
-        print('🎬 [TVVideoPlayer] New media loaded: $newTitle');
-        
-        // Start playing automatically
-        await _player.play();
-        print('🎬 [TVVideoPlayer] New content started playing');
-        
-        // Update the UI to reflect the new title
-        setState(() {
-          _currentTitle = newTitle;
-        });
-      } else {
-        print('🎬 [TVVideoPlayer] No playable content found');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No playable content found. Try again!'),
-              duration: Duration(seconds: 2),
-            ),
-          );
+        // Attempt to play it
+        final result = await TVPlaybackService.attemptTorrentPlayback(
+          randomTorrent,
+          await StorageService.getApiKey() ?? '',
+        );
+
+        if (result != null && mounted) {
+          print('🎬 [TVVideoPlayer] Got new content, loading in same player...');
+          
+          // Update the widget's video URL and title
+          final newVideoUrl = result['downloadLink'];
+          final newTitle = randomTorrent.name;
+          
+          // Load the new media in the same player instance
+          await _player.open(mk.Media(newVideoUrl));
+          print('🎬 [TVVideoPlayer] New media loaded: $newTitle');
+          
+          // Start playing automatically
+          await _player.play();
+          print('🎬 [TVVideoPlayer] New content started playing');
+          
+          // Try to seek to random timestamp (fallback if duration not available yet)
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted && _isReady) {
+              _seekToRandomTimestamp();
+            }
+          });
+          
+          // Update the UI to reflect the new title
+          setState(() {
+            _currentTitle = newTitle;
+          });
+          
+          success = true;
+          break;
+        } else {
+          print('🎬 [TVVideoPlayer] Attempt $attempt: No playable content found');
+        }
+      } catch (e) {
+        print('🎬 [TVVideoPlayer] Attempt $attempt failed: $e');
+        // Continue to next attempt instead of stopping
+        if (attempt == maxAttempts) {
+          // Only show error on final attempt
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to find playable content after $maxAttempts attempts'),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
         }
       }
-    } catch (e) {
-      print('🎬 [TVVideoPlayer] Error in Surprise Me: $e');
+    }
+
+    if (!success) {
+      print('🎬 [TVVideoPlayer] All attempts failed');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load content: ${e.toString()}'),
-            duration: const Duration(seconds: 3),
+          const SnackBar(
+            content: Text('No playable content found. Try again!'),
+            duration: Duration(seconds: 2),
           ),
         );
       }
-    } finally {
-      _isLoading.value = false;
     }
+
+    _isLoading.value = false;
   }
 
 
@@ -258,37 +315,32 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
         top: false,
         right: false,
         bottom: false,
-        child: Focus(
+        child: RawKeyboardListener(
+          focusNode: FocusNode(),
           autofocus: true,
-          onKey: (node, event) {
-            if (event is! KeyDownEvent) return KeyEventResult.ignored;
-            final key = event.logicalKey;
+          onKey: (event) {
+            if (event is! RawKeyDownEvent) return;
+            print('🎬 [TVVideoPlayer] Raw key pressed: ${event.logicalKey}');
             
             // Space -> Toggle play/pause
-            if (key == LogicalKeyboardKey.space) {
+            if (event.logicalKey == LogicalKeyboardKey.space) {
+              print('🎬 [TVVideoPlayer] Space key pressed');
               if (_isReady) {
                 if (_isPlaying) {
+                  print('🎬 [TVVideoPlayer] Pausing video');
                   _player.pause();
                 } else {
+                  print('🎬 [TVVideoPlayer] Playing video');
                   _player.play();
                 }
               }
-              return KeyEventResult.handled;
-            }
-            
-            // Enter -> Toggle controls
-            if (key == LogicalKeyboardKey.enter) {
-              _toggleControls();
-              return KeyEventResult.handled;
             }
             
             // Escape -> Go back
-            if (key == LogicalKeyboardKey.escape) {
+            if (event.logicalKey == LogicalKeyboardKey.escape) {
+              print('🎬 [TVVideoPlayer] Escape key pressed - going back');
               Navigator.of(context).pop();
-              return KeyEventResult.handled;
             }
-            
-            return KeyEventResult.ignored;
           },
           child: Stack(
             fit: StackFit.expand,
@@ -306,16 +358,25 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
               else
                 const Center(child: CircularProgressIndicator(color: Colors.white)),
               
-              // Gesture detector for tap to toggle controls
+              // Gesture detector for double-tap for Surprise Me
               GestureDetector(
                 behavior: HitTestBehavior.translucent,
-                onTap: _toggleControls,
+                onDoubleTap: () {
+                  // Show brief feedback
+                  _showDoubleTapFeedback.value = true;
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    _showDoubleTapFeedback.value = false;
+                  });
+                  _surpriseMe();
+                },
               ),
               
-              // LIVE tag - always visible (not part of controls)
+
+              
+              // LIVE tag - always visible (top right)
               Positioned(
-                bottom: 20,
-                left: 20,
+                top: 20,
+                right: 20,
                 child: SafeArea(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -343,53 +404,37 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                 ),
               ),
               
-              // Small "Surprise Me" button - always visible
-              Positioned(
-                bottom: 20,
-                right: 20,
-                child: SafeArea(
-                  child: GestureDetector(
-                    onTap: _surpriseMe,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: _isLoading.value
-                          ? const Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              // Double-tap feedback indicator
+              ValueListenableBuilder<bool>(
+                valueListenable: _showDoubleTapFeedback,
+                builder: (context, showFeedback, child) {
+                  return AnimatedOpacity(
+                    opacity: showFeedback ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: showFeedback
+                        ? Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.all(Radius.circular(20)),
+                              ),
+                              child: const Text(
+                                '🎲 Surprise Me!',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            )
-                          : const Center(
-                              child: Icon(
-                                Icons.shuffle_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
                             ),
-                    ),
-                  ),
-                ),
+                          )
+                        : const SizedBox.shrink(),
+                  );
+                },
               ),
+              
+
             ],
           ),
         ),
