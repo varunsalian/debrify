@@ -898,10 +898,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 									builder: (context) => VideoPlayerScreen(
 										videoUrl: videoUrl,
 										title: torrentName,
-										searchResults: _torrents,
-										currentTorrentIndex: index,
-										searchQuery: _searchController.text,
-										playedTorrentsCache: [], // Start with empty cache
 									),
 								),
 							);
@@ -1332,10 +1328,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 						subtitle: '${entries.length} files',
 						playlist: entries.isNotEmpty ? entries : null,
 						startIndex: 0,
-						searchResults: _torrents,
-						currentTorrentIndex: index,
-						searchQuery: _searchController.text,
-						playedTorrentsCache: [], // Start with empty cache
 					),
 				),
 			);
