@@ -8,6 +8,7 @@ class TVChannelCard extends StatelessWidget {
   final List<TVChannelTorrent> torrents;
   final VoidCallback onRefresh;
   final VoidCallback onDelete;
+  final VoidCallback? onTap;
 
   const TVChannelCard({
     super.key,
@@ -15,6 +16,7 @@ class TVChannelCard extends StatelessWidget {
     required this.torrents,
     required this.onRefresh,
     required this.onDelete,
+    this.onTap,
   });
 
   @override
@@ -24,9 +26,7 @@ class TVChannelCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          // TODO: Navigate to channel detail page
-        },
+        onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

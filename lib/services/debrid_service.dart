@@ -331,27 +331,38 @@ class DebridService {
 
   // Complete workflow: Add magnet, select largest file, get download link
   static Future<Map<String, dynamic>> addTorrentToDebrid(String apiKey, String magnetLink, {String? tempFileSelection}) async {
+    print('🎬 [DebridService] Starting addTorrentToDebrid workflow');
+    print('🎬 [DebridService] Magnet link: ${magnetLink.substring(0, 50)}...');
+    print('🎬 [DebridService] Temp file selection: $tempFileSelection');
+    
     try {
       // Step 1: Add magnet
+      print('🎬 [DebridService] Step 1: Adding magnet to Real Debrid...');
       final addResponse = await addMagnet(apiKey, magnetLink);
       final torrentId = addResponse['id'];
+      print('🎬 [DebridService] Magnet added successfully, torrent ID: $torrentId');
 
       // Step 2: Get torrent info
+      print('🎬 [DebridService] Step 2: Getting torrent info...');
       final torrentInfo = await getTorrentInfo(apiKey, torrentId);
       final files = torrentInfo['files'] as List<dynamic>;
+      print('🎬 [DebridService] Found ${files.length} files in torrent');
 
       if (files.isEmpty) {
+        print('🎬 [DebridService] No files found in torrent, deleting...');
         await deleteTorrent(apiKey, torrentId);
         throw Exception('No files found in torrent');
       }
 
       // Step 3: Get file selection preference (use temp selection if provided, otherwise use saved preference)
       final fileSelection = tempFileSelection ?? await StorageService.getFileSelection();
+      print('🎬 [DebridService] File selection strategy: $fileSelection');
       List<int> fileIdsToSelect = [];
 
       if (fileSelection == 'all') {
         // Select all files
         fileIdsToSelect = files.map((file) => file['id'] as int).toList();
+        print('🎬 [DebridService] Selecting all ${fileIdsToSelect.length} files');
       } else if (fileSelection == 'video') {
         // Select all video files
         final videoFiles = files.where((file) {
@@ -359,6 +370,8 @@ class DebridService {
           return fileName != null && FileUtils.isVideoFile(fileName);
         }).toList();
         fileIdsToSelect = videoFiles.map((file) => file['id'] as int).toList();
+        print('🎬 [DebridService] Found ${videoFiles.length} video files out of ${files.length} total files');
+        print('🎬 [DebridService] Video files: ${videoFiles.map((f) => f['name']).toList()}');
       } else {
         // Select largest file (default behavior)
         int largestFileId = files[0]['id'] as int;
@@ -372,34 +385,44 @@ class DebridService {
           }
         }
         fileIdsToSelect = [largestFileId];
+        print('🎬 [DebridService] Selected largest file (ID: $largestFileId, Size: ${(largestSize / 1024 / 1024).toStringAsFixed(2)} MB)');
       }
 
       // Step 4: Select files based on preference
+      print('🎬 [DebridService] Step 4: Selecting ${fileIdsToSelect.length} files...');
       await selectFiles(apiKey, torrentId, fileIdsToSelect);
+      print('🎬 [DebridService] Files selected successfully');
 
       // Step 5: Wait a bit and get updated torrent info
+      print('🎬 [DebridService] Step 5: Waiting for Real Debrid to process...');
       await Future.delayed(const Duration(seconds: 2));
       final updatedInfo = await getTorrentInfo(apiKey, torrentId);
       final links = updatedInfo['links'] as List<dynamic>;
+      print('🎬 [DebridService] Got ${links.length} download links');
 
       if (links.isEmpty) {
+        print('🎬 [DebridService] No download links available, deleting torrent...');
         await deleteTorrent(apiKey, torrentId);
         throw Exception('File is not readily available in Real Debrid');
       }
 
       // Step 6: Unrestrict the link
+      print('🎬 [DebridService] Step 6: Unrestricting download link...');
       final unrestrictResponse = await unrestrictLink(apiKey, links[0]);
       final downloadLink = unrestrictResponse['download'] as String?;
       
       if (downloadLink == null) {
+        print('🎬 [DebridService] Failed to unrestrict link, deleting torrent...');
         await deleteTorrent(apiKey, torrentId);
         throw Exception('Failed to get download link from Real Debrid');
       }
 
+      print('🎬 [DebridService] Successfully got download link: ${downloadLink.substring(0, 50)}...');
+
       // Don't delete the torrent - let the user keep it in their Real Debrid account
       // The torrent will remain available for future downloads
 
-      return {
+      final result = {
         'downloadLink': downloadLink,
         'torrentId': torrentId,
         'fileSelection': fileSelection,
@@ -407,7 +430,12 @@ class DebridService {
         'files': files, // Add the files information for lazy loading
         'updatedInfo': updatedInfo, // Add the full updated info
       };
+      
+      print('🎬 [DebridService] addTorrentToDebrid workflow completed successfully');
+      return result;
     } catch (e) {
+      print('🎬 [DebridService] Error in addTorrentToDebrid: $e');
+      print('🎬 [DebridService] Stack trace: ${StackTrace.current}');
       throw Exception('Failed to add torrent to Real Debrid: $e');
     }
   }

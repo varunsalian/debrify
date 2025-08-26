@@ -4,6 +4,12 @@ class TVChannel {
   final List<String> keywords;
   final DateTime createdAt;
   final DateTime lastUpdated;
+  final List<String>? playableTorrentIds;
+  final List<String>? failedTorrentIds;
+  final DateTime? lastPlayedAt;
+  final String? lastPlayedTorrentId;
+  final int? playSuccessCount;
+  final int? playFailureCount;
 
   TVChannel({
     required this.id,
@@ -11,6 +17,12 @@ class TVChannel {
     required this.keywords,
     required this.createdAt,
     required this.lastUpdated,
+    this.playableTorrentIds,
+    this.failedTorrentIds,
+    this.lastPlayedAt,
+    this.lastPlayedTorrentId,
+    this.playSuccessCount,
+    this.playFailureCount,
   });
 
   factory TVChannel.fromJson(Map<String, dynamic> json) {
@@ -20,6 +32,18 @@ class TVChannel {
       keywords: List<String>.from(json['keywords'] ?? []),
       createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
       lastUpdated: DateTime.parse(json['lastUpdated'] ?? DateTime.now().toIso8601String()),
+      playableTorrentIds: json['playableTorrentIds'] != null 
+          ? List<String>.from(json['playableTorrentIds']) 
+          : null,
+      failedTorrentIds: json['failedTorrentIds'] != null 
+          ? List<String>.from(json['failedTorrentIds']) 
+          : null,
+      lastPlayedAt: json['lastPlayedAt'] != null 
+          ? DateTime.parse(json['lastPlayedAt']) 
+          : null,
+      lastPlayedTorrentId: json['lastPlayedTorrentId'],
+      playSuccessCount: json['playSuccessCount'],
+      playFailureCount: json['playFailureCount'],
     );
   }
 
@@ -30,6 +54,12 @@ class TVChannel {
       'keywords': keywords,
       'createdAt': createdAt.toIso8601String(),
       'lastUpdated': lastUpdated.toIso8601String(),
+      'playableTorrentIds': playableTorrentIds,
+      'failedTorrentIds': failedTorrentIds,
+      'lastPlayedAt': lastPlayedAt?.toIso8601String(),
+      'lastPlayedTorrentId': lastPlayedTorrentId,
+      'playSuccessCount': playSuccessCount,
+      'playFailureCount': playFailureCount,
     };
   }
 
@@ -39,6 +69,12 @@ class TVChannel {
     List<String>? keywords,
     DateTime? createdAt,
     DateTime? lastUpdated,
+    List<String>? playableTorrentIds,
+    List<String>? failedTorrentIds,
+    DateTime? lastPlayedAt,
+    String? lastPlayedTorrentId,
+    int? playSuccessCount,
+    int? playFailureCount,
   }) {
     return TVChannel(
       id: id ?? this.id,
@@ -46,6 +82,12 @@ class TVChannel {
       keywords: keywords ?? this.keywords,
       createdAt: createdAt ?? this.createdAt,
       lastUpdated: lastUpdated ?? this.lastUpdated,
+      playableTorrentIds: playableTorrentIds ?? this.playableTorrentIds,
+      failedTorrentIds: failedTorrentIds ?? this.failedTorrentIds,
+      lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
+      lastPlayedTorrentId: lastPlayedTorrentId ?? this.lastPlayedTorrentId,
+      playSuccessCount: playSuccessCount ?? this.playSuccessCount,
+      playFailureCount: playFailureCount ?? this.playFailureCount,
     );
   }
 } 
