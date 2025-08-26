@@ -16,6 +16,10 @@ class SearchEngineFactory {
     return _engines.values.toList();
   }
 
+  static List<SearchEngine> getSearchEngines() {
+    return _engines.values.toList();
+  }
+
   static List<String> getAllEngineNames() {
     return _engines.keys.toList();
   }
