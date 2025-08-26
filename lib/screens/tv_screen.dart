@@ -63,12 +63,71 @@ class _TVScreenState extends State<TVScreen> {
     );
 
     if (result != null) {
-      await TVService.addChannel(result);
-      await _loadChannels();
+      try {
+        // Add the channel to database
+        await TVService.addChannel(result);
+        
+        // Add channel to UI immediately in disabled state
+        setState(() {
+          _channels.add(result);
+          _channelTorrents[result.id] = []; // Empty list for loading state
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Channel "${result.name}" added! Searching for content...'),
+            ),
+          );
+        }
+        
+        // Search for torrents in background
+        _loadTorrentsForChannel(result);
+        
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error adding channel: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _loadTorrentsForChannel(TVChannel channel) async {
+    try {
+      // Search for torrents
+      await TVService.refreshChannelContent(channel);
+      
+      // Load the torrents
+      final torrents = await TVService.getChannelTorrents(channel.id);
       
       if (mounted) {
+        setState(() {
+          _channelTorrents[channel.id] = torrents;
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Channel added successfully!')),
+          SnackBar(
+            content: Text('${channel.name}: Found ${torrents.length} torrents!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _channelTorrents[channel.id] = []; // Keep empty list on error
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading content for ${channel.name}: $e'),
+            backgroundColor: Colors.orange,
+          ),
         );
       }
     }
