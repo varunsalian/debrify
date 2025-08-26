@@ -2784,9 +2784,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Future<void> _updatePlayerToCachedTorrent(TorrentNode node) async {
 		print('🔗 LINKED LIST: Updating player to cached torrent: ${node.torrentName}');
 		
-		// Clear cached series playlist to force regeneration with new torrent data
-		_cachedSeriesPlaylist = null;
-		
 		// Update current torrent index
 		_currentTorrentIndex = node.originalIndex;
 		
@@ -2828,9 +2825,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	/// Update player playlist
 	Future<void> _updatePlayerPlaylist(List<PlaylistEntry> playlist, int startIndex) async {
 		print('🔗 LINKED LIST: Updating player playlist with ${playlist.length} entries, start at $startIndex');
-		
-		// Reset current index to match the new playlist's start index
-		_currentIndex = startIndex;
 		
 		// Stop current playback
 		await _player.stop();
@@ -2906,9 +2900,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Future<void> _updatePlayerToNextTorrent(int newIndex, String videoUrl, String title) async {
 		print('🔗 LINKED LIST: Updating player to next torrent at index $newIndex: $title');
 		
-		// Clear cached series playlist to force regeneration with new torrent data
-		_cachedSeriesPlaylist = null;
-		
 		// Update current torrent index
 		_currentTorrentIndex = newIndex;
 		
@@ -2930,9 +2921,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	/// Update player to next torrent with playlist
 	Future<void> _updatePlayerToNextTorrentWithPlaylist(int newIndex, String videoUrl, String title, String subtitle, List<PlaylistEntry>? playlist, int startIndex) async {
 		print('🔗 LINKED LIST: Updating player to next torrent with playlist at index $newIndex: $title');
-		
-		// Clear cached series playlist to force regeneration with new torrent data
-		_cachedSeriesPlaylist = null;
 		
 		// Update current torrent index
 		_currentTorrentIndex = newIndex;
