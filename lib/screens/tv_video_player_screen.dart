@@ -522,38 +522,27 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                   top: 20,
                   left: 20,
                   child: SafeArea(
-                    child: AnimatedBuilder(
-                      animation: _titleFoldController,
-                      builder: (context, child) {
-                        return Transform.scale(
-                          scaleX: _titleFoldAnimation.value,
-                          child: Opacity(
-                            opacity: _titleOpacityAnimation.value,
-                            child: Builder(
-                              builder: (context) {
-                                final displayText = _currentTitle.isNotEmpty ? _currentTitle : widget.channel.name;
-                                print('🎬 [TVVideoPlayer] Displaying title: "$displayText" (currentTitle: "$_currentTitle", channelName: "${widget.channel.name}")');
-                                return Text(
-                                  displayText,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.6), // Very light, subtle white
-                                    fontWeight: FontWeight.w300, // Light weight
-                                    fontSize: 14, // Smaller size
-                                    letterSpacing: 0.8, // Less spacing for subtlety
-                                    shadows: [
-                                      Shadow(
-                                        color: Colors.black.withValues(alpha: 0.3),
-                                        offset: const Offset(0.5, 0.5),
-                                        blurRadius: 1,
-                                      ),
-                                    ],
-                                  ),
-                                  maxLines: 1, // Single line for cleaner look
-                                  overflow: TextOverflow.ellipsis, // Ellipsis for overflow
-                                );
-                              },
-                            ),
+                    child: Builder(
+                      builder: (context) {
+                        final displayText = _currentTitle.isNotEmpty ? _currentTitle : widget.channel.name;
+                        print('🎬 [TVVideoPlayer] Displaying title: "$displayText" (currentTitle: "$_currentTitle", channelName: "${widget.channel.name}")');
+                        return Text(
+                          displayText,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6), // Very light, subtle white
+                            fontWeight: FontWeight.w300, // Light weight
+                            fontSize: 14, // Smaller size
+                            letterSpacing: 0.8, // Less spacing for subtlety
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                offset: const Offset(0.5, 0.5),
+                                blurRadius: 1,
+                              ),
+                            ],
                           ),
+                          maxLines: 1, // Single line for cleaner look
+                          overflow: TextOverflow.ellipsis, // Ellipsis for overflow
                         );
                       },
                     ),
