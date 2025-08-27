@@ -526,89 +526,92 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
                       builder: (context) {
                         final displayText = _currentTitle.isNotEmpty ? _currentTitle : widget.channel.name;
                         print('🎬 [TVVideoPlayer] Displaying title: "$displayText" (currentTitle: "$_currentTitle", channelName: "${widget.channel.name}")');
-                        return Text(
-                          displayText,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.4), // Less visible, more subtle
-                            fontWeight: FontWeight.w300, // Light weight
-                            fontSize: 14, // Smaller size
-                            letterSpacing: 0.8, // Less spacing for subtlety
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                offset: const Offset(0.5, 0.5),
-                                blurRadius: 1,
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.play_circle_outline,
+                              color: Colors.white.withValues(alpha: 0.3),
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              displayText,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.3), // Even less visible, more subtle
+                                fontWeight: FontWeight.w300, // Light weight
+                                fontSize: 12, // Smaller size
+                                letterSpacing: 0.6, // Less spacing for subtlety
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withValues(alpha: 0.15),
+                                    offset: const Offset(0.5, 0.5),
+                                    blurRadius: 1,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          maxLines: 1, // Single line for cleaner look
-                          overflow: TextOverflow.ellipsis, // Ellipsis for overflow
+                              maxLines: 1, // Single line for cleaner look
+                              overflow: TextOverflow.ellipsis, // Ellipsis for overflow
+                            ),
+                          ],
                         );
                       },
                     ),
                   ),
                 ),
               
-                                                        // Channel name tag - only visible if enabled (top right)
+                                                        // LIVE tag - only visible if enabled (top right)
               if (widget.channel.showLiveTag)
                 Positioned(
                   top: 20,
                   right: 20,
                   child: SafeArea(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFF1E3A8A), // Premium dark blue
-                            Color(0xFF3B82F6), // Premium blue
-                            Color(0xFF1E40AF), // Slightly darker blue
-                          ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedBuilder(
+                          animation: _liveDotController,
+                          builder: (context, child) {
+                            return Text(
+                              '*',
+                              style: TextStyle(
+                                color: const Color(0xFFFF6B6B).withValues(alpha: _liveDotAnimation.value),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withValues(alpha: 0.6),
+                                    offset: const Offset(1, 1),
+                                    blurRadius: 2,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'LIVE',
+                          style: TextStyle(
+                            color: Color(0xFFFF6B6B), // Light red color
+                            fontWeight: FontWeight.w600, // Semi-bold for more professional look
+                            fontSize: 14, // Slightly smaller for elegance
+                            letterSpacing: 1.2, // Increased spacing for professional appearance
+                            shadows: [
+                              Shadow(
+                                color: Colors.black,
+                                offset: Offset(1, 1),
+                                blurRadius: 3,
+                              ),
+                              Shadow(
+                                color: Color(0xFFFF6B6B),
+                                offset: Offset(0, 0),
+                                blurRadius: 4,
+                              ),
+                            ],
                           ),
-                          BoxShadow(
-                            color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 0),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AnimatedBuilder(
-                            animation: _liveDotController,
-                            builder: (context, child) {
-                              return Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: _liveDotAnimation.value),
-                                  shape: BoxShape.circle,
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            widget.channel.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600, // Semi-bold for premium look
-                              fontSize: 14,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
