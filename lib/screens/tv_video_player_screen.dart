@@ -228,6 +228,15 @@ class _TVVideoPlayerScreenState extends State<TVVideoPlayerScreen> with TickerPr
       // Add completion listener
       _player.stream.completed.listen((completed) {
         print('🎬 [TVVideoPlayer] Playback completed: $completed');
+        if (completed && mounted) {
+          print('🎬 [TVVideoPlayer] Video ended, auto-triggering Surprise Me');
+          // Auto-trigger Surprise Me when video ends
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) {
+              _surpriseMe();
+            }
+          });
+        }
       });
 
       print('🎬 [TVVideoPlayer] Stream listeners set up successfully');
