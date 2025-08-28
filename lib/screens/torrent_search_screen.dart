@@ -1860,8 +1860,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Theme.of(context).colorScheme.surface,
-            Theme.of(context).colorScheme.surfaceVariant,
+            const Color(0xFF0F172A), // Slate 900 - Deep blue-black
+            const Color(0xFF1E293B), // Slate 800 - Rich blue-grey
+            const Color(0xFF1E3A8A), // Blue 900 - Deep premium blue
           ],
         ),
       ),
@@ -1878,16 +1879,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Theme.of(context).colorScheme.primaryContainer,
-                    Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.8),
+                    const Color(0xFF1E40AF).withValues(alpha: 0.9), // Blue 800
+                    const Color(0xFF1E3A8A).withValues(alpha: 0.8), // Blue 900
                   ],
                 ),
                 borderRadius: BorderRadius.circular(_isSearchExpanded ? 12 : 16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: _isSearchExpanded ? 10 : 20,
-                    offset: Offset(0, _isSearchExpanded ? 5 : 10),
+                    color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                    blurRadius: _isSearchExpanded ? 15 : 25,
+                    offset: Offset(0, _isSearchExpanded ? 8 : 15),
                   ),
                 ],
               ),
@@ -2003,12 +2004,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   
                   // Search Engine Toggles
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                            Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
                     child: Row(
                       children: [
                         Expanded(
@@ -2388,16 +2399,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFF10B981), // Emerald 500
-                  Color(0xFF059669), // Emerald 600
+                  Color(0xFF1E40AF), // Blue 800
+                  Color(0xFF1E3A8A), // Blue 900
                 ],
               ),
               borderRadius: BorderRadius.circular(8),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+                  color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
@@ -2435,11 +2446,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.3),
+              color: const Color(0xFF1E293B).withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               children: [
@@ -2586,22 +2604,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         StatChip(
                           icon: Icons.storage_rounded,
                           text: Formatters.formatFileSize(torrent.sizeBytes),
-                          color: const Color(0xFF3B82F6), // Blue
+                          color: const Color(0xFF0EA5E9), // Sky 500 - Premium blue
                         ),
                         StatChip(
                           icon: Icons.upload_rounded,
                           text: '${torrent.seeders}',
-                          color: const Color(0xFF10B981), // Emerald
+                          color: const Color(0xFF22C55E), // Green 500 - Fresh green
                         ),
                         StatChip(
                           icon: Icons.download_rounded,
                           text: '${torrent.leechers}',
-                          color: const Color(0xFFF59E0B), // Amber
+                          color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
                         ),
                         StatChip(
                           icon: Icons.check_circle_rounded,
                           text: '${torrent.completed}',
-                          color: const Color(0xFF8B5CF6), // Violet
+                          color: const Color(0xFF8B5CF6), // Violet 500 - Rich purple
                         ),
                       ],
                     ),
@@ -2639,10 +2657,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Row(
@@ -2650,7 +2668,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 children: [
                                   Icon(
                                     Icons.copy_rounded,
-                                    color: const Color(0xFF6366F1),
+                                    color: const Color(0xFF60A5FA),
                                     size: 14,
                                   ),
                                   const SizedBox(width: 6),
@@ -2659,7 +2677,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w500,
-                                      color: const Color(0xFF6366F1),
+                                      color: const Color(0xFF60A5FA),
                                     ),
                                   ),
                                 ],
@@ -2681,10 +2699,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Row(
@@ -2692,7 +2710,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 children: [
                                   Icon(
                                     Icons.download_rounded,
-                                    color: const Color(0xFF10B981),
+                                    color: const Color(0xFF60A5FA),
                                     size: 14,
                                   ),
                                   const SizedBox(width: 6),
@@ -2701,13 +2719,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w500,
-                                      color: const Color(0xFF10B981),
+                                      color: const Color(0xFF60A5FA),
                                     ),
                                   ),
                                   const SizedBox(width: 2),
                                   Icon(
                                     Icons.more_horiz,
-                                    color: const Color(0xFF10B981),
+                                    color: const Color(0xFF60A5FA),
                                     size: 10,
                                   ),
                                 ],
