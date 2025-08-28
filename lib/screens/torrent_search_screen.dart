@@ -24,18 +24,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   List<Torrent> _torrents = [];
+  Map<String, int> _engineCounts = {};
   bool _isLoading = false;
   String _errorMessage = '';
   bool _hasSearched = false;
   bool _isSearchExpanded = false; // New state for search box expansion
-  String _selectedSearchEngine = 'torrents_csv'; // Default search engine
+  
+  // Search engine toggles
+  bool _useTorrentsCsv = true;
+  bool _usePirateBay = true;
   
   late AnimationController _searchAnimationController;
   late AnimationController _listAnimationController;
   late AnimationController _searchBoxAnimationController; // New animation controller
   late Animation<double> _searchAnimation;
   late Animation<double> _listAnimation;
-  late Animation<double> _searchBoxAnimation; // New animation for search box
 
   @override
   void initState() {
@@ -68,14 +71,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       parent: _listAnimationController,
       curve: Curves.easeInOut,
     ));
-
-    _searchBoxAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _searchBoxAnimationController,
-      curve: Curves.easeInOut,
-    ));
     
     _searchAnimationController.forward();
   }
@@ -105,9 +100,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _searchBoxAnimationController.forward();
 
     try {
-      final torrents = await TorrentService.searchTorrents(query, engineName: _selectedSearchEngine);
+      final result = await TorrentService.searchAllEngines(
+        query,
+        useTorrentsCsv: _useTorrentsCsv,
+        usePirateBay: _usePirateBay,
+      );
       setState(() {
-        _torrents = torrents;
+        _torrents = result['torrents'] as List<Torrent>;
+        _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
         _isLoading = false;
       });
       _listAnimationController.forward();
@@ -1756,6 +1756,43 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  String _buildEngineBreakdownText() {
+    if (_engineCounts.isEmpty) {
+      // Show which engines are selected
+      final List<String> selectedEngines = [];
+      if (_useTorrentsCsv) selectedEngines.add('Torrents CSV');
+      if (_usePirateBay) selectedEngines.add('The Pirate Bay');
+      
+      if (selectedEngines.isEmpty) {
+        return 'No search engines selected';
+      }
+      
+      return 'From ${selectedEngines.join(' and ')}';
+    }
+    
+    final List<String> breakdowns = [];
+    
+    // Add Torrents CSV count
+    final csvCount = _engineCounts['torrents_csv'] ?? 0;
+    if (csvCount > 0) {
+      breakdowns.add('Torrents CSV: $csvCount');
+    }
+    
+    // Add Pirate Bay count
+    final pbCount = _engineCounts['pirate_bay'] ?? 0;
+    if (pbCount > 0) {
+      breakdowns.add('The Pirate Bay: $pbCount');
+    }
+    
+    if (breakdowns.isEmpty) {
+      return 'No results found';
+    }
+    
+    return breakdowns.join(' • ');
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1818,7 +1855,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'Search Torrents',
+                            'Search All Engines',
                             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -1826,7 +1863,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Find and download your favorite content',
+                            'Search both Torrents CSV and The Pirate Bay',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                             ),
@@ -1868,7 +1905,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           onSubmitted: (query) => _searchTorrents(query),
                           style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
-                            hintText: _isSearchExpanded ? 'Search torrents...' : 'Enter torrent name...',
+                            hintText: _isSearchExpanded ? 'Search all engines...' : 'Enter torrent name...',
                             hintStyle: TextStyle(
                               color: Colors.white.withValues(alpha: 0.5),
                             ),
@@ -1903,87 +1940,70 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ),
                     ),
-                  ),
+                                    ),
                   
-                  // Search Engine Dropdown
-                  const SizedBox(height: 24),
+                  // Search Engine Toggles
+                  const SizedBox(height: 16),
                   Container(
-                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: const Color(0xFF334155),
+                      color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedSearchEngine,
-                      onChanged: (String? newValue) {
-                        if (newValue != null) {
-                          setState(() {
-                            _selectedSearchEngine = newValue;
-                          });
-                          
-                          // If there's a search query and we have searched before, trigger a new search
-                          if (_searchController.text.trim().isNotEmpty && _hasSearched) {
-                            // Add a small delay to avoid rapid API calls
-                            Future.delayed(const Duration(milliseconds: 300), () {
-                              if (mounted) {
-                                _searchTorrents(_searchController.text);
-                              }
-                            });
-                          }
-                        }
-                      },
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                      dropdownColor: Theme.of(context).colorScheme.surface,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceVariant,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        isDense: false,
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'torrents_csv',
+                    child: Row(
+                      children: [
+                        Expanded(
                           child: Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Icon(
-                                  Icons.search_rounded,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  size: 16,
+                                                          Switch(
+                              value: _useTorrentsCsv,
+                              onChanged: (value) {
+                                setState(() {
+                                  _useTorrentsCsv = value;
+                                });
+                                // Auto-refresh if we have results
+                                if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+                                  _searchTorrents(_searchController.text);
+                                }
+                              },
+                            ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Torrents CSV',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              const Text('Torrents CSV'),
                             ],
                           ),
                         ),
-                        DropdownMenuItem(
-                          value: 'pirate_bay',
+                        Container(
+                          width: 1,
+                          height: 24,
+                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                        ),
+                        Expanded(
                           child: Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Icon(
-                                  Icons.sailing_rounded,
-                                  color: Theme.of(context).colorScheme.secondary,
-                                  size: 16,
+                                                          Switch(
+                              value: _usePirateBay,
+                              onChanged: (value) {
+                                setState(() {
+                                  _usePirateBay = value;
+                                });
+                                // Auto-refresh if we have results
+                                if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+                                  _searchTorrents(_searchController.text);
+                                }
+                              },
+                            ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'The Pirate Bay',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              const Text('The Pirate Bay'),
                             ],
                           ),
                         ),
@@ -2298,17 +2318,74 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     return FadeTransition(
       opacity: _listAnimation,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _torrents.length,
-        itemBuilder: (context, index) {
-          final torrent = _torrents[index];
-          return _buildTorrentCard(torrent, index);
-        },
+      child: Column(
+        children: [
+          // Results count header
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF10B981), // Emerald 500
+                  Color(0xFF059669), // Emerald 600
+                ],
+              ),
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    Icons.search_rounded,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Results list
+          ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _torrents.length,
+            itemBuilder: (context, index) {
+              final torrent = _torrents[index];
+              return _buildTorrentCard(torrent, index);
+            },
+          ),
+        ],
       ),
     );
+
+
   }
 
   Widget _buildTorrentCard(Torrent torrent, int index) {
