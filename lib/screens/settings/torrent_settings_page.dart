@@ -148,15 +148,15 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                           
                                                     // The Pirate Bay Setting
                           _buildEngineSetting(
-                            title: 'The Pirate Bay',
+                            title: 'Pirate Bay',
                             subtitle: 'Popular torrent site',
                             icon: Icons.sailing_rounded,
                             value: _defaultPirateBayEnabled,
-                            onChanged: (value) async {
-                              await StorageService.setDefaultPirateBayEnabled(value);
+                            onChanged: (value) {
                               setState(() {
                                 _defaultPirateBayEnabled = value;
                               });
+                              StorageService.setDefaultPirateBayEnabled(value);
                             },
                           ),
                           
@@ -225,7 +225,6 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                            // Torrents CSV Max Results
                            _buildMaxResultsDropdown(
                              title: 'Max Results from Torrents CSV',
-                             subtitle: 'Higher numbers take longer to search',
                              value: _maxTorrentsCsvResults,
                              onChanged: (value) async {
                                await StorageService.setMaxTorrentsCsvResults(value);
@@ -239,11 +238,11 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                            
                            // The Pirate Bay Max Results (disabled)
                            _buildMaxResultsDropdown(
-                             title: 'Max Results from The Pirate Bay',
-                             subtitle: 'Fixed at 100 results',
+                             title: 'Max Results from Pirate Bay',
                              value: 100,
-                             onChanged: null, // Disabled
+                             onChanged: null,
                              enabled: false,
+                             options: const [100],
                            ),
                          ],
                        ),
@@ -330,12 +329,11 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
 
   Widget _buildMaxResultsDropdown({
     required String title,
-    required String subtitle,
     required int value,
     required Function(int)? onChanged,
     bool enabled = true,
+    List<int> options = const [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500],
   }) {
-    final options = [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500];
     
     // Ensure the value is valid for the dropdown
     int validValue = value;
@@ -377,7 +375,7 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      subtitle,
+                      'Fixed at 100 results',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                       ),

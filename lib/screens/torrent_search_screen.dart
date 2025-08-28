@@ -1953,10 +1953,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 },
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                'Torrents CSV',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              Expanded(
+                                child: Text(
+                                  'Torrents CSV',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -1983,10 +1986,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 },
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                'The Pirate Bay',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              Expanded(
+                                child: Text(
+                                  'Pirate Bay',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
