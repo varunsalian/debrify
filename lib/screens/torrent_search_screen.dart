@@ -34,6 +34,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _useTorrentsCsv = true;
   bool _usePirateBay = true;
   
+  // Sorting options
+  String _sortBy = 'relevance'; // relevance, name, size, seeders, date
+  bool _sortAscending = false;
+  
   late AnimationController _searchAnimationController;
   late AnimationController _listAnimationController;
   late AnimationController _searchBoxAnimationController; // New animation controller
@@ -121,6 +125,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
         _isLoading = false;
       });
+      
+      // Apply sorting to the results
+      _sortTorrents();
       _listAnimationController.forward();
     } catch (e) {
       setState(() {
@@ -166,6 +173,47 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  void _sortTorrents() {
+    if (_torrents.isEmpty) return;
+    
+    List<Torrent> sortedTorrents = List.from(_torrents);
+    
+    switch (_sortBy) {
+      case 'name':
+        sortedTorrents.sort((a, b) {
+          int comparison = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          return _sortAscending ? comparison : -comparison;
+        });
+        break;
+      case 'size':
+        sortedTorrents.sort((a, b) {
+          int comparison = a.sizeBytes.compareTo(b.sizeBytes);
+          return _sortAscending ? comparison : -comparison;
+        });
+        break;
+      case 'seeders':
+        sortedTorrents.sort((a, b) {
+          int comparison = a.seeders.compareTo(b.seeders);
+          return _sortAscending ? comparison : -comparison;
+        });
+        break;
+      case 'date':
+        sortedTorrents.sort((a, b) {
+          int comparison = a.createdUnix.compareTo(b.createdUnix);
+          return _sortAscending ? comparison : -comparison;
+        });
+        break;
+      case 'relevance':
+      default:
+        // Keep original order (relevance is maintained by search engines)
+        break;
+    }
+    
+    setState(() {
+      _torrents = sortedTorrents;
+    });
   }
 
   void _toggleSearchBox() {
@@ -2377,6 +2425,84 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       color: Colors.white,
                     ),
                   ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Sorting controls
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.sort_rounded,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Sort by:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButton<String>(
+                    value: _sortBy,
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _sortBy = newValue;
+                        });
+                        _sortTorrents();
+                      }
+                    },
+                    items: const [
+                      DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 12))),
+                    ],
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontSize: 12,
+                    ),
+                    underline: Container(),
+                    icon: Icon(
+                      Icons.arrow_drop_down,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      size: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _sortAscending = !_sortAscending;
+                    });
+                    _sortTorrents();
+                  },
+                  icon: Icon(
+                    _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 16,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                 ),
               ],
             ),
