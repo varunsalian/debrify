@@ -9,6 +9,9 @@ class StorageService {
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
   static const String _maxParallelDownloadsKey = 'max_parallel_downloads_v1';
+  static const String _defaultTorrentsCsvEnabledKey = 'default_torrents_csv_enabled';
+  static const String _defaultPirateBayEnabledKey = 'default_pirate_bay_enabled';
+  static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
   
   // API Key methods
   static Future<String?> getApiKey() async {
@@ -70,6 +73,40 @@ class StorageService {
   static Future<void> setMaxParallelDownloads(int value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_maxParallelDownloadsKey, value.clamp(1, 8));
+  }
+
+  // Default search engine settings
+  static Future<bool> getDefaultTorrentsCsvEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_defaultTorrentsCsvEnabledKey) ?? true; // Default to enabled
+  }
+
+  static Future<void> setDefaultTorrentsCsvEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_defaultTorrentsCsvEnabledKey, enabled);
+  }
+
+  static Future<bool> getDefaultPirateBayEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_defaultPirateBayEnabledKey) ?? true; // Default to enabled
+  }
+
+  static Future<void> setDefaultPirateBayEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_defaultPirateBayEnabledKey, enabled);
+  }
+
+  // Max results settings
+  static Future<int> getMaxTorrentsCsvResults() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_maxTorrentsCsvResultsKey) ?? 50; // Default to 50
+  }
+
+  static Future<void> setMaxTorrentsCsvResults(int maxResults) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Clamp between 25 and 500
+    final clampedValue = maxResults.clamp(25, 500);
+    await prefs.setInt(_maxTorrentsCsvResultsKey, clampedValue);
   }
 
   // Enhanced Playback State methods

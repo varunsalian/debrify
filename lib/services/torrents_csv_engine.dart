@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../models/torrent.dart';
 import 'search_engine.dart';
+import 'storage_service.dart';
 
 class TorrentsCsvEngine extends SearchEngine {
   const TorrentsCsvEngine() : super(
@@ -29,11 +30,17 @@ class TorrentsCsvEngine extends SearchEngine {
     final List<Torrent> allTorrents = [];
     String? nextId;
     int pageCount = 0;
-    const int maxPages = 4; // Initial call + 3 additional pages
-    const int delayMs = 100; // 100ms delay between calls
+    
+    // Get max results setting
+    final maxResults = await StorageService.getMaxTorrentsCsvResults();
+    // Calculate number of requests needed (each request fetches 25 results)
+    // Example: 100 max results = 100/25 = 4 requests
+    // Example: 75 max results = 75/25 = 3 requests  
+    // Example: 50 max results = 50/25 = 2 requests
+    final requestsNeeded = (maxResults / 25).ceil().clamp(1, 20); // Cap at 20 requests max
 
     try {
-      while (pageCount < maxPages) {
+      while (pageCount < requestsNeeded) {
         // Make API call
         final url = getSearchUrlWithPagination(query, nextId);
         final response = await http.get(Uri.parse(url));
@@ -61,10 +68,7 @@ class TorrentsCsvEngine extends SearchEngine {
             break;
           }
           
-          // Add delay before next call (except for the last iteration)
-          if (pageCount < maxPages) {
-            await Future.delayed(Duration(milliseconds: delayMs));
-          }
+          // No delay between requests for maximum speed
         } else {
           // If API call fails, break and return what we have
           break;

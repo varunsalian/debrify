@@ -73,6 +73,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     ));
     
     _searchAnimationController.forward();
+    _loadDefaultSettings();
+  }
+
+  Future<void> _loadDefaultSettings() async {
+    final defaultTorrentsCsv = await StorageService.getDefaultTorrentsCsvEnabled();
+    final defaultPirateBay = await StorageService.getDefaultPirateBayEnabled();
+    
+    setState(() {
+      _useTorrentsCsv = defaultTorrentsCsv;
+      _usePirateBay = defaultPirateBay;
+    });
   }
 
   @override

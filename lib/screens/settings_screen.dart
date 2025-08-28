@@ -4,6 +4,7 @@ import '../services/account_service.dart';
 import 'settings/real_debrid_settings_page.dart';
 import '../services/android_native_downloader.dart';
 import 'settings/download_settings_page.dart';
+import 'settings/torrent_settings_page.dart';
 import '../widgets/shimmer.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -154,6 +155,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
+          // Torrent Settings
+          _SectionTile(
+            icon: Icons.search_rounded,
+            title: 'Torrent Settings',
+            subtitle: 'Search engine defaults',
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TorrentSettingsPage()),
+              );
+              setState(() {});
+            },
+          ),
+
+          const SizedBox(height: 12),
           // Real Debrid
           _SectionTile(
             icon: Icons.cloud_download_rounded,
