@@ -58,10 +58,10 @@ class ChannelHubDetailScreen extends StatelessWidget {
     return GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
-        childAspectRatio: 0.35,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
+        crossAxisCount: 3,
+        childAspectRatio: 0.6,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
       itemCount: hub.series.length,
       itemBuilder: (context, index) {
@@ -120,52 +120,64 @@ class ChannelHubDetailScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      series.name,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
+                    Flexible(
+                      child: Text(
+                        series.name,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 1),
                     if (series.rating != null) ...[
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.star_rounded,
-                            size: 8,
-                            color: Theme.of(context).colorScheme.tertiary,
-                          ),
-                          const SizedBox(width: 1),
-                          Text(
-                            series.rating!.toStringAsFixed(1),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                              fontSize: 8,
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.star_rounded,
+                              size: 8,
+                              color: Theme.of(context).colorScheme.tertiary,
                             ),
-                          ),
-                          if (series.premiered != null) ...[
-                            const SizedBox(width: 2),
-                            Text(
-                              '•',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-                                fontSize: 8,
+                            const SizedBox(width: 1),
+                            Flexible(
+                              child: Text(
+                                series.rating!.toStringAsFixed(1),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                                  fontSize: 8,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 2),
-                            Text(
-                              series.premiered!.substring(0, 4),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                                fontSize: 8,
+                            if (series.premiered != null) ...[
+                              const SizedBox(width: 2),
+                              Text(
+                                '•',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                  fontSize: 8,
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 2),
+                              Flexible(
+                                child: Text(
+                                  series.premiered!.substring(0, 4),
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                    fontSize: 8,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ],
                   ],
