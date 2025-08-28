@@ -28,7 +28,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _isLoading = false;
   String _errorMessage = '';
   bool _hasSearched = false;
-  bool _isSearchExpanded = false; // New state for search box expansion
   
   // Search engine toggles
   bool _useTorrentsCsv = true;
@@ -38,35 +37,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
   bool _sortAscending = false;
   
-  late AnimationController _searchAnimationController;
   late AnimationController _listAnimationController;
-  late AnimationController _searchBoxAnimationController; // New animation controller
-  late Animation<double> _searchAnimation;
   late Animation<double> _listAnimation;
 
   @override
   void initState() {
     super.initState();
-    _searchAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
     _listAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    _searchBoxAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    
-    _searchAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _searchAnimationController,
-      curve: Curves.elasticOut,
-    ));
     
     _listAnimation = Tween<double>(
       begin: 0.0,
@@ -76,7 +56,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       curve: Curves.easeInOut,
     ));
     
-    _searchAnimationController.forward();
+    _listAnimationController.forward();
     _loadDefaultSettings();
   }
 
@@ -88,15 +68,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _useTorrentsCsv = defaultTorrentsCsv;
       _usePirateBay = defaultPirateBay;
     });
+    
+    // Focus the search field after a short delay to ensure UI is ready
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        _searchFocusNode.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
-    _searchAnimationController.dispose();
     _listAnimationController.dispose();
-    _searchBoxAnimationController.dispose();
     super.dispose();
   }
 
@@ -107,12 +92,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _isLoading = true;
       _errorMessage = '';
       _hasSearched = true;
-      _isSearchExpanded = true;
     });
 
-    // Hide keyboard and animate search box
+    // Hide keyboard
     _searchFocusNode.unfocus();
-    _searchBoxAnimationController.forward();
 
     try {
       final result = await TorrentService.searchAllEngines(
@@ -216,20 +199,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
-  void _toggleSearchBox() {
-    if (_isSearchExpanded) {
-      setState(() {
-        _isSearchExpanded = false;
-      });
-      _searchBoxAnimationController.reverse();
-    } else {
-      setState(() {
-        _isSearchExpanded = true;
-      });
-      _searchBoxAnimationController.forward();
-      _searchFocusNode.requestFocus();
-    }
-  }
+
 
   Future<void> _addToRealDebrid(String infohash, String torrentName, int index) async {
     // Check if API key is available
@@ -1869,11 +1839,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       child: SafeArea(
         child: Column(
           children: [
-            // Animated Search Box
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              margin: EdgeInsets.all(_isSearchExpanded ? 4 : 8),
-              padding: EdgeInsets.all(_isSearchExpanded ? 8 : 12),
+            // Search Box
+            Container(
+              margin: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -1883,160 +1852,106 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     const Color(0xFF1E3A8A).withValues(alpha: 0.8), // Blue 900
                   ],
                 ),
-                borderRadius: BorderRadius.circular(_isSearchExpanded ? 12 : 16),
+                borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
-                    blurRadius: _isSearchExpanded ? 15 : 25,
-                    offset: Offset(0, _isSearchExpanded ? 8 : 15),
+                    blurRadius: 25,
+                    offset: const Offset(0, 15),
                   ),
                 ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Search Icon and Title (only show when not expanded)
-                  if (!_isSearchExpanded) ...[
-                    ScaleTransition(
-                      scale: _searchAnimation,
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              Icons.search_rounded,
-                              color: Theme.of(context).colorScheme.primary,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Search All Engines',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onPrimaryContainer,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Search both Torrents CSV and The Pirate Bay',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                      ),
-                    ),
-                  ],
-                  
                   // Search Input
-                  Focus(
-                    onKey: (node, event) {
-                      if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
-                      if (!_isSearchExpanded && (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter)) {
-                        _toggleSearchBox();
-                        _searchFocusNode.requestFocus();
-                        return KeyEventResult.handled;
-                      }
-                      return KeyEventResult.ignored;
-                    },
-                    child: GestureDetector(
-                      onTap: _isSearchExpanded ? null : _toggleSearchBox,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
-                        child: TextField(
-                          controller: _searchController,
-                          focusNode: _searchFocusNode,
-                          onSubmitted: (query) => _searchTorrents(query),
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            hintText: _isSearchExpanded ? 'Search all engines...' : 'Enter torrent name...',
-                            hintStyle: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5),
-                            ),
-                            prefixIcon: const Icon(
-                              Icons.search_rounded,
-                              color: Color(0xFF6366F1),
-                            ),
-                            suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(
-                                    Icons.clear_rounded,
-                                    color: Color(0xFFEF4444),
-                                  ),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {});
-                                  },
-                                )
-                              : null,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                            filled: true,
-                            fillColor: Theme.of(context).colorScheme.surfaceVariant,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                          ),
-                          onChanged: (value) => setState(() {}),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      onSubmitted: (query) => _searchTorrents(query),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Search all engines...',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search_rounded,
+                          color: Color(0xFF6366F1),
+                        ),
+                        suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(
+                                Icons.clear_rounded,
+                                color: Color(0xFFEF4444),
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
                       ),
+                      onChanged: (value) => setState(() {}),
                     ),
-                                    ),
+                  ),
                   
                   // Search Engine Toggles
                   const SizedBox(height: 16),
-                            Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
                     child: Row(
                       children: [
                         Expanded(
                           child: Row(
                             children: [
-                                                          Switch(
-                              value: _useTorrentsCsv,
-                              onChanged: (value) {
-                                setState(() {
-                                  _useTorrentsCsv = value;
-                                });
-                                // Auto-refresh if we have results
-                                if (_hasSearched && _searchController.text.trim().isNotEmpty) {
-                                  _searchTorrents(_searchController.text);
-                                }
-                              },
-                            ),
+                              Switch(
+                                value: _useTorrentsCsv,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _useTorrentsCsv = value;
+                                  });
+                                  // Auto-refresh if we have results
+                                  if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+                                    _searchTorrents(_searchController.text);
+                                  }
+                                },
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 'Torrents CSV',
@@ -2055,18 +1970,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         Expanded(
                           child: Row(
                             children: [
-                                                          Switch(
-                              value: _usePirateBay,
-                              onChanged: (value) {
-                                setState(() {
-                                  _usePirateBay = value;
-                                });
-                                // Auto-refresh if we have results
-                                if (_hasSearched && _searchController.text.trim().isNotEmpty) {
-                                  _searchTorrents(_searchController.text);
-                                }
-                              },
-                            ),
+                              Switch(
+                                value: _usePirateBay,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _usePirateBay = value;
+                                  });
+                                  // Auto-refresh if we have results
+                                  if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+                                    _searchTorrents(_searchController.text);
+                                  }
+                                },
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 'The Pirate Bay',
@@ -2080,35 +1995,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ],
                     ),
                   ),
-                  
-                  // Search Button (only show when not expanded)
-                  if (!_isSearchExpanded) ...[
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _searchTorrents(_searchController.text),
-                        icon: const Icon(Icons.search_rounded),
-                        label: const Text(
-                          'Search',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 8,
-                          shadowColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
