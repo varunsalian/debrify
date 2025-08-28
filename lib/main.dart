@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/torrent_search_screen.dart';
+import 'screens/tv_screen.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
@@ -201,6 +202,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
+    const TVScreen(),
     const DebridDownloadsScreen(),
     const DownloadsScreen(),
     const SettingsScreen(),
@@ -208,6 +210,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   final List<String> _titles = [
     'Torrent Search',
+    'TV',
     'Real Debrid',
     'Downloads',
     'Settings',
@@ -215,6 +218,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   final List<IconData> _icons = [
     Icons.search_rounded,
+    Icons.tv_rounded,
     Icons.cloud_download_rounded,
     Icons.download_for_offline_rounded,
     Icons.settings_rounded,
@@ -351,7 +355,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             currentIndex: _selectedIndex,
             items: buildDefaultNavItems(_icons, _titles),
             onTap: _onItemTapped,
-            badges: const [0, 0, 0, 0],
+            badges: const [0, 0, 0, 0, 0],
             haptics: true,
           ),
           automaticallyImplyLeading: false,
