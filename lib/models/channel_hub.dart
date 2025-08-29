@@ -51,6 +51,7 @@ class SeriesInfo {
   final String? ended;
   final String? network;
   final String? language;
+  final int createdAt;
 
   SeriesInfo({
     required this.id,
@@ -65,6 +66,7 @@ class SeriesInfo {
     this.ended,
     this.network,
     this.language,
+    required this.createdAt,
   });
 
   Map<String, dynamic> toJson() {
@@ -81,6 +83,7 @@ class SeriesInfo {
       'ended': ended,
       'network': network,
       'language': language,
+      'createdAt': createdAt,
     };
   }
 
@@ -98,6 +101,7 @@ class SeriesInfo {
       ended: json['ended'],
       network: json['network'],
       language: json['language'],
+      createdAt: json['createdAt'] ?? DateTime.now().millisecondsSinceEpoch,
     );
   }
 
@@ -122,6 +126,7 @@ class SeriesInfo {
       ended: show['ended']?.toString(),
       network: show['network']?['name']?.toString(),
       language: show['language']?.toString(),
+      createdAt: DateTime.now().millisecondsSinceEpoch,
     );
   }
 }
@@ -139,6 +144,8 @@ class MovieInfo {
   final List<String> actors;
   final String? duration;
   final String? language;
+  final int createdAt;
+  final int runtimeSeconds;
 
   MovieInfo({
     required this.id,
@@ -153,6 +160,8 @@ class MovieInfo {
     this.actors = const [],
     this.duration,
     this.language,
+    required this.createdAt,
+    required this.runtimeSeconds,
   });
 
   Map<String, dynamic> toJson() {
@@ -169,6 +178,8 @@ class MovieInfo {
       'actors': actors,
       'duration': duration,
       'language': language,
+      'createdAt': createdAt,
+      'runtimeSeconds': runtimeSeconds,
     };
   }
 
@@ -186,6 +197,8 @@ class MovieInfo {
       actors: List<String>.from(json['actors'] ?? []),
       duration: json['duration'],
       language: json['language'],
+      createdAt: json['createdAt'] ?? DateTime.now().millisecondsSinceEpoch,
+      runtimeSeconds: json['runtimeSeconds'] ?? 3600, // Default to 60 minutes (3600 seconds)
     );
   }
 
@@ -196,6 +209,8 @@ class MovieInfo {
       imageUrl: movie['#IMG_POSTER'],
       originalImageUrl: movie['#IMG_POSTER'],
       year: movie['#YEAR']?.toString(),
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      runtimeSeconds: 3600, // Default to 60 minutes (3600 seconds) for search results
     );
   }
 
@@ -203,6 +218,29 @@ class MovieInfo {
     final short = detail['short'];
     if (short == null || short['@type'] != 'Movie') {
       throw Exception('Not a movie');
+    }
+
+    // Extract runtime from the detail response
+    int runtimeSeconds = 3600; // Default to 60 minutes (3600 seconds)
+    
+    try {
+      // Check for runtime in the 'top' section first
+      final top = detail['top'];
+      if (top != null && top['runtime'] != null && top['runtime']['seconds'] != null) {
+        runtimeSeconds = top['runtime']['seconds'] as int;
+        print('DEBUG: Movie "${short['name']}" runtime saved: $runtimeSeconds seconds');
+      } else {
+        // Fallback to root level runtime
+        final runtime = detail['runtime'];
+        if (runtime != null && runtime['seconds'] != null) {
+          runtimeSeconds = runtime['seconds'] as int;
+          print('DEBUG: Movie "${short['name']}" runtime saved: $runtimeSeconds seconds');
+        } else {
+          print('DEBUG: Movie "${short['name']}" - no runtime found, using default: $runtimeSeconds seconds');
+        }
+      }
+    } catch (e) {
+      print('DEBUG: Movie "${short['name']}" - error extracting runtime: $e, using default: $runtimeSeconds seconds');
     }
 
     return MovieInfo(
@@ -226,6 +264,8 @@ class MovieInfo {
           : [],
       duration: short['duration'],
       language: short['inLanguage'],
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      runtimeSeconds: runtimeSeconds,
     );
   }
 } 
