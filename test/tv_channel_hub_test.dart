@@ -15,12 +15,14 @@ void main() {
         rating: 9.5,
         premiered: '2008-01-20',
         ended: '2013-09-29',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
       );
 
       final hub = ChannelHub(
         id: 'test-id',
         name: 'Test Hub',
         series: [series],
+        movies: [],
         createdAt: DateTime(2024, 1, 1),
       );
 

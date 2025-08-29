@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/channel_hub.dart';
+import 'movie_detail_screen.dart';
 
 class ChannelHubDetailScreen extends StatelessWidget {
   final ChannelHub hub;
@@ -155,13 +156,9 @@ class ChannelHubDetailScreen extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: InkWell(
         onTap: () {
-          // TODO: Navigate to movie search or details
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Searching for "${movie.name}"...'),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => MovieDetailScreen(movie: movie),
             ),
           );
         },

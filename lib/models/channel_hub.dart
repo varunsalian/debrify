@@ -1,3 +1,5 @@
+import 'movie_torrentio_stream.dart';
+
 class ChannelHub {
   final String id;
   final String name;
@@ -146,6 +148,8 @@ class MovieInfo {
   final String? language;
   final int createdAt;
   final int runtimeSeconds;
+  final List<MovieTorrentioStream> torrentioStreams;
+  final bool hasTorrentioData;
 
   MovieInfo({
     required this.id,
@@ -162,6 +166,8 @@ class MovieInfo {
     this.language,
     required this.createdAt,
     required this.runtimeSeconds,
+    this.torrentioStreams = const [],
+    this.hasTorrentioData = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -180,6 +186,8 @@ class MovieInfo {
       'language': language,
       'createdAt': createdAt,
       'runtimeSeconds': runtimeSeconds,
+      'torrentioStreams': torrentioStreams.map((s) => s.toJson()).toList(),
+      'hasTorrentioData': hasTorrentioData,
     };
   }
 
@@ -199,6 +207,10 @@ class MovieInfo {
       language: json['language'],
       createdAt: json['createdAt'] ?? DateTime.now().millisecondsSinceEpoch,
       runtimeSeconds: json['runtimeSeconds'] ?? 3600, // Default to 60 minutes (3600 seconds)
+      torrentioStreams: (json['torrentioStreams'] as List? ?? [])
+          .map((s) => MovieTorrentioStream.fromJson(s))
+          .toList(),
+      hasTorrentioData: json['hasTorrentioData'] ?? false,
     );
   }
 
@@ -211,10 +223,12 @@ class MovieInfo {
       year: movie['#YEAR']?.toString(),
       createdAt: DateTime.now().millisecondsSinceEpoch,
       runtimeSeconds: 3600, // Default to 60 minutes (3600 seconds) for search results
+      torrentioStreams: [],
+      hasTorrentioData: false,
     );
   }
 
-  factory MovieInfo.fromIMDBDetail(Map<String, dynamic> detail) {
+  factory MovieInfo.fromIMDBDetail(Map<String, dynamic> detail, {String? originalImdbId}) {
     final short = detail['short'];
     if (short == null || short['@type'] != 'Movie') {
       throw Exception('Not a movie');
@@ -227,13 +241,23 @@ class MovieInfo {
       // Check for runtime in the 'top' section first
       final top = detail['top'];
       if (top != null && top['runtime'] != null && top['runtime']['seconds'] != null) {
-        runtimeSeconds = top['runtime']['seconds'] as int;
+        final seconds = top['runtime']['seconds'];
+        if (seconds is int) {
+          runtimeSeconds = seconds;
+        } else if (seconds is String) {
+          runtimeSeconds = int.tryParse(seconds) ?? 3600;
+        }
         print('DEBUG: Movie "${short['name']}" runtime saved: $runtimeSeconds seconds');
       } else {
         // Fallback to root level runtime
         final runtime = detail['runtime'];
         if (runtime != null && runtime['seconds'] != null) {
-          runtimeSeconds = runtime['seconds'] as int;
+          final seconds = runtime['seconds'];
+          if (seconds is int) {
+            runtimeSeconds = seconds;
+          } else if (seconds is String) {
+            runtimeSeconds = int.tryParse(seconds) ?? 3600;
+          }
           print('DEBUG: Movie "${short['name']}" runtime saved: $runtimeSeconds seconds');
         } else {
           print('DEBUG: Movie "${short['name']}" - no runtime found, using default: $runtimeSeconds seconds');
@@ -243,29 +267,130 @@ class MovieInfo {
       print('DEBUG: Movie "${short['name']}" - error extracting runtime: $e, using default: $runtimeSeconds seconds');
     }
 
+    // Safely extract genres
+    List<String> genres = [];
+    try {
+      final genre = short['genre'];
+      if (genre != null) {
+        if (genre is List) {
+          genres = genre.map((g) => g.toString()).toList();
+        } else if (genre is String) {
+          genres = [genre];
+        } else {
+          genres = [genre.toString()];
+        }
+      }
+    } catch (e) {
+      print('DEBUG: Movie "${short['name']}" - error extracting genres: $e');
+    }
+
+    // Safely extract actors
+    List<String> actors = [];
+    try {
+      final actor = short['actor'];
+      if (actor != null) {
+        if (actor is List) {
+          actors = actor.map((a) {
+            if (a is Map) {
+              return a['name']?.toString() ?? a.toString();
+            }
+            return a.toString();
+          }).toList();
+        } else if (actor is Map) {
+          actors = [actor['name']?.toString() ?? actor.toString()];
+        } else {
+          actors = [actor.toString()];
+        }
+      }
+    } catch (e) {
+      print('DEBUG: Movie "${short['name']}" - error extracting actors: $e');
+    }
+
+    // Safely extract director
+    String? director;
+    try {
+      final dir = short['director'];
+      if (dir != null) {
+        if (dir is Map) {
+          director = dir['name']?.toString();
+        } else {
+          director = dir.toString();
+        }
+      }
+    } catch (e) {
+      print('DEBUG: Movie "${short['name']}" - error extracting director: $e');
+    }
+
+    // Safely extract year
+    String? year;
+    try {
+      final datePublished = short['datePublished'];
+      if (datePublished != null && datePublished.toString().length >= 4) {
+        year = datePublished.toString().substring(0, 4);
+      }
+    } catch (e) {
+      print('DEBUG: Movie "${short['name']}" - error extracting year: $e');
+    }
+
+    // Use the original IMDB ID that we already have
+    final imdbId = originalImdbId ?? '';
+    print('DEBUG: Movie "${short['name']}" - using original IMDB ID: $imdbId');
+
     return MovieInfo(
-      id: short['url']?.toString().split('/').last ?? '',
+      id: imdbId,
       name: short['name']?.toString().replaceAll('&amp;', '&') ?? '',
       imageUrl: short['image'],
       originalImageUrl: short['image'],
       summary: short['description']?.toString().replaceAll('&amp;', '&'),
-      genres: short['genre'] != null 
-          ? (short['genre'] is List 
-              ? List<String>.from(short['genre'])
-              : [short['genre'].toString()])
-          : [],
+      genres: genres,
       rating: short['aggregateRating']?['ratingValue']?.toDouble(),
-      year: short['datePublished']?.toString().substring(0, 4),
-      director: short['director']?['name'] ?? short['director'],
-      actors: short['actor'] != null
-          ? (short['actor'] is List
-              ? List<String>.from(short['actor'].map((a) => a['name'] ?? a.toString()))
-              : [short['actor']['name'] ?? short['actor'].toString()])
-          : [],
+      year: year,
+      director: director,
+      actors: actors,
       duration: short['duration'],
       language: short['inLanguage'],
       createdAt: DateTime.now().millisecondsSinceEpoch,
       runtimeSeconds: runtimeSeconds,
+      torrentioStreams: [],
+      hasTorrentioData: false,
+    );
+  }
+
+  MovieInfo copyWith({
+    String? id,
+    String? name,
+    String? imageUrl,
+    String? originalImageUrl,
+    String? summary,
+    List<String>? genres,
+    double? rating,
+    String? year,
+    String? director,
+    List<String>? actors,
+    String? duration,
+    String? language,
+    int? createdAt,
+    int? runtimeSeconds,
+    List<MovieTorrentioStream>? torrentioStreams,
+    bool? hasTorrentioData,
+  }) {
+    return MovieInfo(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      imageUrl: imageUrl ?? this.imageUrl,
+      originalImageUrl: originalImageUrl ?? this.originalImageUrl,
+      summary: summary ?? this.summary,
+      genres: genres ?? this.genres,
+      rating: rating ?? this.rating,
+      year: year ?? this.year,
+      director: director ?? this.director,
+      actors: actors ?? this.actors,
+      duration: duration ?? this.duration,
+      language: language ?? this.language,
+      createdAt: createdAt ?? this.createdAt,
+      runtimeSeconds: runtimeSeconds ?? this.runtimeSeconds,
+      torrentioStreams: torrentioStreams ?? this.torrentioStreams,
+      hasTorrentioData: hasTorrentioData ?? this.hasTorrentioData,
     );
   }
 } 

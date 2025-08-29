@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/channel_hub.dart';
 import '../services/channel_hub_service.dart';
+import '../services/torrentio_service.dart';
 
 class AddChannelHubDialog extends StatefulWidget {
   final ChannelHub? initialHub;
@@ -33,6 +34,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
   bool _isSearchingSeries = false;
   bool _isSearchingMovies = false;
   bool _isSaving = false;
+  bool _isAddingMovie = false;
 
   @override
   void initState() {
@@ -170,13 +172,19 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
     }
   }
 
-  void _addMovie(Map<String, dynamic> movie) async {
+  Future<void> _addMovie(Map<String, dynamic> movie) async {
+    if (_isAddingMovie) return; // Prevent multiple simultaneous additions
+    
+    setState(() {
+      _isAddingMovie = true;
+    });
+
     try {
       // Get detailed movie info
       final detailResponse = await http.get(
         Uri.parse('https://search.imdbot.workers.dev/?tt=${movie['#IMDB_ID']}'),
         headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 30));
 
       if (detailResponse.statusCode == 200) {
         final detailData = json.decode(detailResponse.body);
@@ -196,20 +204,50 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
           return;
         }
         
-        final movieInfo = MovieInfo.fromIMDBDetail(detailData);
+        final movieInfo = MovieInfo.fromIMDBDetail(detailData, originalImdbId: movie['#IMDB_ID']);
         
         if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
-          setState(() {
-            _selectedMovies.add(movieInfo);
-          });
+          // Fetch Torrentio streams for this movie
+          try {
+            final streams = await TorrentioService.getMovieStreams(movieInfo.id)
+                .timeout(const Duration(seconds: 30));
+            final updatedMovieInfo = movieInfo.copyWith(
+              torrentioStreams: streams,
+              hasTorrentioData: streams.isNotEmpty,
+            );
+            
+            setState(() {
+              _selectedMovies.add(updatedMovieInfo);
+            });
+          } catch (e) {
+            // If Torrentio fetch fails, still add the movie without streams
+            setState(() {
+              _selectedMovies.add(movieInfo);
+            });
+          }
         }
       } else {
         // Fallback to search result if detail fails
         final movieInfo = MovieInfo.fromIMDBSearch(movie);
         if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
-          setState(() {
-            _selectedMovies.add(movieInfo);
-          });
+          // Fetch Torrentio streams for this movie
+          try {
+            final streams = await TorrentioService.getMovieStreams(movieInfo.id)
+                .timeout(const Duration(seconds: 30));
+            final updatedMovieInfo = movieInfo.copyWith(
+              torrentioStreams: streams,
+              hasTorrentioData: streams.isNotEmpty,
+            );
+            
+            setState(() {
+              _selectedMovies.add(updatedMovieInfo);
+            });
+          } catch (e) {
+            // If Torrentio fetch fails, still add the movie without streams
+            setState(() {
+              _selectedMovies.add(movieInfo);
+            });
+          }
         }
       }
     } catch (e) {
@@ -227,13 +265,65 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
         return;
       }
       
-      // For other errors, fallback to search result
-      final movieInfo = MovieInfo.fromIMDBSearch(movie);
-      if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
-        setState(() {
-          _selectedMovies.add(movieInfo);
-        });
+      // For parsing errors or other issues, try fallback to search result
+      try {
+        final movieInfo = MovieInfo.fromIMDBSearch(movie);
+        if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
+          // Fetch Torrentio streams for this movie
+          try {
+            final streams = await TorrentioService.getMovieStreams(movieInfo.id)
+                .timeout(const Duration(seconds: 30));
+            final updatedMovieInfo = movieInfo.copyWith(
+              torrentioStreams: streams,
+              hasTorrentioData: streams.isNotEmpty,
+            );
+            
+            setState(() {
+              _selectedMovies.add(updatedMovieInfo);
+            });
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Added "${movie['#TITLE']}" with basic info (detailed info unavailable)'),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (streamError) {
+            // If Torrentio fetch fails, still add the movie without streams
+            setState(() {
+              _selectedMovies.add(movieInfo);
+            });
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Added "${movie['#TITLE']}" with basic info'),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        }
+      } catch (fallbackError) {
+        // If even the fallback fails, show error
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to add "${movie['#TITLE']}": ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
+    } finally {
+      setState(() {
+        _isAddingMovie = false;
+      });
     }
     
     _moviesSearchController.clear();
@@ -701,7 +791,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
                   prefixIcon: const Icon(Icons.search),
                 ),
                 onFieldSubmitted: (value) {
-                  if (value.trim().isNotEmpty) {
+                  if (value.trim().isNotEmpty && !_isAddingMovie) {
                     _searchMovies(value);
                   }
                 },
@@ -709,7 +799,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
             ),
             const SizedBox(width: 8),
             ElevatedButton(
-              onPressed: _isSearchingMovies 
+              onPressed: (_isSearchingMovies || _isAddingMovie)
                   ? null 
                   : () {
                       if (_moviesSearchController.text.trim().isNotEmpty) {
@@ -787,15 +877,21 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
                       movie['#YEAR']?.toString() ?? 'Unknown Year',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    trailing: IconButton(
-                      onPressed: isSelected ? null : () => _addMovie(movie),
-                      icon: Icon(
-                        isSelected ? Icons.check_circle : Icons.add_circle_outline,
-                        color: isSelected 
-                            ? Theme.of(context).colorScheme.primary 
-                            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
+                    trailing: _isAddingMovie 
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : IconButton(
+                            onPressed: isSelected || _isAddingMovie ? null : () => _addMovie(movie),
+                            icon: Icon(
+                              isSelected ? Icons.check_circle : Icons.add_circle_outline,
+                              color: isSelected 
+                                  ? Theme.of(context).colorScheme.primary 
+                                  : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
                   ),
                 );
               },
