@@ -82,4 +82,20 @@ class ChannelHubService {
   static String generateId() {
     return DateTime.now().millisecondsSinceEpoch.toString();
   }
+  
+  /// Get a specific channel hub by ID
+  static Future<ChannelHub?> getChannelHub(String hubId) async {
+    try {
+      final List<ChannelHub> hubs = await getChannelHubs();
+      return hubs.firstWhere((hub) => hub.id == hubId);
+    } catch (e) {
+      print('Error getting channel hub: $e');
+      return null;
+    }
+  }
+  
+  /// Update an existing channel hub
+  static Future<bool> updateChannelHub(ChannelHub updatedHub) async {
+    return await saveChannelHub(updatedHub);
+  }
 } 

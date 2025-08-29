@@ -4,33 +4,54 @@ import '../models/channel_hub.dart';
 import '../models/movie_torrentio_stream.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
+import '../services/channel_hub_service.dart';
 
 class TVPlaybackService {
-  /// Selects a random movie from a channel hub and plays it
+  /// Selects a movie from a channel hub based on watch count (lowest first) and plays it
   static Future<Map<String, dynamic>?> playRandomMovieFromHub(
     BuildContext context,
     ChannelHub hub,
   ) async {
+    // Get fresh hub data to ensure we have the latest watch counts
+    final freshHub = await ChannelHubService.getChannelHub(hub.id);
+    if (freshHub == null) {
+      throw Exception('Hub not found: ${hub.id}');
+    }
     try {
       // Check if hub has movies
-      if (hub.movies.isEmpty) {
+      if (freshHub.movies.isEmpty) {
         throw Exception('No movies available in this channel hub');
       }
 
-      // Select a random movie
-      final random = Random();
-      final randomMovie = hub.movies[random.nextInt(hub.movies.length)];
-      
-      print('DEBUG: Selected random movie: ${randomMovie.name}');
+      // Filter movies with Torrentio data
+      final availableMovies = freshHub.movies.where((movie) => 
+        movie.hasTorrentioData && movie.torrentioStreams.isNotEmpty
+      ).toList();
 
-      // Check if movie has Torrentio streams
-      if (!randomMovie.hasTorrentioData || randomMovie.torrentioStreams.isEmpty) {
-        throw Exception('No streaming data available for ${randomMovie.name}');
+      if (availableMovies.isEmpty) {
+        throw Exception('No movies with streaming data available in this channel hub');
       }
 
+      // Sort movies by watch count (lowest first)
+      availableMovies.sort((a, b) => a.timesWatched.compareTo(b.timesWatched));
+      
+      // Get the minimum watch count
+      final minWatchCount = availableMovies.first.timesWatched;
+      
+      // Filter movies with the minimum watch count
+      final leastWatchedMovies = availableMovies.where((movie) => 
+        movie.timesWatched == minWatchCount
+      ).toList();
+      
+      // Select a random movie from the least watched ones
+      final random = Random();
+      final selectedMovie = leastWatchedMovies[random.nextInt(leastWatchedMovies.length)];
+      
+      print('DEBUG: Selected movie with lowest watch count: ${selectedMovie.name} (watched ${selectedMovie.timesWatched} times)');
+
       // Select a random torrent stream
-      final randomStream = randomMovie.torrentioStreams[
-        random.nextInt(randomMovie.torrentioStreams.length)
+      final randomStream = selectedMovie.torrentioStreams[
+        random.nextInt(selectedMovie.torrentioStreams.length)
       ];
       
       print('DEBUG: Selected random stream: ${randomStream.title}');
@@ -51,15 +72,18 @@ class TVPlaybackService {
         apiKey, 
         magnetLink, 
         randomStream,
-        hub.quality,
+        freshHub.quality,
       );
 
       if (result != null) {
+        // Increment the watch count immediately after successful selection
+        await incrementMovieWatchCount(freshHub.id, selectedMovie.id);
+        
         return {
           'videoUrl': result['downloadLink'],
-          'title': randomMovie.name,
-          'subtitle': '${randomMovie.year ?? ''} • ${randomStream.title}',
-          'movie': randomMovie,
+          'title': selectedMovie.name,
+          'subtitle': '${selectedMovie.year ?? ''} • ${randomStream.title}',
+          'movie': selectedMovie,
           'stream': randomStream,
         };
       } else {
@@ -152,5 +176,48 @@ class TVPlaybackService {
     final randomSeconds = random.nextInt(maxJumpSeconds);
     
     return Duration(seconds: randomSeconds);
+  }
+
+  /// Increment the watch count for a movie in a channel hub
+  static Future<void> incrementMovieWatchCount(String hubId, String movieId) async {
+    try {
+      // Get the current hub
+      final hub = await ChannelHubService.getChannelHub(hubId);
+      if (hub == null) {
+        print('DEBUG: Hub not found: $hubId');
+        return;
+      }
+
+      // Find the movie and increment its watch count
+      final movieIndex = hub.movies.indexWhere((movie) => movie.id == movieId);
+      if (movieIndex == -1) {
+        print('DEBUG: Movie not found in hub: $movieId');
+        return;
+      }
+
+      final movie = hub.movies[movieIndex];
+      final updatedMovie = movie.copyWith(timesWatched: movie.timesWatched + 1);
+      
+      // Create updated hub with the modified movie
+      final updatedMovies = List<MovieInfo>.from(hub.movies);
+      updatedMovies[movieIndex] = updatedMovie;
+      
+      final updatedHub = ChannelHub(
+        id: hub.id,
+        name: hub.name,
+        quality: hub.quality,
+        series: hub.series,
+        movies: updatedMovies,
+        createdAt: hub.createdAt,
+      );
+
+      // Save the updated hub
+      await ChannelHubService.updateChannelHub(updatedHub);
+      
+      print('DEBUG: Incremented watch count for movie ${movie.name} to ${updatedMovie.timesWatched}');
+      
+    } catch (e) {
+      print('DEBUG: Error incrementing movie watch count: $e');
+    }
   }
 } 

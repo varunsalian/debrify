@@ -154,6 +154,7 @@ class MovieInfo {
   final int runtimeSeconds;
   final List<MovieTorrentioStream> torrentioStreams;
   final bool hasTorrentioData;
+  final int timesWatched;
 
   MovieInfo({
     required this.id,
@@ -172,6 +173,7 @@ class MovieInfo {
     required this.runtimeSeconds,
     this.torrentioStreams = const [],
     this.hasTorrentioData = false,
+    this.timesWatched = 0,
   });
 
   Map<String, dynamic> toJson() {
@@ -192,6 +194,7 @@ class MovieInfo {
       'runtimeSeconds': runtimeSeconds,
       'torrentioStreams': torrentioStreams.map((s) => s.toJson()).toList(),
       'hasTorrentioData': hasTorrentioData,
+      'timesWatched': timesWatched,
     };
   }
 
@@ -215,6 +218,7 @@ class MovieInfo {
           .map((s) => MovieTorrentioStream.fromJson(s))
           .toList(),
       hasTorrentioData: json['hasTorrentioData'] ?? false,
+      timesWatched: json['timesWatched'] ?? 0,
     );
   }
 
@@ -229,6 +233,7 @@ class MovieInfo {
       runtimeSeconds: 3600, // Default to 60 minutes (3600 seconds) for search results
       torrentioStreams: [],
       hasTorrentioData: false,
+      timesWatched: 0,
     );
   }
 
@@ -357,6 +362,7 @@ class MovieInfo {
       runtimeSeconds: runtimeSeconds,
       torrentioStreams: [],
       hasTorrentioData: false,
+      timesWatched: 0,
     );
   }
 
@@ -377,6 +383,7 @@ class MovieInfo {
     int? runtimeSeconds,
     List<MovieTorrentioStream>? torrentioStreams,
     bool? hasTorrentioData,
+    int? timesWatched,
   }) {
     return MovieInfo(
       id: id ?? this.id,
@@ -395,6 +402,7 @@ class MovieInfo {
       runtimeSeconds: runtimeSeconds ?? this.runtimeSeconds,
       torrentioStreams: torrentioStreams ?? this.torrentioStreams,
       hasTorrentioData: hasTorrentioData ?? this.hasTorrentioData,
+      timesWatched: timesWatched ?? this.timesWatched,
     );
   }
 } 

@@ -221,15 +221,15 @@ class _ChannelHubCardState extends State<ChannelHubCard>
 
       if (result != null && mounted) {
         // Launch TV video player
-                          Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => TVVideoPlayerScreen(
-                        videoUrl: result['videoUrl'],
-                        title: result['title'],
-                        subtitle: result['subtitle'],
-                      ),
-                    ),
-                  );
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => TVVideoPlayerScreen(
+              videoUrl: result['videoUrl'],
+              title: result['title'],
+              subtitle: result['subtitle'],
+            ),
+          ),
+        );
       }
 
     } catch (e) {
