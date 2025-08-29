@@ -5,6 +5,7 @@ class MovieTorrentioStream {
   final String infoHash;
   final String? qualityDetails;
   final String? filename;
+  final int fileIdx;
   final int createdAt;
   final int lastUpdated;
 
@@ -15,6 +16,7 @@ class MovieTorrentioStream {
     required this.infoHash,
     this.qualityDetails,
     this.filename,
+    required this.fileIdx,
     required this.createdAt,
     required this.lastUpdated,
   });
@@ -27,6 +29,7 @@ class MovieTorrentioStream {
       'infoHash': infoHash,
       'qualityDetails': qualityDetails,
       'filename': filename,
+      'fileIdx': fileIdx,
       'createdAt': createdAt,
       'lastUpdated': lastUpdated,
     };
@@ -40,6 +43,7 @@ class MovieTorrentioStream {
       infoHash: json['infoHash'],
       qualityDetails: json['qualityDetails'],
       filename: json['filename'],
+      fileIdx: json['fileIdx'] ?? -1,
       createdAt: json['createdAt'] ?? DateTime.now().millisecondsSinceEpoch,
       lastUpdated: json['lastUpdated'] ?? DateTime.now().millisecondsSinceEpoch,
     );
@@ -58,6 +62,7 @@ class MovieTorrentioStream {
       infoHash: stream['infoHash'] ?? '',
       qualityDetails: behaviorHints?['bingeGroup'],
       filename: behaviorHints?['filename'],
+      fileIdx: stream['fileIdx'] ?? -1,
       createdAt: DateTime.now().millisecondsSinceEpoch,
       lastUpdated: DateTime.now().millisecondsSinceEpoch,
     );
@@ -70,6 +75,7 @@ class MovieTorrentioStream {
     String? infoHash,
     String? qualityDetails,
     String? filename,
+    int? fileIdx,
     int? createdAt,
     int? lastUpdated,
   }) {
@@ -80,6 +86,7 @@ class MovieTorrentioStream {
       infoHash: infoHash ?? this.infoHash,
       qualityDetails: qualityDetails ?? this.qualityDetails,
       filename: filename ?? this.filename,
+      fileIdx: fileIdx ?? this.fileIdx,
       createdAt: createdAt ?? this.createdAt,
       lastUpdated: lastUpdated ?? this.lastUpdated,
     );
