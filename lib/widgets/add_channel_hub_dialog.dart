@@ -17,22 +17,29 @@ class AddChannelHubDialog extends StatefulWidget {
   State<AddChannelHubDialog> createState() => _AddChannelHubDialogState();
 }
 
-class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
+class _AddChannelHubDialogState extends State<AddChannelHubDialog>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _searchController = TextEditingController();
   
-  List<Map<String, dynamic>> _searchResults = [];
+  late TabController _tabController;
+  
+  List<dynamic> _searchResults = [];
   List<SeriesInfo> _selectedSeries = [];
+  List<MovieInfo> _selectedMovies = [];
   bool _isSearching = false;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    
     if (widget.initialHub != null) {
       _nameController.text = widget.initialHub!.name;
       _selectedSeries = List.from(widget.initialHub!.series);
+      _selectedMovies = List.from(widget.initialHub!.movies);
     }
   }
 
@@ -40,6 +47,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
   void dispose() {
     _nameController.dispose();
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -89,22 +97,123 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
     }
   }
 
-  void _addSeries(Map<String, dynamic> show) {
-    final series = SeriesInfo.fromTVMazeShow(show);
-    if (!_selectedSeries.any((s) => s.id == series.id)) {
+  Future<void> _searchMovies(String query) async {
+    if (query.trim().isEmpty) {
       setState(() {
-        _selectedSeries.add(series);
+        _searchResults = [];
       });
+      return;
     }
-    _searchController.clear();
+
     setState(() {
-      _searchResults = [];
+      _isSearching = true;
     });
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://search.imdbot.workers.dev/?q=${Uri.encodeComponent(query.trim())}'),
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> results = data['description'] ?? [];
+        
+        setState(() {
+          _searchResults = results.take(10).toList();
+          _isSearching = false;
+        });
+      } else {
+        setState(() {
+          _searchResults = [];
+          _isSearching = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error searching: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _addSeries(Map<String, dynamic> show) {
+    try {
+      final series = SeriesInfo.fromTVMazeShow(show);
+      if (!_selectedSeries.any((s) => s.id == series.id)) {
+        setState(() {
+          _selectedSeries.add(series);
+        });
+      }
+      _searchController.clear();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding series: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _addMovie(Map<String, dynamic> movie) async {
+    try {
+      // Get detailed movie info
+      final detailResponse = await http.get(
+        Uri.parse('https://search.imdbot.workers.dev/?tt=${movie['#IMDB_ID']}'),
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (detailResponse.statusCode == 200) {
+        final detailData = json.decode(detailResponse.body);
+        final movieInfo = MovieInfo.fromIMDBDetail(detailData);
+        
+        if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
+          setState(() {
+            _selectedMovies.add(movieInfo);
+          });
+        }
+      } else {
+        // Fallback to search result if detail fails
+        final movieInfo = MovieInfo.fromIMDBSearch(movie);
+        if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
+          setState(() {
+            _selectedMovies.add(movieInfo);
+          });
+        }
+      }
+    } catch (e) {
+      // Fallback to search result if detail fails
+      final movieInfo = MovieInfo.fromIMDBSearch(movie);
+      if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
+        setState(() {
+          _selectedMovies.add(movieInfo);
+        });
+      }
+    }
+    
+    _searchController.clear();
   }
 
   void _removeSeries(SeriesInfo series) {
     setState(() {
       _selectedSeries.removeWhere((s) => s.id == series.id);
+    });
+  }
+
+  void _removeMovie(MovieInfo movie) {
+    setState(() {
+      _selectedMovies.removeWhere((m) => m.id == movie.id);
     });
   }
 
@@ -120,6 +229,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
         id: widget.initialHub?.id ?? ChannelHubService.generateId(),
         name: _nameController.text.trim(),
         series: _selectedSeries,
+        movies: _selectedMovies,
         createdAt: widget.initialHub?.createdAt ?? DateTime.now(),
       );
 
@@ -158,19 +268,15 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildHeader(),
+              _buildTabs(),
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildNameField(),
-                      const SizedBox(height: 24),
-                      _buildSeriesSearch(),
-                      const SizedBox(height: 16),
-                      _buildSelectedSeries(),
-                    ],
-                  ),
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildHubInfoTab(),
+                    _buildMoviesTab(),
+                    _buildSeriesTab(),
+                  ],
                 ),
               ),
               _buildActions(),
@@ -216,6 +322,65 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
     );
   }
 
+  Widget _buildTabs() {
+    return Container(
+      color: Theme.of(context).colorScheme.surface,
+      child: TabBar(
+        controller: _tabController,
+        labelColor: Theme.of(context).colorScheme.primary,
+        unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+        indicatorColor: Theme.of(context).colorScheme.primary,
+        tabs: const [
+          Tab(text: 'Hub Info'),
+          Tab(text: 'Movies'),
+          Tab(text: 'Series'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHubInfoTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildNameField(),
+          const SizedBox(height: 24),
+          _buildHubStats(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMoviesTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildMoviesSearch(),
+          const SizedBox(height: 16),
+          _buildSelectedMovies(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeriesTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSeriesSearch(),
+          const SizedBox(height: 16),
+          _buildSelectedSeries(),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNameField() {
     return TextFormField(
       controller: _nameController,
@@ -230,6 +395,125 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
         }
         return null;
       },
+    );
+  }
+
+  Widget _buildHubStats() {
+    final totalItems = _selectedSeries.length + _selectedMovies.length;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Hub Statistics',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.tv_rounded,
+                title: 'Series',
+                count: _selectedSeries.length,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                icon: Icons.movie_rounded,
+                title: 'Movies',
+                count: _selectedMovies.length,
+                color: Theme.of(context).colorScheme.secondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.inventory_2_rounded,
+                color: Theme.of(context).colorScheme.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total Items',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '$totalItems items in this hub',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required String title,
+    required int count,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            color: color,
+            size: 24,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            count.toString(),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -292,7 +576,8 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
               itemCount: _searchResults.length,
               itemBuilder: (context, index) {
                 final show = _searchResults[index];
-                final isSelected = _selectedSeries.any((s) => s.id == show['id']);
+                final showId = show['id'];
+                final isSelected = showId != null && _selectedSeries.any((s) => s.id == showId);
                 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -334,11 +619,11 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
                             ),
                     ),
                     title: Text(
-                      show['name'],
+                      show['name']?.toString() ?? 'Unknown Series',
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                     subtitle: Text(
-                      show['genres']?.join(', ') ?? 'No genres',
+                      (show['genres'] as List<dynamic>?)?.join(', ') ?? 'No genres',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     trailing: IconButton(
@@ -360,19 +645,147 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
     );
   }
 
+  Widget _buildMoviesSearch() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Add Movies',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  labelText: 'Search for movies',
+                  hintText: 'Enter movie name to search...',
+                  prefixIcon: const Icon(Icons.search),
+                ),
+                onFieldSubmitted: (value) {
+                  if (value.trim().isNotEmpty) {
+                    _searchMovies(value);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _isSearching 
+                  ? null 
+                  : () {
+                      if (_searchController.text.trim().isNotEmpty) {
+                        _searchMovies(_searchController.text);
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              child: _isSearching
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Search'),
+            ),
+          ],
+        ),
+        if (_searchResults.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _searchResults.length,
+              itemBuilder: (context, index) {
+                final movie = _searchResults[index];
+                final isSelected = _selectedMovies.any((m) => m.id == movie['#IMDB_ID']);
+                
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: movie['#IMG_POSTER'] != null
+                          ? CachedNetworkImage(
+                              imageUrl: movie['#IMG_POSTER'],
+                              width: 50,
+                              height: 50,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                width: 50,
+                                height: 50,
+                                color: Theme.of(context).colorScheme.surfaceContainer,
+                                child: const CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              errorWidget: (context, url, error) {
+                                return Container(
+                                  width: 50,
+                                  height: 50,
+                                  color: Theme.of(context).colorScheme.surfaceContainer,
+                                  child: Icon(
+                                    Icons.movie_rounded,
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              width: 50,
+                              height: 50,
+                              color: Theme.of(context).colorScheme.surfaceContainer,
+                              child: Icon(
+                                Icons.movie_rounded,
+                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                              ),
+                            ),
+                    ),
+                    title: Text(
+                      movie['#TITLE'] ?? 'Unknown Movie',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    subtitle: Text(
+                      movie['#YEAR']?.toString() ?? 'Unknown Year',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    trailing: IconButton(
+                      onPressed: isSelected ? null : () => _addMovie(movie),
+                      icon: Icon(
+                        isSelected ? Icons.check_circle : Icons.add_circle_outline,
+                        color: isSelected 
+                            ? Theme.of(context).colorScheme.primary 
+                            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildSelectedSeries() {
     if (_selectedSeries.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer.withValues(alpha: 0.3),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
             Icon(
-              Icons.info_outline,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              Icons.tv_rounded,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+              size: 24,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -397,26 +810,43 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 8),
-        ...(_selectedSeries.map((series) => Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: series.imageUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: series.imageUrl!,
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        width: 50,
-                        height: 50,
-                        color: Theme.of(context).colorScheme.surfaceContainer,
-                        child: const CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      errorWidget: (context, url, error) {
-                        return Container(
+        const SizedBox(height: 12),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _selectedSeries.length,
+          itemBuilder: (context, index) {
+            final series = _selectedSeries[index];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: series.originalImageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: series.originalImageUrl!,
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            width: 50,
+                            height: 50,
+                            color: Theme.of(context).colorScheme.surfaceContainer,
+                            child: const CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          errorWidget: (context, url, error) {
+                            return Container(
+                              width: 50,
+                              height: 50,
+                              color: Theme.of(context).colorScheme.surfaceContainer,
+                              child: Icon(
+                                Icons.tv_rounded,
+                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
                           width: 50,
                           height: 50,
                           color: Theme.of(context).colorScheme.surfaceContainer,
@@ -424,36 +854,134 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
                             Icons.tv_rounded,
                             color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
                           ),
-                        );
-                      },
-                    )
-                  : Container(
-                      width: 50,
-                      height: 50,
-                      color: Theme.of(context).colorScheme.surfaceContainer,
-                      child: Icon(
-                        Icons.tv_rounded,
-                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                    ),
+                        ),
+                ),
+                title: Text(
+                  series.name,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                subtitle: Text(
+                  series.genres.join(', '),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                trailing: IconButton(
+                  onPressed: () => _removeSeries(series),
+                  icon: Icon(
+                    Icons.remove_circle_outline,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectedMovies() {
+    if (_selectedMovies.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.movie_rounded,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+              size: 24,
             ),
-            title: Text(
-              series.name,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            subtitle: Text(
-              series.genres.join(', '),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            trailing: IconButton(
-              onPressed: () => _removeSeries(series),
-              icon: Icon(
-                Icons.remove_circle_outline,
-                color: Theme.of(context).colorScheme.error,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'No movies added yet. Search and add your favorite movies!',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
               ),
             ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Selected Movies (${_selectedMovies.length})',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
           ),
-        )).toList()),
+        ),
+        const SizedBox(height: 12),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _selectedMovies.length,
+          itemBuilder: (context, index) {
+            final movie = _selectedMovies[index];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: movie.originalImageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: movie.originalImageUrl!,
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            width: 50,
+                            height: 50,
+                            color: Theme.of(context).colorScheme.surfaceContainer,
+                            child: const CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          errorWidget: (context, url, error) {
+                            return Container(
+                              width: 50,
+                              height: 50,
+                              color: Theme.of(context).colorScheme.surfaceContainer,
+                              child: Icon(
+                                Icons.movie_rounded,
+                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
+                          width: 50,
+                          height: 50,
+                          color: Theme.of(context).colorScheme.surfaceContainer,
+                          child: Icon(
+                            Icons.movie_rounded,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                        ),
+                ),
+                title: Text(
+                  movie.name,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                subtitle: Text(
+                  movie.year ?? 'Unknown Year',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                trailing: IconButton(
+                  onPressed: () => _removeMovie(movie),
+                  icon: Icon(
+                    Icons.remove_circle_outline,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -462,25 +990,27 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer.withValues(alpha: 0.3),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
       ),
       child: Row(
         children: [
-          TextButton(
-            onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+          Expanded(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
           ElevatedButton(
             onPressed: _isSaving ? null : _saveChannelHub,
             child: _isSaving
                 ? const SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 16,
+                    height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Create Channel Hub'),
+                : Text(widget.initialHub != null ? 'Update' : 'Create'),
           ),
         ],
       ),

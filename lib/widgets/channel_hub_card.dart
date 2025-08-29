@@ -27,14 +27,17 @@ class _ChannelHubCardState extends State<ChannelHubCard>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   int _currentImageIndex = 0;
-  List<SeriesInfo> _shuffledSeries = [];
+  List<dynamic> _shuffledContent = [];
   final Random _random = Random();
 
   @override
   void initState() {
     super.initState();
-    _shuffledSeries = List.from(widget.hub.series);
-    _shuffledSeries.shuffle(_random);
+    // Combine series and movies for slideshow
+    _shuffledContent = <dynamic>[];
+    _shuffledContent.addAll(widget.hub.series);
+    _shuffledContent.addAll(widget.hub.movies);
+    _shuffledContent.shuffle(_random);
     
     _slideshowController = AnimationController(
       duration: const Duration(seconds: 4),
@@ -54,7 +57,7 @@ class _ChannelHubCardState extends State<ChannelHubCard>
       curve: Curves.easeInOut,
     ));
 
-    if (_shuffledSeries.isNotEmpty) {
+    if (_shuffledContent.isNotEmpty) {
       _startSlideshow();
     }
   }
@@ -71,11 +74,11 @@ class _ChannelHubCardState extends State<ChannelHubCard>
   }
 
   void _nextImage() {
-    if (_shuffledSeries.isEmpty) return;
+    if (_shuffledContent.isEmpty) return;
     
     setState(() {
       _fadeController.reverse().then((_) {
-        _currentImageIndex = (_currentImageIndex + 1) % _shuffledSeries.length;
+        _currentImageIndex = (_currentImageIndex + 1) % _shuffledContent.length;
         _fadeController.forward();
       });
     });
@@ -210,7 +213,7 @@ class _ChannelHubCardState extends State<ChannelHubCard>
   }
 
   Widget _buildBackgroundImage(BuildContext context) {
-    if (_shuffledSeries.isEmpty) {
+    if (_shuffledContent.isEmpty) {
       return Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
@@ -226,15 +229,18 @@ class _ChannelHubCardState extends State<ChannelHubCard>
       );
     }
 
-    final currentSeries = _shuffledSeries[_currentImageIndex];
+    final currentContent = _shuffledContent[_currentImageIndex];
+    final imageUrl = currentContent is SeriesInfo 
+        ? currentContent.originalImageUrl 
+        : (currentContent as MovieInfo).originalImageUrl;
     
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: FadeTransition(
         opacity: _fadeAnimation,
-        child: currentSeries.originalImageUrl != null
+        child: imageUrl != null
             ? CachedNetworkImage(
-                imageUrl: currentSeries.originalImageUrl!,
+                imageUrl: imageUrl,
                 width: double.infinity,
                 height: double.infinity,
                 fit: BoxFit.cover,
@@ -281,6 +287,8 @@ class _ChannelHubCardState extends State<ChannelHubCard>
   }
 
   Widget _buildNameContainer(BuildContext context) {
+    final totalCount = widget.hub.series.length + widget.hub.movies.length;
+    
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -296,17 +304,28 @@ class _ChannelHubCardState extends State<ChannelHubCard>
         ),
       ),
       padding: const EdgeInsets.all(8),
-      child: Center(
-        child: Text(
-          widget.hub.name,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            fontSize: 10,
-            color: Colors.white,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            widget.hub.name,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              fontSize: 10,
+              color: Colors.white,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+          const SizedBox(height: 2),
+          Text(
+            '$totalCount items',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 8,
+            ),
+          ),
+        ],
       ),
     );
   }
