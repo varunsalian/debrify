@@ -50,6 +50,11 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
       _selectedSeries = List.from(widget.initialHub!.series);
       _selectedMovies = List.from(widget.initialHub!.movies);
     }
+    
+    // Add listener to name controller to update UI when text changes
+    _nameController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -346,7 +351,27 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
   }
 
   Future<void> _saveChannelHub() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Validate form first
+    if (!_formKey.currentState!.validate()) {
+      // If validation fails, switch to the hub info tab to show the error
+      _tabController.animateTo(0);
+      return;
+    }
+
+    // Additional check for name
+    if (_nameController.text.trim().isEmpty) {
+      _tabController.animateTo(0);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please enter a name for the channel hub'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _isSaving = true;
@@ -1137,7 +1162,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
           ),
           const SizedBox(width: 12),
           ElevatedButton(
-            onPressed: _isSaving ? null : _saveChannelHub,
+            onPressed: (_isSaving || _nameController.text.trim().isEmpty) ? null : _saveChannelHub,
             child: _isSaving
                 ? const SizedBox(
                     width: 16,
