@@ -24,6 +24,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
   final _nameController = TextEditingController();
   final _seriesSearchController = TextEditingController();
   final _moviesSearchController = TextEditingController();
+  String _selectedQuality = '720p';
   
   late TabController _tabController;
   
@@ -47,6 +48,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
     
     if (widget.initialHub != null) {
       _nameController.text = widget.initialHub!.name;
+      _selectedQuality = widget.initialHub!.quality;
       _selectedSeries = List.from(widget.initialHub!.series);
       _selectedMovies = List.from(widget.initialHub!.movies);
     }
@@ -381,6 +383,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
       final hub = ChannelHub(
         id: _hubId!,
         name: _nameController.text.trim(),
+        quality: _selectedQuality,
         series: _selectedSeries,
         movies: _selectedMovies,
         createdAt: widget.initialHub?.createdAt ?? DateTime.now(),
@@ -499,6 +502,8 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildNameField(),
+          const SizedBox(height: 16),
+          _buildQualityField(),
           const SizedBox(height: 24),
           _buildHubStats(),
         ],
@@ -547,6 +552,29 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
           return 'Please enter a name';
         }
         return null;
+      },
+    );
+  }
+
+  Widget _buildQualityField() {
+    return DropdownButtonFormField<String>(
+      value: _selectedQuality,
+      decoration: const InputDecoration(
+        labelText: 'Quality',
+        hintText: 'Select preferred quality',
+        prefixIcon: Icon(Icons.high_quality),
+      ),
+      items: const [
+        DropdownMenuItem(value: '720p', child: Text('720p')),
+        DropdownMenuItem(value: '1080p', child: Text('1080p')),
+        DropdownMenuItem(value: '4k', child: Text('4K')),
+      ],
+      onChanged: (value) {
+        if (value != null) {
+          setState(() {
+            _selectedQuality = value;
+          });
+        }
       },
     );
   }
@@ -1157,12 +1185,21 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
           Expanded(
             child: TextButton(
               onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.primary,
+              ),
               child: const Text('Cancel'),
             ),
           ),
           const SizedBox(width: 12),
           ElevatedButton(
             onPressed: (_isSaving || _nameController.text.trim().isEmpty) ? null : _saveChannelHub,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              disabledBackgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              disabledForegroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
+            ),
             child: _isSaving
                 ? const SizedBox(
                     width: 16,

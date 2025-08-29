@@ -3,6 +3,7 @@ import 'movie_torrentio_stream.dart';
 class ChannelHub {
   final String id;
   final String name;
+  final String quality;
   final List<SeriesInfo> series;
   final List<MovieInfo> movies;
   final DateTime createdAt;
@@ -10,6 +11,7 @@ class ChannelHub {
   ChannelHub({
     required this.id,
     required this.name,
+    this.quality = '720p',
     required this.series,
     required this.movies,
     required this.createdAt,
@@ -19,6 +21,7 @@ class ChannelHub {
     return {
       'id': id,
       'name': name,
+      'quality': quality,
       'series': series.map((s) => s.toJson()).toList(),
       'movies': movies.map((m) => m.toJson()).toList(),
       'createdAt': createdAt.toIso8601String(),
@@ -29,6 +32,7 @@ class ChannelHub {
     return ChannelHub(
       id: json['id'],
       name: json['name'],
+      quality: json['quality'] ?? '720p',
       series: (json['series'] as List? ?? [])
           .map((s) => SeriesInfo.fromJson(s))
           .toList(),

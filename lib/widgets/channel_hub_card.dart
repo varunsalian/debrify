@@ -3,6 +3,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:math';
 import '../models/channel_hub.dart';
 import '../screens/channel_hub_detail_screen.dart';
+import '../screens/tv_video_player_screen.dart';
+import '../services/tv_playback_service.dart';
 import '../widgets/add_channel_hub_dialog.dart';
 
 class ChannelHubCard extends StatefulWidget {
@@ -115,6 +117,17 @@ class _ChannelHubCardState extends State<ChannelHubCard>
             const SizedBox(height: 16),
             ListTile(
               leading: Icon(
+                Icons.play_arrow_rounded,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              title: const Text('Play Random Movie'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _playRandomMovie(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(
                 Icons.edit_rounded,
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -178,35 +191,97 @@ class _ChannelHubCardState extends State<ChannelHubCard>
     );
   }
 
+  void _playRandomMovie(BuildContext context) async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Loading random movie...'),
+            ],
+          ),
+        ),
+      );
+
+      // Get random movie and download link
+      final result = await TVPlaybackService.playRandomMovieFromHub(
+        context,
+        widget.hub,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      if (result != null && mounted) {
+        // Launch TV video player
+                          Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => TVVideoPlayerScreen(
+                        videoUrl: result['videoUrl'],
+                        title: result['title'],
+                        subtitle: result['subtitle'],
+                      ),
+                    ),
+                  );
+      }
+
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to play random movie: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 4,
       shadowColor: Colors.black.withValues(alpha: 0.2),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        width: 100,
-        height: 140, // Increased height to accommodate name container
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            // Image Container
-            Expanded(
-              flex: 4, // Takes up most of the space
-              child: Stack(
-                children: [
-                  // Background Image
-                  _buildBackgroundImage(context),
-                  // Options Menu Button
-                  _buildOptionsButton(context),
-                ],
+      child: GestureDetector(
+        onTap: () => _playRandomMovie(context),
+        child: Container(
+          width: 100,
+          height: 140, // Increased height to accommodate name container
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              // Image Container
+              Expanded(
+                flex: 4, // Takes up most of the space
+                child: Stack(
+                  children: [
+                    // Background Image
+                    _buildBackgroundImage(context),
+                    // Options Menu Button
+                    _buildOptionsButton(context),
+                  ],
+                ),
               ),
-            ),
-            // Channel Name Container
-            _buildNameContainer(context),
-          ],
+              // Channel Name Container
+              _buildNameContainer(context),
+            ],
+          ),
         ),
       ),
     );

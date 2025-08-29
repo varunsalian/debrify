@@ -163,6 +163,10 @@ class _TVScreenState extends State<TVScreen> {
             onPressed: _addChannelHub,
             icon: const Icon(Icons.add),
             label: const Text('Create Channel Hub'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            ),
           ),
         ],
       ),
