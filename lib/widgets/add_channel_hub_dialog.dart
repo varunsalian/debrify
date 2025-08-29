@@ -21,14 +21,17 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _searchController = TextEditingController();
+  final _seriesSearchController = TextEditingController();
+  final _moviesSearchController = TextEditingController();
   
   late TabController _tabController;
   
-  List<dynamic> _searchResults = [];
+  List<dynamic> _seriesSearchResults = [];
+  List<dynamic> _moviesSearchResults = [];
   List<SeriesInfo> _selectedSeries = [];
   List<MovieInfo> _selectedMovies = [];
-  bool _isSearching = false;
+  bool _isSearchingSeries = false;
+  bool _isSearchingMovies = false;
   bool _isSaving = false;
 
   @override
@@ -46,7 +49,8 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
   @override
   void dispose() {
     _nameController.dispose();
-    _searchController.dispose();
+    _seriesSearchController.dispose();
+    _moviesSearchController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -54,13 +58,13 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
   Future<void> _searchSeries(String query) async {
     if (query.trim().isEmpty) {
       setState(() {
-        _searchResults = [];
+        _seriesSearchResults = [];
       });
       return;
     }
 
     setState(() {
-      _isSearching = true;
+      _isSearchingSeries = true;
     });
 
     try {
@@ -72,19 +76,19 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
       if (response.statusCode == 200) {
         final List<dynamic> results = json.decode(response.body);
         setState(() {
-          _searchResults = results.map((r) => r['show'] as Map<String, dynamic>).toList().take(10).toList();
-          _isSearching = false;
+          _seriesSearchResults = results.map((r) => r['show'] as Map<String, dynamic>).toList().take(10).toList();
+          _isSearchingSeries = false;
         });
       } else {
         setState(() {
-          _searchResults = [];
-          _isSearching = false;
+          _seriesSearchResults = [];
+          _isSearchingSeries = false;
         });
       }
     } catch (e) {
       setState(() {
-        _searchResults = [];
-        _isSearching = false;
+        _seriesSearchResults = [];
+        _isSearchingSeries = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -100,13 +104,13 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
   Future<void> _searchMovies(String query) async {
     if (query.trim().isEmpty) {
       setState(() {
-        _searchResults = [];
+        _moviesSearchResults = [];
       });
       return;
     }
 
     setState(() {
-      _isSearching = true;
+      _isSearchingMovies = true;
     });
 
     try {
@@ -120,19 +124,19 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
         final List<dynamic> results = data['description'] ?? [];
         
         setState(() {
-          _searchResults = results.take(10).toList();
-          _isSearching = false;
+          _moviesSearchResults = results.take(10).toList();
+          _isSearchingMovies = false;
         });
       } else {
         setState(() {
-          _searchResults = [];
-          _isSearching = false;
+          _moviesSearchResults = [];
+          _isSearchingMovies = false;
         });
       }
     } catch (e) {
       setState(() {
-        _searchResults = [];
-        _isSearching = false;
+        _moviesSearchResults = [];
+        _isSearchingMovies = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -153,7 +157,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
           _selectedSeries.add(series);
         });
       }
-      _searchController.clear();
+      _seriesSearchController.clear();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -176,6 +180,22 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
 
       if (detailResponse.statusCode == 200) {
         final detailData = json.decode(detailResponse.body);
+        
+        // Check if it's actually a movie
+        final short = detailData['short'];
+        if (short == null || short['@type'] != 'Movie') {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('"${movie['#TITLE']}" is not a movie. Please select only movies.'),
+                backgroundColor: Theme.of(context).colorScheme.error,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+        
         final movieInfo = MovieInfo.fromIMDBDetail(detailData);
         
         if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
@@ -193,7 +213,21 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
         }
       }
     } catch (e) {
-      // Fallback to search result if detail fails
+      // Check if the error is due to not being a movie
+      if (e.toString().contains('Not a movie')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('"${movie['#TITLE']}" is not a movie. Please select only movies.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      
+      // For other errors, fallback to search result
       final movieInfo = MovieInfo.fromIMDBSearch(movie);
       if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
         setState(() {
@@ -202,7 +236,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
       }
     }
     
-    _searchController.clear();
+    _moviesSearchController.clear();
   }
 
   void _removeSeries(SeriesInfo series) {
@@ -532,7 +566,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
           children: [
             Expanded(
               child: TextFormField(
-                controller: _searchController,
+                controller: _seriesSearchController,
                 decoration: InputDecoration(
                   labelText: 'Search for TV series',
                   hintText: 'Enter series name to search...',
@@ -547,17 +581,17 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
             ),
             const SizedBox(width: 8),
             ElevatedButton(
-              onPressed: _isSearching 
+              onPressed: _isSearchingSeries 
                   ? null 
                   : () {
-                      if (_searchController.text.trim().isNotEmpty) {
-                        _searchSeries(_searchController.text);
+                      if (_seriesSearchController.text.trim().isNotEmpty) {
+                        _searchSeries(_seriesSearchController.text);
                       }
                     },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              child: _isSearching
+              child: _isSearchingSeries
                   ? const SizedBox(
                       width: 16,
                       height: 16,
@@ -567,15 +601,15 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
             ),
           ],
         ),
-        if (_searchResults.isNotEmpty) ...[
+        if (_seriesSearchResults.isNotEmpty) ...[
           const SizedBox(height: 12),
           Container(
             constraints: const BoxConstraints(maxHeight: 200),
             child: ListView.builder(
               shrinkWrap: true,
-              itemCount: _searchResults.length,
+              itemCount: _seriesSearchResults.length,
               itemBuilder: (context, index) {
-                final show = _searchResults[index];
+                final show = _seriesSearchResults[index];
                 final showId = show['id'];
                 final isSelected = showId != null && _selectedSeries.any((s) => s.id == showId);
                 
@@ -660,7 +694,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
           children: [
             Expanded(
               child: TextFormField(
-                controller: _searchController,
+                controller: _moviesSearchController,
                 decoration: InputDecoration(
                   labelText: 'Search for movies',
                   hintText: 'Enter movie name to search...',
@@ -675,17 +709,17 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
             ),
             const SizedBox(width: 8),
             ElevatedButton(
-              onPressed: _isSearching 
+              onPressed: _isSearchingMovies 
                   ? null 
                   : () {
-                      if (_searchController.text.trim().isNotEmpty) {
-                        _searchMovies(_searchController.text);
+                      if (_moviesSearchController.text.trim().isNotEmpty) {
+                        _searchMovies(_moviesSearchController.text);
                       }
                     },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              child: _isSearching
+              child: _isSearchingMovies
                   ? const SizedBox(
                       width: 16,
                       height: 16,
@@ -695,15 +729,15 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
             ),
           ],
         ),
-        if (_searchResults.isNotEmpty) ...[
+        if (_moviesSearchResults.isNotEmpty) ...[
           const SizedBox(height: 12),
           Container(
             constraints: const BoxConstraints(maxHeight: 200),
             child: ListView.builder(
               shrinkWrap: true,
-              itemCount: _searchResults.length,
+              itemCount: _moviesSearchResults.length,
               itemBuilder: (context, index) {
-                final movie = _searchResults[index];
+                final movie = _moviesSearchResults[index];
                 final isSelected = _selectedMovies.any((m) => m.id == movie['#IMDB_ID']);
                 
                 return Card(
