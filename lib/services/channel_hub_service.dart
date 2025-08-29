@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/channel_hub.dart';
+import 'torrentio_service.dart';
 
 class ChannelHubService {
   static const String _storageKey = 'channel_hubs';
@@ -45,16 +46,32 @@ class ChannelHubService {
     }
   }
   
-  /// Delete a channel hub
+  /// Delete a channel hub and all its related data
   static Future<bool> deleteChannelHub(String hubId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final List<ChannelHub> existingHubs = await getChannelHubs();
       
+      // Find the hub to get its movies and series
+      final hubToDelete = existingHubs.firstWhere((hub) => hub.id == hubId);
+      
+      // Clean up Torrentio streams for all movies in this hub
+      for (final movie in hubToDelete.movies) {
+        await TorrentioService.clearMovieCache(movie.id, hubId: hubId);
+      }
+      
+      // Clear all Torrentio cache for this hub
+      await TorrentioService.clearHubCache(hubId);
+      
+      // Remove the hub from the list
       existingHubs.removeWhere((hub) => hub.id == hubId);
       
+      // Save the updated list
       final String hubsJson = json.encode(existingHubs.map((h) => h.toJson()).toList());
-      return await prefs.setString(_storageKey, hubsJson);
+      final result = await prefs.setString(_storageKey, hubsJson);
+      
+      print('DEBUG: Deleted channel hub $hubId and cleaned up all related data');
+      return result;
     } catch (e) {
       print('Error deleting channel hub: $e');
       return false;

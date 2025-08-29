@@ -35,11 +35,15 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
   bool _isSearchingMovies = false;
   bool _isSaving = false;
   bool _isAddingMovie = false;
+  String? _hubId; // Store the hub ID for Torrentio cache keys
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    
+    // Set the hub ID (either existing or generate immediately for new hubs)
+    _hubId = widget.initialHub?.id ?? ChannelHubService.generateId();
     
     if (widget.initialHub != null) {
       _nameController.text = widget.initialHub!.name;
@@ -209,7 +213,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
         if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
           // Fetch Torrentio streams for this movie
           try {
-            final streams = await TorrentioService.getMovieStreams(movieInfo.id)
+            final streams = await TorrentioService.getMovieStreams(movieInfo.id, hubId: _hubId)
                 .timeout(const Duration(seconds: 30));
             final updatedMovieInfo = movieInfo.copyWith(
               torrentioStreams: streams,
@@ -232,7 +236,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
         if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
           // Fetch Torrentio streams for this movie
           try {
-            final streams = await TorrentioService.getMovieStreams(movieInfo.id)
+            final streams = await TorrentioService.getMovieStreams(movieInfo.id, hubId: _hubId)
                 .timeout(const Duration(seconds: 30));
             final updatedMovieInfo = movieInfo.copyWith(
               torrentioStreams: streams,
@@ -271,7 +275,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
         if (!_selectedMovies.any((m) => m.id == movieInfo.id)) {
           // Fetch Torrentio streams for this movie
           try {
-            final streams = await TorrentioService.getMovieStreams(movieInfo.id)
+            final streams = await TorrentioService.getMovieStreams(movieInfo.id, hubId: _hubId)
                 .timeout(const Duration(seconds: 30));
             final updatedMovieInfo = movieInfo.copyWith(
               torrentioStreams: streams,
@@ -350,7 +354,7 @@ class _AddChannelHubDialogState extends State<AddChannelHubDialog>
 
     try {
       final hub = ChannelHub(
-        id: widget.initialHub?.id ?? ChannelHubService.generateId(),
+        id: _hubId!,
         name: _nameController.text.trim(),
         series: _selectedSeries,
         movies: _selectedMovies,

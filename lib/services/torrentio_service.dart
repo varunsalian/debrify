@@ -57,24 +57,24 @@ class TorrentioService {
     }
   }
 
-  // Save streams for a movie to storage
-  static Future<void> saveMovieStreams(String imdbId, List<MovieTorrentioStream> streams) async {
+  // Save streams for a movie to storage (hub-specific)
+  static Future<void> saveMovieStreams(String imdbId, List<MovieTorrentioStream> streams, {String? hubId}) async {
     try {
-      final key = 'torrentio_streams_$imdbId';
+      final key = hubId != null ? 'torrentio_streams_${hubId}_$imdbId' : 'torrentio_streams_$imdbId';
       final data = streams.map((s) => s.toJson()).toList();
       await StorageService.saveString(key, json.encode(data));
       
-      print('DEBUG: Saved ${streams.length} streams for movie $imdbId');
+      print('DEBUG: Saved ${streams.length} streams for movie $imdbId in hub $hubId');
     } catch (e) {
       print('DEBUG: Error saving streams: $e');
       throw Exception('Failed to save streams: $e');
     }
   }
 
-  // Load streams for a movie from storage
-  static Future<List<MovieTorrentioStream>> loadMovieStreams(String imdbId) async {
+  // Load streams for a movie from storage (hub-specific)
+  static Future<List<MovieTorrentioStream>> loadMovieStreams(String imdbId, {String? hubId}) async {
     try {
-      final key = 'torrentio_streams_$imdbId';
+      final key = hubId != null ? 'torrentio_streams_${hubId}_$imdbId' : 'torrentio_streams_$imdbId';
       final data = await StorageService.getString(key);
       
       if (data == null || data.isEmpty) {
@@ -89,10 +89,10 @@ class TorrentioService {
     }
   }
 
-  // Check if streams are cached (persistent cache)
-  static Future<bool> isStreamsCached(String imdbId) async {
+  // Check if streams are cached (hub-specific)
+  static Future<bool> isStreamsCached(String imdbId, {String? hubId}) async {
     try {
-      final key = 'torrentio_streams_$imdbId';
+      final key = hubId != null ? 'torrentio_streams_${hubId}_$imdbId' : 'torrentio_streams_$imdbId';
       final data = await StorageService.getString(key);
       return data != null && data.isNotEmpty;
     } catch (e) {
@@ -103,10 +103,11 @@ class TorrentioService {
   // Get streams for a movie (always fetch fresh)
   static Future<List<MovieTorrentioStream>> getMovieStreams(String imdbId, {
     bool forceRefresh = false,
+    String? hubId,
   }) async {
     try {
       // Always fetch fresh data, ignore cache
-      print('DEBUG: Fetching fresh streams for movie $imdbId (ignoring cache)');
+      print('DEBUG: Fetching fresh streams for movie $imdbId in hub $hubId (ignoring cache)');
 
       // Fetch fresh data
       print('DEBUG: Fetching fresh streams for movie $imdbId');
@@ -114,7 +115,7 @@ class TorrentioService {
 
       // Save to cache
       if (streams.isNotEmpty) {
-        await saveMovieStreams(imdbId, streams);
+        await saveMovieStreams(imdbId, streams, hubId: hubId);
       }
 
       return streams;
@@ -122,7 +123,7 @@ class TorrentioService {
       print('DEBUG: Error getting streams: $e');
       // Fallback to cached data if available
       if (!forceRefresh) {
-        return await loadMovieStreams(imdbId);
+        return await loadMovieStreams(imdbId, hubId: hubId);
       }
       return [];
     }
@@ -146,12 +147,31 @@ class TorrentioService {
   }
 
   // Clear cache for a specific movie
-  static Future<void> clearMovieCache(String imdbId) async {
+  static Future<void> clearMovieCache(String imdbId, {String? hubId}) async {
     try {
-      await StorageService.remove('torrentio_streams_$imdbId');
-      print('DEBUG: Cleared cache for movie $imdbId');
+      final key = hubId != null ? 'torrentio_streams_${hubId}_$imdbId' : 'torrentio_streams_$imdbId';
+      await StorageService.remove(key);
+      print('DEBUG: Cleared cache for movie $imdbId in hub $hubId');
     } catch (e) {
       print('DEBUG: Error clearing cache: $e');
+    }
+  }
+
+  // Clear all Torrentio cache for a specific hub
+  static Future<void> clearHubCache(String hubId) async {
+    try {
+      final keys = await StorageService.getAllKeys();
+      final hubKeys = keys.where((key) => 
+        key.startsWith('torrentio_streams_${hubId}_')
+      ).toList();
+      
+      for (final key in hubKeys) {
+        await StorageService.remove(key);
+      }
+      
+      print('DEBUG: Cleared all Torrentio cache for hub $hubId');
+    } catch (e) {
+      print('DEBUG: Error clearing hub cache: $e');
     }
   }
 
