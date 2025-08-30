@@ -1,6 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'secure_storage_service.dart';
 import 'debrid_service.dart';
 
 class StorageService {
@@ -15,37 +14,20 @@ class StorageService {
   static const String _defaultPirateBayEnabledKey = 'default_pirate_bay_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
   
-  // API Key methods - Updated to use secure storage with migration
+
+  // Note: Plain text storage is fine for API key since they're stored locally on user's device
+  // and can be easily regenerated if compromised
   static Future<String?> getApiKey() async {
-    // Try secure storage first
-    final secureKey = await SecureStorageService.getApiKey();
-    if (secureKey != null) return secureKey;
-    
-    // Fallback to old storage (for migration)
     final prefs = await SharedPreferences.getInstance();
-    final oldKey = prefs.getString(_apiKeyKey);
-    
-    // Migrate to secure storage if found
-    if (oldKey != null) {
-      await SecureStorageService.saveApiKey(oldKey);
-      await prefs.remove(_apiKeyKey); // Clean up old storage
-    }
-    
-    return oldKey;
+    return prefs.getString(_apiKeyKey);
   }
 
   static Future<void> saveApiKey(String apiKey) async {
-    // Save to secure storage
-    await SecureStorageService.saveApiKey(apiKey);
-    
-    // Clean up old storage
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_apiKeyKey);
+    await prefs.setString(_apiKeyKey, apiKey);
   }
 
   static Future<void> deleteApiKey() async {
-    // Delete from both secure and old storage
-    await SecureStorageService.deleteApiKey();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_apiKeyKey);
   }
