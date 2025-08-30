@@ -64,14 +64,12 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         
         if (currentEpisode.seriesInfo.season != null) {
           _selectedSeason = currentEpisode.seriesInfo.season!;
-          print('Auto-selected season ${_selectedSeason} for current episode S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode}');
           return;
         }
       }
       
       // Fallback to first season if current episode not found or not a series
       _selectedSeason = widget.seriesPlaylist.seasons.first.seasonNumber;
-      print('Fallback to first season: $_selectedSeason');
     }
   }
 
@@ -89,21 +87,16 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
   void _startBackgroundEpisodeInfoLoading() {
     if (widget.seriesPlaylist.isSeries && widget.seriesPlaylist.seriesTitle != null && _tvmazeAvailable) {
-      print('Starting background episode info loading for: ${widget.seriesPlaylist.seriesTitle}');
       _loadEpisodeInfoInBackground();
     } else {
-      print('Episode info loading skipped - Series: ${widget.seriesPlaylist.isSeries}, Title: ${widget.seriesPlaylist.seriesTitle}, TVMaze: $_tvmazeAvailable');
     }
   }
 
   Future<void> _loadEpisodeInfoInBackground() async {
     final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
     if (selectedSeason == null) {
-      print('No season found for season number: $_selectedSeason');
       return;
     }
-
-    print('Loading episode info for ${selectedSeason.episodes.length} episodes in season $_selectedSeason');
 
     // Clear previous loading states for this season
     _loadingEpisodes.clear();
@@ -112,12 +105,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
         final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
         if (!_loadingEpisodes.contains(episodeKey)) {
-          print('Loading episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}');
           _loadingEpisodes.add(episodeKey);
           _loadEpisodeInfo(episode);
         }
-      } else {
-        print('Skipping episode - missing season/episode info: ${episode.title}');
       }
     }
   }
@@ -125,7 +115,6 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Future<void> _loadEpisodeInfo(SeriesEpisode episode) async {
     if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
       try {
-        print('Fetching episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode} from TVMaze');
         final episodeData = await EpisodeInfoService.getEpisodeInfo(
           widget.seriesPlaylist.seriesTitle!,
           episode.seriesInfo.season!,
@@ -133,15 +122,11 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         );
         
         if (episodeData != null && mounted) {
-          print('Successfully loaded episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}');
           setState(() {
             episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData);
           });
-        } else {
-          print('No episode data returned for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}');
         }
       } catch (e) {
-        print('Failed to load episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}: $e');
       } finally {
         final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
         _loadingEpisodes.remove(episodeKey);
@@ -161,7 +146,6 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         });
       }
     } catch (e) {
-      print('Error loading last played episode: $e');
     }
   }
 
@@ -177,7 +161,6 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         });
       }
     } catch (e) {
-      print('Error loading finished episodes: $e');
     }
   }
 
@@ -193,7 +176,6 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         });
       }
     } catch (e) {
-      print('Error loading episode progress: $e');
     }
   }
 
@@ -226,8 +208,6 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
             duration: const Duration(milliseconds: 500),
             curve: Curves.easeInOut,
           );
-          
-          print('Scrolled to current episode at index $episodeIndexInSeason in season $_selectedSeason');
         }
       }
     }
@@ -237,14 +217,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Widget build(BuildContext context) {
     final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
     if (selectedSeason == null) {
-      print('DEBUG: selectedSeason is null for season $_selectedSeason');
       return const Center(child: CircularProgressIndicator());
     }
 
     final episodes = selectedSeason.episodes;
-    print('DEBUG: selectedSeason: ${selectedSeason.seasonNumber}, episodes count: ${episodes.length}');
-    print('DEBUG: episodes: ${episodes.map((e) => e.title).toList()}');
-    
     return Container(
         height: MediaQuery.of(context).size.height * 0.85,
         decoration: const BoxDecoration(
@@ -438,11 +414,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     return GestureDetector(
       onTap: () {
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
-          print('Playing episode S${episode.seriesInfo.season}E${episode.seriesInfo.episode} (${episode.title})');
           Navigator.of(context).pop();
           widget.onEpisodeSelected(episode.seriesInfo.season!, episode.seriesInfo.episode!);
         } else {
-          print('Episode missing season/episode info: ${episode.title}');
         }
       },
       child: Container(

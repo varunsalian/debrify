@@ -339,7 +339,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				}
 			}
 		} catch (e) {
-			print('Error getting last played episode: $e');
 		}
 		return null;
 	}
@@ -385,7 +384,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						return 'Episode ${currentEpisode.seriesInfo.episode}';
 					}
 				} catch (e) {
-					print('Error getting episode title: $e');
 				}
 			}
 		}
@@ -417,7 +415,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						return '$seriesName • Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
 					}
 				} catch (e) {
-					print('Error getting episode subtitle: $e');
 				}
 			}
 		}
@@ -457,7 +454,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						return metadata;
 					}
 				} catch (e) {
-					print('Error getting enhanced metadata: $e');
 				}
 			}
 		}
@@ -588,11 +584,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							season: currentEpisode.seriesInfo.season!,
 							episode: currentEpisode.seriesInfo.episode!,
 						);
-						print('Marked episode S${currentEpisode.seriesInfo.season}E${currentEpisode.seriesInfo.episode} as finished');
 					}
 				}
 			} catch (e) {
-				print('Error marking episode as finished: $e');
 			}
 		}
 	}
@@ -621,11 +615,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		String videoUrl = entry.url;
 		if (entry.restrictedLink != null && entry.apiKey != null) {
 			try {
-				print('🔗 LINKED LIST: Unrestricting playlist entry: ${entry.title}');
 				final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
 				videoUrl = unrestrictResult['download'] ?? entry.url;
-				print('🔗 LINKED LIST: Successfully unrestricted playlist entry: $videoUrl');
-				
 				// Update the playlist entry with the unrestricted URL
 				// Note: We can't modify the const PlaylistEntry, so we'll use the unrestricted URL directly
 			} catch (e) {
@@ -645,7 +636,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Log whether we're using cached or unrestricted URL
 		if (entry.restrictedLink == null) {
-			print('🔗 LINKED LIST: Using cached URL for playlist entry: ${entry.title}');
 		}
 		
 		await _player.open(mk.Media(videoUrl), play: autoplay);
@@ -669,7 +659,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				}
 			}).catchError((error) {
 				// Silently handle errors - this is just preloading
-				print('Episode info preload failed: $error');
 			});
 		}
 	}
@@ -1421,8 +1410,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 										});
 										await _loadPlaylistIndex(originalIndex, autoplay: true);
 									} else {
-										print('Failed to find original index for S${season}E${episode}');
-										// Show error message to user
+                                        // Show error message to user
 										if (mounted) {
 											ScaffoldMessenger.of(context).showSnackBar(
 												SnackBar(
@@ -2829,7 +2817,6 @@ extension on _VideoPlayerScreenState {
 				}
 			}
 		} catch (e) {
-			print('Error restoring track preferences: $e');
 		}
 	}
 
@@ -2853,7 +2840,6 @@ extension on _VideoPlayerScreenState {
 				);
 			}
 		} catch (e) {
-			print('Error saving track preferences: $e');
 		}
 	}
 
@@ -3032,7 +3018,6 @@ class _BuildMetadataRow extends StatelessWidget {
 
 	@override
 	Widget build(BuildContext context) {
-		print('Building metadata row with data: $metadata');
 		final List<Widget> metadataItems = [];
 
 		// Rating

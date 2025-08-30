@@ -253,31 +253,21 @@ class SeriesPlaylist {
 
   /// Fetch episode information for all episodes in the playlist
   Future<void> fetchEpisodeInfo() async {
-    print('DEBUG: fetchEpisodeInfo called for series: $seriesTitle');
-    print('DEBUG: isSeries: $isSeries, seriesTitle: $seriesTitle');
-    
     if (!isSeries || seriesTitle == null) {
-      print('DEBUG: Early return - not a series or no series title');
       return;
     }
 
     // First, get the show information to extract genres, language, network, etc.
     Map<String, dynamic>? showInfo;
     try {
-      print('DEBUG: Fetching show info for: $seriesTitle');
       showInfo = await EpisodeInfoService.getSeriesInfo(seriesTitle!);
-      print('DEBUG: Show info result: ${showInfo != null ? 'SUCCESS' : 'FAILED'}');
     } catch (e) {
-      print('Failed to fetch show info: $e');
     }
 
-    print('DEBUG: Processing ${seasons.length} seasons with ${seasons.fold(0, (sum, season) => sum + season.episodes.length)} total episodes');
-    
     for (final season in seasons) {
       for (final episode in season.episodes) {
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
           try {
-            print('DEBUG: Fetching episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}');
             final episodeData = await EpisodeInfoService.getEpisodeInfo(
               seriesTitle!,
               episode.seriesInfo.season!,
@@ -285,22 +275,14 @@ class SeriesPlaylist {
             );
             if (episodeData != null) {
               episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
-              print('DEBUG: Successfully fetched episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode} - title: ${episode.episodeInfo?.title}');
-            } else {
-              print('DEBUG: No episode data returned for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}');
             }
           } catch (e) {
             // Silently fail - episode info is optional
-            print('Failed to fetch episode info for S${episode.seriesInfo.season}E${episode.seriesInfo.episode}: $e');
           }
-        } else {
-          print('DEBUG: Skipping episode - missing season/episode info');
         }
       }
     }
-    
-    print('DEBUG: fetchEpisodeInfo completed');
-  }
+   }
 
   /// Get episode information for a specific episode
   Future<EpisodeInfo?> getEpisodeInfoForEpisode(String seriesTitle, int season, int episode) async {
@@ -313,7 +295,6 @@ class SeriesPlaylist {
         return EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
       }
     } catch (e) {
-      print('Failed to fetch episode info for S${season}E${episode}: $e');
     }
     return null;
   }
@@ -321,19 +302,13 @@ class SeriesPlaylist {
   /// Find the original index in the PlaylistEntry array by season and episode
   /// Returns -1 if not found
   int findOriginalIndexBySeasonEpisode(int season, int episode) {
-    print('Searching for original index: S${season}E${episode}');
-    
     for (int i = 0; i < allEpisodes.length; i++) {
       final episodeInfo = allEpisodes[i];
       if (episodeInfo.seriesInfo.season == season && 
           episodeInfo.seriesInfo.episode == episode) {
-        print('Found episode S${season}E${episode} at original index: ${episodeInfo.originalIndex}');
         return episodeInfo.originalIndex;
       }
     }
-    
-    print('Episode S${season}E${episode} not found in playlist');
-    print('Available episodes: ${allEpisodes.map((e) => 'S${e.seriesInfo.season}E${e.seriesInfo.episode}').join(', ')}');
     return -1;
   }
 
@@ -341,7 +316,6 @@ class SeriesPlaylist {
   /// Returns -1 if no episodes found
   int getFirstEpisodeOriginalIndex() {
     if (allEpisodes.isEmpty) {
-      print('No episodes found in playlist');
       return -1;
     }
     
@@ -349,11 +323,8 @@ class SeriesPlaylist {
     // So the first episode is the one with lowest season and episode
     final firstEpisode = allEpisodes.first;
     if (firstEpisode.seriesInfo.season != null && firstEpisode.seriesInfo.episode != null) {
-      print('First episode is S${firstEpisode.seriesInfo.season}E${firstEpisode.seriesInfo.episode} at original index: ${firstEpisode.originalIndex}');
       return firstEpisode.originalIndex;
     }
-    
-    print('First episode missing season/episode info');
     return -1;
   }
 } 

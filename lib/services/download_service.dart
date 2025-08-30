@@ -587,8 +587,7 @@ class DownloadService {
         }
       } catch (e) {
         // Fallback to app documents if Downloads directory is not accessible
-        print('Could not access Downloads directory: $e');
-      }
+       }
     }
     return Directory((await getApplicationDocumentsDirectory()).path);
   }
@@ -608,7 +607,6 @@ class DownloadService {
         }
       } catch (e) {
         // Fallback to app documents if Downloads directory is not accessible
-        print('Could not access Downloads directory: $e');
       }
     }
     

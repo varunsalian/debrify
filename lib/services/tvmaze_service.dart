@@ -31,7 +31,6 @@ class TVMazeService {
       _lastAvailabilityCheck = DateTime.now();
       return _isAvailable;
     } catch (e) {
-      print('TVMaze availability check failed: $e');
       _isAvailable = false;
       _lastAvailabilityCheck = DateTime.now();
       return false;
@@ -42,9 +41,7 @@ class TVMazeService {
   static String _cleanShowName(String showName) {
     // Remove trailing dots and clean the name
     String cleaned = showName.trim();
-    
-    print('Original show name: "$showName"');
-    
+
     // Replace common separators with spaces
     cleaned = cleaned.replaceAll(RegExp(r'[._-]'), ' ');
     
@@ -89,9 +86,7 @@ class TVMazeService {
     
     // Clean up any remaining multiple spaces and trim
     cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
-    
-    print('Cleaned show name: "$cleaned"');
-    
+
     return cleaned;
   }
 
@@ -140,10 +135,8 @@ class TVMazeService {
     try {
       // For now, return null - we'll rely on the API working properly
       // This method can be enhanced later with a proper fallback database if needed
-      print('Alternative search not implemented for: $cleanName');
       return null;
     } catch (e) {
-      print('Alternative search failed: $e');
       return null;
     }
   }
@@ -159,7 +152,6 @@ class TVMazeService {
 
     // Check availability first
     if (!await isAvailable()) {
-      print('TVMaze not available, trying alternative search for: $cleanName');
       // Try alternative search method
       final alternativeResult = await _tryAlternativeSearch(cleanName);
       if (alternativeResult != null) {
@@ -176,16 +168,12 @@ class TVMazeService {
     final searchVariations = _generateSearchVariations(cleanName);
     
     for (final searchTerm in searchVariations) {
-      print('Trying search variation: "$searchTerm"');
-      
       for (int attempt = 1; attempt <= _maxRetries; attempt++) {
         try {
           // Use proper URL encoding
           final encodedQuery = Uri.encodeComponent(searchTerm);
           final url = '$_baseUrl/search/shows?q=$encodedQuery';
-          
-          print('TVMaze searching for: $searchTerm (encoded: $encodedQuery)');
-          
+
           final response = await http.get(
             Uri.parse(url),
             headers: {
@@ -193,12 +181,9 @@ class TVMazeService {
             },
           ).timeout(_timeout);
 
-          print('TVMaze response status: ${response.statusCode}');
 
           if (response.statusCode == 200) {
             final List<dynamic> results = json.decode(response.body);
-            print('TVMaze found ${results.length} results');
-            
             if (results.isNotEmpty) {
               final show = results.first['show'] as Map<String, dynamic>;
               _cache[cacheKey] = show;
@@ -207,16 +192,10 @@ class TVMazeService {
             }
           } else if (response.statusCode == 429) {
             // Rate limited, wait and retry
-            print('TVMaze rate limited, waiting...');
             await Future.delayed(Duration(seconds: attempt * 2));
             continue;
-          } else {
-            print('TVMaze search failed with status: ${response.statusCode}');
-            print('Response body: ${response.body}');
           }
         } catch (e) {
-          print('TVMaze search error (attempt $attempt): $e');
-          
           // Check if it's a network-related error
           if (e is SocketException || 
               e.toString().contains('HandshakeException') ||
@@ -237,11 +216,9 @@ class TVMazeService {
       }
       
       // If we get here, this search variation failed, try the next one
-      print('Search variation "$searchTerm" failed, trying next...');
     }
     
     // If all attempts failed, try alternative search
-    print('TVMaze search failed for: $cleanName, trying alternative search');
     final alternativeResult = await _tryAlternativeSearch(cleanName);
     if (alternativeResult != null) {
       _cache[cacheKey] = alternativeResult;
@@ -266,7 +243,6 @@ class TVMazeService {
 
     // Check availability first
     if (!await isAvailable()) {
-      print('TVMaze not available, skipping episodes fetch for show ID: $showId');
       return [];
     }
 
@@ -291,11 +267,8 @@ class TVMazeService {
           await Future.delayed(Duration(seconds: attempt * 2));
           continue;
         } else {
-          print('TVMaze episodes failed with status: ${response.statusCode}');
         }
       } catch (e) {
-        print('TVMaze episodes error (attempt $attempt): $e');
-        
         // Check if it's a network-related error
         if (e is SocketException || 
             e.toString().contains('HandshakeException') ||
@@ -314,8 +287,6 @@ class TVMazeService {
         }
       }
     }
-
-    print('TVMaze episodes failed for show ID: $showId after $_maxRetries attempts');
     return [];
   }
 
@@ -325,53 +296,39 @@ class TVMazeService {
     int season,
     int episode,
   ) async {
-    print('DEBUG: TVMazeService.getEpisodeInfo called for $showName S${season}E${episode}');
     final cleanName = _cleanShowName(showName);
-    print('DEBUG: Cleaned show name: $cleanName');
-    
+
     // First try to get show ID from cache
     int? showId = _seriesIdCache[cleanName.toLowerCase()];
-    print('DEBUG: Show ID from cache: $showId');
-    
     if (showId == null) {
       // Search for the show
-      print('DEBUG: Show not in cache, searching for: $cleanName');
       final show = await searchShow(cleanName);
       if (show != null) {
         showId = show['id'] as int;
-        print('DEBUG: Found show ID: $showId');
       } else {
-        print('DEBUG: Show not found in search');
       }
     }
 
     if (showId == null) {
-      print('DEBUG: No show ID available, returning null');
       return null;
     }
 
     // Get all episodes
-    print('DEBUG: Getting episodes for show ID: $showId');
     final episodes = await getEpisodes(showId);
-    print('DEBUG: Got ${episodes.length} episodes');
-    
+
     // Find the specific episode
     for (final ep in episodes) {
       if (ep['season'] == season && ep['number'] == episode) {
-        print('DEBUG: Found episode S${season}E${episode}');
         return ep;
       }
     }
 
-    print('DEBUG: Episode S${season}E${episode} not found in episodes list');
     return null;
   }
 
   /// Get show information by name
   static Future<Map<String, dynamic>?> getShowInfo(String showName) async {
-    print('DEBUG: TVMazeService.getShowInfo called for: $showName');
     final result = await searchShow(showName);
-    print('DEBUG: getShowInfo result: ${result != null ? 'SUCCESS' : 'FAILED'}');
     return result;
   }
 
@@ -389,7 +346,6 @@ class TVMazeService {
     _cache.clear();
     _seriesIdCache.clear();
     _lastAvailabilityCheck = null;
-    print('TVMazeService cache cleared');
   }
 
   /// Clear cache for a specific series
@@ -401,6 +357,5 @@ class TVMazeService {
     _cache.remove(searchKey);
     _seriesIdCache.remove(seriesIdKey);
     
-    print('Cleared TVMaze cache for series: $seriesTitle');
   }
 } 

@@ -2156,7 +2156,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               }
             } catch (e) {
               // If unrestriction fails, add as restricted link for lazy loading
-              print('Failed to unrestrict first episode: $e');
               entries.add(PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
@@ -2216,7 +2215,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               }
             } catch (e) {
               // If unrestriction fails, add as restricted link for lazy loading
-              print('Failed to unrestrict first video: $e');
               entries.add(PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,

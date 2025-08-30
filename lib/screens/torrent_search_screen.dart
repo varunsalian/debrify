@@ -354,7 +354,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Future<void> _showFileSelectionDialog(String infohash, String torrentName, int index) async {
-    print('DEBUG: _showFileSelectionDialog called with infohash: $infohash, name: $torrentName');
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -1221,7 +1220,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               }
             } catch (e) {
               // If unrestriction fails, add as restricted link for lazy loading
-              print('Failed to unrestrict first episode: $e');
               entries.add(PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
@@ -1281,7 +1279,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               }
             } catch (e) {
               // If unrestriction fails, add as restricted link for lazy loading
-              print('Failed to unrestrict first video: $e');
               entries.add(PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
@@ -2582,7 +2579,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           child: GestureDetector(
                             onTap: () => _addToRealDebrid(torrent.infohash, torrent.name, index),
                             onLongPress: () {
-                              print('DEBUG: Long press detected!');
                               _showFileSelectionDialog(torrent.infohash, torrent.name, index);
                             },
                             child: Container(

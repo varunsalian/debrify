@@ -117,9 +117,7 @@ class DebridService {
 
       final uri = Uri.parse('$_baseUrl/torrents').replace(queryParameters: queryParams);
       
-      print('DEBUG: Making API call to: ${uri.toString()}');
-      print('DEBUG: Headers: Authorization: Bearer ${apiKey.substring(0, 4)}...');
-      
+
       final response = await http.get(
         uri,
         headers: {
@@ -127,12 +125,7 @@ class DebridService {
           'Content-Type': 'application/json',
         },
       );
-      
-      print('DEBUG: Response status: ${response.statusCode}');
-      print('DEBUG: Response headers: ${response.headers}');
-      if (response.statusCode == 200) {
-        print('DEBUG: Response body: ${response.body}');
-      }
+
 
       if (response.statusCode == 200) {
         try {

@@ -56,7 +56,6 @@ Future<void> _cleanupPlaybackState() async {
   try {
     await StorageService.cleanupOldPlaybackState();
   } catch (e) {
-    print('Error cleaning up playback state: $e');
   }
 }
 
