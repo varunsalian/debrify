@@ -8,7 +8,7 @@ import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
 import 'services/account_service.dart';
 import 'widgets/api_key_validation_dialog.dart';
-import 'widgets/account_status_widget.dart';
+
 import 'widgets/animated_background.dart';
 import 'widgets/premium_nav_bar.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -288,57 +288,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
   }
 
-  void _showAccountInfo() {
-    final user = AccountService.currentUser;
-    if (user != null) {
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 300, maxHeight: 400),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Account',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, size: 20),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                AccountStatusWidget(user: user),
-              ],
-            ),
-          ),
-        ),
-      );
-    } else {
-      // Show API key validation dialog
-      showDialog(
-        context: context,
-        builder: (context) => const ApiKeyValidationDialog(),
-      ).then((result) {
-        if (result == true) {
-          setState(() {}); // Refresh UI
-        }
-      });
-    }
-  }
+
 
   @override
   Widget build(BuildContext context) {

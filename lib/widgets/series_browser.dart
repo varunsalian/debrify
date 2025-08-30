@@ -793,8 +793,5 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     );
   }
 
-  String _cleanSummary(String summary) {
-    // Remove HTML tags and extra whitespace
-    return summary.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll(RegExp(r'\s{2,}'), ' ').trim();
-  }
+
 } 

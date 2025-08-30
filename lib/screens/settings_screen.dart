@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../services/account_service.dart';
 import 'settings/real_debrid_settings_page.dart';
-import '../services/android_native_downloader.dart';
+
 import 'settings/download_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
 import '../widgets/shimmer.dart';

@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'storage_service.dart';
-import 'package:saf_stream/saf_stream.dart';
 import 'android_native_downloader.dart';
 import 'android_download_history.dart';
 import 'package:flutter/material.dart';
@@ -260,25 +257,7 @@ class DownloadService {
     }
   }
 
-  Future<String> _resolveAbsolutePathForTask(Task task) async {
-    // We only construct paths for tasks we created with BaseDirectory.applicationDocuments
-    // and a relative 'directory'
-    Directory docs = await getApplicationDocumentsDirectory();
-    final String dir = (task is DownloadTask) ? (task.directory ?? '') : '';
-    final String filename = task.filename;
-    final String normalizedDir = dir.isEmpty
-        ? docs.path
-        : '${docs.path}/${dir.replaceAll('\\', '/')}';
-    return '$normalizedDir/$filename';
-  }
 
-  String _withSuffix(String filename, int attempt) {
-    if (attempt <= 0) return filename;
-    final dot = filename.lastIndexOf('.');
-    final name = dot > 0 ? filename.substring(0, dot) : filename;
-    final ext = dot > 0 ? filename.substring(dot) : '';
-    return '$name ($attempt)$ext';
-  }
 
   Future<void> initialize() async {
     if (_started) return;

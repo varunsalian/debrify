@@ -1135,14 +1135,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
-  void _copyAllLinks(List<Map<String, dynamic>> links) {
-    final downloadLinks = links
-        .map((link) => link['download'])
-        .where((link) => link != null)
-        .join('\n');
-    
-    _copyToClipboard(downloadLinks);
-  }
+
 
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
@@ -1791,25 +1784,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
-  Future<void> _handleDownloadActionForTorrent(RDTorrent torrent) async {
-    if (_apiKey == null) return;
-    try {
-      final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
-      final link = unrestrict['download'] as String;
-      await Clipboard.setData(ClipboardData(text: link));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Link copied to clipboard')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to copy: $e')),
-        );
-      }
-    }
-  }
+
 
   Widget _buildDownloadCard(DebridDownload download) {
     return Container(
@@ -2417,19 +2392,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
 
 
-  Future<void> _pasteMagnetLink() async {
-    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-    if (clipboardData?.text != null) {
-      final text = clipboardData!.text!.trim();
-      if (_isValidMagnetLink(text)) {
-        _magnetController.text = text;
-      } else {
-        _showError('Clipboard does not contain a valid magnet link');
-      }
-    } else {
-      _showError('No text found in clipboard');
-    }
-  }
+
 
   Future<void> _addMagnetWithDefaultSelection() async {
     final magnetLink = _magnetController.text.trim();
@@ -2481,7 +2444,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       final fileSelection = await StorageService.getFileSelection();
       
       // Add the magnet using the same logic as the torrent search screen
-      final result = await DebridService.addTorrentToDebrid(
+      await DebridService.addTorrentToDebrid(
         _apiKey!,
         magnetLink,
         tempFileSelection: fileSelection,
@@ -2620,7 +2583,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
     try {
       // Add the magnet with the selected file preference
-      final result = await DebridService.addTorrentToDebrid(
+      await DebridService.addTorrentToDebrid(
         _apiKey!,
         magnetLink,
         tempFileSelection: fileSelection,

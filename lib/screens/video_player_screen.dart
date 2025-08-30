@@ -46,10 +46,7 @@ class VideoPlayerScreen extends StatefulWidget {
 		this.startIndex,
 	}) : super(key: key);
 
-	SeriesPlaylist? get _seriesPlaylist {
-		if (playlist == null || playlist!.isEmpty) return null;
-		return SeriesPlaylist.fromPlaylistEntries(playlist!);
-	}
+
 
 	@override
 	State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -102,6 +99,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	}
 	Timer? _hideTimer;
 	bool _isSeekingWithSlider = false;
+
 	_DoubleTapRipple? _ripple;
 	bool _panIgnore = false;
 	int _currentIndex = 0;
@@ -166,9 +164,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		int initialIndex = 0;
 		
 		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
-			for (int i = 0; i < widget.playlist!.length; i++) {
-				final entry = widget.playlist![i];
-			}
+			// Initialize playlist
 			
 			// Check if this is a series and we should find the first episode by season/episode
 			final seriesPlaylist = _seriesPlaylist;
@@ -343,12 +339,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		return null;
 	}
 
-	void _onVideoUpdate() {
-		// Update slider-driven seeks HUD if needed
-		if (!mounted) return;
-		// handled via stream.completed
-		if (mounted) setState(() {});
-	}
+
 
 	Future<void> _onPlaybackEnded() async {
 		// Mark the current episode as finished if it's a series
@@ -411,7 +402,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					
 					// Return series name and season/episode info as subtitle
 					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
-						final seriesName = seriesPlaylist.seriesTitle ?? 'Unknown Series';
+						final seriesName = seriesPlaylist.seriesTitle;
 						return '$seriesName • Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
 					}
 				} catch (e) {
@@ -937,7 +928,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				case _AspectMode.aspect5_4:
 					return '5:4';
 				case _AspectMode.contain:
-				default:
 					return 'contain';
 			}
 		}();
@@ -954,15 +944,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 					);
 					
 					if (currentEpisode.seriesInfo.season != null && currentEpisode.seriesInfo.episode != null) {
-						await StorageService.saveSeriesPlaybackState(
-							seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
-							season: currentEpisode.seriesInfo.season!,
-							episode: currentEpisode.seriesInfo.episode!,
-							positionMs: pos.inMilliseconds,
-							durationMs: dur.inMilliseconds,
-							speed: _playbackSpeed,
-							aspect: aspectStr,
-						);
+										await StorageService.saveSeriesPlaybackState(
+					seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+					season: currentEpisode.seriesInfo.season!,
+					episode: currentEpisode.seriesInfo.episode!,
+					positionMs: pos.inMilliseconds,
+					durationMs: dur.inMilliseconds,
+					speed: _playbackSpeed,
+					aspect: aspectStr,
+				);
 					}
 				}
 			} else {
@@ -2529,10 +2519,10 @@ extension on _VideoPlayerScreenState {
 	}
 	Future<void> _showTracksSheet(BuildContext context) async {
 		final tracks = _player.state.tracks;
-		final audios = tracks.audio.where((a) => (a.id ?? '').toLowerCase() != 'no').toList(growable: false);
-		final subs = tracks.subtitle.where((s) => (s.id ?? '').toLowerCase() != 'auto' && (s.id ?? '').toLowerCase() != 'no').toList(growable: false);
-		String selectedAudio = _player.state.track.audio.id ?? '';
-		String selectedSub = _player.state.track.subtitle.id ?? '';
+		final audios = tracks.audio.where((a) => a.id.toLowerCase() != 'no').toList(growable: false);
+		final subs = tracks.subtitle.where((s) => s.id.toLowerCase() != 'auto' && s.id.toLowerCase() != 'no').toList(growable: false);
+		String selectedAudio = _player.state.track.audio.id;
+		String selectedSub = _player.state.track.subtitle.id;
 
 		await showModalBottomSheet(
 			context: context,
@@ -2668,7 +2658,7 @@ extension on _VideoPlayerScreenState {
 																					}
 																					final a = audios[index - 1];
 																					return _NetflixRadioTile(
-																						value: a.id ?? '',
+																						value: a.id,
 																						groupValue: selectedAudio.isEmpty ? 'auto' : selectedAudio,
 																						title: _labelForTrack(a, index - 1),
 																						onChanged: (v) async {
@@ -2752,7 +2742,7 @@ extension on _VideoPlayerScreenState {
 																					}
 																					final s = subs[index - 1];
 																					return _NetflixRadioTile(
-																						value: s.id ?? '',
+																						value: s.id,
 																						groupValue: selectedSub,
 																						title: _labelForTrack(s, index - 1),
 																						onChanged: (v) async {
@@ -3020,192 +3010,3 @@ class _NetflixControlButton extends StatelessWidget {
 	} 
 }
 
-/// Widget to build beautiful OTT-style metadata row
-class _BuildMetadataRow extends StatelessWidget {
-	final Map<String, dynamic> metadata;
-
-	const _BuildMetadataRow(this.metadata);
-
-	@override
-	Widget build(BuildContext context) {
-		final List<Widget> metadataItems = [];
-
-		// Rating
-		if (metadata['rating'] != null && metadata['rating'] > 0) {
-			metadataItems.add(_buildMetadataItem(
-				Icons.star_rounded,
-				'${metadata['rating'].toStringAsFixed(1)}',
-				'Rating',
-			));
-		}
-
-		// Runtime
-		if (metadata['runtime'] != null && metadata['runtime'] > 0) {
-			metadataItems.add(_buildMetadataItem(
-				Icons.access_time_rounded,
-				'${metadata['runtime']} min',
-				'Duration',
-			));
-		}
-
-		// Year
-		if (metadata['year'] != null && metadata['year'].isNotEmpty) {
-			metadataItems.add(_buildMetadataItem(
-				Icons.calendar_today_rounded,
-				metadata['year'],
-				'Year',
-			));
-		}
-
-		// Language
-		if (metadata['language'] != null && metadata['language'].isNotEmpty) {
-			metadataItems.add(_buildMetadataItem(
-				Icons.language_rounded,
-				metadata['language'].toUpperCase(),
-				'Language',
-			));
-		}
-
-		// Genres (show first 2)
-		if (metadata['genres'] != null && (metadata['genres'] as List).isNotEmpty) {
-			final genres = metadata['genres'] as List;
-			final displayGenres = genres.take(2).join(', ');
-			metadataItems.add(_buildMetadataItem(
-				Icons.category_rounded,
-				displayGenres,
-				'Genres',
-			));
-		}
-
-		// Network
-		if (metadata['network'] != null && metadata['network'].isNotEmpty) {
-			metadataItems.add(_buildMetadataItem(
-				Icons.tv_rounded,
-				metadata['network'],
-				'Network',
-			));
-		}
-
-		if (metadataItems.isEmpty) {
-			return const SizedBox.shrink();
-		}
-
-		return Container(
-			width: 280,
-			padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-			decoration: BoxDecoration(
-				color: Colors.black.withOpacity(0.85),
-				borderRadius: BorderRadius.circular(20),
-				border: Border.all(
-					color: Colors.white.withOpacity(0.15),
-					width: 1,
-				),
-				boxShadow: [
-					BoxShadow(
-						color: Colors.black.withOpacity(0.3),
-						blurRadius: 20,
-						offset: const Offset(0, 10),
-					),
-				],
-			),
-			child: Column(
-				mainAxisSize: MainAxisSize.min,
-				children: [
-					// Header
-					Row(
-						children: [
-							Container(
-								padding: const EdgeInsets.all(6),
-								decoration: BoxDecoration(
-									color: const Color(0xFFE50914).withOpacity(0.2),
-									borderRadius: BorderRadius.circular(8),
-								),
-								child: const Icon(
-									Icons.info_outline_rounded,
-									color: Color(0xFFE50914),
-									size: 16,
-								),
-							),
-							const SizedBox(width: 8),
-							const Text(
-								'Episode Info',
-								style: TextStyle(
-									color: Colors.white,
-									fontSize: 14,
-									fontWeight: FontWeight.w600,
-								),
-							),
-						],
-					),
-					const SizedBox(height: 12),
-					// Metadata grid
-					Wrap(
-						spacing: 12,
-						runSpacing: 8,
-						children: metadataItems,
-					),
-				],
-			),
-		);
-	}
-
-	Widget _buildMetadataItem(IconData icon, String value, String label) {
-		return Container(
-			width: 120,
-			padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-			decoration: BoxDecoration(
-				color: Colors.white.withOpacity(0.08),
-				borderRadius: BorderRadius.circular(12),
-				border: Border.all(
-					color: Colors.white.withOpacity(0.1),
-					width: 1,
-				),
-			),
-			child: Row(
-				children: [
-					Container(
-						padding: const EdgeInsets.all(6),
-						decoration: BoxDecoration(
-							color: const Color(0xFFE50914).withOpacity(0.2),
-							borderRadius: BorderRadius.circular(8),
-						),
-						child: Icon(
-							icon,
-							color: const Color(0xFFE50914),
-							size: 14,
-						),
-					),
-					const SizedBox(width: 8),
-					Expanded(
-						child: Column(
-							crossAxisAlignment: CrossAxisAlignment.start,
-							mainAxisSize: MainAxisSize.min,
-							children: [
-								Text(
-									value,
-									style: const TextStyle(
-										color: Colors.white,
-										fontSize: 12,
-										fontWeight: FontWeight.w600,
-									),
-									maxLines: 1,
-									overflow: TextOverflow.ellipsis,
-								),
-								Text(
-									label,
-									style: TextStyle(
-										color: Colors.white.withOpacity(0.6),
-										fontSize: 10,
-										fontWeight: FontWeight.w400,
-									),
-									maxLines: 1,
-									overflow: TextOverflow.ellipsis,
-								),
-							],
-						),
-					),
-				],
-			),
-		);
-	}
-}

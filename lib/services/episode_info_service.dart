@@ -3,7 +3,7 @@ import 'tvmaze_service.dart';
 
 class EpisodeInfoService {
   static final Map<String, dynamic> _cache = {};
-  static final Map<String, int> _seriesIdCache = {};
+
   static Timer? _rateLimitTimer;
   static bool _isRateLimited = false;
 

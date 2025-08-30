@@ -548,7 +548,7 @@ class ApiKeyValidator {
     if (!isValidFormat(apiKey)) return false;
     
     try {
-      final user = await DebridService.getUserInfo(apiKey);
+      await DebridService.getUserInfo(apiKey);
       return true; // If we get here, the API key is valid
     } catch (e) {
       return false;

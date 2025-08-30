@@ -7,8 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 
 import '../services/download_service.dart';
-import '../services/storage_service.dart';
-import 'settings_screen.dart';
 import '../services/android_native_downloader.dart';
 import '../widgets/shimmer.dart';
 
@@ -38,23 +36,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   final Map<String, double> _moveProgressByTaskId = {};
   final Set<String> _moveFailed = {};
 
-  String? _defaultUri;
 
-  String _safReadable(String uri, String filename) {
-    try {
-      final decoded = Uri.decodeComponent(uri);
-      final treeIndex = decoded.indexOf('tree/');
-      if (treeIndex == -1) return 'Shared folder: $filename';
-      String rest = decoded.substring(treeIndex + 5); // after 'tree/'
-      // Expect formats like 'primary:Download/Subdir' or 'home:Documents'
-      final colon = rest.indexOf(':');
-      final path = colon != -1 ? rest.substring(colon + 1) : rest;
-      if (path.isEmpty) return filename;
-      return '$path/$filename';
-    } catch (_) {
-      return 'Shared folder: $filename';
-    }
-  }
 
   @override
   void initState() {
@@ -582,7 +564,6 @@ class _StyledField extends StatelessWidget {
   final IconData icon;
   final ValueChanged<String>? onChanged;
   const _StyledField({
-    super.key,
     required this.controller,
     required this.label,
     required this.hint,
@@ -618,7 +599,7 @@ class _StyledField extends StatelessWidget {
 class _PreviewCard extends StatelessWidget {
   final String filename;
   final String host;
-  const _PreviewCard({super.key, required this.filename, required this.host});
+  const _PreviewCard({required this.filename, required this.host});
 
   @override
   Widget build(BuildContext context) {
@@ -745,8 +726,6 @@ class _DownloadTile extends StatelessWidget {
         return 'Failed';
       case TaskStatus.notFound:
         return 'Not found';
-      default:
-        return status.name;
     }
   }
 
@@ -764,12 +743,18 @@ class _DownloadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Prefer live progress if available
-    final double rawProgress = progress?.progress ?? (record.progress ?? 0.0);
+    final double rawProgress = progress?.progress ?? record.progress;
     final name = record.task.filename;
 
-    final int? totalBytes = rawTotal ?? (progress?.hasExpectedFileSize == true
-        ? progress!.expectedFileSize
-        : (record.expectedFileSize > 0 ? record.expectedFileSize : null));
+    final int? totalBytes = rawTotal ?? (() {
+      if (progress?.hasExpectedFileSize == true) {
+        return progress!.expectedFileSize;
+      } else if (record.expectedFileSize > 0) {
+        return record.expectedFileSize;
+      } else {
+        return null;
+      }
+    })();
     final bool isActive = record.status == TaskStatus.running ||
         record.status == TaskStatus.paused ||
         record.status == TaskStatus.enqueued ||
@@ -783,7 +768,7 @@ class _DownloadTile extends StatelessWidget {
                 : rawProgress.clamp(0.0, 1.0)
             : 0.0;
 
-    final int? downloadedBytes = rawBytes ?? ((totalBytes != null)
+    final int? downloadedBytes = rawBytes ?? (totalBytes != null
         ? (shownProgress * totalBytes).round()
         : null);
     final String? speedStr =

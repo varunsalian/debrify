@@ -32,12 +32,11 @@ void main() {
     });
 
     test('Normal playback should allow resuming', () {
-      // Test case: Normal playback (not manual selection, not auto-advancing)
-      bool isManualEpisodeSelection = false;
+      // Test case: Normal playback (not auto-advancing)
       bool isAutoAdvancing = false;
       
       // Should allow resuming for normal playback
-      bool shouldAllowResume = !isAutoAdvancing && !(isManualEpisodeSelection && false);
+      bool shouldAllowResume = !isAutoAdvancing;
       expect(shouldAllowResume, true);
     });
   });
