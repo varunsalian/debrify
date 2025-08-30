@@ -205,7 +205,7 @@ class TVPlaybackService {
     }
   }
 
-  /// Get download link from Real-Debrid with fallback strategies
+  /// Get download link from Real-Debrid with new filename-based file selection strategies
   static Future<Map<String, dynamic>?> _getDownloadLinkFromDebrid(
     String apiKey,
     String magnetLink,
@@ -213,40 +213,65 @@ class TVPlaybackService {
     String quality,
   ) async {
     try {
-      // Strategy 1: Try "All video" selection first
-      print('DEBUG: Trying "All video" selection...');
-      try {
-        final result = await DebridService.addTorrentToDebrid(
-          apiKey, 
-          magnetLink, 
-          tempFileSelection: 'video',
-        );
-        
-        if (result['downloadLink'] != null) {
-          print('DEBUG: Success with "All video" selection');
-          return result;
+      print('DEBUG: Starting filename-based file selection for stream: ${stream.title}');
+      print('DEBUG: Stream filename: ${stream.filename}');
+      print('DEBUG: Stream fileIdx: ${stream.fileIdx}');
+      
+      // Strategy 1: Try filename-based selection
+      if (stream.filename != null) {
+        print('DEBUG: Strategy 1 - Trying filename-based selection...');
+        try {
+          final result = await DebridService.addTorrentToDebrid(
+            apiKey, 
+            magnetLink, 
+            targetFilename: stream.filename!,
+          );
+          
+          if (result['downloadLink'] != null) {
+            print('DEBUG: Success with filename-based selection');
+            return result;
+          }
+        } catch (e) {
+          print('DEBUG: Filename-based selection failed: $e');
         }
-      } catch (e) {
-        print('DEBUG: "All video" selection failed: $e');
+
+        // Strategy 2: Try all video selection, then filter by filename
+        print('DEBUG: Strategy 2 - Trying all video selection with filename filter...');
+        try {
+          final result = await DebridService.addTorrentToDebridWithFilenameFilter(
+            apiKey, 
+            magnetLink, 
+            stream.filename!,
+          );
+          
+          if (result['downloadLink'] != null) {
+            print('DEBUG: Success with all video + filename filter selection');
+            return result;
+          }
+        } catch (e) {
+          print('DEBUG: All video + filename filter selection failed: $e');
+        }
+      } else {
+        print('DEBUG: No filename available, falling back to all video + highest size strategy');
+        
+        // Strategy 3: Try all video selection, then pick highest size
+        try {
+          final result = await DebridService.addTorrentToDebrid(
+            apiKey, 
+            magnetLink, 
+            tempFileSelection: 'largest',
+          );
+          
+          if (result['downloadLink'] != null) {
+            print('DEBUG: Success with all video + largest file selection');
+            return result;
+          }
+        } catch (e) {
+          print('DEBUG: All video + largest file selection failed: $e');
+        }
       }
 
-      // Strategy 2: Try "Largest file" selection (default)
-      print('DEBUG: Trying "Largest file" selection...');
-      try {
-        final result = await DebridService.addTorrentToDebrid(
-          apiKey, 
-          magnetLink, 
-          tempFileSelection: 'largest',
-        );
-        
-        if (result['downloadLink'] != null) {
-          print('DEBUG: Success with "Largest file" selection');
-          return result;
-        }
-      } catch (e) {
-        print('DEBUG: "Largest file" selection failed: $e');
-      }
-
+      print('DEBUG: All file selection strategies failed');
       return null;
 
     } catch (e) {

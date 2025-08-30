@@ -330,7 +330,7 @@ class DebridService {
   }
 
   // Complete workflow: Add magnet, select largest file, get download link
-  static Future<Map<String, dynamic>> addTorrentToDebrid(String apiKey, String magnetLink, {String? tempFileSelection}) async {
+  static Future<Map<String, dynamic>> addTorrentToDebrid(String apiKey, String magnetLink, {String? tempFileSelection, int? specificFileIdx, String? targetFilename}) async {
     try {
       // Step 1: Add magnet
       final addResponse = await addMagnet(apiKey, magnetLink);
@@ -349,7 +349,34 @@ class DebridService {
       final fileSelection = tempFileSelection ?? await StorageService.getFileSelection();
       List<int> fileIdsToSelect = [];
 
-      if (fileSelection == 'all') {
+      if (targetFilename != null) {
+        // Strategy 1: Select specific file by filename matching
+        print('DEBUG: Trying to select specific file with filename: $targetFilename');
+        
+        // Find file with matching filename
+        final matchingFile = _findFileByFilename(files, targetFilename);
+        if (matchingFile != null) {
+          final fileId = matchingFile['id'] as int;
+          fileIdsToSelect = [fileId];
+          print('DEBUG: Found file with matching filename, selecting fileId: $fileId');
+        } else {
+          print('DEBUG: File with filename $targetFilename not found in torrent');
+          throw Exception('Target filename not found in torrent');
+        }
+      } else if (specificFileIdx != null) {
+        // Legacy: Select specific file by fileIdx
+        print('DEBUG: Trying to select specific file with fileIdx: $specificFileIdx');
+        
+        // Check if the specific fileIdx exists in the torrent
+        final fileExists = files.any((file) => file['id'] == specificFileIdx);
+        if (fileExists) {
+          fileIdsToSelect = [specificFileIdx];
+          print('DEBUG: Found file with fileIdx $specificFileIdx, selecting it');
+        } else {
+          print('DEBUG: File with fileIdx $specificFileIdx not found in torrent');
+          throw Exception('Specific file not found in torrent');
+        }
+      } else if (fileSelection == 'all') {
         // Select all files
         fileIdsToSelect = files.map((file) => file['id'] as int).toList();
       } else if (fileSelection == 'video') {
@@ -410,5 +437,249 @@ class DebridService {
     } catch (e) {
       throw Exception('Failed to add torrent to Real Debrid: $e');
     }
+  }
+
+  // Strategy 2: Add magnet, select all video files, then filter by specific fileIdx
+  static Future<Map<String, dynamic>> addTorrentToDebridWithFileFilter(String apiKey, String magnetLink, int targetFileIdx) async {
+    try {
+      print('DEBUG: Strategy 2 - Adding magnet and selecting all video files');
+      
+      // Step 1: Add magnet
+      final addResponse = await addMagnet(apiKey, magnetLink);
+      final torrentId = addResponse['id'];
+
+      // Step 2: Get torrent info
+      final torrentInfo = await getTorrentInfo(apiKey, torrentId);
+      final files = torrentInfo['files'] as List<dynamic>;
+
+      if (files.isEmpty) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('No files found in torrent');
+      }
+
+      // Step 3: Select all video files
+      final videoFiles = files.where((file) {
+        final fileName = file['name'] as String?;
+        return fileName != null && FileUtils.isVideoFile(fileName);
+      }).toList();
+      
+      final videoFileIds = videoFiles.map((file) => file['id'] as int).toList();
+      
+      if (videoFileIds.isEmpty) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('No video files found in torrent');
+      }
+
+      print('DEBUG: Found ${videoFileIds.length} video files, selecting all');
+      await selectFiles(apiKey, torrentId, videoFileIds);
+
+      // Step 4: Wait a bit and get updated torrent info
+      await Future.delayed(const Duration(seconds: 2));
+      final updatedInfo = await getTorrentInfo(apiKey, torrentId);
+      final links = updatedInfo['links'] as List<dynamic>;
+
+      if (links.isEmpty) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('No download links available after file selection');
+      }
+
+      // Step 5: Find the link that corresponds to our target fileIdx
+      print('DEBUG: Looking for link with fileIdx: $targetFileIdx');
+      print('DEBUG: Available links count: ${links.length}');
+      
+      // The links array corresponds to the selected files in order
+      // We need to find which selected file has our target fileIdx
+      int linkIndex = -1;
+      for (int i = 0; i < videoFiles.length; i++) {
+        if (videoFiles[i]['id'] == targetFileIdx) {
+          linkIndex = i;
+          print('DEBUG: Found target fileIdx $targetFileIdx at index $i in video files');
+          break;
+        }
+      }
+
+      if (linkIndex == -1) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('Target fileIdx $targetFileIdx not found in selected video files');
+      }
+
+      if (linkIndex >= links.length) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('Link index $linkIndex out of bounds (${links.length} links available)');
+      }
+
+      // Step 6: Unrestrict the specific link
+      final specificLink = links[linkIndex];
+      print('DEBUG: Unrestricting link at index $linkIndex');
+      final unrestrictResponse = await unrestrictLink(apiKey, specificLink);
+      final downloadLink = unrestrictResponse['download'] as String?;
+      
+      if (downloadLink == null) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('Failed to get download link for specific file');
+      }
+
+      print('DEBUG: Successfully got download link for fileIdx $targetFileIdx');
+      return {
+        'downloadLink': downloadLink,
+        'torrentId': torrentId,
+        'fileSelection': 'video_filtered',
+        'targetFileIdx': targetFileIdx,
+        'links': links,
+        'files': files,
+        'updatedInfo': updatedInfo,
+      };
+    } catch (e) {
+      throw Exception('Failed to add torrent with file filter: $e');
+    }
+  }
+
+  /// Strategy 2: Add magnet, select all video files, then filter by specific filename
+  static Future<Map<String, dynamic>> addTorrentToDebridWithFilenameFilter(String apiKey, String magnetLink, String targetFilename) async {
+    try {
+      print('DEBUG: Strategy 2 - Adding magnet and selecting all video files');
+      
+      // Step 1: Add magnet
+      final addResponse = await addMagnet(apiKey, magnetLink);
+      final torrentId = addResponse['id'];
+
+      // Step 2: Get torrent info
+      final torrentInfo = await getTorrentInfo(apiKey, torrentId);
+      final files = torrentInfo['files'] as List<dynamic>;
+
+      if (files.isEmpty) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('No files found in torrent');
+      }
+
+      // Step 3: Select all video files
+      final videoFiles = files.where((file) {
+        final fileName = file['name'] as String?;
+        return fileName != null && FileUtils.isVideoFile(fileName);
+      }).toList();
+      
+      final videoFileIds = videoFiles.map((file) => file['id'] as int).toList();
+      
+      if (videoFileIds.isEmpty) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('No video files found in torrent');
+      }
+
+      print('DEBUG: Found ${videoFileIds.length} video files, selecting all');
+      await selectFiles(apiKey, torrentId, videoFileIds);
+
+      // Step 4: Wait a bit and get updated torrent info
+      await Future.delayed(const Duration(seconds: 2));
+      final updatedInfo = await getTorrentInfo(apiKey, torrentId);
+      final links = updatedInfo['links'] as List<dynamic>;
+
+      if (links.isEmpty) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('No download links available after file selection');
+      }
+
+      // Step 5: Find the link that corresponds to our target filename
+      print('DEBUG: Looking for link with filename: $targetFilename');
+      print('DEBUG: Available links count: ${links.length}');
+      
+      // Find the index of the matching file in the video files list
+      int linkIndex = -1;
+      for (int i = 0; i < videoFiles.length; i++) {
+        final file = videoFiles[i];
+        final path = file['path'] as String?;
+        if (path != null) {
+          final extractedFilename = _extractFilenameFromPath(path);
+          if (_filenamesMatch(extractedFilename, targetFilename)) {
+            linkIndex = i;
+            print('DEBUG: Found target filename $targetFilename at index $i in video files');
+            break;
+          }
+        }
+      }
+
+      if (linkIndex == -1) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('Target filename $targetFilename not found in selected video files');
+      }
+
+      if (linkIndex >= links.length) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('Link index $linkIndex out of bounds (${links.length} links available)');
+      }
+
+      // Step 6: Unrestrict the specific link
+      final specificLink = links[linkIndex];
+      print('DEBUG: Unrestricting link at index $linkIndex');
+      final unrestrictResponse = await unrestrictLink(apiKey, specificLink);
+      final downloadLink = unrestrictResponse['download'] as String?;
+      
+      if (downloadLink == null) {
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('Failed to get download link for specific file');
+      }
+
+      print('DEBUG: Successfully got download link for filename $targetFilename');
+      return {
+        'downloadLink': downloadLink,
+        'torrentId': torrentId,
+        'fileSelection': 'video_filename_filtered',
+        'targetFilename': targetFilename,
+        'links': links,
+        'files': files,
+        'updatedInfo': updatedInfo,
+      };
+    } catch (e) {
+      throw Exception('Failed to add torrent with filename filter: $e');
+    }
+  }
+
+  /// Helper method to find file by filename matching
+  static Map<String, dynamic>? _findFileByFilename(List<dynamic> files, String targetFilename) {
+    print('DEBUG: Searching for filename: $targetFilename');
+    print('DEBUG: Available files: ${files.length}');
+    
+    for (final file in files) {
+      final path = file['path'] as String?;
+      if (path != null) {
+        final extractedFilename = _extractFilenameFromPath(path);
+        print('DEBUG: Checking file path: $path');
+        print('DEBUG: Extracted filename: $extractedFilename');
+        
+        if (_filenamesMatch(extractedFilename, targetFilename)) {
+          print('DEBUG: ✓ Found matching file: $extractedFilename');
+          return file;
+        }
+      }
+    }
+    
+    print('DEBUG: ✗ No matching filename found');
+    return null;
+  }
+
+  /// Extract filename from path (remove leading slash and any directory)
+  static String _extractFilenameFromPath(String path) {
+    return path.split('/').last;
+  }
+
+  /// Match filenames (case-insensitive, handle special characters)
+  static bool _filenamesMatch(String pathFilename, String targetFilename) {
+    final pathLower = pathFilename.toLowerCase();
+    final targetLower = targetFilename.toLowerCase();
+    
+    // Direct match
+    if (pathLower == targetLower) {
+      return true;
+    }
+    
+    // Contains match (handle variations)
+    if (pathLower.contains(targetLower) || targetLower.contains(pathLower)) {
+      return true;
+    }
+    
+    // Handle common variations (spaces, dots, etc.)
+    final normalizedPath = pathLower.replaceAll(RegExp(r'[._\s-]+'), '');
+    final normalizedTarget = targetLower.replaceAll(RegExp(r'[._\s-]+'), '');
+    
+    return normalizedPath == normalizedTarget;
   }
 } 
