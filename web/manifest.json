@@ -1,6 +1,6 @@
 {
-    "name": "torrent_search_app",
-    "short_name": "torrent_search_app",
+    "name": "debrify",
+    "short_name": "debrify",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

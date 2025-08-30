@@ -25,7 +25,7 @@ A modern torrent search and debrid management app built with Flutter.
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd torrent_search_app
+cd debrify
 ```
 
 2. Install dependencies:
