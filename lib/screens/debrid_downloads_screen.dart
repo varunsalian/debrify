@@ -90,34 +90,42 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   Future<void> _loadApiKeyAndData() async {
     final apiKey = await StorageService.getApiKey();
     
-    setState(() {
-      _apiKey = apiKey;
-    });
+    if (mounted) {
+      setState(() {
+        _apiKey = apiKey;
+      });
+    }
 
     if (apiKey != null) {
       await _fetchTorrents(apiKey, reset: true);
       await _fetchDownloads(apiKey, reset: true);
     } else {
-      setState(() {
-        _torrentErrorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
-        _downloadErrorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
-      });
+      if (mounted) {
+        setState(() {
+          _torrentErrorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
+          _downloadErrorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
+        });
+      }
     }
   }
 
   Future<void> _fetchTorrents(String apiKey, {bool reset = false}) async {
     if (reset) {
-      setState(() {
-        _torrentPage = 1;
-        _hasMoreTorrents = true;
-        _torrents.clear();
-      });
+      if (mounted) {
+        setState(() {
+          _torrentPage = 1;
+          _hasMoreTorrents = true;
+          _torrents.clear();
+        });
+      }
     }
 
-    setState(() {
-      _isLoadingTorrents = true;
-      _torrentErrorMessage = '';
-    });
+    if (mounted) {
+      setState(() {
+        _isLoadingTorrents = true;
+        _torrentErrorMessage = '';
+      });
+    }
 
     try {
       final result = await DebridService.getTorrents(
@@ -130,31 +138,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       final List<RDTorrent> newTorrents = result['torrents'];
       final bool hasMore = result['hasMore'];
 
-      setState(() {
-        if (reset) {
-          _torrents.clear();
-        }
-        // Filter to show only downloaded torrents
-        final downloadedTorrents = newTorrents.where((torrent) => torrent.isDownloaded).toList();
-        _torrents.addAll(downloadedTorrents);
-        _hasMoreTorrents = hasMore;
-        _torrentPage++;
-        _isLoadingTorrents = false;
-      });
+      if (mounted) {
+        setState(() {
+          if (reset) {
+            _torrents.clear();
+          }
+          // Filter to show only downloaded torrents
+          final downloadedTorrents = newTorrents.where((torrent) => torrent.isDownloaded).toList();
+          _torrents.addAll(downloadedTorrents);
+          _hasMoreTorrents = hasMore;
+          _torrentPage++;
+          _isLoadingTorrents = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _torrentErrorMessage = _getUserFriendlyErrorMessage(e);
-        _isLoadingTorrents = false;
-      });
+      if (mounted) {
+        setState(() {
+          _torrentErrorMessage = _getUserFriendlyErrorMessage(e);
+          _isLoadingTorrents = false;
+        });
+      }
     }
   }
 
   Future<void> _loadMoreTorrents() async {
     if (_apiKey == null || _isLoadingMoreTorrents || !_hasMoreTorrents) return;
 
-    setState(() {
-      _isLoadingMoreTorrents = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoadingMoreTorrents = true;
+      });
+    }
 
     try {
       final result = await DebridService.getTorrents(
@@ -167,36 +181,44 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       final List<RDTorrent> newTorrents = result['torrents'];
       final bool hasMore = result['hasMore'];
 
-      setState(() {
-        // Filter to show only downloaded torrents
-        final downloadedTorrents = newTorrents.where((torrent) => torrent.isDownloaded).toList();
-        _torrents.addAll(downloadedTorrents);
-        _hasMoreTorrents = hasMore;
-        _torrentPage++;
-        _isLoadingMoreTorrents = false;
-      });
+      if (mounted) {
+        setState(() {
+          // Filter to show only downloaded torrents
+          final downloadedTorrents = newTorrents.where((torrent) => torrent.isDownloaded).toList();
+          _torrents.addAll(downloadedTorrents);
+          _hasMoreTorrents = hasMore;
+          _torrentPage++;
+          _isLoadingMoreTorrents = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _torrentErrorMessage = _getUserFriendlyErrorMessage(e);
-        _isLoadingMoreTorrents = false;
-      });
+      if (mounted) {
+        setState(() {
+          _torrentErrorMessage = _getUserFriendlyErrorMessage(e);
+          _isLoadingMoreTorrents = false;
+        });
+      }
     }
   }
 
   // Downloads methods
   Future<void> _fetchDownloads(String apiKey, {bool reset = false}) async {
     if (reset) {
-      setState(() {
-        _downloadPage = 1;
-        _hasMoreDownloads = true;
-        _downloads.clear();
-      });
+      if (mounted) {
+        setState(() {
+          _downloadPage = 1;
+          _hasMoreDownloads = true;
+          _downloads.clear();
+        });
+      }
     }
 
-    setState(() {
-      _isLoadingDownloads = true;
-      _downloadErrorMessage = '';
-    });
+    if (mounted) {
+      setState(() {
+        _isLoadingDownloads = true;
+        _downloadErrorMessage = '';
+      });
+    }
 
     try {
       final result = await DebridService.getDownloads(
@@ -208,29 +230,35 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       final List<DebridDownload> newDownloads = result['downloads'];
       final bool hasMore = result['hasMore'];
 
-      setState(() {
-        if (reset) {
-          _downloads.clear();
-        }
-        _downloads.addAll(newDownloads);
-        _hasMoreDownloads = hasMore;
-        _downloadPage++;
-        _isLoadingDownloads = false;
-      });
+      if (mounted) {
+        setState(() {
+          if (reset) {
+            _downloads.clear();
+          }
+          _downloads.addAll(newDownloads);
+          _hasMoreDownloads = hasMore;
+          _downloadPage++;
+          _isLoadingDownloads = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _downloadErrorMessage = _getUserFriendlyErrorMessage(e);
-        _isLoadingDownloads = false;
-      });
+      if (mounted) {
+        setState(() {
+          _downloadErrorMessage = _getUserFriendlyErrorMessage(e);
+          _isLoadingDownloads = false;
+        });
+      }
     }
   }
 
   Future<void> _loadMoreDownloads() async {
     if (_apiKey == null || _isLoadingMoreDownloads || !_hasMoreDownloads) return;
 
-    setState(() {
-      _isLoadingMoreDownloads = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoadingMoreDownloads = true;
+      });
+    }
 
     try {
       final result = await DebridService.getDownloads(
@@ -242,17 +270,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       final List<DebridDownload> newDownloads = result['downloads'];
       final bool hasMore = result['hasMore'];
 
-      setState(() {
-        _downloads.addAll(newDownloads);
-        _hasMoreDownloads = hasMore;
-        _downloadPage++;
-        _isLoadingMoreDownloads = false;
-      });
+      if (mounted) {
+        setState(() {
+          _downloads.addAll(newDownloads);
+          _hasMoreDownloads = hasMore;
+          _downloadPage++;
+          _isLoadingMoreDownloads = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _downloadErrorMessage = _getUserFriendlyErrorMessage(e);
-        _isLoadingMoreDownloads = false;
-      });
+      if (mounted) {
+        setState(() {
+          _downloadErrorMessage = _getUserFriendlyErrorMessage(e);
+          _isLoadingMoreDownloads = false;
+        });
+      }
     }
   }
 
@@ -2438,9 +2470,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       ),
     );
 
-    setState(() {
-      _isAddingMagnet = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isAddingMagnet = true;
+      });
+    }
 
     try {
       // Get the default file selection preference

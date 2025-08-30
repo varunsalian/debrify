@@ -1033,7 +1033,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	void _scheduleAutoHide() {
 		_hideTimer?.cancel();
 		_hideTimer = Timer(const Duration(seconds: 3), () {
-			_controlsVisible.value = false;
+			if (mounted) {
+				_controlsVisible.value = false;
+			}
 		});
 	}
 
@@ -1155,8 +1157,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 		_mode = _GestureMode.none;
 		Future.delayed(const Duration(milliseconds: 250), () {
-			_seekHud.value = null;
-			_verticalHud.value = null;
+			if (mounted) {
+				_seekHud.value = null;
+				_verticalHud.value = null;
+			}
 		});
 	}
 
@@ -1252,7 +1256,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Auto-hide the HUD after 1.5 seconds
 		Future.delayed(const Duration(milliseconds: 1500), () {
-			_aspectRatioHud.value = null;
+			if (mounted) {
+				_aspectRatioHud.value = null;
+			}
 		});
 		
 		_scheduleAutoHide();
@@ -1679,7 +1685,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								// Show volume HUD
 								_verticalHud.value = _VerticalHudState(kind: _VerticalKind.volume, value: newVolume);
 								Future.delayed(const Duration(milliseconds: 250), () {
-									_verticalHud.value = null;
+									if (mounted) {
+										_verticalHud.value = null;
+									}
 								});
 								
 								return KeyEventResult.handled;
@@ -1698,7 +1706,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								// Show volume HUD
 								_verticalHud.value = _VerticalHudState(kind: _VerticalKind.volume, value: newVolume);
 								Future.delayed(const Duration(milliseconds: 250), () {
-									_verticalHud.value = null;
+									if (mounted) {
+										_verticalHud.value = null;
+									}
 								});
 								
 								return KeyEventResult.handled;
