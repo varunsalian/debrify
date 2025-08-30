@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'secure_storage_service.dart';
+import 'debrid_service.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
@@ -13,18 +15,37 @@ class StorageService {
   static const String _defaultPirateBayEnabledKey = 'default_pirate_bay_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
   
-  // API Key methods
+  // API Key methods - Updated to use secure storage with migration
   static Future<String?> getApiKey() async {
+    // Try secure storage first
+    final secureKey = await SecureStorageService.getApiKey();
+    if (secureKey != null) return secureKey;
+    
+    // Fallback to old storage (for migration)
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_apiKeyKey);
+    final oldKey = prefs.getString(_apiKeyKey);
+    
+    // Migrate to secure storage if found
+    if (oldKey != null) {
+      await SecureStorageService.saveApiKey(oldKey);
+      await prefs.remove(_apiKeyKey); // Clean up old storage
+    }
+    
+    return oldKey;
   }
 
   static Future<void> saveApiKey(String apiKey) async {
+    // Save to secure storage
+    await SecureStorageService.saveApiKey(apiKey);
+    
+    // Clean up old storage
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_apiKeyKey, apiKey);
+    await prefs.remove(_apiKeyKey);
   }
 
   static Future<void> deleteApiKey() async {
+    // Delete from both secure and old storage
+    await SecureStorageService.deleteApiKey();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_apiKeyKey);
   }
@@ -532,5 +553,23 @@ class StorageService {
     if (trackPreferences == null) return null;
     
     return trackPreferences as Map<String, dynamic>;
+  }
+}
+
+class ApiKeyValidator {
+  static bool isValidFormat(String apiKey) {
+    // Real Debrid API keys are typically 40 characters
+    return apiKey.length == 40 && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(apiKey);
+  }
+  
+  static Future<bool> validateApiKey(String apiKey) async {
+    if (!isValidFormat(apiKey)) return false;
+    
+    try {
+      final user = await DebridService.getUserInfo(apiKey);
+      return true; // If we get here, the API key is valid
+    } catch (e) {
+      return false;
+    }
   }
 } 

@@ -20,6 +20,10 @@ class AccountService {
     try {
       final user = await DebridService.getUserInfo(apiKey);
       _currentUser = user;
+      
+      // Save to secure storage immediately after validation
+      await StorageService.saveApiKey(apiKey);
+      
       return true;
     } catch (e) {
       _currentUser = null;

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/account_service.dart';
-import '../services/storage_service.dart';
 
 class ApiKeyValidationDialog extends StatefulWidget {
   final bool isInitialSetup;
@@ -44,9 +43,7 @@ class _ApiKeyValidationDialogState extends State<ApiKeyValidationDialog> {
       final isValid = await AccountService.validateAndGetUserInfo(apiKey);
       
       if (isValid) {
-        // Save the API key
-        await StorageService.saveApiKey(apiKey);
-        
+        // API key is already saved to secure storage by AccountService
         if (mounted) {
           Navigator.of(context).pop(true);
         }

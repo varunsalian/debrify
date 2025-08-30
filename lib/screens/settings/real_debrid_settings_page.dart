@@ -62,14 +62,13 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       return;
     }
     
-    // Validate the API key
+    // Validate the API key (this will also save to secure storage)
     final isValid = await AccountService.validateAndGetUserInfo(txt);
     if (!isValid) {
       _snack('Invalid API key. Please check and try again.', err: true);
       return;
     }
     
-    await StorageService.saveApiKey(txt);
     setState(() {
       _savedApiKey = txt;
       _isEditing = false;
