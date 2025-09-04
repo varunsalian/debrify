@@ -2004,632 +2004,612 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             
             // Content Section
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _buildContent(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              child: Builder(
+                builder: (context) {
+                  if (_isLoading) {
+                    return ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 16, left: 12, right: 12, top: 12),
+                      itemCount: 6,
+                      itemBuilder: (context, i) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Shimmer(width: double.infinity, height: 18),
+                              SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(child: Shimmer(height: 22)),
+                                  SizedBox(width: 8),
+                                  Shimmer(width: 70, height: 22),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  }
 
-  Widget _buildContent() {
-    if (_isLoading) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            for (int i = 0; i < 6; i++) ...[
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B).withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Shimmer(width: double.infinity, height: 18),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: const [
-                        Expanded(child: Shimmer(height: 22)),
-                        SizedBox(width: 8),
-                        Shimmer(width: 70, height: 22),
+                  if (_errorMessage.isNotEmpty) {
+                    return ListView(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF7F1D1D),
+                                Color(0xFF991B1B),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.error_outline_rounded,
+                                  color: Colors.white,
+                                  size: 36,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Oops! Something went wrong',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _errorMessage,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 12,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                onPressed: () => _searchTorrents(_searchController.text),
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('Try Again'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: const Color(0xFF7F1D1D),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
+                    );
+                  }
 
-    if (_errorMessage.isNotEmpty) {
-      return Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF7F1D1D), // Red 900
-              Color(0xFF991B1B), // Red 800
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFEF4444).withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.error_outline_rounded,
-                color: Colors.white,
-                size: 36,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Oops! Something went wrong',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _errorMessage,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 12,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () => _searchTorrents(_searchController.text),
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try Again'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF7F1D1D),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+                  if (!_hasSearched) {
+                    return ListView(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF1E293B),
+                                Color(0xFF334155),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.search_rounded,
+                                  color: Color(0xFF6366F1),
+                                  size: 32,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Ready to Search?',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Enter a torrent name above to get started',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.tips_and_updates_rounded,
+                                      color: const Color(0xFFF59E0B),
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Try: movies, games, software',
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.8),
+                                          fontSize: 10,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
 
-    if (!_hasSearched) {
-      return Container(
-        margin: const EdgeInsets.all(8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1E293B), // Slate 800
-              Color(0xFF334155), // Slate 700
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.search_rounded,
-                color: Color(0xFF6366F1),
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Ready to Search?',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Enter a torrent name above to get started',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.tips_and_updates_rounded,
-                    color: const Color(0xFFF59E0B),
-                    size: 16,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Try: movies, games, software',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        fontSize: 10,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+                  if (_torrents.isEmpty) {
+                    return ListView(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF1E293B),
+                                Color(0xFF334155),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              SizedBox(height: 16),
+                              Text(
+                                'No Results Found',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Try different keywords or check your spelling',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white70,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
 
-    if (_torrents.isEmpty) {
-      return Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1E293B), // Slate 800
-              Color(0xFF334155), // Slate 700
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.search_off_rounded,
-                color: Color(0xFFF59E0B),
-                size: 36,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No Results Found',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Try different keywords or check your spelling',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return FadeTransition(
-      opacity: _listAnimation,
-      child: Column(
-        children: [
-          // Results count header
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1E40AF), // Blue 800
-                  Color(0xFF1E3A8A), // Blue 900
-                ],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Icon(
-                    Icons.search_rounded,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Sorting controls
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.sort_rounded,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Sort by:',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: _sortBy,
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          _sortBy = newValue;
-                        });
-                        _sortTorrents();
+                  return ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    itemCount: _torrents.length + 2,
+                    itemBuilder: (context, index) {
+                      if (index == 0) {
+                        return FadeTransition(
+                          opacity: _listAnimation,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFF1E40AF),
+                                  Color(0xFF1E3A8A),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Icon(
+                                    Icons.search_rounded,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
                       }
+                      if (index == 1) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.sort_rounded,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Sort by:',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButton<String>(
+                                  value: _sortBy,
+                                  onChanged: (String? newValue) {
+                                    if (newValue != null) {
+                                      setState(() {
+                                        _sortBy = newValue;
+                                      });
+                                      _sortTorrents();
+                                    }
+                                  },
+                                  items: const [
+                                    DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 12))),
+                                    DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 12))),
+                                    DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 12))),
+                                    DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 12))),
+                                    DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 12))),
+                                  ],
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                    fontSize: 12,
+                                  ),
+                                  underline: Container(),
+                                  icon: Icon(
+                                    Icons.arrow_drop_down,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _sortAscending = !_sortAscending;
+                                  });
+                                  _sortTorrents();
+                                },
+                                icon: Icon(
+                                  _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  size: 16,
+                                ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final torrent = _torrents[index - 2];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: _buildTorrentCard(torrent, index - 2),
+                      );
                     },
-                    items: const [
-                      DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 12))),
-                    ],
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 12,
-                    ),
-                    underline: Container(),
-                    icon: Icon(
-                      Icons.arrow_drop_down,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      size: 16,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _sortAscending = !_sortAscending;
-                    });
-                    _sortTorrents();
-                  },
-                  icon: Icon(
-                    _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    size: 16,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                ),
-              ],
+                  );
+                },
+              ),
             ),
-          ),
-          // Results list
-          ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _torrents.length,
-            itemBuilder: (context, index) {
-              final torrent = _torrents[index];
-              return _buildTorrentCard(torrent, index);
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     );
-
-
   }
 
   Widget _buildTorrentCard(Torrent torrent, int index) {
-    return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 300 + (index * 100)),
-      tween: Tween(begin: 0.0, end: 1.0),
-      builder: (context, value, child) {
-        return Transform.translate(
-          offset: Offset(0, 50 * (1 - value)),
-          child: Opacity(
-            opacity: value,
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF1E293B), // Slate 800
-                    Color(0xFF334155), // Slate 700
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title Row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            torrent.name,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Stats Grid
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        StatChip(
-                          icon: Icons.storage_rounded,
-                          text: Formatters.formatFileSize(torrent.sizeBytes),
-                          color: const Color(0xFF0EA5E9), // Sky 500 - Premium blue
-                        ),
-                        StatChip(
-                          icon: Icons.upload_rounded,
-                          text: '${torrent.seeders}',
-                          color: const Color(0xFF22C55E), // Green 500 - Fresh green
-                        ),
-                        StatChip(
-                          icon: Icons.download_rounded,
-                          text: '${torrent.leechers}',
-                          color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
-                        ),
-                        StatChip(
-                          icon: Icons.check_circle_rounded,
-                          text: '${torrent.completed}',
-                          color: const Color(0xFF8B5CF6), // Violet 500 - Rich purple
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    
-                    // Date
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.schedule_rounded,
-                          color: Colors.white.withValues(alpha: 0.6),
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          Formatters.formatDate(torrent.createdUnix),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Action Buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => _copyMagnetLink(torrent.infohash),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.copy_rounded,
-                                    color: const Color(0xFF60A5FA),
-                                    size: 14,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Copy Magnet',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: const Color(0xFF60A5FA),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => _addToRealDebrid(torrent.infohash, torrent.name, index),
-                            onLongPress: () {
-                              _showFileSelectionDialog(torrent.infohash, torrent.name, index);
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.download_rounded,
-                                    color: const Color(0xFF60A5FA),
-                                    size: 14,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Add to Debrid',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: const Color(0xFF60A5FA),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Icon(
-                                    Icons.more_horiz,
-                                    color: const Color(0xFF60A5FA),
-                                    size: 10,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1E293B), // Slate 800
+            Color(0xFF334155), // Slate 700
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
-        );
-      },
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title Row
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    torrent.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            // Stats Grid
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                StatChip(
+                  icon: Icons.storage_rounded,
+                  text: Formatters.formatFileSize(torrent.sizeBytes),
+                  color: const Color(0xFF0EA5E9), // Sky 500 - Premium blue
+                ),
+                StatChip(
+                  icon: Icons.upload_rounded,
+                  text: '${torrent.seeders}',
+                  color: const Color(0xFF22C55E), // Green 500 - Fresh green
+                ),
+                StatChip(
+                  icon: Icons.download_rounded,
+                  text: '${torrent.leechers}',
+                  color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
+                ),
+                StatChip(
+                  icon: Icons.check_circle_rounded,
+                  text: '${torrent.completed}',
+                  color: const Color(0xFF8B5CF6), // Violet 500 - Rich purple
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            
+            // Date
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule_rounded,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  Formatters.formatDate(torrent.createdUnix),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => _copyMagnetLink(torrent.infohash),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.copy_rounded,
+                            color: const Color(0xFF60A5FA),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Copy Magnet',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF60A5FA),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => _addToRealDebrid(torrent.infohash, torrent.name, index),
+                    onLongPress: () {
+                      _showFileSelectionDialog(torrent.infohash, torrent.name, index);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.download_rounded,
+                            color: const Color(0xFF60A5FA),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Add to Debrid',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF60A5FA),
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(
+                            Icons.more_horiz,
+                            color: const Color(0xFF60A5FA),
+                            size: 10,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 } 
