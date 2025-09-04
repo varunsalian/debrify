@@ -93,7 +93,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	SeriesPlaylist? get _seriesPlaylist {
 		if (widget.playlist == null || widget.playlist!.isEmpty) return null;
 		if (_cachedSeriesPlaylist == null) {
-			_cachedSeriesPlaylist = SeriesPlaylist.fromPlaylistEntries(widget.playlist!);
+			try {
+				_cachedSeriesPlaylist = SeriesPlaylist.fromPlaylistEntries(widget.playlist!);
+			} catch (e) {
+				return null;
+			}
 		}
 		return _cachedSeriesPlaylist;
 	}
@@ -463,24 +467,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return -1;
 		}
 
-		// Find current episode in the sorted allEpisodes list
-		final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-			(episode) => episode.originalIndex == _currentIndex,
-			orElse: () => seriesPlaylist.allEpisodes.first,
-		);
+		try {
+			// Find current episode in the sorted allEpisodes list
+			final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+				(episode) => episode.originalIndex == _currentIndex,
+				orElse: () {
+					if (seriesPlaylist.allEpisodes.isEmpty) {
+						throw StateError('allEpisodes is empty');
+					}
+					return seriesPlaylist.allEpisodes.first;
+				},
+			);
 
-		// Find the index of current episode in allEpisodes
-		final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(currentEpisode);
-		
-		if (currentEpisodeIndex == -1 || currentEpisodeIndex + 1 >= seriesPlaylist.allEpisodes.length) {
-			// No next episode found
+			// Find the index of current episode in allEpisodes
+			final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(currentEpisode);
+			
+			if (currentEpisodeIndex == -1 || currentEpisodeIndex + 1 >= seriesPlaylist.allEpisodes.length) {
+				return -1;
+			}
+
+			// Get the next episode from the sorted list
+			final nextEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex + 1];
+			return nextEpisode.originalIndex;
+		} catch (e) {
 			return -1;
 		}
-
-		// Get the next episode from the sorted list
-		final nextEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex + 1];
-		
-		return nextEpisode.originalIndex;
 	}
 
 	/// Find the previous logical episode index
@@ -494,23 +505,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return -1;
 		}
 
-		// Find current episode in the sorted allEpisodes list
-		final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-			(episode) => episode.originalIndex == _currentIndex,
-			orElse: () => seriesPlaylist.allEpisodes.first,
-		);
+		try {
+			// Find current episode in the sorted allEpisodes list
+			final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+				(episode) => episode.originalIndex == _currentIndex,
+				orElse: () {
+					if (seriesPlaylist.allEpisodes.isEmpty) {
+						throw StateError('allEpisodes is empty');
+					}
+					return seriesPlaylist.allEpisodes.first;
+				},
+			);
 
-		// Find the index of current episode in allEpisodes
-		final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(currentEpisode);
-		
-		if (currentEpisodeIndex <= 0) {
-			// No previous episode found
+			// Find the index of current episode in allEpisodes
+			final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(currentEpisode);
+			
+			if (currentEpisodeIndex <= 0) {
+				return -1;
+			}
+
+			// Get the previous episode from the sorted list
+			final previousEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex - 1];
+			return previousEpisode.originalIndex;
+		} catch (e) {
 			return -1;
 		}
-
-		// Get the previous episode from the sorted list
-		final previousEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex - 1];
-		return previousEpisode.originalIndex;
 	}
 
 	/// Check if there's a next episode available
