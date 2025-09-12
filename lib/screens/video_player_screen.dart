@@ -40,6 +40,8 @@ class VideoPlayerScreen extends StatefulWidget {
     final Future<Map<String, String>?> Function()? requestMagicNext;
     // Advanced: start each video at a random timestamp
     final bool startFromRandom;
+    // Advanced: hide seekbar (double-tap seek still enabled)
+    final bool hideSeekbar;
 
 	const VideoPlayerScreen({
 		Key? key,
@@ -50,6 +52,7 @@ class VideoPlayerScreen extends StatefulWidget {
 		this.startIndex,
         this.requestMagicNext,
         this.startFromRandom = false,
+        this.hideSeekbar = false,
 	}) : super(key: key);
 
 
@@ -1970,7 +1973,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 												onPrevious: _hasPreviousEpisode() ? _goToPreviousEpisode : null,
 												hasNext: _hasNextEpisode() || widget.requestMagicNext != null,
 												hasPrevious: _hasPreviousEpisode(),
-												
+												hideSeekbar: widget.hideSeekbar,
 											),
 										),
 									);
@@ -2055,6 +2058,7 @@ class _Controls extends StatelessWidget {
 	final VoidCallback? onPrevious;
 	final bool hasNext;
 	final bool hasPrevious;
+	final bool hideSeekbar;
 
 
 	const _Controls({
@@ -2079,10 +2083,11 @@ class _Controls extends StatelessWidget {
 		required this.onSeekBarChangedStart,
 		required this.onSeekBarChanged,
 		required this.onSeekBarChangeEnd,
-			this.onNext,
-	this.onPrevious,
-	this.hasNext = false,
-	this.hasPrevious = false,
+		this.onNext,
+		this.onPrevious,
+		this.hasNext = false,
+		this.hasPrevious = false,
+		required this.hideSeekbar,
 	});
 	
 	String _getAspectRatioName() {
@@ -2252,47 +2257,51 @@ class _Controls extends StatelessWidget {
 									// Progress bar with time indicators
 									Row(
 										children: [
-											Text(
-												_format(position),
-												style: const TextStyle(
-													color: Colors.white,
-													fontSize: 14,
-													fontWeight: FontWeight.w500,
+											if (!hideSeekbar) ...[
+												Text(
+													_format(position),
+													style: const TextStyle(
+														color: Colors.white,
+														fontSize: 14,
+														fontWeight: FontWeight.w500,
+													),
 												),
-											),
-											const SizedBox(width: 12),
-											Expanded(
-												child: SliderTheme(
-													data: SliderTheme.of(context).copyWith(
-														trackHeight: 4,
-														activeTrackColor: const Color(0xFFE50914),
-														inactiveTrackColor: Colors.white.withOpacity(0.3),
-														thumbShape: const RoundSliderThumbShape(
-															enabledThumbRadius: 6,
-															elevation: 2,
+												const SizedBox(width: 12),
+												Expanded(
+													child: SliderTheme(
+														data: SliderTheme.of(context).copyWith(
+															trackHeight: 4,
+															activeTrackColor: const Color(0xFFE50914),
+															inactiveTrackColor: Colors.white.withOpacity(0.3),
+															thumbShape: const RoundSliderThumbShape(
+																enabledThumbRadius: 6,
+																elevation: 2,
+															),
+															thumbColor: const Color(0xFFE50914),
+															overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
 														),
-														thumbColor: const Color(0xFFE50914),
-														overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-													),
-													child: Slider(
-														min: 0,
-														max: 1,
-														value: progress.toDouble(),
-														onChangeStart: (_) => onSeekBarChangedStart(),
-														onChanged: (v) => onSeekBarChanged(v),
-														onChangeEnd: (_) => onSeekBarChangeEnd(),
+														child: Slider(
+															min: 0,
+															max: 1,
+															value: (position.inMilliseconds / (total.inMilliseconds == 0 ? 1 : total.inMilliseconds)).clamp(0.0, 1.0),
+															onChangeStart: (_) => onSeekBarChangedStart(),
+															onChanged: (v) => onSeekBarChanged(v),
+															onChangeEnd: (_) => onSeekBarChangeEnd(),
+														),
 													),
 												),
-											),
-											const SizedBox(width: 12),
-											Text(
-												_format(duration),
-												style: const TextStyle(
-													color: Colors.white,
-													fontSize: 14,
-													fontWeight: FontWeight.w500,
+												const SizedBox(width: 12),
+												Text(
+													_format(duration),
+													style: const TextStyle(
+														color: Colors.white,
+														fontSize: 14,
+														fontWeight: FontWeight.w500,
+													),
 												),
-											),
+											] else ...[
+												const SizedBox.shrink(),
+											],
 										],
 									),
 									

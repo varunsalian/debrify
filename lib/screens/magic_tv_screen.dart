@@ -21,6 +21,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
   String _status = '';
   // Advanced options
   bool _startRandom = false;
+  bool _hideSeekbar = false;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -256,6 +257,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
             videoUrl: firstUrl,
             title: firstTitle,
             startFromRandom: _startRandom,
+            hideSeekbar: _hideSeekbar,
             requestMagicNext: requestMagicNext,
           ),
         ),
@@ -307,6 +309,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
                   videoUrl: videoUrl,
                   title: next.name,
                   startFromRandom: _startRandom,
+                  hideSeekbar: _hideSeekbar,
                 ),
               ),
             );
@@ -368,6 +371,22 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
               subtitle: const Text('Each Magic TV video starts at a random point', style: TextStyle(color: Colors.white70)),
               value: _startRandom,
               onChanged: (v) => setState(() => _startRandom = v),
+              activeColor: const Color(0xFFE50914),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white12, width: 1),
+            ),
+            child: SwitchListTile(
+              title: const Text('Hide seekbar', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Disable progress slider; double-tap seeking still works', style: TextStyle(color: Colors.white70)),
+              value: _hideSeekbar,
+              onChanged: (v) => setState(() => _hideSeekbar = v),
               activeColor: const Color(0xFFE50914),
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
             ),
