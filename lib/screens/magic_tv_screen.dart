@@ -34,11 +34,19 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
   String? _activeApiKey;
   final Set<String> _inflightInfohashes = {};
 
+  // Progress UI state
+  final ValueNotifier<List<String>> _progress = ValueNotifier<List<String>>([]);
+  BuildContext? _progressSheetContext;
+  bool _progressOpen = false;
+  int _lastQueueSize = 0;
+  DateTime? _lastSearchAt;
+
   @override
   void dispose() {
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _prefetchStopRequested = true;
     _stopPrefetch();
+    _progress.dispose();
     _keywordsController.dispose();
     super.dispose();
   }
@@ -52,6 +60,11 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
   }
 
   Future<void> _watch() async {
+    void _log(String m) {
+      final copy = List<String>.from(_progress.value)..add(m);
+      _progress.value = copy;
+      debugPrint('MagicTV: ' + m);
+    }
     final text = _keywordsController.text.trim();
     debugPrint('MagicTV: Watch started. Raw input="$text"');
     if (text.isEmpty) {
@@ -77,6 +90,77 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       _status = 'Searching...';
       _queue.clear();
     });
+
+    // show progress modal
+    _progress.value = [];
+    _progressOpen = true;
+    // ignore: unawaited_futures
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F0F0F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        _progressSheetContext = ctx;
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: const Color(0xFFE50914).withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFFE50914), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Magic TV • Watch Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+                  const Spacer(),
+                ]),
+                const SizedBox(height: 16),
+                Row(children: [
+                  const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(_status, style: const TextStyle(color: Colors.white70))),
+                ]),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12, width: 1)),
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.4),
+                  child: ValueListenableBuilder<List<String>>(
+                    valueListenable: _progress,
+                    builder: (context, logs, _) {
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: logs.length,
+                        itemBuilder: (context, index) {
+                          final line = logs[index];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(children: [
+                              const Icon(Icons.check_circle_outline, color: Colors.white54, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(line, style: const TextStyle(color: Colors.white, fontSize: 13))),
+                            ]),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ).whenComplete(() { _progressOpen = false; _progressSheetContext = null; });
+
+    _log('Searching providers with your keywords');
 
     // Force 500 results from Torrents CSV during this search, without permanently changing user settings
     final prevMax = await StorageService.getMaxTorrentsCsvResults();
@@ -104,6 +188,8 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
 
       _queue.addAll(combined);
       debugPrint('MagicTV: Queue prepared. size=${_queue.length}');
+      _lastQueueSize = _queue.length;
+      _lastSearchAt = DateTime.now();
     } catch (e) {
       setState(() {
         _status = 'Search failed: $e';
@@ -123,6 +209,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
         _status = 'No results found';
       });
       debugPrint('MagicTV: No results found after combining.');
+      _log('No results found');
       return;
     }
 
@@ -233,6 +320,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       _status = 'Finding a playable stream...';
       _isBusy = true;
     });
+    _log('Finding a playable stream...');
 
     try {
       final first = await requestMagicNext();
@@ -251,6 +339,9 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       // Start background prefetch while player is active
       _activeApiKey = apiKey;
       _startPrefetch();
+      if (_progressOpen && _progressSheetContext != null) {
+        Navigator.of(_progressSheetContext!).pop();
+      }
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
@@ -339,64 +430,123 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _keywordsController,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _watch(),
-            decoration: const InputDecoration(
-              hintText: 'Enter keywords (comma separated)',
+          const SizedBox(height: 32),
+          // Logo + headline
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.auto_awesome_rounded, color: Colors.white70),
+              SizedBox(width: 8),
+              Text('Magic TV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 22, letterSpacing: 0.5)),
+            ],
+          ),
+          const SizedBox(height: 18),
+          // Centered search card
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0x221E3A8A), Color(0x2214B8A6)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white12, width: 1),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _keywordsController,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _watch(),
+                    decoration: InputDecoration(
+                      hintText: 'What mood are you in? (comma separated keywords)',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.play_circle_fill_rounded),
+                        onPressed: _isBusy ? null : _watch,
+                        color: const Color(0xFFE50914),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 44,
+                    child: ElevatedButton.icon(
+                      onPressed: _isBusy ? null : _watch,
+                      icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
+                      label: const Text('Watch', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE50914),
+                        disabledBackgroundColor: const Color(0x66E50914),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _isBusy ? null : _watch,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Watch'),
-          ),
-          const SizedBox(height: 8),
-          // Advanced Options
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12, width: 1),
+          const SizedBox(height: 24),
+          // Stats removed as requested
+          const SizedBox(height: 24),
+          // Advanced options card
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F0F0F).withOpacity(0.8),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white12, width: 1),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.settings_rounded, color: Colors.white70, size: 18),
+                      SizedBox(width: 8),
+                      Text('Advanced options', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _SwitchRow(
+                    title: 'Start from random timestamp',
+                    subtitle: 'Each Magic TV video starts at a random point',
+                    value: _startRandom,
+                    onChanged: (v) => setState(() => _startRandom = v),
+                  ),
+                  const SizedBox(height: 8),
+                  _SwitchRow(
+                    title: 'Hide seekbar',
+                    subtitle: 'Disable progress slider and time; double-tap still works',
+                    value: _hideSeekbar,
+                    onChanged: (v) => setState(() => _hideSeekbar = v),
+                  ),
+                ],
+              ),
             ),
-            child: SwitchListTile(
-              title: const Text('Start from random timestamp', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Each Magic TV video starts at a random point', style: TextStyle(color: Colors.white70)),
-              value: _startRandom,
-              onChanged: (v) => setState(() => _startRandom = v),
-              activeColor: const Color(0xFFE50914),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            ),
           ),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12, width: 1),
+          const SizedBox(height: 20),
+          if (_status.isNotEmpty)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(_status, style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
+              ),
             ),
-            child: SwitchListTile(
-              title: const Text('Hide seekbar', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Disable progress slider; double-tap seeking still works', style: TextStyle(color: Colors.white70)),
-              value: _hideSeekbar,
-              onChanged: (v) => setState(() => _hideSeekbar = v),
-              activeColor: const Color(0xFFE50914),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _status,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -553,3 +703,108 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
 }
 
 
+class _InfoTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  const _InfoTile({required this.icon, required this.title, required this.subtitle});
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12, width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsTile extends StatelessWidget {
+  final int queue;
+  final DateTime? lastSearchedAt;
+  const _StatsTile({required this.queue, required this.lastSearchedAt});
+  @override
+  Widget build(BuildContext context) {
+    final last = lastSearchedAt == null ? '—' : '${lastSearchedAt!.hour.toString().padLeft(2,'0')}:${lastSearchedAt!.minute.toString().padLeft(2,'0')}';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12, width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.insights_rounded, color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Search snapshot', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Queue prepared: $queue • Last search: $last', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SwitchRow extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const _SwitchRow({required this.title, required this.subtitle, required this.value, required this.onChanged});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12, width: 1),
+      ),
+      child: SwitchListTile(
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
+        value: value,
+        onChanged: onChanged,
+        activeColor: const Color(0xFFE50914),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+      ),
+    );
+  }
+}
