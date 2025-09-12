@@ -38,6 +38,8 @@ class VideoPlayerScreen extends StatefulWidget {
 	final int? startIndex;
     // Optional: Magic TV provider to fetch the next playable item (url & title)
     final Future<Map<String, String>?> Function()? requestMagicNext;
+    // Advanced: start each video at a random timestamp
+    final bool startFromRandom;
 
 	const VideoPlayerScreen({
 		Key? key,
@@ -47,6 +49,7 @@ class VideoPlayerScreen extends StatefulWidget {
 		this.playlist,
 		this.startIndex,
         this.requestMagicNext,
+        this.startFromRandom = false,
 	}) : super(key: key);
 
 
@@ -267,7 +270,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			_player.open(mk.Media(initialUrl)).then((_) async {
 				// Wait for the video to load and duration to be available
 				await _waitForVideoReady();
-				await _maybeRestoreResume();
+				// Random start takes precedence over resume
+				if (widget.startFromRandom) {
+					final dur = _duration;
+					if (dur > Duration.zero) {
+						final fraction = 0.1 + (0.8 * math.Random().nextDouble());
+						final pos = Duration(milliseconds: (dur.inMilliseconds * fraction).floor());
+						await _player.seek(pos);
+					}
+				} else {
+					await _maybeRestoreResume();
+				}
 				_scheduleAutoHide();
 				// Restore audio and subtitle track preferences
 				await _restoreTrackPreferences();
@@ -581,6 +594,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				if (url.isNotEmpty) {
 					debugPrint('Player: MagicTV next success. Opening new URL.');
 					await _player.open(mk.Media(url), play: true);
+					// If advanced option is enabled, jump to a random timestamp for Magic TV items
+					if (widget.startFromRandom) {
+						await _waitForVideoReady();
+						final dur = _duration;
+						if (dur > Duration.zero) {
+							final fraction = 0.1 + (0.8 * math.Random().nextDouble());
+							final pos = Duration(milliseconds: (dur.inMilliseconds * fraction).floor());
+							await _player.seek(pos);
+						}
+					}
 					if (title.isNotEmpty) {
 						setState(() {
 							_dynamicTitle = title;
