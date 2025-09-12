@@ -36,8 +36,8 @@ class VideoPlayerScreen extends StatefulWidget {
 	final String? subtitle;
 	final List<PlaylistEntry>? playlist;
 	final int? startIndex;
-    // Optional: Magic TV provider to fetch the next playable URL
-    final Future<String?> Function()? requestMagicNext;
+    // Optional: Magic TV provider to fetch the next playable item (url & title)
+    final Future<Map<String, String>?> Function()? requestMagicNext;
 
 	const VideoPlayerScreen({
 		Key? key,
@@ -147,6 +147,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	// Orientation
 	bool _landscapeLocked = false;
 
+	// Dynamic title for Magic TV (no-playlist) flow
+	String _dynamicTitle = '';
+
 	@override
 	void initState() {
 		super.initState();
@@ -252,6 +255,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 		
 		_currentIndex = initialIndex;
+		_dynamicTitle = widget.title;
 		_player = mk.Player(configuration: mk.PlayerConfiguration(ready: () {
 			_isReady = true;
 			if (mounted) setState(() {});
@@ -391,7 +395,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return widget.playlist![_currentIndex].title;
 		}
 		
-		// Final fallback to the current title or widget title
+		// If Magic TV (no playlist) is active, use dynamic title when available
+		if ((widget.playlist == null || widget.playlist!.isEmpty) && widget.requestMagicNext != null) {
+			return _dynamicTitle.isNotEmpty ? _dynamicTitle : widget.title;
+		}
+
+		// Final fallback
 		return widget.title;
 	}
 
@@ -566,10 +575,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		if (widget.requestMagicNext != null) {
 			debugPrint('Player: MagicTV next requested.');
 			try {
-				final url = await widget.requestMagicNext!();
-				if (url != null && url.isNotEmpty) {
+				final result = await widget.requestMagicNext!();
+				final url = result != null ? (result['url'] ?? '') : '';
+				final title = result != null ? (result['title'] ?? '') : '';
+				if (url.isNotEmpty) {
 					debugPrint('Player: MagicTV next success. Opening new URL.');
 					await _player.open(mk.Media(url), play: true);
+					if (title.isNotEmpty) {
+						setState(() {
+							_dynamicTitle = title;
+						});
+					}
 					return;
 				}
 			} catch (e) {

@@ -131,7 +131,18 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       return;
     }
 
-    Future<String?> requestMagicNext() async {
+    // Helper to infer a filename-like title from a URL
+    String _inferTitleFromUrl(String url) {
+      final uri = Uri.tryParse(url);
+      final last = (uri != null && uri.pathSegments.isNotEmpty)
+          ? uri.pathSegments.last
+          : url;
+      return Uri.decodeComponent(last);
+    }
+
+    String firstTitle = 'Magic TV';
+
+    Future<Map<String, String>?> requestMagicNext() async {
       debugPrint('MagicTV: requestMagicNext() called. queueSize=${_queue.length}');
       while (_queue.isNotEmpty) {
         final item = _queue.removeAt(0);
@@ -148,7 +159,12 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
             final videoUrl = unrestrict['download'] as String?;
             if (videoUrl != null && videoUrl.isNotEmpty) {
               debugPrint('MagicTV: Success (RD link). Unrestricted in ${elapsed}s');
-              return videoUrl;
+              // Prefer filename inferred from URL; fallback to any stored displayName
+              final inferred = _inferTitleFromUrl(videoUrl).trim();
+              final display = (item['displayName'] as String?)?.trim();
+              final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Magic TV');
+              firstTitle = chosenTitle;
+              return {'url': videoUrl, 'title': chosenTitle};
             }
           } catch (e) {
             debugPrint('MagicTV: RD link failed to unrestrict: $e');
@@ -183,6 +199,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
                   'type': 'rd_restricted',
                   'restrictedLink': link,
                   'torrentId': torrentId,
+                  'displayName': item.name,
                 });
               }
               if (rdLinks.length > 1) {
@@ -191,7 +208,11 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
             }
             if (videoUrl != null && videoUrl.isNotEmpty) {
               debugPrint('MagicTV: Success. Got unrestricted URL in ${elapsed}s');
-              return videoUrl;
+              // Prefer filename inferred from URL; fallback to torrent name
+              final inferred = _inferTitleFromUrl(videoUrl).trim();
+              final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Magic TV');
+              firstTitle = chosenTitle;
+              return {'url': videoUrl, 'title': chosenTitle};
             }
           } catch (e) {
             debugPrint('MagicTV: Debrid add failed for ${item.infohash}: $e');
@@ -208,14 +229,16 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
     });
 
     try {
-      final firstUrl = await requestMagicNext();
-      if (firstUrl == null) {
+      final first = await requestMagicNext();
+      if (first == null) {
         setState(() {
           _status = 'No playable torrents found. Try different keywords.';
         });
         debugPrint('MagicTV: No playable stream found.');
         return;
       }
+      final firstUrl = first['url'] ?? '';
+      firstTitle = (first['title'] ?? firstTitle).trim().isNotEmpty ? (first['title'] ?? firstTitle) : firstTitle;
       // Navigate to the player with a Next callback
       if (!mounted) return;
       debugPrint('MagicTV: Launching player. Remaining queue=${_queue.length}');
@@ -226,7 +249,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
-            title: 'Magic TV',
+            title: firstTitle,
             requestMagicNext: requestMagicNext,
           ),
         ),
@@ -445,6 +468,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
             'type': 'rd_restricted',
             'restrictedLink': headLink,
             'torrentId': torrentId,
+            'displayName': item.name,
           };
         }
       }
@@ -465,6 +489,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
             'type': 'rd_restricted',
             'restrictedLink': link,
             'torrentId': torrentId,
+            'displayName': item.name,
           });
           appended++;
         }
