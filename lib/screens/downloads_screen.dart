@@ -483,6 +483,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                       moveProgressByTaskId: _moveProgressByTaskId,
                       moveFailed: _moveFailed,
                       rawBytes: _bytesByTaskId,
+                      isFinishedTab: true,
                     ),
                   ],
                 ),
@@ -652,6 +653,7 @@ class _DownloadList extends StatelessWidget {
   final Map<String, double> moveProgressByTaskId;
   final Set<String> moveFailed;
   final Map<String, (int bytes, int? total)> rawBytes;
+  final bool isFinishedTab;
 
   const _DownloadList({
     required this.records,
@@ -660,6 +662,7 @@ class _DownloadList extends StatelessWidget {
     required this.moveProgressByTaskId,
     required this.moveFailed,
     required this.rawBytes,
+    this.isFinishedTab = false,
   });
 
   @override
@@ -669,22 +672,86 @@ class _DownloadList extends StatelessWidget {
         child: Text('No downloads'),
       );
     }
-
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: records.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => PressableScale(
-        child: _DownloadTile(
-          record: records[index],
-          onChanged: onChanged,
-          progress: progressByTaskId[records[index].task.taskId],
-          moveProgress: moveProgressByTaskId[records[index].task.taskId],
-          moveFailed: moveFailed.contains(records[index].task.taskId),
-          rawBytes: rawBytes[records[index].task.taskId]?.$1,
-          rawTotal: rawBytes[records[index].task.taskId]?.$2,
+    
+    if (!isFinishedTab) {
+      return ListView.separated(
+        padding: const EdgeInsets.all(12),
+        itemCount: records.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) => PressableScale(
+          child: _DownloadTile(
+            record: records[index],
+            onChanged: onChanged,
+            progress: progressByTaskId[records[index].task.taskId],
+            moveProgress: moveProgressByTaskId[records[index].task.taskId],
+            moveFailed: moveFailed.contains(records[index].task.taskId),
+            rawBytes: rawBytes[records[index].task.taskId]?.$1,
+            rawTotal: rawBytes[records[index].task.taskId]?.$2,
+          ),
         ),
-      ),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Row(
+            children: [
+              const Text('Finished', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Clear all finished?'),
+                          content: const Text('This removes finished items from the list.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text('Clear All'),
+                            ),
+                          ],
+                        ),
+                      ) ??
+                      false;
+                  if (!confirm) return;
+                  for (final r in List<TaskRecord>.from(records)) {
+                    await DownloadService.instance.deleteRecord(r);
+                  }
+                  await onChanged();
+                },
+                icon: const Icon(Icons.delete_sweep_rounded),
+                label: const Text('Clear All'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: records.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) => PressableScale(
+              child: _DownloadTile(
+                record: records[index],
+                onChanged: onChanged,
+                progress: progressByTaskId[records[index].task.taskId],
+                moveProgress: moveProgressByTaskId[records[index].task.taskId],
+                moveFailed: moveFailed.contains(records[index].task.taskId),
+                rawBytes: rawBytes[records[index].task.taskId]?.$1,
+                rawTotal: rawBytes[records[index].task.taskId]?.$2,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -776,7 +843,9 @@ class _DownloadTile extends StatelessWidget {
     final String? etaStr =
         progress?.hasTimeRemaining == true ? progress!.timeRemainingAsString : null;
 
-    return Card(
+    return Stack(
+      children: [
+        Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -881,7 +950,7 @@ class _DownloadTile extends StatelessWidget {
             if (record.status == TaskStatus.complete)
               Align(
                 alignment: Alignment.centerRight,
-                child: OutlinedButton.icon(
+                child: TextButton.icon(
                   onPressed: () async {
                     final fileInfo = DownloadService.instance.getLastFileForTask(record.task.taskId);
                     if (fileInfo == null) {
@@ -935,6 +1004,7 @@ class _DownloadTile extends StatelessWidget {
                         style: TextStyle(color: Colors.red)),
                   ),
                 const Spacer(),
+                // Removed inline Clear button; handled by top-right X overlay
                 if (isActive)
                   Text('${(shownProgress * 100).toStringAsFixed(0)}%',
                       style:
@@ -944,6 +1014,24 @@ class _DownloadTile extends StatelessWidget {
           ],
         ),
       ),
+    ),
+        if (!isActive)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: InkResponse(
+              onTap: () async {
+                await DownloadService.instance.deleteRecord(record);
+                await onChanged();
+              },
+              radius: 18,
+              child: const Icon(
+                Icons.close_rounded,
+                color: Colors.red,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
