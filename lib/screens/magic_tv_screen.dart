@@ -33,6 +33,9 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
 
   @override
   void dispose() {
+    // Ensure prefetch loop is stopped if this screen is disposed mid-run
+    _prefetchStopRequested = true;
+    _stopPrefetch();
     _keywordsController.dispose();
     super.dispose();
   }
