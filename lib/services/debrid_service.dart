@@ -349,7 +349,19 @@ class DebridService {
 
       // Step 2: Get torrent info
       final torrentInfo = await getTorrentInfo(apiKey, torrentId);
-      final files = torrentInfo['files'] as List<dynamic>;
+      final files = (torrentInfo['files'] as List<dynamic>? ?? const []);
+      // Log raw file info for debugging
+      // ignore: avoid_print
+      print('Debrid: Torrent info received. filesCount=${files.length}');
+      for (final f in files) {
+        try {
+          final name = (f is Map && f['name'] != null) ? f['name'] : '<no-name>';
+          final bytes = (f is Map && f['bytes'] != null) ? f['bytes'] : '<no-bytes>';
+          final id = (f is Map && f['id'] != null) ? f['id'] : '<no-id>';
+          // ignore: avoid_print
+          print('Debrid: file id=$id name=$name bytes=$bytes');
+        } catch (_) {}
+      }
 
       if (files.isEmpty) {
         await deleteTorrent(apiKey, torrentId);
@@ -420,6 +432,158 @@ class DebridService {
       };
     } catch (e) {
       throw Exception('Failed to add torrent to Real Debrid: $e');
+    }
+  }
+
+  // Enhanced workflow for Magic TV: Prefer video files (all), fallback to largest video file
+  static Future<Map<String, dynamic>> addTorrentToDebridPreferVideos(String apiKey, String magnetLink) async {
+    try {
+      // Log start
+      // ignore: avoid_print
+      print('Debrid: addTorrentToDebridPreferVideos: Adding magnet...');
+      // Step 1: Add magnet
+      final addResponse = await addMagnet(apiKey, magnetLink);
+      final torrentId = addResponse['id'];
+      // ignore: avoid_print
+      print('Debrid: Magnet added. torrentId=$torrentId');
+
+      // Step 2: Get torrent info
+      final torrentInfo = await getTorrentInfo(apiKey, torrentId);
+      final files = torrentInfo['files'] as List<dynamic>;
+
+      if (files.isEmpty) {
+        // ignore: avoid_print
+        print('Debrid: No files in torrent. Deleting.');
+        await deleteTorrent(apiKey, torrentId);
+        throw Exception('No files found in torrent');
+      }
+
+      // Step 3: Try selecting all video files first
+      // Some RD responses might use different keys. If name is missing, try fallback to 'path'
+      final normalizedFiles = files.map((file) {
+        if (file is Map && (file['name'] == null || (file['name'] as String?)?.isEmpty == true)) {
+          final path = file['path'] as String?;
+          if (path != null && path.isNotEmpty) {
+            final nameOnly = FileUtils.getFileName(path);
+            return {...file, 'name': nameOnly};
+          }
+        }
+        return file;
+      }).toList();
+
+      final videoFiles = normalizedFiles.where((file) {
+        final fileName = (file is Map) ? file['name'] as String? : null;
+        final isVideo = fileName != null && FileUtils.isVideoFile(fileName);
+        // ignore: avoid_print
+        print('Debrid: classify name="${fileName ?? '<null>'}" isVideo=$isVideo');
+        return isVideo;
+      }).toList();
+
+      if (videoFiles.isNotEmpty) {
+        // ignore: avoid_print
+        print('Debrid: Selecting all video files. count=${videoFiles.length}');
+        final allVideoIds = videoFiles.map((file) => file['id'] as int).toList();
+        await selectFiles(apiKey, torrentId, allVideoIds);
+
+        // Wait briefly and fetch updated links
+        await Future.delayed(const Duration(seconds: 2));
+        final updatedInfo = await getTorrentInfo(apiKey, torrentId);
+        List<dynamic> links = (updatedInfo['links'] as List<dynamic>? ?? const []);
+        // ignore: avoid_print
+        print('Debrid: Links after selecting all videos: count=${links.length}');
+
+        // If no links yet, fallback to largest single video file
+        if (links.isEmpty) {
+          // ignore: avoid_print
+          print('Debrid: Links empty after selecting all videos. Falling back to largest video.');
+          // Find largest video file
+          int? largestVideoId;
+          int largestVideoSize = -1;
+          for (final file in videoFiles) {
+            final size = (file['bytes'] as int?) ?? -1;
+            if (size > largestVideoSize) {
+              largestVideoSize = size;
+              largestVideoId = file['id'] as int?;
+            }
+          }
+
+          if (largestVideoId != null) {
+            // ignore: avoid_print
+            print('Debrid: Selecting largest video id=$largestVideoId size=$largestVideoSize');
+            await selectFiles(apiKey, torrentId, [largestVideoId]);
+            await Future.delayed(const Duration(seconds: 2));
+            final updatedInfo2 = await getTorrentInfo(apiKey, torrentId);
+            links = (updatedInfo2['links'] as List<dynamic>? ?? const []);
+            // ignore: avoid_print
+            print('Debrid: Links after selecting largest video: count=${links.length}');
+
+            if (links.isEmpty) {
+              // ignore: avoid_print
+              print('Debrid: Still no links after selecting largest video. Deleting torrent.');
+              await deleteTorrent(apiKey, torrentId);
+              throw Exception('File is not readily available in Real Debrid');
+            }
+
+            final unrestrictResponse = await unrestrictLink(apiKey, links[0]);
+            final downloadLink = unrestrictResponse['download'] as String?;
+            if (downloadLink == null) {
+              // ignore: avoid_print
+              print('Debrid: Unrestrict failed after largest video selection. Deleting.');
+              await deleteTorrent(apiKey, torrentId);
+              throw Exception('Failed to get download link from Real Debrid');
+            }
+
+            // ignore: avoid_print
+            print('Debrid: Success with largest video. Returning download link.');
+            return {
+              'downloadLink': downloadLink,
+              'torrentId': torrentId,
+              'fileSelection': 'largest_video',
+              'links': links,
+              'files': files,
+              'updatedInfo': updatedInfo2,
+            };
+          } else {
+            // ignore: avoid_print
+            print('Debrid: No video files found to select as largest. Deleting torrent.');
+            await deleteTorrent(apiKey, torrentId);
+            throw Exception('No video files found in torrent');
+          }
+        }
+
+        // Unrestrict first link when all videos selection succeeded
+        // ignore: avoid_print
+        print('Debrid: Unrestricting first link after selecting all videos...');
+        final unrestrictResponse = await unrestrictLink(apiKey, links[0]);
+        final downloadLink = unrestrictResponse['download'] as String?;
+        if (downloadLink == null) {
+          // ignore: avoid_print
+          print('Debrid: Unrestrict failed after selecting all videos. Deleting.');
+          await deleteTorrent(apiKey, torrentId);
+          throw Exception('Failed to get download link from Real Debrid');
+        }
+
+        // ignore: avoid_print
+        print('Debrid: Success with all videos selection. Returning download link.');
+        return {
+          'downloadLink': downloadLink,
+          'torrentId': torrentId,
+          'fileSelection': 'video',
+          'links': links,
+          'files': files,
+          'updatedInfo': updatedInfo,
+        };
+      }
+
+      // If no video files found at all, fail early
+      // ignore: avoid_print
+      print('Debrid: No video files found in torrent. Deleting.');
+      await deleteTorrent(apiKey, torrentId);
+      throw Exception('No video files found in torrent');
+    } catch (e) {
+      // ignore: avoid_print
+      print('Debrid: addTorrentToDebridPreferVideos failed: $e');
+      throw Exception('Failed to add torrent (prefer videos): $e');
     }
   }
 } 

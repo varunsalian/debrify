@@ -4,6 +4,7 @@ import 'screens/torrent_search_screen.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
+import 'screens/magic_tv_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
 import 'services/account_service.dart';
@@ -202,6 +203,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const TorrentSearchScreen(),
     const DebridDownloadsScreen(),
     const DownloadsScreen(),
+    const MagicTVScreen(),
     const SettingsScreen(),
   ];
 
@@ -209,6 +211,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Torrent Search',
     'Real Debrid',
     'Downloads',
+    'Magic TV',
     'Settings',
   ];
 
@@ -216,6 +219,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.search_rounded,
     Icons.cloud_download_rounded,
     Icons.download_for_offline_rounded,
+    Icons.auto_awesome_rounded,
     Icons.settings_rounded,
   ];
 
@@ -300,7 +304,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             currentIndex: _selectedIndex,
             items: buildDefaultNavItems(_icons, _titles),
             onTap: _onItemTapped,
-            badges: const [0, 0, 0, 0],
+            badges: const [0, 0, 0, 0, 0],
             haptics: true,
           ),
           automaticallyImplyLeading: false,

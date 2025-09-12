@@ -36,6 +36,8 @@ class VideoPlayerScreen extends StatefulWidget {
 	final String? subtitle;
 	final List<PlaylistEntry>? playlist;
 	final int? startIndex;
+    // Optional: Magic TV provider to fetch the next playable URL
+    final Future<String?> Function()? requestMagicNext;
 
 	const VideoPlayerScreen({
 		Key? key,
@@ -44,6 +46,7 @@ class VideoPlayerScreen extends StatefulWidget {
 		this.subtitle,
 		this.playlist,
 		this.startIndex,
+        this.requestMagicNext,
 	}) : super(key: key);
 
 
@@ -556,6 +559,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				_allowResumeForManualSelection = false;
 			});
 			await _loadPlaylistIndex(nextIndex, autoplay: true);
+			return;
+		}
+
+		// If there is no playlist-based next item and Magic TV provider is present, use it
+		if (widget.requestMagicNext != null) {
+			debugPrint('Player: MagicTV next requested.');
+			try {
+				final url = await widget.requestMagicNext!();
+				if (url != null && url.isNotEmpty) {
+					debugPrint('Player: MagicTV next success. Opening new URL.');
+					await _player.open(mk.Media(url), play: true);
+					return;
+				}
+			} catch (e) {
+				debugPrint('Player: MagicTV next failed: $e');
+			}
 		}
 	}
 
@@ -1761,7 +1780,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 							// Next/Previous episode navigation
 							if (key == LogicalKeyboardKey.mediaSkipForward) {
-								if (_hasNextEpisode()) {
+								if (_hasNextEpisode() || widget.requestMagicNext != null) {
 									_goToNextEpisode();
 									return KeyEventResult.handled;
 								}
@@ -1908,9 +1927,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 													_isSeekingWithSlider = false;
 													_scheduleAutoHide();
 												},
-												onNext: _goToNextEpisode,
-												onPrevious: _goToPreviousEpisode,
-												hasNext: _hasNextEpisode(),
+												onNext: (_hasNextEpisode() || widget.requestMagicNext != null) ? _goToNextEpisode : null,
+												onPrevious: _hasPreviousEpisode() ? _goToPreviousEpisode : null,
+												hasNext: _hasNextEpisode() || widget.requestMagicNext != null,
 												hasPrevious: _hasPreviousEpisode(),
 												
 											),
