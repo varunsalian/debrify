@@ -260,10 +260,28 @@ class DebridService {
       } else if (response.statusCode == 401) {
         throw Exception('Invalid API key');
       } else {
-        throw Exception('Failed to unrestrict link: ${response.statusCode}');
+        // Try to parse the error response from Real Debrid
+        try {
+          final errorData = json.decode(response.body);
+          if (errorData is Map<String, dynamic> && errorData.containsKey('error')) {
+            throw Exception(errorData['error'].toString());
+          } else if (errorData is Map<String, dynamic> && errorData.containsKey('message')) {
+            throw Exception(errorData['message'].toString());
+          } else {
+            throw Exception('Failed to unrestrict link: ${response.statusCode} - ${response.body}');
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, return the raw response body
+          throw Exception('Failed to unrestrict link: ${response.statusCode} - ${response.body}');
+        }
       }
     } catch (e) {
-      throw Exception('Network error: $e');
+      if (e.toString().contains('Exception:')) {
+        // Re-throw our custom exceptions
+        rethrow;
+      } else {
+        throw Exception('Network error: $e');
+      }
     }
   }
 

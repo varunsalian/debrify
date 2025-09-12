@@ -47,6 +47,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   // Magnet input
   final TextEditingController _magnetController = TextEditingController();
   bool _isAddingMagnet = false;
+  
+  // Link input
+  final TextEditingController _linkController = TextEditingController();
+  bool _isAddingLink = false;
 
   @override
   void initState() {
@@ -68,6 +72,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     _torrentScrollController.dispose();
     _downloadScrollController.dispose();
     _magnetController.dispose();
+    _linkController.dispose();
     super.dispose();
   }
 
@@ -1531,6 +1536,43 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
+  String _getLinkUnrestrictErrorMessage(String errorMessage) {
+    final errorString = errorMessage.toLowerCase();
+    
+    // Handle specific Real Debrid error codes and messages
+    if (errorString.contains('infringing_file')) {
+      return 'This file contains copyrighted content and cannot be unrestricted.';
+    } else if (errorString.contains('invalid_link')) {
+      return 'Invalid or unsupported link format.';
+    } else if (errorString.contains('file_not_found')) {
+      return 'File not found or no longer available.';
+    } else if (errorString.contains('host_not_supported')) {
+      return 'This file hosting service is not supported by Real Debrid.';
+    } else if (errorString.contains('file_too_large')) {
+      return 'File size exceeds Real Debrid limits.';
+    } else if (errorString.contains('quota_exceeded')) {
+      return 'Real Debrid quota exceeded. Please try again later.';
+    } else if (errorString.contains('invalid api key') || errorString.contains('401')) {
+      return 'Invalid API key. Please check your Real Debrid settings.';
+    } else if (errorString.contains('account_locked') || errorString.contains('403')) {
+      return 'Your Real Debrid account is locked. Please check your account status.';
+    } else if (errorString.contains('network error') || errorString.contains('connection')) {
+      return 'Network connection error. Please check your internet connection.';
+    } else if (errorString.contains('timeout')) {
+      return 'Request timed out. Please try again.';
+    } else {
+      // For other errors, try to extract a clean message
+      if (errorString.contains('failed to unrestrict link:')) {
+        // Extract the status code and clean up the message
+        final parts = errorMessage.split(' - ');
+        if (parts.length > 1) {
+          return 'Failed to unrestrict link (${parts[0].split(': ').last}). Please try a different link.';
+        }
+      }
+      return 'Failed to unrestrict link. Please try a different link.';
+    }
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1611,12 +1653,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           ),
         ],
       ),
-      floatingActionButton: _selectedIndex == 0 ? FloatingActionButton(
-        onPressed: _showAddMagnetDialog,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _selectedIndex == 0 ? _showAddMagnetDialog : _showAddLinkDialog,
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
-      ) : null,
+      ),
     );
   }
 
@@ -2960,6 +3002,217 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       if (mounted) {
         setState(() {
           _isAddingMagnet = false;
+        });
+      }
+    }
+  }
+
+  // Link input methods
+  Future<void> _showAddLinkDialog() async {
+    // Auto-paste link from clipboard if available
+    await _autoPasteLink();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Add Link',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter a link to unrestrict:',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _linkController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'https://example.com/file.zip',
+                hintStyle: TextStyle(color: Colors.grey[600]),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF475569)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF475569)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF6366F1)),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              maxLines: 3,
+              minLines: 1,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Supported: Direct download links, file hosting services, etc.',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: Color(0xFF475569)),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _isAddingLink ? null : _addLink,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: const Color(0xFF6366F1),
+                  ),
+                  child: _isAddingLink
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Add'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _autoPasteLink() async {
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (clipboardData?.text != null) {
+      final text = clipboardData!.text!.trim();
+      // Check if it looks like a URL
+      if (text.startsWith('http://') || text.startsWith('https://')) {
+        _linkController.text = text;
+      }
+    }
+  }
+
+  bool _isValidLink(String link) {
+    final trimmedLink = link.trim();
+    return trimmedLink.startsWith('http://') || trimmedLink.startsWith('https://');
+  }
+
+  Future<void> _addLink() async {
+    final link = _linkController.text.trim();
+    if (link.isEmpty) {
+      _showError('Please enter a link');
+      return;
+    }
+
+    if (!_isValidLink(link)) {
+      _showError('Please enter a valid URL (must start with http:// or https://)');
+      return;
+    }
+
+    Navigator.of(context).pop(); // Close the dialog
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Unrestricting Link',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text(
+              'Processing link...',
+              style: TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This may take a few moments',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() {
+        _isAddingLink = true;
+      });
+    }
+
+    try {
+      // Unrestrict the link
+      await DebridService.unrestrictLink(_apiKey!, link);
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Clear the input
+      _linkController.clear();
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Link unrestricted successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // Refresh the downloads list
+      await _fetchDownloads(_apiKey!, reset: true);
+
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (mounted) {
+        // Show the actual Real Debrid error message with user-friendly formatting
+        final errorMessage = e.toString().replaceFirst('Exception: ', '');
+        final friendlyMessage = _getLinkUnrestrictErrorMessage(errorMessage);
+        _showError(friendlyMessage);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAddingLink = false;
         });
       }
     }
