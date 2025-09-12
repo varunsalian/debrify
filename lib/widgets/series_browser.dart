@@ -5,6 +5,9 @@ import '../models/series_playlist.dart';
 import '../services/episode_info_service.dart';
 import '../services/storage_service.dart';
 
+// Premium blue accent used throughout the playlist view
+const Color kPremiumBlue = Color(0xFF6366F1);
+
 class SeriesBrowser extends StatefulWidget {
   final SeriesPlaylist seriesPlaylist;
   final Function(int season, int episode) onEpisodeSelected;
@@ -228,9 +231,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF1A1A1A),
-              Color(0xFF0F0F0F),
-              Color(0xFF1A1A1A),
+              Color(0xFF0F172A),
+              Color(0xFF0B1220),
+              Color(0xFF0F172A),
             ],
           ),
         ),
@@ -268,10 +271,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE50914).withOpacity(0.2),
+                      color: kPremiumBlue.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: const Color(0xFFE50914).withOpacity(0.5),
+                        color: kPremiumBlue.withOpacity(0.5),
                         width: 1,
                       ),
                     ),
@@ -286,7 +289,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                         ),
                         icon: const Icon(
                           Icons.keyboard_arrow_down, 
-                          color: Color(0xFFE50914), 
+                          color: kPremiumBlue, 
                           size: 18
                         ),
                         items: widget.seriesPlaylist.seasons.map((season) {
@@ -422,7 +425,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       child: Container(
         decoration: BoxDecoration(
           color: isCurrentEpisode 
-            ? const Color(0xFFE50914).withOpacity(0.2)
+            ? kPremiumBlue.withOpacity(0.2)
             : isLastPlayed 
               ? const Color(0xFF059669).withOpacity(0.1)
               : isFinished
@@ -431,7 +434,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCurrentEpisode 
-              ? const Color(0xFFE50914)
+              ? kPremiumBlue
               : isLastPlayed 
                 ? const Color(0xFF059669)
                 : isFinished
@@ -442,7 +445,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           boxShadow: [
             BoxShadow(
               color: isCurrentEpisode 
-                ? const Color(0xFFE50914).withOpacity(0.3)
+                ? kPremiumBlue.withOpacity(0.3)
                 : Colors.black.withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 2),
@@ -512,13 +515,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  const Color(0xFFE50914),
-                                  const Color(0xFFE50914).withValues(alpha: 0.8),
+                                  kPremiumBlue,
+                                  kPremiumBlue.withValues(alpha: 0.8),
                                 ],
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFE50914).withValues(alpha: 0.5),
+                                  color: kPremiumBlue.withValues(alpha: 0.5),
                                   blurRadius: 4,
                                   offset: const Offset(0, 0),
                                 ),
@@ -539,14 +542,14 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                           color: Colors.black.withValues(alpha: 0.7),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: const Color(0xFFE50914).withValues(alpha: 0.8),
+                            color: kPremiumBlue.withValues(alpha: 0.8),
                             width: 1,
                           ),
                         ),
                         child: Text(
                           '${(progress * 100).round()}%',
                           style: const TextStyle(
-                            color: Color(0xFFE50914),
+                            color: kPremiumBlue,
                             fontSize: 8,
                             fontWeight: FontWeight.w600,
                           ),
@@ -561,11 +564,11 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE50914),
+                          color: kPremiumBlue,
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFE50914).withOpacity(0.5),
+                              color: kPremiumBlue.withOpacity(0.5),
                               blurRadius: 4,
                               offset: const Offset(0, 1),
                             ),
@@ -683,6 +686,22 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                     ),
                     
                     const SizedBox(height: 6),
+
+                    // Episode description
+                    if (episode.episodeInfo?.plot != null &&
+                        episode.episodeInfo!.plot!.isNotEmpty) ...[
+                      Text(
+                        episode.episodeInfo!.plot!,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                          height: 1.25,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                    ],
                     
                     // Metadata Row
                     Row(
@@ -691,7 +710,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE50914).withOpacity(0.2),
+                            color: kPremiumBlue.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -699,7 +718,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                                 ? episode.seasonEpisodeString
                                 : 'Episode ${index + 1}',
                             style: const TextStyle(
-                              color: Color(0xFFE50914),
+                              color: kPremiumBlue,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),
@@ -739,8 +758,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                           end: Alignment.centerRight,
                           colors: isCurrentEpisode
                               ? [
-                                  const Color(0xFFE50914),
-                                  const Color(0xFFE50914).withOpacity(0.8),
+                                  kPremiumBlue,
+                                  kPremiumBlue.withOpacity(0.8),
                                 ]
                               : isFinished
                                   ? [
@@ -756,7 +775,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                         boxShadow: [
                           BoxShadow(
                             color: isCurrentEpisode
-                                ? const Color(0xFFE50914).withOpacity(0.3)
+                                ? kPremiumBlue.withOpacity(0.3)
                                 : Colors.black.withOpacity(0.2),
                             blurRadius: 4,
                             offset: const Offset(0, 1),
