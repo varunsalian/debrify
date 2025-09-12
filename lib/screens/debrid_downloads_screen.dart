@@ -584,8 +584,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           await DebridService.deleteTorrent(_apiKey!, torrent.id);
           completed++;
           
-          // Update dialog state
-          setDialogState?.call(() {});
+          // Update dialog state only if not cancelled
+          if (!isCancelled && setDialogState != null) {
+            setDialogState!(() {});
+          }
           
           // Small delay to prevent overwhelming the API
           await Future.delayed(const Duration(milliseconds: 200));
@@ -593,13 +595,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           failedDeletes.add(torrent.filename);
           completed++;
           
-          // Update dialog state
-          setDialogState?.call(() {});
+          // Update dialog state only if not cancelled
+          if (!isCancelled && setDialogState != null) {
+            setDialogState!(() {});
+          }
         }
       }
 
-      // Close progress dialog
-      if (mounted) {
+      // Close progress dialog only if not already cancelled
+      if (mounted && !isCancelled) {
         Navigator.of(context).pop();
       }
 
@@ -611,11 +615,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           });
         }
 
+        // Refresh the list to load more items from next pages
+        if (mounted) {
+          await _fetchTorrents(_apiKey!, reset: true);
+        }
+
         // Show result message
         if (failedDeletes.isEmpty) {
           _showSuccess('All torrents deleted successfully!');
         } else {
           _showError('Deleted ${completed - failedDeletes.length} torrents. ${failedDeletes.length} failed to delete.');
+        }
+      } else {
+        // Operation was cancelled, refresh the list to show current state
+        if (mounted) {
+          await _fetchTorrents(_apiKey!, reset: true);
         }
       }
     } catch (e) {
@@ -623,6 +637,172 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       if (mounted) {
         Navigator.of(context).pop();
         _showError('Failed to delete torrents: ${e.toString()}');
+      }
+    }
+  }
+
+  Future<void> _handleDeleteAllDownloads() async {
+    if (_apiKey == null || _downloads.isEmpty) return;
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete All Downloads',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete all ${_downloads.length} downloads from Real Debrid? This action cannot be undone.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _showDeleteAllDownloadsProgressDialog();
+    }
+  }
+
+  Future<void> _showDeleteAllDownloadsProgressDialog() async {
+    bool isCancelled = false;
+    int completed = 0;
+    int total = _downloads.length;
+    List<String> failedDeletes = [];
+    StateSetter? setDialogState;
+
+    // Show progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, dialogStateSetter) {
+          setDialogState = dialogStateSetter;
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              'Deleting All Downloads',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Deleting downloads... ($completed/$total)',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                LinearProgressIndicator(
+                  value: total > 0 ? completed / total : 0,
+                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
+                ),
+                const SizedBox(height: 16),
+                if (failedDeletes.isNotEmpty)
+                  Text(
+                    'Failed: ${failedDeletes.length}',
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  isCancelled = true;
+                  Navigator.of(context).pop();
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    // Perform batch delete
+    try {
+      for (int i = 0; i < _downloads.length && !isCancelled; i++) {
+        final download = _downloads[i];
+        
+        try {
+          await DebridService.deleteDownload(_apiKey!, download.id);
+          completed++;
+          
+          // Update dialog state only if not cancelled
+          if (!isCancelled && setDialogState != null) {
+            setDialogState!(() {});
+          }
+          
+          // Small delay to prevent overwhelming the API
+          await Future.delayed(const Duration(milliseconds: 200));
+        } catch (e) {
+          failedDeletes.add(download.filename);
+          completed++;
+          
+          // Update dialog state only if not cancelled
+          if (!isCancelled && setDialogState != null) {
+            setDialogState!(() {});
+          }
+        }
+      }
+
+      // Close progress dialog only if not already cancelled
+      if (mounted && !isCancelled) {
+        Navigator.of(context).pop();
+      }
+
+      if (!isCancelled) {
+        // Update the downloads list
+        if (mounted) {
+          setState(() {
+            _downloads.clear();
+          });
+        }
+
+        // Refresh the list to load more items from next pages
+        if (mounted) {
+          await _fetchDownloads(_apiKey!, reset: true);
+        }
+
+        // Show result message
+        if (failedDeletes.isEmpty) {
+          _showSuccess('All downloads deleted successfully!');
+        } else {
+          _showError('Deleted ${completed - failedDeletes.length} downloads. ${failedDeletes.length} failed to delete.');
+        }
+      } else {
+        // Operation was cancelled, refresh the list to show current state
+        if (mounted) {
+          await _fetchDownloads(_apiKey!, reset: true);
+        }
+      }
+    } catch (e) {
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+        _showError('Failed to delete downloads: ${e.toString()}');
       }
     }
   }
@@ -1772,7 +1952,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   child: ElevatedButton.icon(
                     onPressed: _handleDeleteAllTorrents,
                     icon: const Icon(Icons.delete_sweep, size: 18),
-                    label: const Text('Delete All Torrents'),
+                    label: Text('Delete ${_torrents.length} Torrents'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFEF4444),
                       foregroundColor: Colors.white,
@@ -1921,34 +2101,66 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        if (_apiKey != null) {
-          await _fetchDownloads(_apiKey!, reset: true);
-        }
-      },
-      color: Colors.white,
-      backgroundColor: const Color(0xFF1E293B),
-      strokeWidth: 3,
-      child: ListView.builder(
-        controller: _downloadScrollController,
-        padding: const EdgeInsets.all(16),
-        itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == _downloads.length) {
-            // Loading more indicator
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
+    return Column(
+      children: [
+        // Delete All button
+        if (_downloads.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _handleDeleteAllDownloads,
+                    icon: const Icon(Icons.delete_sweep, size: 18),
+                    label: Text('Delete ${_downloads.length} Downloads'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEF4444),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        
+        // Downloads list
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              if (_apiKey != null) {
+                await _fetchDownloads(_apiKey!, reset: true);
+              }
+            },
+            color: Colors.white,
+            backgroundColor: const Color(0xFF1E293B),
+            strokeWidth: 3,
+            child: ListView.builder(
+              controller: _downloadScrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == _downloads.length) {
+                  // Loading more indicator
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
 
-          final download = _downloads[index];
-          return _buildDownloadCard(download);
-        },
-      ),
+                final download = _downloads[index];
+                return _buildDownloadCard(download);
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -2244,24 +2456,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         }
                       },
                       icon: const Icon(Icons.download_rounded, color: Color(0xFF10B981)),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: const Text(
-                        'Downloaded',
-                        style: TextStyle(
-                          color: Color(0xFF10B981),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
                     ),
                   ],
                 ),
