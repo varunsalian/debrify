@@ -307,7 +307,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     } else {
       // Multiple links - show popup with all files
       if (mounted) {
-        _showMultipleLinksDialog(torrent, showPlayButtons: true);
+        _showMultipleLinksDialog(torrent, showPlayButtons: false);
       }
     }
   }
@@ -348,7 +348,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     } else {
       // Multiple files - show popup with play options
       if (mounted) {
-        _showMultipleLinksDialog(torrent, showPlayButtons: true);
+        _showMultipleLinksDialog(torrent, showPlayButtons: false);
       }
     }
   }
@@ -592,8 +592,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 ),
               ],
             ),
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: DebridService.unrestrictLinks(_apiKey!, torrent.links),
+            child: FutureBuilder<Map<String, dynamic>>(
+              future: DebridService.getTorrentInfo(_apiKey!, torrent.id),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Container(
@@ -633,7 +633,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          'Preparing Files',
+                          'Loading Files',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -642,7 +642,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Unrestricting download links...',
+                          'Getting file information...',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[400],
@@ -691,7 +691,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          'Failed to Load Files',
+                          'Failed to Load File Info',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -733,11 +733,147 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   );
                 }
 
-                final unrestrictedLinks = snapshot.data!;
+                final torrentInfo = snapshot.data!;
+                final allFiles = torrentInfo['files'] as List<dynamic>? ?? [];
+                
+                // Get selected files from the torrent info
+                final selectedFilesFromTorrent = allFiles.where((file) => file['selected'] == 1).toList();
+                
+                // Only show files that are selected (selected: 1)
+                final files = selectedFilesFromTorrent;
+                
+                // If no files are selected, show empty state
+                if (files.isEmpty) {
+                  return Container(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.9,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Header
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+                          child: Column(
+                            children: [
+                              // Drag handle
+                              Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[600],
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Title
+                              Text(
+                                '${torrent.filename} (0 files)',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // Empty state message
+                        Expanded(
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                                        blurRadius: 15,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.folder_off_rounded,
+                                    color: Colors.white,
+                                    size: 32,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                const Text(
+                                  'No Files Available',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'No files are currently selected for download.\nPlease select files in Real Debrid first.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[400],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        
+                        // Close button
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFF475569),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: const Text(
+                                'Close',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                
+                // Create mapping from filtered file index to original file index
+                final Map<int, int> fileIndexMapping = {};
+                for (int i = 0; i < files.length; i++) {
+                  final file = files[i];
+                  final originalIndex = allFiles.indexOf(file);
+                  fileIndexMapping[i] = originalIndex;
+                }
+                
                 bool downloadingAll = false;
                 int addCount = 0;
                 final Set<int> added = {};
                 final Set<int> selectedFiles = {}; // Track selected files
+                final Map<int, bool> unrestrictingFiles = {}; // Track which files are being unrestricted
                 return StatefulBuilder(
                   builder: (context, setLocal) {
                     return Container(
@@ -764,7 +900,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                 const SizedBox(height: 16),
                                 // Simple title
                                 Text(
-                                  '${torrent.filename} (${unrestrictedLinks.length} files)',
+                                  '${torrent.filename} (${files.length} files)',
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -800,7 +936,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                       ),
                                       const Spacer(),
                                       Text(
-                                        '$addCount/${unrestrictedLinks.length}',
+                                        '$addCount/${files.length}',
                                         style: TextStyle(
                                           color: Colors.grey[400],
                                           fontWeight: FontWeight.w500,
@@ -813,7 +949,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                     borderRadius: BorderRadius.circular(8),
                                     child: LinearProgressIndicator(
                                       minHeight: 8,
-                                      value: unrestrictedLinks.isEmpty ? null : (addCount / unrestrictedLinks.length).clamp(0.0, 1.0),
+                                      value: files.isEmpty ? null : (addCount / files.length).clamp(0.0, 1.0),
                                       backgroundColor: Colors.grey[800],
                                       valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
                                     ),
@@ -828,16 +964,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                             child: ListView.separated(
                               padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
                               shrinkWrap: true,
-                              itemCount: unrestrictedLinks.length,
+                              itemCount: files.length,
                               separatorBuilder: (_, __) => const SizedBox(height: 12),
                               itemBuilder: (context, index) {
-                                final link = unrestrictedLinks[index];
-                                final fileName = (link['filename'] ?? 'Unknown file').toString();
-                                final fileSize = (link['filesize'] ?? 0) as int;
-                                final mimeType = (link['mimeType'] ?? '').toString();
-                                final isVideo = FileUtils.isVideoMimeType(mimeType);
+                                final file = files[index];
+                                String fileName = file['path']?.toString() ?? 'Unknown file';
+                                if (fileName.startsWith('/')) {
+                                  fileName = fileName.split('/').last;
+                                }
+                                final fileSize = (file['bytes'] ?? 0) as int;
+                                final isVideo = FileUtils.isVideoFile(fileName);
                                 final isAdded = added.contains(index);
                                 final isSelected = selectedFiles.contains(index);
+                                final isUnrestricting = unrestrictingFiles[index] ?? false;
 
                                 return _buildModernFileCard(
                                   fileName: fileName,
@@ -845,19 +984,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                   isVideo: isVideo,
                                   isAdded: isAdded,
                                   isSelected: isSelected,
+                                  isUnrestricting: isUnrestricting,
                                   showPlayButtons: showPlayButtons,
-                                  onPlay: () => _playUnrestricted(link),
-                                  onDownload: () async {
-                                    final url = (link['download'] ?? '').toString();
-                                    if (url.isEmpty) return;
-                                    setLocal(() => added.add(index));
-                                    await DownloadService.instance.enqueueDownload(
-                                      url: url,
-                                      fileName: fileName,
-                                      context: context,
-                                      torrentName: torrent.filename,
-                                    );
-                                  },
+                                  onPlay: () => _playFileOnDemand(torrent, fileIndexMapping[index]!, setLocal, unrestrictingFiles),
+                                  onDownload: () => _downloadFileOnDemand(torrent, fileIndexMapping[index]!, fileName, setLocal, added, unrestrictingFiles),
                                   onSelect: () {
                                     setLocal(() {
                                       if (isSelected) {
@@ -913,20 +1043,41 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                               final selectedIndices = selectedFiles.toList();
                                               for (var i = 0; i < selectedIndices.length; i++) {
                                                 final index = selectedIndices[i];
-                                                final link = unrestrictedLinks[index];
-                                                final url = (link['download'] ?? '').toString();
-                                                final fileName = (link['filename'] ?? 'file').toString();
-                                                if (url.isEmpty) continue;
-                                                await DownloadService.instance.enqueueDownload(
-                                                  url: url,
-                                                  fileName: fileName,
-                                                  context: context,
-                                                  torrentName: torrent.filename,
-                                                );
-                                                setLocal(() {
-                                                  added.add(index);
-                                                  addCount = i + 1;
-                                                });
+                                                final file = files[index];
+                                                String fileName = file['path']?.toString() ?? 'file';
+                                                if (fileName.startsWith('/')) {
+                                                  fileName = fileName.split('/').last;
+                                                }
+                                                
+                                                // Unrestrict the link for this file
+                                                try {
+                                                  setLocal(() {
+                                                    unrestrictingFiles[index] = true;
+                                                  });
+                                                  
+                                                  final originalIndex = fileIndexMapping[index]!;
+                                                  final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[originalIndex]);
+                                                  final url = (unrestrictResult['download'] ?? '').toString();
+                                                  
+                                                  if (url.isNotEmpty) {
+                                                    await DownloadService.instance.enqueueDownload(
+                                                      url: url,
+                                                      fileName: fileName,
+                                                      context: context,
+                                                      torrentName: torrent.filename,
+                                                    );
+                                                    setLocal(() {
+                                                      added.add(index);
+                                                      addCount = i + 1;
+                                                    });
+                                                  }
+                                                } catch (e) {
+                                                  // Handle error silently for batch operations
+                                                } finally {
+                                                  setLocal(() {
+                                                    unrestrictingFiles[index] = false;
+                                                  });
+                                                }
                                               }
                                               setLocal(() {
                                                 downloadingAll = false;
@@ -1020,21 +1171,42 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                     downloadingAll = true;
                                                     addCount = 0;
                                                   });
-                                                  for (var i = 0; i < unrestrictedLinks.length; i++) {
-                                                    final link = unrestrictedLinks[i];
-                                                    final url = (link['download'] ?? '').toString();
-                                                    final fileName = (link['filename'] ?? 'file').toString();
-                                                    if (url.isEmpty) continue;
-                                                    await DownloadService.instance.enqueueDownload(
-                                                      url: url,
-                                                      fileName: fileName,
-                                                      context: context,
-                                                      torrentName: torrent.filename,
-                                                    );
-                                                    setLocal(() {
-                                                      added.add(i);
-                                                      addCount = i + 1;
-                                                    });
+                                                  for (var i = 0; i < files.length; i++) {
+                                                    final file = files[i];
+                                                    String fileName = file['path']?.toString() ?? 'file';
+                                                    if (fileName.startsWith('/')) {
+                                                      fileName = fileName.split('/').last;
+                                                    }
+                                                    
+                                                    // Unrestrict the link for this file
+                                                    try {
+                                                      setLocal(() {
+                                                        unrestrictingFiles[i] = true;
+                                                      });
+                                                      
+                                                      final originalIndex = fileIndexMapping[i]!;
+                                                      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[originalIndex]);
+                                                      final url = (unrestrictResult['download'] ?? '').toString();
+                                                      
+                                                      if (url.isNotEmpty) {
+                                                        await DownloadService.instance.enqueueDownload(
+                                                          url: url,
+                                                          fileName: fileName,
+                                                          context: context,
+                                                          torrentName: torrent.filename,
+                                                        );
+                                                        setLocal(() {
+                                                          added.add(i);
+                                                          addCount = i + 1;
+                                                        });
+                                                      }
+                                                    } catch (e) {
+                                                      // Handle error silently for batch operations
+                                                    } finally {
+                                                      setLocal(() {
+                                                        unrestrictingFiles[i] = false;
+                                                      });
+                                                    }
                                                   }
                                                   setLocal(() => downloadingAll = false);
                                                   if (mounted) {
@@ -1057,7 +1229,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                             const SizedBox(width: 12),
                                                             Expanded(
                                                               child: Text(
-                                                                'Added ${unrestrictedLinks.length} downloads',
+                                                                'Added ${files.length} downloads',
                                                                 style: const TextStyle(fontWeight: FontWeight.w500),
                                                               ),
                                                             ),
@@ -1079,7 +1251,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                 )
                                               : const Icon(Icons.download_rounded, color: Colors.white),
                                           label: Text(
-                                            downloadingAll ? 'Adding $addCount/${unrestrictedLinks.length}…' : 'Download All',
+                                            downloadingAll ? 'Adding $addCount/${files.length}…' : 'Download All',
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w600,
@@ -1697,7 +1869,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                           : const Icon(Icons.copy, size: 18),
                       label: Text(
                         torrent.links.length > 1 
-                          ? 'File Options (${torrent.links.length})'
+                          ? 'Download Options (${torrent.links.length})'
                           : 'Copy Download Link',
                       ),
                       style: TextButton.styleFrom(
@@ -2003,25 +2175,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             ),
           ),
         ],
-      ),
-    );
-  }
-
-
-
-  void _playUnrestricted(Map<String, dynamic> link) {
-    final downloadLink = (link['download'] ?? '').toString();
-    final fileName = (link['filename'] ?? 'Video').toString();
-    final fileSize = (link['filesize'] ?? 0) as int;
-    if (downloadLink.isEmpty) return;
-    Navigator.of(context).pop();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => VideoPlayerScreen(
-          videoUrl: downloadLink,
-          title: fileName,
-          subtitle: Formatters.formatFileSize(fileSize),
-        ),
       ),
     );
   }
@@ -2628,12 +2781,98 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
+  // New on-demand action handlers
+  Future<void> _playFileOnDemand(RDTorrent torrent, int index, StateSetter setLocal, Map<int, bool> unrestrictingFiles) async {
+    if (_apiKey == null) return;
+    
+    try {
+      setLocal(() {
+        unrestrictingFiles[index] = true;
+      });
+      
+      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
+      final downloadLink = unrestrictResult['download']?.toString() ?? '';
+      final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
+      
+      if (downloadLink.isNotEmpty) {
+        // Check if it's actually a video using MIME type
+        if (FileUtils.isVideoMimeType(mimeType)) {
+          if (mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => VideoPlayerScreen(
+                  videoUrl: downloadLink,
+                  title: torrent.filename,
+                  subtitle: 'File ${index + 1}',
+                ),
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            _showError('This file is not a video (MIME type: $mimeType)');
+          }
+        }
+      } else {
+        if (mounted) {
+          _showError('Failed to get download link');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Failed to load video: ${e.toString()}');
+      }
+    } finally {
+      setLocal(() {
+        unrestrictingFiles[index] = false;
+      });
+    }
+  }
+
+  Future<void> _downloadFileOnDemand(RDTorrent torrent, int index, String fileName, StateSetter setLocal, Set<int> added, Map<int, bool> unrestrictingFiles) async {
+    if (_apiKey == null) return;
+    
+    try {
+      setLocal(() {
+        unrestrictingFiles[index] = true;
+      });
+      
+      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
+      final downloadLink = unrestrictResult['download']?.toString() ?? '';
+      
+      if (downloadLink.isNotEmpty) {
+        await DownloadService.instance.enqueueDownload(
+          url: downloadLink,
+          fileName: fileName,
+          context: context,
+          torrentName: torrent.filename,
+        );
+        setLocal(() {
+          added.add(index);
+        });
+      } else {
+        if (mounted) {
+          _showError('Failed to get download link');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Failed to get download link: ${e.toString()}');
+      }
+    } finally {
+      setLocal(() {
+        unrestrictingFiles[index] = false;
+      });
+    }
+  }
+
   Widget _buildModernFileCard({
     required String fileName,
     required int fileSize,
     required bool isVideo,
     required bool isAdded,
     required bool isSelected,
+    required bool isUnrestricting,
     required bool showPlayButtons,
     required VoidCallback onPlay,
     required VoidCallback onDownload,
@@ -2810,11 +3049,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                   ],
                                 ),
                                 child: FilledButton.icon(
-                                  onPressed: onPlay,
-                                  icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
-                                  label: const Text(
-                                    'Play',
-                                    style: TextStyle(
+                                  onPressed: isUnrestricting ? null : onPlay,
+                                  icon: isUnrestricting
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
+                                        )
+                                      : const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                                  label: Text(
+                                    isUnrestricting ? 'Loading...' : 'Play',
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
@@ -2854,14 +3102,23 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                 ] : null,
                               ),
                               child: FilledButton.icon(
-                                onPressed: isAdded ? null : onDownload,
-                                icon: Icon(
-                                  isAdded ? Icons.check_circle_rounded : Icons.download_rounded,
-                                  color: isAdded ? Colors.white : Colors.grey[300],
-                                  size: 18,
-                                ),
+                                onPressed: (isAdded || isUnrestricting) ? null : onDownload,
+                                icon: isUnrestricting
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+                                        ),
+                                      )
+                                    : Icon(
+                                        isAdded ? Icons.check_circle_rounded : Icons.download_rounded,
+                                        color: isAdded ? Colors.white : Colors.grey[300],
+                                        size: 18,
+                                      ),
                                 label: Text(
-                                  isAdded ? 'Added' : 'Download',
+                                  isUnrestricting ? 'Getting Link...' : (isAdded ? 'Added' : 'Download'),
                                   style: TextStyle(
                                     color: isAdded ? Colors.white : Colors.grey[300],
                                     fontWeight: FontWeight.w600,
