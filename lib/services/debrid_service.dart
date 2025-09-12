@@ -299,6 +299,8 @@ class DebridService {
   // Delete torrent
   static Future<void> deleteTorrent(String apiKey, String torrentId) async {
     try {
+      // ignore: avoid_print
+      print('Debrid: Deleting torrent $torrentId');
       final response = await http.delete(
         Uri.parse('$_baseUrl/torrents/delete/$torrentId'),
         headers: {
@@ -310,8 +312,13 @@ class DebridService {
         if (response.statusCode == 401) {
           throw Exception('Invalid API key');
         } else {
+          // ignore: avoid_print
+          print('Debrid: Failed to delete torrent $torrentId. Status ${response.statusCode}');
           throw Exception('Failed to delete torrent: ${response.statusCode}');
         }
+      } else {
+        // ignore: avoid_print
+        print('Debrid: Deleted torrent $torrentId');
       }
     } catch (e) {
       throw Exception('Network error: $e');
@@ -483,7 +490,15 @@ class DebridService {
         // ignore: avoid_print
         print('Debrid: Selecting all video files. count=${videoFiles.length}');
         final allVideoIds = videoFiles.map((file) => file['id'] as int).toList();
-        await selectFiles(apiKey, torrentId, allVideoIds);
+        try {
+          await selectFiles(apiKey, torrentId, allVideoIds);
+        } catch (e) {
+          // Selection failed (e.g., 202 or other). Clean up and surface error.
+          // ignore: avoid_print
+          print('Debrid: selectFiles(all videos) failed for $torrentId: $e. Deleting.');
+          await deleteTorrent(apiKey, torrentId);
+          throw Exception('Failed to select files for Real Debrid torrent: $e');
+        }
 
         // Wait briefly and fetch updated links
         await Future.delayed(const Duration(seconds: 2));
@@ -510,7 +525,14 @@ class DebridService {
           if (largestVideoId != null) {
             // ignore: avoid_print
             print('Debrid: Selecting largest video id=$largestVideoId size=$largestVideoSize');
-            await selectFiles(apiKey, torrentId, [largestVideoId]);
+            try {
+              await selectFiles(apiKey, torrentId, [largestVideoId]);
+            } catch (e) {
+              // ignore: avoid_print
+              print('Debrid: selectFiles(largest video) failed for $torrentId: $e. Deleting.');
+              await deleteTorrent(apiKey, torrentId);
+              throw Exception('Failed to select files for Real Debrid torrent: $e');
+            }
             await Future.delayed(const Duration(seconds: 2));
             final updatedInfo2 = await getTorrentInfo(apiKey, torrentId);
             links = (updatedInfo2['links'] as List<dynamic>? ?? const []);

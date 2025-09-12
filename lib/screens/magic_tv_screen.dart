@@ -22,6 +22,14 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
+  // Prefetch state
+  static const int _minPrepared = 6; // maintain at least 6 prepared items
+  static const int _lookaheadWindow = 10; // window near head to keep prepared
+  bool _prefetchRunning = false;
+  bool _prefetchStopRequested = false;
+  Future<void>? _prefetchTask;
+  String? _activeApiKey;
+  final Set<String> _inflightInfohashes = {};
 
   @override
   void dispose() {
@@ -211,6 +219,9 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       // Navigate to the player with a Next callback
       if (!mounted) return;
       debugPrint('MagicTV: Launching player. Remaining queue=${_queue.length}');
+      // Start background prefetch while player is active
+      _activeApiKey = apiKey;
+      _startPrefetch();
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
@@ -220,6 +231,8 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
           ),
         ),
       );
+      // Stop prefetch when player exits
+      await _stopPrefetch();
     } finally {
       if (mounted) {
         setState(() {
@@ -321,6 +334,153 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
         ],
       ),
     );
+  }
+
+  // ===================== Prefetcher =====================
+
+  void _startPrefetch() {
+    if (_prefetchRunning || _activeApiKey == null || _activeApiKey!.isEmpty) {
+      return;
+    }
+    _prefetchRunning = true;
+    _prefetchStopRequested = false;
+    debugPrint('MagicTV: Prefetch started.');
+    _prefetchTask = _runPrefetchLoop();
+  }
+
+  Future<void> _stopPrefetch() async {
+    if (!_prefetchRunning) return;
+    _prefetchStopRequested = true;
+    try {
+      await _prefetchTask;
+    } catch (_) {}
+    _prefetchRunning = false;
+    _prefetchTask = null;
+    _inflightInfohashes.clear();
+    debugPrint('MagicTV: Prefetch stopped.');
+  }
+
+  Future<void> _runPrefetchLoop() async {
+    while (mounted && !_prefetchStopRequested) {
+      try {
+        final prepared = _countPreparedInLookahead();
+        if (prepared >= _minPrepared) {
+          await Future.delayed(const Duration(milliseconds: 750));
+          continue;
+        }
+
+        // Find first unprepared torrent within lookahead window and prefetch it
+        final idx = _findUnpreparedTorrentIndexInLookahead();
+        if (idx == -1) {
+          // nothing to prefetch near head; small idle
+          await Future.delayed(const Duration(milliseconds: 750));
+          continue;
+        }
+
+        await _prefetchOneAtIndex(idx);
+        // brief yield
+        await Future.delayed(const Duration(milliseconds: 50));
+      } catch (e) {
+        debugPrint('MagicTV: Prefetch loop error: $e');
+        await Future.delayed(const Duration(seconds: 1));
+      }
+    }
+  }
+
+  int _countPreparedInLookahead() {
+    final end = _queue.length < _lookaheadWindow ? _queue.length : _lookaheadWindow;
+    int count = 0;
+    for (int i = 0; i < end; i++) {
+      final item = _queue[i];
+      if (item is Map && item['type'] == 'rd_restricted') {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  int _findUnpreparedTorrentIndexInLookahead() {
+    final end = _queue.length < _lookaheadWindow ? _queue.length : _lookaheadWindow;
+    for (int i = 0; i < end; i++) {
+      final item = _queue[i];
+      if (item is Torrent && !_inflightInfohashes.contains(item.infohash)) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  Future<void> _prefetchOneAtIndex(int idx) async {
+    if (_activeApiKey == null || _activeApiKey!.isEmpty) return;
+    if (idx < 0 || idx >= _queue.length) return;
+    final item = _queue[idx];
+    if (item is! Torrent) return;
+    final infohash = item.infohash;
+    _inflightInfohashes.add(infohash);
+    debugPrint('MagicTV: Prefetching torrent at idx=$idx name="${item.name}"');
+    try {
+      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+      final result = await DebridService.addTorrentToDebridPreferVideos(_activeApiKey!, magnetLink);
+      final String torrentId = result['torrentId'] as String? ?? '';
+      final List<dynamic> rdLinks = (result['links'] as List<dynamic>? ?? const []);
+
+      if (rdLinks.isEmpty) {
+        // Nothing ready; drop this torrent from queue
+        if (idx < _queue.length && identical(_queue[idx], item)) {
+          _queue.removeAt(idx);
+        }
+        debugPrint('MagicTV: Prefetch: no links; removed torrent at idx=$idx');
+        return;
+      }
+
+      // Convert this queue slot to rd_restricted using first link
+      final String headLink = rdLinks.first.toString();
+      if (headLink.isNotEmpty) {
+        if (!_seenRestrictedLinks.contains(headLink) && !_seenLinkWithTorrentId.contains('$torrentId|$headLink')) {
+          _seenRestrictedLinks.add(headLink);
+          _seenLinkWithTorrentId.add('$torrentId|$headLink');
+        }
+        if (idx < _queue.length && identical(_queue[idx], item)) {
+          _queue[idx] = {
+            'type': 'rd_restricted',
+            'restrictedLink': headLink,
+            'torrentId': torrentId,
+          };
+        }
+      }
+
+      // Append remaining links to tail (dedup)
+      if (rdLinks.length > 1) {
+        int appended = 0;
+        for (int i = 1; i < rdLinks.length; i++) {
+          final String link = rdLinks[i]?.toString() ?? '';
+          if (link.isEmpty) continue;
+          final combo = '$torrentId|$link';
+          if (_seenRestrictedLinks.contains(link) || _seenLinkWithTorrentId.contains(combo)) {
+            continue;
+          }
+          _seenRestrictedLinks.add(link);
+          _seenLinkWithTorrentId.add(combo);
+          _queue.add({
+            'type': 'rd_restricted',
+            'restrictedLink': link,
+            'torrentId': torrentId,
+          });
+          appended++;
+        }
+        if (appended > 0) {
+          debugPrint('MagicTV: Prefetch: appended $appended RD links to tail. queueSize=${_queue.length}');
+        }
+      }
+    } catch (e) {
+      // On failure, drop this torrent so we don't block the window
+      if (idx < _queue.length && identical(_queue[idx], item)) {
+        _queue.removeAt(idx);
+      }
+      debugPrint('MagicTV: Prefetch failed for $infohash: $e');
+    } finally {
+      _inflightInfohashes.remove(infohash);
+    }
   }
 }
 
