@@ -470,6 +470,158 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
+  Future<void> _handleDeleteAllTorrents() async {
+    if (_apiKey == null || _torrents.isEmpty) return;
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete All Torrents',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete all ${_torrents.length} torrents from Real Debrid? This action cannot be undone.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _showDeleteAllProgressDialog();
+    }
+  }
+
+  Future<void> _showDeleteAllProgressDialog() async {
+    bool isCancelled = false;
+    int completed = 0;
+    int total = _torrents.length;
+    List<String> failedDeletes = [];
+    StateSetter? setDialogState;
+
+    // Show progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, dialogStateSetter) {
+          setDialogState = dialogStateSetter;
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              'Deleting All Torrents',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Deleting torrents... ($completed/$total)',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                LinearProgressIndicator(
+                  value: total > 0 ? completed / total : 0,
+                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
+                ),
+                const SizedBox(height: 16),
+                if (failedDeletes.isNotEmpty)
+                  Text(
+                    'Failed: ${failedDeletes.length}',
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  isCancelled = true;
+                  Navigator.of(context).pop();
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    // Perform batch delete
+    try {
+      for (int i = 0; i < _torrents.length && !isCancelled; i++) {
+        final torrent = _torrents[i];
+        
+        try {
+          await DebridService.deleteTorrent(_apiKey!, torrent.id);
+          completed++;
+          
+          // Update dialog state
+          setDialogState?.call(() {});
+          
+          // Small delay to prevent overwhelming the API
+          await Future.delayed(const Duration(milliseconds: 200));
+        } catch (e) {
+          failedDeletes.add(torrent.filename);
+          completed++;
+          
+          // Update dialog state
+          setDialogState?.call(() {});
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      if (!isCancelled) {
+        // Update the torrents list
+        if (mounted) {
+          setState(() {
+            _torrents.clear();
+          });
+        }
+
+        // Show result message
+        if (failedDeletes.isEmpty) {
+          _showSuccess('All torrents deleted successfully!');
+        } else {
+          _showError('Deleted ${completed - failedDeletes.length} torrents. ${failedDeletes.length} failed to delete.');
+        }
+      }
+    } catch (e) {
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+        _showError('Failed to delete torrents: ${e.toString()}');
+      }
+    }
+  }
+
   Future<void> _handleDeleteDownload(DebridDownload download) async {
     if (_apiKey == null) return;
 
@@ -1566,34 +1718,66 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        if (_apiKey != null) {
-          await _fetchTorrents(_apiKey!, reset: true);
-        }
-      },
-      color: Colors.white,
-      backgroundColor: const Color(0xFF1E293B),
-      strokeWidth: 3,
-      child: ListView.builder(
-        controller: _torrentScrollController,
-        padding: const EdgeInsets.all(16),
-        itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == _torrents.length) {
-            // Loading more indicator
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
+    return Column(
+      children: [
+        // Delete All button
+        if (_torrents.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _handleDeleteAllTorrents,
+                    icon: const Icon(Icons.delete_sweep, size: 18),
+                    label: const Text('Delete All Torrents'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEF4444),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        
+        // Torrents list
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              if (_apiKey != null) {
+                await _fetchTorrents(_apiKey!, reset: true);
+              }
+            },
+            color: Colors.white,
+            backgroundColor: const Color(0xFF1E293B),
+            strokeWidth: 3,
+            child: ListView.builder(
+              controller: _torrentScrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == _torrents.length) {
+                  // Loading more indicator
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
 
-          final torrent = _torrents[index];
-          return _buildTorrentCard(torrent);
-        },
-      ),
+                final torrent = _torrents[index];
+                return _buildTorrentCard(torrent);
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
