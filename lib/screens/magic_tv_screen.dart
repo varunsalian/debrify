@@ -326,11 +326,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             _status = 'Found ${_queue.length} results... preparing first play';
           });
 
-          // Start prefetch early on first influx as soon as we have an API key
-          if (!_prefetchRunning && apiKeyEarly != null && apiKeyEarly.isNotEmpty) {
-            _activeApiKey = apiKeyEarly;
-            _startPrefetch();
-          }
+          // Do not start prefetch until player launches
 
           // Try to launch player as soon as a playable stream is available
           if (!_launchedPlayer) {
@@ -343,6 +339,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 Navigator.of(_progressSheetContext!).pop();
               }
               debugPrint('DebrifyTV: Launching player early. Remaining queue=${_queue.length}');
+
+              // Start background prefetch only while player is active
+              if (apiKeyEarly != null && apiKeyEarly.isNotEmpty) {
+                _activeApiKey = apiKeyEarly;
+                _startPrefetch();
+              }
 
               // Stage 2: Expand search in background to full (500) WHILE user watches
               if (!_stage2Running) {

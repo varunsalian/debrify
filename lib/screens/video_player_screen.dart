@@ -378,6 +378,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		// Mark the current episode as finished if it's a series
 		await _markCurrentEpisodeAsFinished();
 		
+		// Debrify TV (no playlist): auto-advance using provider if available
+		if ((widget.playlist == null || widget.playlist!.isEmpty) && widget.requestMagicNext != null) {
+			await _goToNextEpisode();
+			return;
+		}
+		
 		if (widget.playlist == null || widget.playlist!.isEmpty) return;
 		
 		// Find the next logical episode
