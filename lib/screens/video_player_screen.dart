@@ -1914,16 +1914,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								final candidate = _position - const Duration(seconds: 10);
 								final newPos = candidate < Duration.zero ? Duration.zero : (candidate > _duration ? _duration : candidate);
 								_player.seek(newPos);
-								_controlsVisible.value = true;
-								_scheduleAutoHide();
+								// Don't show controls or any overlay for keyboard seeking
 								return KeyEventResult.handled;
 							}
 							if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.mediaFastForward) {
 								final candidate = _position + const Duration(seconds: 10);
 								final newPos = candidate < Duration.zero ? Duration.zero : (candidate > _duration ? _duration : candidate);
 								_player.seek(newPos);
-								_controlsVisible.value = true;
-								_scheduleAutoHide();
+								// Don't show controls or any overlay for keyboard seeking
 								return KeyEventResult.handled;
 							}
 
