@@ -159,6 +159,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	// Orientation
 	bool _landscapeLocked = false;
 
+	// Rainbow next animation
+	late AnimationController _rainbowController;
+	late Animation<double> _rainbowOpacity;
+	bool _rainbowActive = false;
+	bool _transitionRunning = false;
+	Timer? _transitionStopTimer;
+	Timer? _transitionPhaseTimer;
+	int _transitionPhase = 1; // 1 = static, 2 = reveal
+	DateTime? _transitionPhase2Started;
+
 	// Dynamic title for Debrify TV (no-playlist) flow
 	String _dynamicTitle = '';
 
@@ -178,6 +188,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Initialize the player asynchronously
 		_initializePlayer();
+
+		// Init rainbow animation
+		_rainbowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+		_rainbowOpacity = CurvedAnimation(parent: _rainbowController, curve: Curves.easeInOut);
 	}
 
 	Future<void> _initializePlayer() async {
@@ -313,6 +327,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		});
 		_playSub = _player.stream.playing.listen((p) {
 			_isPlaying = p;
+			if (p && _transitionRunning) {
+				// Total 3s: 1.5s static (phase 1) + 1.5s reveal (phase 2)
+				_transitionStopTimer?.cancel();
+				_transitionPhaseTimer?.cancel();
+				_transitionPhase = 1;
+				_transitionPhase2Started = null;
+				debugPrint('Player: Playback started; overlay phase 1 (static) 1500ms.');
+				_transitionPhaseTimer = Timer(const Duration(milliseconds: 1500), () {
+					_transitionPhase = 2;
+					_transitionPhase2Started = DateTime.now();
+					if (mounted) setState(() {});
+					debugPrint('Player: Overlay phase 2 (cinematic bars) 1500ms.');
+				});
+				_transitionStopTimer = Timer(const Duration(milliseconds: 3000), () {
+					_rainbowController.stop();
+					_transitionRunning = false;
+					_rainbowActive = false;
+					if (mounted) setState(() {});
+					debugPrint('Player: Transition overlay stopped (3s complete).');
+				});
+			}
 			if (mounted) setState(() {});
 		});
 		// No need to observe video params for sizing; we use a fixed logical surface
@@ -393,6 +428,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		// Mark this as auto-advancing to the next episode
 		_isAutoAdvancing = true;
 		await _loadPlaylistIndex(nextIndex, autoplay: true);
+	}
+
+	void _startTransitionOverlay() {
+		if (!mounted) return;
+		_rainbowActive = true;
+		_transitionRunning = true;
+		_transitionStopTimer?.cancel();
+		_transitionPhaseTimer?.cancel();
+		_transitionPhase = 1;
+		debugPrint('Player: Transition overlay started.');
+		_rainbowController.repeat(period: const Duration(milliseconds: 800));
+		if (mounted) setState(() {});
 	}
 
 	/// Get the current episode title for display
@@ -584,6 +631,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Navigate to next episode
 	Future<void> _goToNextEpisode() async {
+		// Start visual transition immediately and pause current playback
+		_startTransitionOverlay();
+		try { await _player.pause(); } catch (_) {}
 		final nextIndex = _findNextEpisodeIndex();
 		if (nextIndex != -1) {
 			// Mark this as a manual episode selection
@@ -764,6 +814,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		_paramsSub?.cancel();
 		_completedSub?.cancel();
 		_player.dispose();
+		_transitionStopTimer?.cancel();
+		_rainbowController.dispose();
 		// Restore system brightness when exiting the player
 		try { ScreenBrightness().resetScreenBrightness(); } catch (_) {}
 		WakelockPlus.disable();
@@ -1423,6 +1475,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			),
 		);
 	}
+
+	// Fullscreen transition overlay: rainbow or fallback static
+	Widget _buildTransitionOverlay() {
+		return Positioned.fill(
+			child: IgnorePointer(
+				ignoring: true,
+				child: AnimatedBuilder(
+					animation: _rainbowController,
+					builder: (_, __) => Stack(
+						fit: StackFit.expand,
+						children: [
+							if (_transitionPhase == 1)
+								CustomPaint(painter: _TvStaticPainter(seed: (_rainbowController.value * 10000).floor())),
+							if (_transitionPhase == 2)
+								CustomPaint(painter: _TvStaticPainter(seed: (_rainbowController.value * 20000).floor())),
+						],
+					),
+				),
+			),
+		);
+	}
 	
 	// Get the custom aspect ratio for specific modes
 	double? _getCustomAspectRatio() {
@@ -1864,6 +1937,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 									)
 							else
 								const Center(child: CircularProgressIndicator(color: Colors.white)),
+							// Transition overlay above video
+							if (_rainbowActive) _buildTransitionOverlay(),
 							// DebrifyTV watermark (non-interactive) - ESPN style
 							if (widget.showWatermark)
 								Positioned(
@@ -2630,6 +2705,70 @@ class _DoubleTapRipplePainter extends CustomPainter {
 	}
 	@override
 	bool shouldRepaint(covariant _DoubleTapRipplePainter oldDelegate) => true;
+}
+
+class _TvStaticPainter extends CustomPainter {
+	final int seed;
+	_TvStaticPainter({required this.seed});
+	@override
+	void paint(Canvas canvas, Size size) {
+		final rect = Offset.zero & size;
+		// Opaque black base
+		canvas.drawRect(rect, Paint()..color = Colors.black);
+		// Dense white/gray noise dots
+		final rnd = math.Random(seed);
+		final paint = Paint()..isAntiAlias = false;
+		final density = 0.08; // proportion of pixels approximated via rects
+		final int dots = (size.width * size.height * density / 4).ceil();
+		for (int i = 0; i < dots; i++) {
+			final dx = rnd.nextDouble() * size.width;
+			final dy = rnd.nextDouble() * size.height;
+			final shade = rnd.nextBool() ? 1.0 : (0.75 + rnd.nextDouble() * 0.25); // white or light gray
+			paint.color = Color.fromRGBO(
+				(shade * 255).toInt(),
+				(shade * 255).toInt(),
+				(shade * 255).toInt(),
+				1.0,
+			);
+			final w = 2.0;
+			final h = 2.0;
+			canvas.drawRect(Rect.fromLTWH(dx, dy, w, h), paint);
+		}
+	}
+	@override
+	bool shouldRepaint(covariant _TvStaticPainter oldDelegate) => true;
+}
+
+class _BloomOverlayPainter extends CustomPainter {
+  final DateTime? startedAt;
+  _BloomOverlayPainter({required this.startedAt});
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (startedAt == null) return;
+    final elapsedMs = DateTime.now().difference(startedAt!).inMilliseconds.toDouble();
+    final t = (elapsedMs / 1500.0).clamp(0.0, 1.0);
+    // Ease in-out opacity using a smooth curve
+    final ease = Curves.easeInOut.transform(t);
+    final opacity = (0.0 + 0.18 * (ease < 0.5 ? (ease * 2.0) : (1.0 - (ease - 0.5) * 2.0))).clamp(0.0, 0.18);
+
+    final rect = Offset.zero & size;
+    // Radial soft white bloom at center
+    final gradient = RadialGradient(
+      center: Alignment.center,
+      radius: 0.9,
+      colors: [
+        Colors.white.withOpacity(opacity),
+        Colors.white.withOpacity(0.0),
+      ],
+      stops: const [0.0, 1.0],
+    );
+    final paint = Paint()
+      ..shader = gradient.createShader(rect)
+      ..blendMode = BlendMode.screen;
+    canvas.drawRect(rect, paint);
+  }
+  @override
+  bool shouldRepaint(covariant _BloomOverlayPainter oldDelegate) => true;
 }
 
 // Helpers for tap gating

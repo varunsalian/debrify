@@ -58,6 +58,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _prefetchStopRequested = true;
     _stopPrefetch();
+    // Cancel Stage 2 if running
+    _stage2Running = false;
     _progress.dispose();
     _keywordsController.dispose();
     super.dispose();
@@ -424,6 +426,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _lastSearchAt = DateTime.now();
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _status = 'Search failed: $e';
       });
@@ -435,13 +438,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         await StorageService.setMaxTorrentsCsvResults(restoreTo);
         debugPrint('DebrifyTV: Restored Torrents CSV max to $restoreTo after Stage 1');
       }
-      setState(() {
-        _isBusy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
     }
 
     if (!mounted) return;
     if (_queue.isEmpty) {
+      if (!mounted) return;
       setState(() {
         _status = 'No results found';
       });
