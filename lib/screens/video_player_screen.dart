@@ -637,8 +637,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Navigate to next episode
 	Future<void> _goToNextEpisode() async {
-		// Start visual transition immediately and pause current playback
-		_startTransitionOverlay();
+		// Only show transition overlay for Debrify TV content (when requestMagicNext is available)
+		final isDebrifyTV = widget.requestMagicNext != null;
+		if (isDebrifyTV) {
+			_startTransitionOverlay();
+		}
 		try { await _player.pause(); } catch (_) {}
 		final nextIndex = _findNextEpisodeIndex();
 		if (nextIndex != -1) {
