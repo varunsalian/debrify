@@ -1194,6 +1194,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			const bottomBar = 72.0;
 			if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) return;
 		}
+		
+		// Check if we're on Android and if the tap is in the far right area for next episode
+		final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+		final farRightThreshold = size.width * 0.8; // Far right 20% of screen
+		
+		if (isAndroid && localPos.dx > farRightThreshold) {
+			// Double tap on far right for next episode on Android
+			if (_hasNextEpisode() || widget.requestMagicNext != null) {
+				_ripple = _DoubleTapRipple(
+					center: localPos,
+					icon: Icons.skip_next_rounded,
+				);
+				setState(() {});
+				Future.delayed(const Duration(milliseconds: 450), () {
+					if (mounted) setState(() => _ripple = null);
+				});
+				await _goToNextEpisode();
+				return;
+			}
+		}
+		
+		// Default seek behavior for left/right taps
 		final isLeft = localPos.dx < size.width / 2;
 		final delta = const Duration(seconds: 10);
 		final target = _position + (isLeft ? -delta : delta);
@@ -1905,6 +1927,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								return KeyEventResult.handled;
 							}
 
+							// N key for next episode (Mac)
+							if (key == LogicalKeyboardKey.keyN) {
+								if (_hasNextEpisode() || widget.requestMagicNext != null) {
+									_goToNextEpisode();
+									return KeyEventResult.handled;
+								}
+							}
+							
 							// Next/Previous episode navigation
 							if (key == LogicalKeyboardKey.mediaSkipForward) {
 								if (_hasNextEpisode() || widget.requestMagicNext != null) {
