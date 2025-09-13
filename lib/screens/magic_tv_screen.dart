@@ -40,6 +40,10 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
   bool _progressOpen = false;
   int _lastQueueSize = 0;
   DateTime? _lastSearchAt;
+  bool _launchedPlayer = false;
+  bool _stage2Running = false;
+  int? _originalMaxCap;
+  bool _capRestoredByStage2 = false;
 
   @override
   void dispose() {
@@ -60,6 +64,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
   }
 
   Future<void> _watch() async {
+    _launchedPlayer = false;
     void _log(String m) {
       final copy = List<String>.from(_progress.value)..add(m);
       _progress.value = copy;
@@ -162,42 +167,240 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
 
     _log('Searching providers with your keywords');
 
-    // Force 500 results from Torrents CSV during this search, without permanently changing user settings
-    final prevMax = await StorageService.getMaxTorrentsCsvResults();
-    debugPrint('MagicTV: Temporarily bumping Torrents CSV max from $prevMax to 500');
+    // Stage 1: Use a small cap to get the first playable quickly
+    const int _stage1Cap = 50;
+    _originalMaxCap = await StorageService.getMaxTorrentsCsvResults();
+    debugPrint('MagicTV: Temporarily setting Torrents CSV max from ${_originalMaxCap} to $_stage1Cap for Stage 1');
     try {
-      await StorageService.setMaxTorrentsCsvResults(500);
+      await StorageService.setMaxTorrentsCsvResults(_stage1Cap);
+
+      // Require RD API key early so we can prefetch as soon as results arrive
+      final apiKeyEarly = await StorageService.getApiKey();
+      if (apiKeyEarly == null || apiKeyEarly.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please add your Real Debrid API key in Settings first!')),
+        );
+        debugPrint('MagicTV: Missing Real Debrid API key.');
+        return;
+      }
+
+      // Helper to infer a filename-like title from a URL
+      String _inferTitleFromUrl(String url) {
+        final uri = Uri.tryParse(url);
+        final last = (uri != null && uri.pathSegments.isNotEmpty)
+            ? uri.pathSegments.last
+            : url;
+        return Uri.decodeComponent(last);
+      }
+
+      String firstTitle = 'Magic TV';
+
+      Future<Map<String, String>?> requestMagicNext() async {
+        debugPrint('MagicTV: requestMagicNext() called. queueSize=${_queue.length}');
+        while (_queue.isNotEmpty) {
+          final item = _queue.removeAt(0);
+          // Case 1: RD-restricted entry (append-only items)
+          if (item is Map && item['type'] == 'rd_restricted') {
+            final String link = item['restrictedLink'] as String? ?? '';
+            final String rdTid = item['torrentId'] as String? ?? '';
+            debugPrint('MagicTV: Trying RD link from queue: torrentId=$rdTid');
+            if (link.isEmpty) continue;
+            try {
+              final started = DateTime.now();
+              final unrestrict = await DebridService.unrestrictLink(apiKeyEarly, link);
+              final elapsed = DateTime.now().difference(started).inSeconds;
+              final videoUrl = unrestrict['download'] as String?;
+              if (videoUrl != null && videoUrl.isNotEmpty) {
+                debugPrint('MagicTV: Success (RD link). Unrestricted in ${elapsed}s');
+                final inferred = _inferTitleFromUrl(videoUrl).trim();
+                final display = (item['displayName'] as String?)?.trim();
+                final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Magic TV');
+                firstTitle = chosenTitle;
+                return {'url': videoUrl, 'title': chosenTitle};
+              }
+            } catch (e) {
+              debugPrint('MagicTV: RD link failed to unrestrict: $e');
+              continue;
+            }
+          }
+
+          // Case 2: Torrent entry
+          if (item is Torrent) {
+            debugPrint('MagicTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
+            final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
+            try {
+              final started = DateTime.now();
+              final result = await DebridService.addTorrentToDebridPreferVideos(apiKeyEarly, magnetLink);
+              final elapsed = DateTime.now().difference(started).inSeconds;
+              final videoUrl = result['downloadLink'] as String?;
+              // Append other RD-restricted links from this torrent to the END of the queue
+              final String torrentId = result['torrentId'] as String? ?? '';
+              final List<dynamic> rdLinks = (result['links'] as List<dynamic>? ?? const []);
+              if (rdLinks.isNotEmpty) {
+                for (int i = 1; i < rdLinks.length; i++) {
+                  final String link = rdLinks[i]?.toString() ?? '';
+                  if (link.isEmpty) continue;
+                  final String combined = '$torrentId|$link';
+                  if (_seenRestrictedLinks.contains(link) || _seenLinkWithTorrentId.contains(combined)) {
+                    continue;
+                  }
+                  _seenRestrictedLinks.add(link);
+                  _seenLinkWithTorrentId.add(combined);
+                  _queue.add({
+                    'type': 'rd_restricted',
+                    'restrictedLink': link,
+                    'torrentId': torrentId,
+                    'displayName': item.name,
+                  });
+                }
+              }
+              if (videoUrl != null && videoUrl.isNotEmpty) {
+                debugPrint('MagicTV: Success. Got unrestricted URL in ${elapsed}s');
+                final inferred = _inferTitleFromUrl(videoUrl).trim();
+                final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Magic TV');
+                firstTitle = chosenTitle;
+                return {'url': videoUrl, 'title': chosenTitle};
+              }
+            } catch (e) {
+              debugPrint('MagicTV: Debrid add failed for ${item.infohash}: $e');
+            }
+          }
+        }
+        debugPrint('MagicTV: requestMagicNext() queue exhausted.');
+        return null;
+      }
 
       final Map<String, Torrent> dedupByInfohash = {};
 
-      for (final kw in keywords) {
+      // Launch per-keyword searches in parallel and process as they complete
+      final futures = keywords.map((kw) {
         debugPrint('MagicTV: Searching engines for "$kw"...');
-        final result = await TorrentService.searchAllEngines(kw, useTorrentsCsv: true, usePirateBay: true);
+        return TorrentService.searchAllEngines(kw, useTorrentsCsv: true, usePirateBay: true);
+      }).toList();
+
+      await for (final result in Stream.fromFutures(futures)) {
         final List<Torrent> torrents = (result['torrents'] as List<Torrent>?) ?? <Torrent>[];
         final engineCounts = (result['engineCounts'] as Map<String, int>?) ?? const {};
-        debugPrint('MagicTV: "$kw" results: total=${torrents.length}, engineCounts=$engineCounts');
+        debugPrint('MagicTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts');
+        int added = 0;
         for (final t in torrents) {
           if (!dedupByInfohash.containsKey(t.infohash)) {
             dedupByInfohash[t.infohash] = t;
+            added++;
+          }
+        }
+        if (added > 0) {
+          final combined = dedupByInfohash.values.toList();
+          combined.shuffle(Random());
+          _queue
+            ..clear()
+            ..addAll(combined);
+          _lastQueueSize = _queue.length;
+          _lastSearchAt = DateTime.now();
+          setState(() {
+            _status = 'Found ${_queue.length} results... preparing first play';
+          });
+
+          // Start prefetch early on first influx
+          if (_activeApiKey == null || _activeApiKey!.isEmpty) {
+            _activeApiKey = apiKeyEarly;
+            _startPrefetch();
+          }
+
+          // Try to launch player as soon as a playable stream is available
+          if (!_launchedPlayer) {
+            final first = await requestMagicNext();
+            if (first != null && mounted && !_launchedPlayer) {
+              _launchedPlayer = true;
+              final firstUrl = first['url'] ?? '';
+              final firstTitleResolved = (first['title'] ?? firstTitle).trim().isNotEmpty ? (first['title'] ?? firstTitle) : firstTitle;
+              if (_progressOpen && _progressSheetContext != null) {
+                Navigator.of(_progressSheetContext!).pop();
+              }
+              debugPrint('MagicTV: Launching player early. Remaining queue=${_queue.length}');
+
+              // Stage 2: Expand search in background to full (500) WHILE user watches
+              if (!_stage2Running) {
+                _stage2Running = true;
+                // ignore: unawaited_futures
+                (() async {
+                  debugPrint('MagicTV: Stage 2 expansion starting. Temporarily setting max to 500');
+                  try {
+                    await StorageService.setMaxTorrentsCsvResults(500);
+                    final futures2 = keywords.map((kw) {
+                      debugPrint('MagicTV: [Stage 2] Searching engines for "$kw"...');
+                      return TorrentService.searchAllEngines(kw, useTorrentsCsv: true, usePirateBay: true);
+                    }).toList();
+                    await for (final res2 in Stream.fromFutures(futures2)) {
+                      final List<Torrent> more = (res2['torrents'] as List<Torrent>?) ?? <Torrent>[];
+                      int added2 = 0;
+                      for (final t in more) {
+                        if (!dedupByInfohash.containsKey(t.infohash)) {
+                          dedupByInfohash[t.infohash] = t;
+                          added2++;
+                        }
+                      }
+                      if (added2 > 0) {
+                        final combined2 = dedupByInfohash.values.toList();
+                        combined2.shuffle(Random());
+                        _queue
+                          ..clear()
+                          ..addAll(combined2);
+                        _lastQueueSize = _queue.length;
+                        _lastSearchAt = DateTime.now();
+                        debugPrint('MagicTV: [Stage 2] Queue expanded to ${_queue.length}');
+                      }
+                    }
+                  } catch (e) {
+                    debugPrint('MagicTV: Stage 2 expansion failed: $e');
+                  } finally {
+                    final restoreTo = _originalMaxCap ?? 50;
+                    await StorageService.setMaxTorrentsCsvResults(restoreTo);
+                    _stage2Running = false;
+                    _capRestoredByStage2 = true;
+                    debugPrint('MagicTV: Stage 2 done. Restored Torrents CSV max to $restoreTo');
+                  }
+                })();
+              }
+
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => VideoPlayerScreen(
+                    videoUrl: firstUrl,
+                    title: firstTitleResolved,
+                    startFromRandom: _startRandom,
+                    hideSeekbar: _hideSeekbar,
+                    requestMagicNext: requestMagicNext,
+                  ),
+                ),
+              );
+
+              // Stop prefetch when player exits
+              await _stopPrefetch();
+            }
           }
         }
       }
 
-      final combined = dedupByInfohash.values.toList();
-      combined.shuffle(Random());
-
-      _queue.addAll(combined);
-      debugPrint('MagicTV: Queue prepared. size=${_queue.length}');
-      _lastQueueSize = _queue.length;
-      _lastSearchAt = DateTime.now();
+      // Final queue snapshot (if we didn't launch early)
+      if (!_launchedPlayer) {
+        debugPrint('MagicTV: Queue prepared. size=${_queue.length}');
+        _lastQueueSize = _queue.length;
+        _lastSearchAt = DateTime.now();
+      }
     } catch (e) {
       setState(() {
         _status = 'Search failed: $e';
       });
       debugPrint('MagicTV: Search failed: $e');
     } finally {
-      await StorageService.setMaxTorrentsCsvResults(prevMax);
-      debugPrint('MagicTV: Restored Torrents CSV max to $prevMax');
+      // Restore only if Stage 2 didn't already restore
+      if (!_stage2Running && !_capRestoredByStage2) {
+        final restoreTo = _originalMaxCap ?? 50;
+        await StorageService.setMaxTorrentsCsvResults(restoreTo);
+        debugPrint('MagicTV: Restored Torrents CSV max to $restoreTo after Stage 1');
+      }
       setState(() {
         _isBusy = false;
       });
@@ -213,14 +416,12 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       return;
     }
 
-    // Build a provider for "next" requests that reuses the same queue and keywords
-    final apiKey = await StorageService.getApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
+    // If we already launched the player early, we're done here
+    if (_launchedPlayer) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add your Real Debrid API key in Settings first!')),
-      );
-      debugPrint('MagicTV: Missing Real Debrid API key.');
+      setState(() {
+        _status = '';
+      });
       return;
     }
 
@@ -231,6 +432,17 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
           ? uri.pathSegments.last
           : url;
       return Uri.decodeComponent(last);
+    }
+
+    // Build a provider for "next" requests that reuses the same queue and keywords
+    final apiKey = await StorageService.getApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add your Real Debrid API key in Settings first!')),
+      );
+      debugPrint('MagicTV: Missing Real Debrid API key.');
+      return;
     }
 
     String firstTitle = 'Magic TV';
