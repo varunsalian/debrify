@@ -22,6 +22,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   // Advanced options
   bool _startRandom = false;
   bool _hideSeekbar = false;
+  bool _showWatermark = true;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -371,6 +372,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     title: firstTitleResolved,
                     startFromRandom: _startRandom,
                     hideSeekbar: _hideSeekbar,
+                    showWatermark: _showWatermark,
                     requestMagicNext: requestMagicNext,
                   ),
                 ),
@@ -561,6 +563,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             title: firstTitle,
             startFromRandom: _startRandom,
             hideSeekbar: _hideSeekbar,
+            showWatermark: _showWatermark,
             requestMagicNext: requestMagicNext,
           ),
         ),
@@ -613,6 +616,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   title: next.name,
                   startFromRandom: _startRandom,
                   hideSeekbar: _hideSeekbar,
+                  showWatermark: _showWatermark,
                 ),
               ),
             );
@@ -744,6 +748,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     subtitle: 'Disable progress slider and time; double-tap still works',
                     value: _hideSeekbar,
                     onChanged: (v) => setState(() => _hideSeekbar = v),
+                  ),
+                  const SizedBox(height: 8),
+                  _SwitchRow(
+                    title: 'Show DebrifyTV watermark',
+                    subtitle: 'Display a subtle DebrifyTV tag on the video',
+                    value: _showWatermark,
+                    onChanged: (v) => setState(() => _showWatermark = v),
                   ),
                 ],
               ),

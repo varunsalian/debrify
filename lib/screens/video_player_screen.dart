@@ -42,6 +42,8 @@ class VideoPlayerScreen extends StatefulWidget {
     final bool startFromRandom;
     // Advanced: hide seekbar (double-tap seek still enabled)
     final bool hideSeekbar;
+    // Watermark: show DebrifyTV tag overlay
+    final bool showWatermark;
 
 	const VideoPlayerScreen({
 		Key? key,
@@ -53,6 +55,7 @@ class VideoPlayerScreen extends StatefulWidget {
         this.requestMagicNext,
         this.startFromRandom = false,
         this.hideSeekbar = false,
+        this.showWatermark = false,
 	}) : super(key: key);
 
 
@@ -1852,6 +1855,62 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 									)
 							else
 								const Center(child: CircularProgressIndicator(color: Colors.white)),
+							// DebrifyTV watermark (non-interactive) - ESPN style
+							if (widget.showWatermark)
+								Positioned(
+									top: 18,
+									right: 18,
+									child: IgnorePointer(
+										ignoring: true,
+										child: Opacity(
+											opacity: 0.8,
+											child: Container(
+												padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+												decoration: BoxDecoration(
+													gradient: const LinearGradient(
+														begin: Alignment.topLeft,
+														end: Alignment.bottomRight,
+														colors: [Color(0xFFE50914), Color(0xFFB71C1C)],
+													),
+													borderRadius: BorderRadius.circular(6),
+													boxShadow: [
+														BoxShadow(
+															color: Colors.black.withOpacity(0.3),
+															blurRadius: 8,
+															offset: const Offset(0, 2),
+														),
+													],
+												),
+												child: Row(
+													mainAxisSize: MainAxisSize.min,
+													children: const [
+														Text(
+															'DEBRIFY',
+															style: TextStyle(
+																color: Colors.white,
+																fontWeight: FontWeight.w900,
+																letterSpacing: 1.2,
+																fontSize: 14,
+																fontFamily: 'Arial',
+															),
+														),
+														SizedBox(width: 4),
+														Text(
+															'TV',
+															style: TextStyle(
+																color: Colors.white,
+																fontWeight: FontWeight.w300,
+																letterSpacing: 0.5,
+																fontSize: 14,
+																fontFamily: 'Arial',
+															),
+														),
+													],
+												),
+											),
+										),
+									),
+								),
 							// Double-tap ripple
 							if (_ripple != null)
 								IgnorePointer(child: CustomPaint(painter: _DoubleTapRipplePainter(_ripple!))),
