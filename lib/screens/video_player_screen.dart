@@ -46,6 +46,10 @@ class VideoPlayerScreen extends StatefulWidget {
     final bool showWatermark;
     // Show video title in player controls
     final bool showVideoTitle;
+    // Hide all bottom options (next, audio, etc.) - back button stays
+    final bool hideOptions;
+    // Hide back button - use device back gesture or escape key
+    final bool hideBackButton;
 
 	const VideoPlayerScreen({
 		Key? key,
@@ -59,6 +63,8 @@ class VideoPlayerScreen extends StatefulWidget {
         this.hideSeekbar = false,
         this.showWatermark = false,
         this.showVideoTitle = true,
+        this.hideOptions = false,
+        this.hideBackButton = false,
 	}) : super(key: key);
 
 
@@ -1935,6 +1941,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								}
 							}
 							
+							// Escape key to quit the player
+							if (key == LogicalKeyboardKey.escape) {
+								Navigator.of(context).pop();
+								return KeyEventResult.handled;
+							}
+							
+							
 							// Next/Previous episode navigation
 							if (key == LogicalKeyboardKey.mediaSkipForward) {
 								if (_hasNextEpisode() || widget.requestMagicNext != null) {
@@ -2089,6 +2102,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								behavior: HitTestBehavior.translucent,
 								onTapDown: (d) => _lastTapLocal = d.localPosition,
 								onTap: () {
+									// Disable single tap when both back button and options are hidden
+									if (widget.hideBackButton && widget.hideOptions) {
+										return;
+									}
 									final box = context.findRenderObject() as RenderBox?;
 									if (box == null) return;
 									final size = box.size;
@@ -2147,6 +2164,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 												hasNext: _hasNextEpisode() || widget.requestMagicNext != null,
 												hasPrevious: _hasPreviousEpisode(),
 												hideSeekbar: widget.hideSeekbar,
+												hideOptions: widget.hideOptions,
+												hideBackButton: widget.hideBackButton,
 											),
 										),
 									);
@@ -2232,6 +2251,8 @@ class _Controls extends StatelessWidget {
 	final bool hasNext;
 	final bool hasPrevious;
 	final bool hideSeekbar;
+	final bool hideOptions;
+	final bool hideBackButton;
 
 
 	const _Controls({
@@ -2261,6 +2282,8 @@ class _Controls extends StatelessWidget {
 		this.hasNext = false,
 		this.hasPrevious = false,
 		required this.hideSeekbar,
+		required this.hideOptions,
+		required this.hideBackButton,
 	});
 	
 	String _getAspectRatioName() {
@@ -2376,20 +2399,21 @@ class _Controls extends StatelessWidget {
 					),
 				// Interactive controls
 				SafeArea(
-				left: true,
-				right: true,
-				top: true,
-				bottom: true,
-				child: Column(
-					mainAxisAlignment: MainAxisAlignment.spaceBetween,
-					children: [
+					left: true,
+					right: true,
+					top: true,
+					bottom: true,
+					child: Column(
+						mainAxisAlignment: MainAxisAlignment.spaceBetween,
+						children: [
 						// Netflix-style Top Bar - Back button and centered title when playing
 						Row(
 							children: [
-								IconButton(
-									icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-									onPressed: onBack,
-								),
+								if (!hideBackButton)
+									IconButton(
+										icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+										onPressed: onBack,
+									),
 								Expanded(
 									child: Column(
 										crossAxisAlignment: CrossAxisAlignment.center,
@@ -2414,16 +2438,18 @@ class _Controls extends StatelessWidget {
 										],
 									),
 								),
-								// Empty space to balance the back button
-								const SizedBox(width: 48),
+								// Empty space to balance the back button (when visible)
+								if (!hideBackButton)
+									const SizedBox(width: 48),
 							],
 						),
 
 
 
-						// Netflix-style Bottom Bar with all controls
-						Container(
-							padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+						// Netflix-style Bottom Bar with all controls (conditionally shown)
+						if (!hideOptions)
+							Container(
+								padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
 							child: Column(
 								mainAxisSize: MainAxisSize.min,
 								children: [
@@ -2564,11 +2590,11 @@ class _Controls extends StatelessWidget {
 								],
 							),
 						),
-											],
-						),
-					),
-				],
-			);
+					],
+				),
+			),
+		],
+	);
 	}
 }
 

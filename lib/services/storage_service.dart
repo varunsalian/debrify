@@ -17,6 +17,8 @@ class StorageService {
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
   static const String _debrifyTvShowWatermarkKey = 'debrify_tv_show_watermark';
   static const String _debrifyTvShowVideoTitleKey = 'debrify_tv_show_video_title';
+  static const String _debrifyTvHideOptionsKey = 'debrify_tv_hide_options';
+  static const String _debrifyTvHideBackButtonKey = 'debrify_tv_hide_back_button';
 
   // Note: Plain text storage is fine for API key since they're stored locally on user's device
   // and can be easily regenerated if compromised
@@ -579,6 +581,26 @@ class StorageService {
   static Future<void> saveDebrifyTvShowVideoTitle(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_debrifyTvShowVideoTitleKey, value);
+  }
+
+  static Future<bool> getDebrifyTvHideOptions() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_debrifyTvHideOptionsKey) ?? false;
+  }
+
+  static Future<void> saveDebrifyTvHideOptions(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_debrifyTvHideOptionsKey, value);
+  }
+
+  static Future<bool> getDebrifyTvHideBackButton() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_debrifyTvHideBackButtonKey) ?? false;
+  }
+
+  static Future<void> saveDebrifyTvHideBackButton(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_debrifyTvHideBackButtonKey, value);
   }
 }
 

@@ -24,6 +24,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _hideSeekbar = false;
   bool _showWatermark = true;
   bool _showVideoTitle = true;
+  bool _hideOptions = false;
+  bool _hideBackButton = false;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -70,6 +72,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final hideSeekbar = await StorageService.getDebrifyTvHideSeekbar();
     final showWatermark = await StorageService.getDebrifyTvShowWatermark();
     final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
+    final hideOptions = await StorageService.getDebrifyTvHideOptions();
+    final hideBackButton = await StorageService.getDebrifyTvHideBackButton();
     
     if (mounted) {
       setState(() {
@@ -77,6 +81,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _hideSeekbar = hideSeekbar;
         _showWatermark = showWatermark;
         _showVideoTitle = showVideoTitle;
+        _hideOptions = hideOptions;
+        _hideBackButton = hideBackButton;
       });
     }
   }
@@ -407,6 +413,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     hideSeekbar: _hideSeekbar,
                     showWatermark: _showWatermark,
                     showVideoTitle: _showVideoTitle,
+                    hideOptions: _hideOptions,
+                    hideBackButton: _hideBackButton,
                     requestMagicNext: requestMagicNext,
                   ),
                 ),
@@ -603,6 +611,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideSeekbar: _hideSeekbar,
             showWatermark: _showWatermark,
             showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            hideBackButton: _hideBackButton,
             requestMagicNext: requestMagicNext,
           ),
         ),
@@ -657,6 +667,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   hideSeekbar: _hideSeekbar,
                   showWatermark: _showWatermark,
                   showVideoTitle: _showVideoTitle,
+                  hideOptions: _hideOptions,
+                  hideBackButton: _hideBackButton,
                 ),
               ),
             );
@@ -813,6 +825,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     onChanged: (v) async {
                       setState(() => _showVideoTitle = v);
                       await StorageService.saveDebrifyTvShowVideoTitle(v);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _SwitchRow(
+                    title: 'Hide all options',
+                    subtitle: 'Hide all bottom controls (next, audio, etc.) - back button stays',
+                    value: _hideOptions,
+                    onChanged: (v) async {
+                      setState(() => _hideOptions = v);
+                      await StorageService.saveDebrifyTvHideOptions(v);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _SwitchRow(
+                    title: 'Hide back button',
+                    subtitle: 'Hide back button - use device back gesture or escape key',
+                    value: _hideBackButton,
+                    onChanged: (v) async {
+                      setState(() => _hideBackButton = v);
+                      await StorageService.saveDebrifyTvHideBackButton(v);
                     },
                   ),
                 ],
