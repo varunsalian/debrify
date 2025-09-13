@@ -6,14 +6,14 @@ import '../services/storage_service.dart';
 import '../services/debrid_service.dart';
 import 'video_player_screen.dart';
 
-class MagicTVScreen extends StatefulWidget {
-  const MagicTVScreen({super.key});
+class DebrifyTVScreen extends StatefulWidget {
+  const DebrifyTVScreen({super.key});
 
   @override
-  State<MagicTVScreen> createState() => _MagicTVScreenState();
+  State<DebrifyTVScreen> createState() => _DebrifyTVScreenState();
 }
 
-class _MagicTVScreenState extends State<MagicTVScreen> {
+class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   final TextEditingController _keywordsController = TextEditingController();
   // Mixed queue: can contain Torrent items or RD-restricted link maps
   final List<dynamic> _queue = [];
@@ -68,25 +68,25 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
     void _log(String m) {
       final copy = List<String>.from(_progress.value)..add(m);
       _progress.value = copy;
-      debugPrint('MagicTV: ' + m);
+      debugPrint('DebrifyTV: ' + m);
     }
     final text = _keywordsController.text.trim();
-    debugPrint('MagicTV: Watch started. Raw input="$text"');
+    debugPrint('DebrifyTV: Watch started. Raw input="$text"');
     if (text.isEmpty) {
       setState(() {
         _status = 'Enter one or more keywords, separated by commas';
       });
-      debugPrint('MagicTV: Aborting. No keywords provided.');
+      debugPrint('DebrifyTV: Aborting. No keywords provided.');
       return;
     }
 
     final keywords = _parseKeywords(text);
-    debugPrint('MagicTV: Parsed ${keywords.length} keyword(s): ${keywords.join(' | ')}');
+    debugPrint('DebrifyTV: Parsed ${keywords.length} keyword(s): ${keywords.join(' | ')}');
     if (keywords.isEmpty) {
       setState(() {
         _status = 'Enter valid keywords';
       });
-      debugPrint('MagicTV: Aborting. Parsed keywords became empty after trimming.');
+      debugPrint('DebrifyTV: Aborting. Parsed keywords became empty after trimming.');
       return;
     }
 
@@ -124,7 +124,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
                     child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFFE50914), size: 20),
                   ),
                   const SizedBox(width: 12),
-                  const Text('Magic TV • Watch Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+                  const Text('Debrify TV • Watch Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
                   const Spacer(),
                 ]),
                 const SizedBox(height: 16),
@@ -170,7 +170,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
     // Stage 1: Use a small cap to get the first playable quickly
     const int _stage1Cap = 50;
     _originalMaxCap = await StorageService.getMaxTorrentsCsvResults();
-    debugPrint('MagicTV: Temporarily setting Torrents CSV max from ${_originalMaxCap} to $_stage1Cap for Stage 1');
+    debugPrint('DebrifyTV: Temporarily setting Torrents CSV max from ${_originalMaxCap} to $_stage1Cap for Stage 1');
     try {
       await StorageService.setMaxTorrentsCsvResults(_stage1Cap);
 
@@ -181,7 +181,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please add your Real Debrid API key in Settings first!')),
         );
-        debugPrint('MagicTV: Missing Real Debrid API key.');
+        debugPrint('DebrifyTV: Missing Real Debrid API key.');
         return;
       }
 
@@ -194,17 +194,17 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
         return Uri.decodeComponent(last);
       }
 
-      String firstTitle = 'Magic TV';
+      String firstTitle = 'Debrify TV';
 
       Future<Map<String, String>?> requestMagicNext() async {
-        debugPrint('MagicTV: requestMagicNext() called. queueSize=${_queue.length}');
+        debugPrint('DebrifyTV: requestMagicNext() called. queueSize=${_queue.length}');
         while (_queue.isNotEmpty) {
           final item = _queue.removeAt(0);
           // Case 1: RD-restricted entry (append-only items)
           if (item is Map && item['type'] == 'rd_restricted') {
             final String link = item['restrictedLink'] as String? ?? '';
             final String rdTid = item['torrentId'] as String? ?? '';
-            debugPrint('MagicTV: Trying RD link from queue: torrentId=$rdTid');
+            debugPrint('DebrifyTV: Trying RD link from queue: torrentId=$rdTid');
             if (link.isEmpty) continue;
             try {
               final started = DateTime.now();
@@ -212,22 +212,22 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
               final elapsed = DateTime.now().difference(started).inSeconds;
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
-                debugPrint('MagicTV: Success (RD link). Unrestricted in ${elapsed}s');
+                debugPrint('DebrifyTV: Success (RD link). Unrestricted in ${elapsed}s');
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
                 final display = (item['displayName'] as String?)?.trim();
-                final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Magic TV');
+                final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
                 firstTitle = chosenTitle;
                 return {'url': videoUrl, 'title': chosenTitle};
               }
             } catch (e) {
-              debugPrint('MagicTV: RD link failed to unrestrict: $e');
+              debugPrint('DebrifyTV: RD link failed to unrestrict: $e');
               continue;
             }
           }
 
           // Case 2: Torrent entry
           if (item is Torrent) {
-            debugPrint('MagicTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
+            debugPrint('DebrifyTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
             final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
             try {
               final started = DateTime.now();
@@ -256,18 +256,18 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
                 }
               }
               if (videoUrl != null && videoUrl.isNotEmpty) {
-                debugPrint('MagicTV: Success. Got unrestricted URL in ${elapsed}s');
+                debugPrint('DebrifyTV: Success. Got unrestricted URL in ${elapsed}s');
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
-                final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Magic TV');
+                final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
                 firstTitle = chosenTitle;
                 return {'url': videoUrl, 'title': chosenTitle};
               }
             } catch (e) {
-              debugPrint('MagicTV: Debrid add failed for ${item.infohash}: $e');
+              debugPrint('DebrifyTV: Debrid add failed for ${item.infohash}: $e');
             }
           }
         }
-        debugPrint('MagicTV: requestMagicNext() queue exhausted.');
+        debugPrint('DebrifyTV: requestMagicNext() queue exhausted.');
         return null;
       }
 
@@ -275,14 +275,14 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
 
       // Launch per-keyword searches in parallel and process as they complete
       final futures = keywords.map((kw) {
-        debugPrint('MagicTV: Searching engines for "$kw"...');
+        debugPrint('DebrifyTV: Searching engines for "$kw"...');
         return TorrentService.searchAllEngines(kw, useTorrentsCsv: true, usePirateBay: true);
       }).toList();
 
       await for (final result in Stream.fromFutures(futures)) {
         final List<Torrent> torrents = (result['torrents'] as List<Torrent>?) ?? <Torrent>[];
         final engineCounts = (result['engineCounts'] as Map<String, int>?) ?? const {};
-        debugPrint('MagicTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts');
+        debugPrint('DebrifyTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts');
         int added = 0;
         for (final t in torrents) {
           if (!dedupByInfohash.containsKey(t.infohash)) {
@@ -318,18 +318,18 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
               if (_progressOpen && _progressSheetContext != null) {
                 Navigator.of(_progressSheetContext!).pop();
               }
-              debugPrint('MagicTV: Launching player early. Remaining queue=${_queue.length}');
+              debugPrint('DebrifyTV: Launching player early. Remaining queue=${_queue.length}');
 
               // Stage 2: Expand search in background to full (500) WHILE user watches
               if (!_stage2Running) {
                 _stage2Running = true;
                 // ignore: unawaited_futures
                 (() async {
-                  debugPrint('MagicTV: Stage 2 expansion starting. Temporarily setting max to 500');
+                  debugPrint('DebrifyTV: Stage 2 expansion starting. Temporarily setting max to 500');
                   try {
                     await StorageService.setMaxTorrentsCsvResults(500);
                     final futures2 = keywords.map((kw) {
-                      debugPrint('MagicTV: [Stage 2] Searching engines for "$kw"...');
+                      debugPrint('DebrifyTV: [Stage 2] Searching engines for "$kw"...');
                       return TorrentService.searchAllEngines(kw, useTorrentsCsv: true, usePirateBay: true);
                     }).toList();
                     await for (final res2 in Stream.fromFutures(futures2)) {
@@ -349,17 +349,17 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
                           ..addAll(combined2);
                         _lastQueueSize = _queue.length;
                         _lastSearchAt = DateTime.now();
-                        debugPrint('MagicTV: [Stage 2] Queue expanded to ${_queue.length}');
+                        debugPrint('DebrifyTV: [Stage 2] Queue expanded to ${_queue.length}');
                       }
                     }
                   } catch (e) {
-                    debugPrint('MagicTV: Stage 2 expansion failed: $e');
+                    debugPrint('DebrifyTV: Stage 2 expansion failed: $e');
                   } finally {
                     final restoreTo = _originalMaxCap ?? 50;
                     await StorageService.setMaxTorrentsCsvResults(restoreTo);
                     _stage2Running = false;
                     _capRestoredByStage2 = true;
-                    debugPrint('MagicTV: Stage 2 done. Restored Torrents CSV max to $restoreTo');
+                    debugPrint('DebrifyTV: Stage 2 done. Restored Torrents CSV max to $restoreTo');
                   }
                 })();
               }
@@ -385,7 +385,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
 
       // Final queue snapshot (if we didn't launch early)
       if (!_launchedPlayer) {
-        debugPrint('MagicTV: Queue prepared. size=${_queue.length}');
+        debugPrint('DebrifyTV: Queue prepared. size=${_queue.length}');
         _lastQueueSize = _queue.length;
         _lastSearchAt = DateTime.now();
       }
@@ -393,13 +393,13 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       setState(() {
         _status = 'Search failed: $e';
       });
-      debugPrint('MagicTV: Search failed: $e');
+      debugPrint('DebrifyTV: Search failed: $e');
     } finally {
       // Restore only if Stage 2 didn't already restore
       if (!_stage2Running && !_capRestoredByStage2) {
         final restoreTo = _originalMaxCap ?? 50;
         await StorageService.setMaxTorrentsCsvResults(restoreTo);
-        debugPrint('MagicTV: Restored Torrents CSV max to $restoreTo after Stage 1');
+        debugPrint('DebrifyTV: Restored Torrents CSV max to $restoreTo after Stage 1');
       }
       setState(() {
         _isBusy = false;
@@ -411,7 +411,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       setState(() {
         _status = 'No results found';
       });
-      debugPrint('MagicTV: No results found after combining.');
+      debugPrint('DebrifyTV: No results found after combining.');
       _log('No results found');
       return;
     }
@@ -445,7 +445,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
       return;
     }
 
-    String firstTitle = 'Magic TV';
+    String firstTitle = 'Debrify TV';
 
     Future<Map<String, String>?> requestMagicNext() async {
       debugPrint('MagicTV: requestMagicNext() called. queueSize=${_queue.length}');
@@ -467,7 +467,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
               // Prefer filename inferred from URL; fallback to any stored displayName
               final inferred = _inferTitleFromUrl(videoUrl).trim();
               final display = (item['displayName'] as String?)?.trim();
-              final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Magic TV');
+              final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
               firstTitle = chosenTitle;
               return {'url': videoUrl, 'title': chosenTitle};
             }
@@ -515,7 +515,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
               debugPrint('MagicTV: Success. Got unrestricted URL in ${elapsed}s');
               // Prefer filename inferred from URL; fallback to torrent name
               final inferred = _inferTitleFromUrl(videoUrl).trim();
-              final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Magic TV');
+              final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
               firstTitle = chosenTitle;
               return {'url': videoUrl, 'title': chosenTitle};
             }
@@ -654,7 +654,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
             children: const [
               Icon(Icons.auto_awesome_rounded, color: Colors.white70),
               SizedBox(width: 8),
-              Text('Magic TV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 22, letterSpacing: 0.5)),
+              Text('Debrify TV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 22, letterSpacing: 0.5)),
             ],
           ),
           const SizedBox(height: 18),
@@ -734,7 +734,7 @@ class _MagicTVScreenState extends State<MagicTVScreen> {
                   const SizedBox(height: 10),
                   _SwitchRow(
                     title: 'Start from random timestamp',
-                    subtitle: 'Each Magic TV video starts at a random point',
+                    subtitle: 'Each Debrify TV video starts at a random point',
                     value: _startRandom,
                     onChanged: (v) => setState(() => _startRandom = v),
                   ),

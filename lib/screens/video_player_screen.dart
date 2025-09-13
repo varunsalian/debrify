@@ -36,7 +36,7 @@ class VideoPlayerScreen extends StatefulWidget {
 	final String? subtitle;
 	final List<PlaylistEntry>? playlist;
 	final int? startIndex;
-    // Optional: Magic TV provider to fetch the next playable item (url & title)
+    // Optional: Debrify TV provider to fetch the next playable item (url & title)
     final Future<Map<String, String>?> Function()? requestMagicNext;
     // Advanced: start each video at a random timestamp
     final bool startFromRandom;
@@ -153,7 +153,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	// Orientation
 	bool _landscapeLocked = false;
 
-	// Dynamic title for Magic TV (no-playlist) flow
+	// Dynamic title for Debrify TV (no-playlist) flow
 	String _dynamicTitle = '';
 
 	@override
@@ -411,7 +411,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return widget.playlist![_currentIndex].title;
 		}
 		
-		// If Magic TV (no playlist) is active, use dynamic title when available
+		// If Debrify TV (no playlist) is active, use dynamic title when available
 		if ((widget.playlist == null || widget.playlist!.isEmpty) && widget.requestMagicNext != null) {
 			return _dynamicTitle.isNotEmpty ? _dynamicTitle : widget.title;
 		}
@@ -587,7 +587,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			return;
 		}
 
-		// If there is no playlist-based next item and Magic TV provider is present, use it
+		// If there is no playlist-based next item and Debrify TV provider is present, use it
 		if (widget.requestMagicNext != null) {
 			debugPrint('Player: MagicTV next requested.');
 			try {
@@ -597,7 +597,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				if (url.isNotEmpty) {
 					debugPrint('Player: MagicTV next success. Opening new URL.');
 					await _player.open(mk.Media(url), play: true);
-					// If advanced option is enabled, jump to a random timestamp for Magic TV items
+					// If advanced option is enabled, jump to a random timestamp for Debrify TV items
 					if (widget.startFromRandom) {
 						await _waitForVideoReady();
 						final dur = _duration;

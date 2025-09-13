@@ -203,7 +203,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const TorrentSearchScreen(),
     const DebridDownloadsScreen(),
     const DownloadsScreen(),
-    const MagicTVScreen(),
+    const DebrifyTVScreen(),
     const SettingsScreen(),
   ];
 
@@ -211,7 +211,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Torrent Search',
     'Real Debrid',
     'Downloads',
-    'Magic TV',
+    'Debrify TV',
     'Settings',
   ];
 
