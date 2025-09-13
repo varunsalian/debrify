@@ -13,7 +13,10 @@ class StorageService {
   static const String _defaultTorrentsCsvEnabledKey = 'default_torrents_csv_enabled';
   static const String _defaultPirateBayEnabledKey = 'default_pirate_bay_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
-  
+  static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
+  static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
+  static const String _debrifyTvShowWatermarkKey = 'debrify_tv_show_watermark';
+  static const String _debrifyTvShowVideoTitleKey = 'debrify_tv_show_video_title';
 
   // Note: Plain text storage is fine for API key since they're stored locally on user's device
   // and can be easily regenerated if compromised
@@ -535,6 +538,47 @@ class StorageService {
     if (trackPreferences == null) return null;
     
     return trackPreferences as Map<String, dynamic>;
+  }
+
+  // Debrify TV settings methods
+  static Future<bool> getDebrifyTvStartRandom() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_debrifyTvStartRandomKey) ?? false;
+  }
+
+  static Future<void> saveDebrifyTvStartRandom(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_debrifyTvStartRandomKey, value);
+  }
+
+  static Future<bool> getDebrifyTvHideSeekbar() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_debrifyTvHideSeekbarKey) ?? false;
+  }
+
+  static Future<void> saveDebrifyTvHideSeekbar(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_debrifyTvHideSeekbarKey, value);
+  }
+
+  static Future<bool> getDebrifyTvShowWatermark() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_debrifyTvShowWatermarkKey) ?? true;
+  }
+
+  static Future<void> saveDebrifyTvShowWatermark(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_debrifyTvShowWatermarkKey, value);
+  }
+
+  static Future<bool> getDebrifyTvShowVideoTitle() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_debrifyTvShowVideoTitleKey) ?? true;
+  }
+
+  static Future<void> saveDebrifyTvShowVideoTitle(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_debrifyTvShowVideoTitleKey, value);
   }
 }
 

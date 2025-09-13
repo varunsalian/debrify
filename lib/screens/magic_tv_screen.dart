@@ -48,6 +48,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _capRestoredByStage2 = false;
 
   @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  @override
   void dispose() {
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _prefetchStopRequested = true;
@@ -55,6 +61,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _progress.dispose();
     _keywordsController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSettings() async {
+    final startRandom = await StorageService.getDebrifyTvStartRandom();
+    final hideSeekbar = await StorageService.getDebrifyTvHideSeekbar();
+    final showWatermark = await StorageService.getDebrifyTvShowWatermark();
+    final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
+    
+    if (mounted) {
+      setState(() {
+        _startRandom = startRandom;
+        _hideSeekbar = hideSeekbar;
+        _showWatermark = showWatermark;
+        _showVideoTitle = showVideoTitle;
+      });
+    }
   }
 
   List<String> _parseKeywords(String input) {
@@ -744,28 +766,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     title: 'Start from random timestamp',
                     subtitle: 'Each Debrify TV video starts at a random point',
                     value: _startRandom,
-                    onChanged: (v) => setState(() => _startRandom = v),
+                    onChanged: (v) async {
+                      setState(() => _startRandom = v);
+                      await StorageService.saveDebrifyTvStartRandom(v);
+                    },
                   ),
                   const SizedBox(height: 8),
                   _SwitchRow(
                     title: 'Hide seekbar',
                     subtitle: 'Disable progress slider and time; double-tap still works',
                     value: _hideSeekbar,
-                    onChanged: (v) => setState(() => _hideSeekbar = v),
+                    onChanged: (v) async {
+                      setState(() => _hideSeekbar = v);
+                      await StorageService.saveDebrifyTvHideSeekbar(v);
+                    },
                   ),
                   const SizedBox(height: 8),
                   _SwitchRow(
                     title: 'Show DebrifyTV watermark',
                     subtitle: 'Display a subtle DebrifyTV tag on the video',
                     value: _showWatermark,
-                    onChanged: (v) => setState(() => _showWatermark = v),
+                    onChanged: (v) async {
+                      setState(() => _showWatermark = v);
+                      await StorageService.saveDebrifyTvShowWatermark(v);
+                    },
                   ),
                   const SizedBox(height: 8),
                   _SwitchRow(
                     title: 'Show video title',
                     subtitle: 'Display video title and subtitle in player controls',
                     value: _showVideoTitle,
-                    onChanged: (v) => setState(() => _showVideoTitle = v),
+                    onChanged: (v) async {
+                      setState(() => _showVideoTitle = v);
+                      await StorageService.saveDebrifyTvShowVideoTitle(v);
+                    },
                   ),
                 ],
               ),
