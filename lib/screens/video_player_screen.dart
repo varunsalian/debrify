@@ -44,6 +44,8 @@ class VideoPlayerScreen extends StatefulWidget {
     final bool hideSeekbar;
     // Watermark: show DebrifyTV tag overlay
     final bool showWatermark;
+    // Show video title in player controls
+    final bool showVideoTitle;
 
 	const VideoPlayerScreen({
 		Key? key,
@@ -56,6 +58,7 @@ class VideoPlayerScreen extends StatefulWidget {
         this.startFromRandom = false,
         this.hideSeekbar = false,
         this.showWatermark = false,
+        this.showVideoTitle = true,
 	}) : super(key: key);
 
 
@@ -1999,8 +2002,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 										child: IgnorePointer(
 											ignoring: !visible,
 											child: _Controls(
-												title: _getCurrentEpisodeTitle(),
-												subtitle: _getCurrentEpisodeSubtitle(),
+												title: widget.showVideoTitle ? _getCurrentEpisodeTitle() : '',
+												subtitle: widget.showVideoTitle ? _getCurrentEpisodeSubtitle() : null,
 												enhancedMetadata: _getEnhancedMetadata(),
 												duration: duration,
 												position: pos,

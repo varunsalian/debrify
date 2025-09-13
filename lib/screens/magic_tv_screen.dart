@@ -23,6 +23,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _startRandom = false;
   bool _hideSeekbar = false;
   bool _showWatermark = true;
+  bool _showVideoTitle = true;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -373,6 +374,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     startFromRandom: _startRandom,
                     hideSeekbar: _hideSeekbar,
                     showWatermark: _showWatermark,
+                    showVideoTitle: _showVideoTitle,
                     requestMagicNext: requestMagicNext,
                   ),
                 ),
@@ -564,6 +566,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             startFromRandom: _startRandom,
             hideSeekbar: _hideSeekbar,
             showWatermark: _showWatermark,
+            showVideoTitle: _showVideoTitle,
             requestMagicNext: requestMagicNext,
           ),
         ),
@@ -617,6 +620,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   startFromRandom: _startRandom,
                   hideSeekbar: _hideSeekbar,
                   showWatermark: _showWatermark,
+                  showVideoTitle: _showVideoTitle,
                 ),
               ),
             );
@@ -755,6 +759,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     subtitle: 'Display a subtle DebrifyTV tag on the video',
                     value: _showWatermark,
                     onChanged: (v) => setState(() => _showWatermark = v),
+                  ),
+                  const SizedBox(height: 8),
+                  _SwitchRow(
+                    title: 'Show video title',
+                    subtitle: 'Display video title and subtitle in player controls',
+                    value: _showVideoTitle,
+                    onChanged: (v) => setState(() => _showVideoTitle = v),
                   ),
                 ],
               ),
