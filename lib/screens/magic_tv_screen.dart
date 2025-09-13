@@ -326,8 +326,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             _status = 'Found ${_queue.length} results... preparing first play';
           });
 
-          // Start prefetch early on first influx
-          if (_activeApiKey == null || _activeApiKey!.isEmpty) {
+          // Start prefetch early on first influx as soon as we have an API key
+          if (!_prefetchRunning && apiKeyEarly != null && apiKeyEarly.isNotEmpty) {
             _activeApiKey = apiKeyEarly;
             _startPrefetch();
           }
@@ -368,12 +368,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       if (added2 > 0) {
                         final combined2 = dedupByInfohash.values.toList();
                         combined2.shuffle(Random());
+                        // Preserve already prepared RD links at the head
+                        final preparedOld = _queue
+                            .where((e) => e is Map && e['type'] == 'rd_restricted')
+                            .take(_minPrepared)
+                            .toList();
                         _queue
                           ..clear()
+                          ..addAll(preparedOld)
                           ..addAll(combined2);
                         _lastQueueSize = _queue.length;
                         _lastSearchAt = DateTime.now();
-                        debugPrint('DebrifyTV: [Stage 2] Queue expanded to ${_queue.length}');
+                        debugPrint('DebrifyTV: [Stage 2] Queue expanded to ${_queue.length} (preserved ${preparedOld.length} prepared in head)');
                       }
                     }
                   } catch (e) {
@@ -862,8 +868,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
 
         await _prefetchOneAtIndex(idx);
-        // brief yield
-        await Future.delayed(const Duration(milliseconds: 50));
+        // brief yield (faster when under target prepared)
+        await Future.delayed(Duration(milliseconds: prepared <= 2 ? 75 : 150));
       } catch (e) {
         debugPrint('MagicTV: Prefetch loop error: $e');
         await Future.delayed(const Duration(seconds: 1));
@@ -909,11 +915,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final List<dynamic> rdLinks = (result['links'] as List<dynamic>? ?? const []);
 
       if (rdLinks.isEmpty) {
-        // Nothing ready; drop this torrent from queue
+        // Nothing ready; move to tail to retry later
         if (idx < _queue.length && identical(_queue[idx], item)) {
           _queue.removeAt(idx);
+          _queue.add(item);
         }
-        debugPrint('MagicTV: Prefetch: no links; removed torrent at idx=$idx');
+        debugPrint('MagicTV: Prefetch: no links; moved torrent to tail idx=$idx');
         return;
       }
 
@@ -959,11 +966,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
       }
     } catch (e) {
-      // On failure, drop this torrent so we don't block the window
+      // On failure, move to tail for retry later
       if (idx < _queue.length && identical(_queue[idx], item)) {
         _queue.removeAt(idx);
+        _queue.add(item);
       }
-      debugPrint('MagicTV: Prefetch failed for $infohash: $e');
+      debugPrint('MagicTV: Prefetch failed for $infohash: $e (moved to tail)');
     } finally {
       _inflightInfohashes.remove(infohash);
     }
