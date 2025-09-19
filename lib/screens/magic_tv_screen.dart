@@ -128,76 +128,190 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _queue.clear();
     });
 
-    // show progress modal
+    // show non-dismissible loading modal
     _progress.value = [];
     _progressOpen = true;
     // ignore: unawaited_futures
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF0F0F0F),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      barrierDismissible: false, // Prevent dismissing by tapping outside
       builder: (ctx) {
         _progressSheetContext = ctx;
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: const Color(0xFFE50914).withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFFE50914), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text('Debrify TV • Watch Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
-                  const Spacer(),
-                ]),
-                const SizedBox(height: 16),
-                Row(children: [
-                  const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(_status, style: const TextStyle(color: Colors.white70))),
-                ]),
-                const SizedBox(height: 16),
-                Container(
-                  decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12, width: 1)),
-                  constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.4),
-                  child: ValueListenableBuilder<List<String>>(
-                    valueListenable: _progress,
-                    builder: (context, logs, _) {
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: logs.length,
-                        itemBuilder: (context, index) {
-                          final line = logs[index];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(children: [
-                              const Icon(Icons.check_circle_outline, color: Colors.white54, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(line, style: const TextStyle(color: Colors.white, fontSize: 13))),
-                            ]),
-                          );
+        return WillPopScope(
+          onWillPop: () async => false, // Prevent dismissing with back button
+          child: Dialog(
+            backgroundColor: const Color(0xFF0F0F0F),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.9,
+                maxHeight: MediaQuery.of(context).size.height * 0.6,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Compact header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFE50914), Color(0xFFB71C1C)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFE50914).withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Debrify TV', 
+                          style: TextStyle(
+                            color: Colors.white, 
+                            fontWeight: FontWeight.w800, 
+                            fontSize: 18
+                          )
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Smaller loading animation
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFE50914).withOpacity(0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Compact message
+                    const Text(
+                      'Debrify TV is working its magic...',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Compact timing information
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.access_time_rounded, color: Colors.blue[300], size: 14),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Usually takes 20-30 seconds',
+                                style: TextStyle(
+                                  color: Colors.blue[200],
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Rare keywords may take longer',
+                            style: TextStyle(
+                              color: Colors.blue[300],
+                              fontSize: 10,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Compact cancel button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          setState(() {
+                            _isBusy = false;
+                            _status = '';
+                          });
                         },
-                      );
-                    },
-                  ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                          foregroundColor: Colors.white70,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );
       },
     ).whenComplete(() { _progressOpen = false; _progressSheetContext = null; });
 
-    _log('Searching providers with your keywords');
+    // Silent approach - no progress logging needed
 
     // Stage 1: Use a small cap to get the first playable quickly
     const int _stage1Cap = 50;
@@ -210,6 +324,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final apiKeyEarly = await StorageService.getApiKey();
       if (apiKeyEarly == null || apiKeyEarly.isEmpty) {
         if (!mounted) return;
+        _log('❌ Real Debrid API key not found - please add it in Settings');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please add your Real Debrid API key in Settings first!')),
         );
@@ -239,12 +354,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             debugPrint('DebrifyTV: Trying RD link from queue: torrentId=$rdTid');
             if (link.isEmpty) continue;
             try {
+              // Silent approach - no progress logging needed
               final started = DateTime.now();
               final unrestrict = await DebridService.unrestrictLink(apiKeyEarly, link);
               final elapsed = DateTime.now().difference(started).inSeconds;
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
                 debugPrint('DebrifyTV: Success (RD link). Unrestricted in ${elapsed}s');
+                // Silent approach - no progress logging needed
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
                 final display = (item['displayName'] as String?)?.trim();
                 final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
@@ -262,6 +379,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             debugPrint('DebrifyTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
             final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
             try {
+              // Silent approach - no progress logging needed
               final started = DateTime.now();
               final result = await DebridService.addTorrentToDebridPreferVideos(apiKeyEarly, magnetLink);
               final elapsed = DateTime.now().difference(started).inSeconds;
@@ -289,6 +407,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               }
               if (videoUrl != null && videoUrl.isNotEmpty) {
                 debugPrint('DebrifyTV: Success. Got unrestricted URL in ${elapsed}s');
+                // Silent approach - no progress logging needed
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
                 final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
                 firstTitle = chosenTitle;
@@ -305,6 +424,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       final Map<String, Torrent> dedupByInfohash = {};
 
+      // Silent approach - no progress logging needed
+      
       // Launch per-keyword searches in parallel and process as they complete
       final futures = keywords.map((kw) {
         debugPrint('DebrifyTV: Searching engines for "$kw"...');
@@ -330,8 +451,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ..addAll(combined);
           _lastQueueSize = _queue.length;
           _lastSearchAt = DateTime.now();
+          // Silent approach - no progress logging needed
           setState(() {
-            _status = 'Found ${_queue.length} results... preparing first play';
+            _status = 'Preparing your content...';
           });
 
           // Do not start prefetch until player launches
@@ -460,7 +582,28 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _status = 'No results found';
       });
       debugPrint('DebrifyTV: No results found after combining.');
-      _log('No results found');
+      _log('❌ No results found - trying different search strategies');
+      
+      // Close popup and show user-friendly message
+      if (_progressOpen && _progressSheetContext != null) {
+        Navigator.of(_progressSheetContext!).pop();
+        _progressOpen = false;
+        _progressSheetContext = null;
+      }
+      
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+          _status = 'No results found. Try different keywords.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No results found. Try different keywords or check your internet connection.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
       return;
     }
 
@@ -580,14 +723,31 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _status = 'Finding a playable stream...';
       _isBusy = true;
     });
-    _log('Finding a playable stream...');
+    _log('🎬 Selecting the best quality stream for you');
 
     try {
       final first = await requestMagicNext();
       if (first == null) {
-        setState(() {
-          _status = 'No playable torrents found. Try different keywords.';
-        });
+        // Close popup and show user-friendly message
+        if (_progressOpen && _progressSheetContext != null) {
+          Navigator.of(_progressSheetContext!).pop();
+          _progressOpen = false;
+          _progressSheetContext = null;
+        }
+        
+        if (mounted) {
+          setState(() {
+            _isBusy = false;
+            _status = 'No playable torrents found. Try different keywords.';
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No playable streams found. Try different keywords or check your internet connection.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
         debugPrint('MagicTV: No playable stream found.');
         return;
       }
@@ -736,12 +896,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     textInputAction: TextInputAction.search,
                     onSubmitted: (_) => _watch(),
                     decoration: InputDecoration(
-                      hintText: 'What mood are you in? (comma separated keywords)',
+                      hintText: 'Comma separated keywords',
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: IconButton(
-                        icon: const Icon(Icons.play_circle_fill_rounded),
-                        onPressed: _isBusy ? null : _watch,
-                        color: const Color(0xFFE50914),
+                        icon: const Icon(Icons.clear_rounded),
+                        onPressed: _isBusy ? null : () {
+                          _keywordsController.clear();
+                        },
+                        color: Colors.white70,
                       ),
                     ),
                   ),
