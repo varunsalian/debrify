@@ -981,39 +981,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
         break;
       case 'play':
-        // existing code below
-        // Do nothing - just show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Torrent added to Real Debrid successfully!',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF1E293B),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 4),
-          ),
+        await _playFromResult(
+          links: links,
+          files: files,
+          updatedInfo: updatedInfo,
+          torrentName: torrentName,
+          apiKey: apiKey,
+          fileSelection: fileSelection,
         );
         break;
       case 'copy':
@@ -1053,96 +1027,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
         break;
       case 'play':
-        // Play video - check if it's actually a video file first
-        if (fileSelection == 'video' && links.length > 1) {
-          // Multiple video files - create playlist with true lazy loading
-          await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey, index);
-        } else {
-          // Single file - check MIME type after unrestricting
-          try {
-            final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[0]);
-            final videoUrl = unrestrictResult['download'];
-            final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
-            
-            // Check if it's actually a video using MIME type
-            if (FileUtils.isVideoMimeType(mimeType)) {
-              							Navigator.of(context).push(
-								MaterialPageRoute(
-									builder: (context) => VideoPlayerScreen(
-										videoUrl: videoUrl,
-										title: torrentName,
-									),
-								),
-							);
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.check,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Added to torrent but the file is not a video file',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: const Color(0xFF1E293B),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  margin: const EdgeInsets.all(16),
-                  duration: const Duration(seconds: 4),
-                ),
-              );
-            }
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.error,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Failed to load video: ${e.toString()}',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF1E293B),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                margin: const EdgeInsets.all(16),
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
-        }
+        await _playFromResult(
+          links: links,
+          files: files,
+          updatedInfo: updatedInfo,
+          torrentName: torrentName,
+          apiKey: apiKey,
+          fileSelection: fileSelection,
+        );
         break;
       case 'download':
         // Download file(s)
@@ -1214,7 +1106,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     required String apiKey,
     required String fileSelection,
   }) async {
-    if (fileSelection == 'video' && links.length > 1) {
+    // If multiple RD links exist, treat as multi-file playlist (series pack, multi-episode, etc.)
+    if (links.length > 1) {
       await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey, 0);
       return;
     }
