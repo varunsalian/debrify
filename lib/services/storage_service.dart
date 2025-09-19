@@ -51,7 +51,7 @@ class StorageService {
   // Post-torrent action methods
   static Future<String> getPostTorrentAction() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_postTorrentActionKey) ?? 'none';
+    return prefs.getString(_postTorrentActionKey) ?? 'choose';
   }
 
   static Future<void> savePostTorrentAction(String action) async {

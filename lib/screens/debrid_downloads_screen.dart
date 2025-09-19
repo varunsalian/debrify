@@ -13,7 +13,9 @@ import '../services/download_service.dart';
 import 'dart:ui'; // Added for ImageFilter
 
 class DebridDownloadsScreen extends StatefulWidget {
-  const DebridDownloadsScreen({super.key});
+  const DebridDownloadsScreen({super.key, this.initialTorrentForOptions});
+
+  final RDTorrent? initialTorrentForOptions;
 
   @override
   State<DebridDownloadsScreen> createState() => _DebridDownloadsScreenState();
@@ -64,6 +66,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     _loadApiKeyAndData();
     _torrentScrollController.addListener(_onTorrentScroll);
     _downloadScrollController.addListener(_onDownloadScroll);
+
+    // If asked to show options for a specific torrent, open after init
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (widget.initialTorrentForOptions != null) {
+        // Wait until API key is loaded
+        int attempts = 0;
+        while (_apiKey == null && attempts < 20) {
+          await Future.delayed(const Duration(milliseconds: 150));
+          attempts++;
+        }
+        if (mounted && _apiKey != null) {
+          _showMultipleLinksDialog(widget.initialTorrentForOptions!, showPlayButtons: false);
+        }
+      }
+    });
   }
 
   @override

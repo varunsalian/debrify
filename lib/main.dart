@@ -14,6 +14,8 @@ import 'widgets/animated_background.dart';
 import 'widgets/premium_nav_bar.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'widgets/premium_top_nav.dart';
+import 'services/main_page_bridge.dart';
+import 'models/rd_torrent.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -226,6 +228,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    // Expose tab switcher for deep-link flows
+    MainPageBridge.switchTab = (int index) {
+      if (!mounted) return;
+      _onItemTapped(index);
+    };
+    MainPageBridge.openDebridOptions = (RDTorrent torrent) {
+      if (!mounted) return;
+      setState(() {
+        _pages[1] = DebridDownloadsScreen(initialTorrentForOptions: torrent);
+      });
+      _onItemTapped(1);
+    };
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,

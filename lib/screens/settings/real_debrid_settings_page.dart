@@ -364,9 +364,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   RadioListTile<String>(
-                    title: const Text('None'),
-                    subtitle: const Text('Do nothing after adding torrent (default)'),
-                    value: 'none',
+                    title: const Text('Let me choose'),
+                    subtitle: const Text('Show a quick Play/Download picker after adding a torrent'),
+                    value: 'choose',
                     groupValue: _postTorrentAction,
                     onChanged: (v) => v == null ? null : _savePostAction(v),
                     contentPadding: EdgeInsets.zero,
@@ -381,7 +381,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                   ),
                   RadioListTile<String>(
                     title: const Text('Download'),
-                    subtitle: const Text('Start downloading to device'),
+                    subtitle: const Text('If the torrent contains only video files, all videos will download immediately'),
                     value: 'download',
                     groupValue: _postTorrentAction,
                     onChanged: (v) => v == null ? null : _savePostAction(v),
