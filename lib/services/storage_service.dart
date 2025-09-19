@@ -545,7 +545,7 @@ class StorageService {
   // Debrify TV settings methods
   static Future<bool> getDebrifyTvStartRandom() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvStartRandomKey) ?? false;
+    return prefs.getBool(_debrifyTvStartRandomKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvStartRandom(bool value) async {
@@ -555,7 +555,7 @@ class StorageService {
 
   static Future<bool> getDebrifyTvHideSeekbar() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvHideSeekbarKey) ?? false;
+    return prefs.getBool(_debrifyTvHideSeekbarKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvHideSeekbar(bool value) async {
@@ -575,7 +575,7 @@ class StorageService {
 
   static Future<bool> getDebrifyTvShowVideoTitle() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvShowVideoTitleKey) ?? true;
+    return prefs.getBool(_debrifyTvShowVideoTitleKey) ?? false;
   }
 
   static Future<void> saveDebrifyTvShowVideoTitle(bool value) async {
@@ -585,7 +585,7 @@ class StorageService {
 
   static Future<bool> getDebrifyTvHideOptions() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvHideOptionsKey) ?? false;
+    return prefs.getBool(_debrifyTvHideOptionsKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvHideOptions(bool value) async {
@@ -595,7 +595,7 @@ class StorageService {
 
   static Future<bool> getDebrifyTvHideBackButton() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvHideBackButtonKey) ?? false;
+    return prefs.getBool(_debrifyTvHideBackButtonKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvHideBackButton(bool value) async {
