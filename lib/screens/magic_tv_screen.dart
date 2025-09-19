@@ -20,12 +20,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _isBusy = false;
   String _status = '';
   // Advanced options
-  bool _startRandom = false;
-  bool _hideSeekbar = false;
+  bool _startRandom = true;
+  bool _hideSeekbar = true;
   bool _showWatermark = true;
-  bool _showVideoTitle = true;
-  bool _hideOptions = false;
-  bool _hideBackButton = false;
+  bool _showVideoTitle = false;
+  bool _hideOptions = true;
+  bool _hideBackButton = true;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -841,9 +841,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (_queue.isEmpty) {
-        setState(() {
-          _status = 'No playable torrents found. Try different keywords.';
-        });
+        // Close popup and show user-friendly message
+        if (_progressOpen && _progressSheetContext != null) {
+          Navigator.of(_progressSheetContext!).pop();
+          _progressOpen = false;
+          _progressSheetContext = null;
+        }
+        
+        if (mounted) {
+          setState(() {
+            _isBusy = false;
+            _status = 'No playable torrents found. Try different keywords.';
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('All torrents failed to process. Try different keywords or check your internet connection.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
       } else {
         setState(() {
           _status = 'Queue has ${_queue.length} remaining';
@@ -920,6 +937,54 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Keyboard shortcuts tip
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.lightbulb_outline_rounded, color: Colors.amber[300], size: 16),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Quick Tips',
+                              style: TextStyle(
+                                color: Colors.amber[200],
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Next Video: Android double tap far right, Mac/Windows press \'N\'',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Quit: Mac/Windows press ESC, Android use back button',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1008,6 +1073,51 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       setState(() => _hideBackButton = v);
                       await StorageService.saveDebrifyTvHideBackButton(v);
                     },
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Reset to defaults button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        // Reset to defaults
+                        setState(() {
+                          _startRandom = true;
+                          _hideSeekbar = true;
+                          _showWatermark = true;
+                          _showVideoTitle = false;
+                          _hideOptions = true;
+                          _hideBackButton = true;
+                        });
+                        
+                        // Save to storage
+                        await StorageService.saveDebrifyTvStartRandom(true);
+                        await StorageService.saveDebrifyTvHideSeekbar(true);
+                        await StorageService.saveDebrifyTvShowWatermark(true);
+                        await StorageService.saveDebrifyTvShowVideoTitle(false);
+                        await StorageService.saveDebrifyTvHideOptions(true);
+                        await StorageService.saveDebrifyTvHideBackButton(true);
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Reset to defaults successful'),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.restore_rounded, size: 18),
+                      label: const Text('Reset to Defaults'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white.withOpacity(0.1),
+                        foregroundColor: Colors.white70,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
