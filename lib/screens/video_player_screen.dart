@@ -139,6 +139,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	bool _isPlaying = false;
 	Duration _position = Duration.zero;
 	Duration _duration = Duration.zero;
+	bool _isTransitioning = false; // Show black screen during transitions
 	// We render using a large logical surface; fit is controlled by BoxFit
 	StreamSubscription? _posSub;
 	StreamSubscription? _durSub;
@@ -637,6 +638,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Navigate to next episode
 	Future<void> _goToNextEpisode() async {
+		// Show black screen during transition to hide previous frame
+		setState(() {
+			_isTransitioning = true;
+		});
+		
 		// Only show transition overlay for Debrify TV content (when requestMagicNext is available)
 		final isDebrifyTV = widget.requestMagicNext != null;
 		if (isDebrifyTV) {
@@ -683,16 +689,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							_dynamicTitle = title;
 						});
 					}
+					// Clear transition state when video is ready
+					if (mounted) {
+						setState(() {
+							_isTransitioning = false;
+						});
+					}
 					return;
 				}
 			} catch (e) {
 				debugPrint('Player: MagicTV next failed: $e');
 			}
 		}
+		
+		// Clear transition state if no next episode found
+		if (mounted) {
+			setState(() {
+				_isTransitioning = false;
+			});
+		}
 	}
 
 	/// Navigate to previous episode
 	Future<void> _goToPreviousEpisode() async {
+		// Show black screen during transition to hide previous frame
+		setState(() {
+			_isTransitioning = true;
+		});
+		
 		final previousIndex = _findPreviousEpisodeIndex();
 		if (previousIndex != -1) {
 			// Mark this as a manual episode selection
@@ -705,6 +729,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 				_allowResumeForManualSelection = false;
 			});
 			await _loadPlaylistIndex(previousIndex, autoplay: true);
+		} else {
+			// Clear transition state if no previous episode found
+			if (mounted) {
+				setState(() {
+					_isTransitioning = false;
+				});
+			}
 		}
 	}
 
@@ -786,6 +817,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		await _maybeRestoreResume();
 		// Restore audio and subtitle track preferences
 		await _restoreTrackPreferences();
+		
+		// Clear transition state when video is ready
+		if (mounted) {
+			setState(() {
+				_isTransitioning = false;
+			});
+		}
 	}
 
 	/// Preload episode information in the background
@@ -1968,7 +2006,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						fit: StackFit.expand,
 						children: [
 							// Video texture (media_kit renderer)
-							if (isReady)
+							if (isReady && !_isTransitioning)
 								_getCustomAspectRatio() != null
 									? _buildCustomAspectRatioVideo()
 									: FittedBox(
@@ -1979,6 +2017,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 											child: mkv.Video(controller: _videoController, controls: null),
 										),
 									)
+							else if (_isTransitioning)
+								// Black screen during transitions to hide previous frame
+								Container(color: Colors.black)
 							else
 								const Center(child: CircularProgressIndicator(color: Colors.white)),
 							// Transition overlay above video
