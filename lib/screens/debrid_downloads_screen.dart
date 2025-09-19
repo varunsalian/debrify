@@ -3088,6 +3088,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             child: const Text('Cancel'),
           ),
           TextButton(
+            onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'smart'),
+            child: _isAddingMagnet
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Smart (recommended)'),
+          ),
+          TextButton(
             onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'largest'),
             child: _isAddingMagnet
                 ? const SizedBox(
