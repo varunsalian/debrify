@@ -400,6 +400,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return Dialog(
           backgroundColor: Colors.transparent,
           child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+            ),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
@@ -492,12 +495,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                 ),
                 
-                // Content
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
+                // Content (scrollable to avoid overflow)
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
                       // File selection options with beautiful cards
+                      _buildOptionCard(
+                        context: context,
+                        title: 'Smart (recommended)',
+                        subtitle: 'Detect media vs non-media automatically',
+                        icon: Icons.auto_awesome_rounded,
+                        value: 'smart',
+                        selectedOption: null,
+                        onChanged: (value) {
+                          Navigator.of(context).pop();
+                          _addToRealDebridWithSelection(infohash, torrentName, value!, index);
+                        },
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       _buildOptionCard(
                         context: context,
                         title: 'All video files',
@@ -545,7 +566,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
                         ),
                       ),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],

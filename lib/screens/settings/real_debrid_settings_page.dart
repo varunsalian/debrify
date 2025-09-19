@@ -298,6 +298,14 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   RadioListTile<String>(
+                    title: const Text('Smart (recommended)'),
+                    subtitle: const Text('Detects media vs non-media automatically'),
+                    value: 'smart',
+                    groupValue: _fileSelection,
+                    onChanged: (v) => v == null ? null : _saveSelection(v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  RadioListTile<String>(
                     title: const Text('File with highest size'),
                     subtitle: const Text('Ideal for movies - selects the largest file'),
                     value: 'largest',

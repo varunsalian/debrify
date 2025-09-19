@@ -40,7 +40,7 @@ class StorageService {
   // File Selection methods
   static Future<String> getFileSelection() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_fileSelectionKey) ?? 'largest'; // Default to largest file
+    return prefs.getString(_fileSelectionKey) ?? 'smart'; // Default to smart selection
   }
 
   static Future<void> saveFileSelection(String selection) async {
