@@ -2023,41 +2023,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 									child: IgnorePointer(
 										ignoring: true,
 										child: Container(
-											padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-											decoration: BoxDecoration(
-												gradient: LinearGradient(
-													begin: Alignment.topLeft,
-													end: Alignment.bottomRight,
-													colors: [
-														Colors.white.withOpacity(0.25),
-														Colors.white.withOpacity(0.08),
-														Colors.white.withOpacity(0.15),
-													],
-													stops: const [0.0, 0.5, 1.0],
-												),
-												borderRadius: BorderRadius.circular(16),
-												border: Border.all(
-													color: Colors.white.withOpacity(0.3),
-													width: 1.5,
-												),
-												boxShadow: [
-													BoxShadow(
-														color: Colors.black.withOpacity(0.15),
-														blurRadius: 30,
-														offset: const Offset(0, 8),
-													),
-													BoxShadow(
-														color: Colors.black.withOpacity(0.08),
-														blurRadius: 60,
-														offset: const Offset(0, 16),
-													),
-													BoxShadow(
-														color: const Color(0xFF6366F1).withOpacity(0.1),
-														blurRadius: 40,
-														offset: const Offset(0, 0),
-													),
-												],
-											),
+											padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
 											child: Row(
 												mainAxisSize: MainAxisSize.min,
 												children: [
