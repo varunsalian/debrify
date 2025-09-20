@@ -2015,58 +2015,125 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								const Center(child: CircularProgressIndicator(color: Colors.white)),
 							// Transition overlay above video
 							if (_rainbowActive) _buildTransitionOverlay(),
-							// DebrifyTV watermark (non-interactive) - ESPN style
+							// DebrifyTV watermark (non-interactive) - Premium luxury design
 							if (widget.showWatermark)
 								Positioned(
-									top: 18,
-									right: 18,
+									top: 8,
+									right: 8,
 									child: IgnorePointer(
 										ignoring: true,
-										child: Opacity(
-											opacity: 0.8,
-											child: Container(
-												padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-												decoration: BoxDecoration(
-													gradient: const LinearGradient(
-														begin: Alignment.topLeft,
-														end: Alignment.bottomRight,
-														colors: [Color(0xFFE50914), Color(0xFFB71C1C)],
+										child: Container(
+											padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+											decoration: BoxDecoration(
+												gradient: LinearGradient(
+													begin: Alignment.topLeft,
+													end: Alignment.bottomRight,
+													colors: [
+														Colors.white.withOpacity(0.25),
+														Colors.white.withOpacity(0.08),
+														Colors.white.withOpacity(0.15),
+													],
+													stops: const [0.0, 0.5, 1.0],
+												),
+												borderRadius: BorderRadius.circular(16),
+												border: Border.all(
+													color: Colors.white.withOpacity(0.3),
+													width: 1.5,
+												),
+												boxShadow: [
+													BoxShadow(
+														color: Colors.black.withOpacity(0.15),
+														blurRadius: 30,
+														offset: const Offset(0, 8),
 													),
-													borderRadius: BorderRadius.circular(6),
-													boxShadow: [
-														BoxShadow(
-															color: Colors.black.withOpacity(0.3),
-															blurRadius: 8,
-															offset: const Offset(0, 2),
-														),
-													],
-												),
-												child: Row(
-													mainAxisSize: MainAxisSize.min,
-													children: const [
-														Text(
-															'DEBRIFY',
-															style: TextStyle(
-																color: Colors.white,
-																fontWeight: FontWeight.w900,
-																letterSpacing: 1.2,
-																fontSize: 14,
-																fontFamily: 'Arial',
+													BoxShadow(
+														color: Colors.black.withOpacity(0.08),
+														blurRadius: 60,
+														offset: const Offset(0, 16),
+													),
+													BoxShadow(
+														color: const Color(0xFF6366F1).withOpacity(0.1),
+														blurRadius: 40,
+														offset: const Offset(0, 0),
+													),
+												],
+											),
+											child: Row(
+												mainAxisSize: MainAxisSize.min,
+												children: [
+													// Premium icon with glow effect
+													Container(
+														width: 24,
+														height: 24,
+														decoration: BoxDecoration(
+															gradient: const LinearGradient(
+																begin: Alignment.topLeft,
+																end: Alignment.bottomRight,
+																colors: [
+																	Color(0xFF6366F1),
+																	Color(0xFF8B5CF6),
+																	Color(0xFFEC4899),
+																],
 															),
+															borderRadius: BorderRadius.circular(6),
+															boxShadow: [
+																BoxShadow(
+																	color: const Color(0xFF6366F1).withOpacity(0.4),
+																	blurRadius: 12,
+																	offset: const Offset(0, 2),
+																),
+															],
 														),
-														SizedBox(width: 4),
-														Text(
-															'TV',
-															style: TextStyle(
-																color: Colors.white,
-																fontWeight: FontWeight.w300,
-																letterSpacing: 0.5,
-																fontSize: 14,
-																fontFamily: 'Arial',
+														child: const Icon(
+															Icons.play_circle_fill_rounded,
+															color: Colors.white,
+															size: 14,
+														),
+													),
+													const SizedBox(width: 12),
+													// Premium typography with better hierarchy
+													Column(
+														crossAxisAlignment: CrossAxisAlignment.start,
+														mainAxisSize: MainAxisSize.min,
+														children: [
+															Text(
+																'DEBRIFY',
+																style: TextStyle(
+																	color: Colors.white.withOpacity(0.98),
+																	fontWeight: FontWeight.w900,
+																	letterSpacing: 2.0,
+																	fontSize: 13,
+																	height: 1.0,
+																	shadows: [
+																		Shadow(
+																			color: Colors.black.withOpacity(0.3),
+																			blurRadius: 4,
+																			offset: const Offset(0, 1),
+																		),
+																	],
+																),
 															),
-														),
-													],
-												),
+															const SizedBox(height: 1),
+															Text(
+																'TV',
+																style: TextStyle(
+																	color: Colors.white.withOpacity(0.75),
+																	fontWeight: FontWeight.w400,
+																	letterSpacing: 3.0,
+																	fontSize: 9,
+																	height: 1.0,
+																	shadows: [
+																		Shadow(
+																			color: Colors.black.withOpacity(0.2),
+																			blurRadius: 2,
+																			offset: const Offset(0, 1),
+																		),
+																	],
+																),
+															),
+														],
+													),
+												],
 											),
 										),
 									),
