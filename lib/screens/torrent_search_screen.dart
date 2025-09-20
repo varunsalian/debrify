@@ -963,6 +963,64 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             },
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _CompactActionButton(
+                            icon: Icons.playlist_add,
+                            title: 'Add to Playlist',
+                            color: const Color(0xFF8B5CF6),
+                            onTap: () async {
+                              Navigator.of(ctx).pop();
+                              if (!hasAnyVideo) return; // ignore non-video
+                              if (links.length == 1) {
+                                // Fetch actual torrent filename for resume key parity with Debrid screen
+                                String finalTitle = torrentName;
+                                try {
+                                  final torrentId = result['torrentId']?.toString();
+                                  if (torrentId != null && torrentId.isNotEmpty) {
+                                    final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
+                                    final filename = torrentInfo['filename']?.toString();
+                                    if (filename != null && filename.isNotEmpty) {
+                                      finalTitle = filename;
+                                    }
+                                  }
+                                } catch (_) {
+                                  // Fallback to torrentName if fetch fails
+                                }
+                                
+                                final added = await StorageService.addPlaylistItemRaw({
+                                  'title': finalTitle,
+                                  'url': '',
+                                  'restrictedLink': links[0],
+                                  'apiKey': apiKey,
+                                  'rdTorrentId': result['torrentId']?.toString(),
+                                  'kind': 'single',
+                                });
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(added ? 'Added to playlist' : 'Already in playlist')),
+                                );
+                              } else {
+                                // Multi-file/series torrent: add entire collection as one entry
+                                final torrentId = result['torrentId']?.toString() ?? '';
+                                if (torrentId.isEmpty) return;
+                                final added = await StorageService.addPlaylistItemRaw({
+                                  'title': torrentName,
+                                  'kind': 'collection',
+                                  'rdTorrentId': torrentId,
+                                  'apiKey': apiKey,
+                                  'count': links.length,
+                                });
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(added ? 'Added collection to playlist' : 'Already in playlist')),
+                                );
+                              }
+                            },
+                            enabled: hasAnyVideo,
+                          ),
+                        ),
+                        // Intentionally NO playlist button here (out of scope per request)
                       ],
                     ),
                     const SizedBox(height: 12),

@@ -19,6 +19,7 @@ class StorageService {
   static const String _debrifyTvShowVideoTitleKey = 'debrify_tv_show_video_title';
   static const String _debrifyTvHideOptionsKey = 'debrify_tv_hide_options';
   static const String _debrifyTvHideBackButtonKey = 'debrify_tv_hide_back_button';
+  static const String _playlistKey = 'user_playlist_v1';
 
   // Note: Plain text storage is fine for API key since they're stored locally on user's device
   // and can be easily regenerated if compromised
@@ -601,6 +602,63 @@ class StorageService {
   static Future<void> saveDebrifyTvHideBackButton(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_debrifyTvHideBackButtonKey, value);
+  }
+
+  // Playlist storage (local-only MVP)
+  static Future<List<Map<String, dynamic>>> getPlaylistItemsRaw() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_playlistKey);
+    if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
+    try {
+      final List<dynamic> list = jsonDecode(raw);
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  static Future<void> _savePlaylistItemsRaw(List<Map<String, dynamic>> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playlistKey, jsonEncode(items));
+  }
+
+  static String computePlaylistDedupeKey(Map<String, dynamic> item) {
+    final String? rdId = (item['rdTorrentId'] as String?);
+    if (rdId != null && rdId.isNotEmpty) {
+      return 'rd:${rdId}'.toLowerCase();
+    }
+    final String source = (item['restrictedLink'] as String?)?.trim() ?? (item['url'] as String?)?.trim() ?? '';
+    final String title = (item['title'] as String?)?.trim() ?? '';
+    return '${source}|${title}'.toLowerCase();
+  }
+
+  /// Add a new playlist item if it does not already exist.
+  /// Expected item shape (MVP): { url, title, restrictedLink, apiKey }
+  /// Returns true if inserted, false if duplicate.
+  static Future<bool> addPlaylistItemRaw(Map<String, dynamic> item) async {
+    final items = await getPlaylistItemsRaw();
+    final newKey = computePlaylistDedupeKey(item);
+    final exists = items.any((e) => computePlaylistDedupeKey(e) == newKey);
+    if (exists) return false;
+    final enriched = Map<String, dynamic>.from(item);
+    enriched['addedAt'] = DateTime.now().millisecondsSinceEpoch;
+    items.add(enriched);
+    await _savePlaylistItemsRaw(items);
+    return true;
+  }
+
+  static Future<void> removePlaylistItemByKey(String dedupeKey) async {
+    final items = await getPlaylistItemsRaw();
+    items.removeWhere((e) => computePlaylistDedupeKey(e) == dedupeKey);
+    await _savePlaylistItemsRaw(items);
+  }
+
+  static Future<void> clearPlaylist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_playlistKey);
   }
 }
 

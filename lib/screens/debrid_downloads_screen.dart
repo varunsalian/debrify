@@ -1341,6 +1341,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                   isUnrestricting: isUnrestricting,
                                   showPlayButtons: showPlayButtons,
                                   onPlay: () => _playFileOnDemand(torrent, fileIndexMapping[index]!, setLocal, unrestrictingFiles),
+                                  onAddToPlaylist: () => _addFileToPlaylist(torrent, fileIndexMapping[index]!, setLocal),
                                   onDownload: () => _downloadFileOnDemand(torrent, fileIndexMapping[index]!, fileName, setLocal, added, unrestrictingFiles),
                                   onSelect: () {
                                     setLocal(() {
@@ -2363,6 +2364,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                       ),
                     ),
                   ),
+                  // Playlist add for single-file
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: const Color(0xFF475569).withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        if (_apiKey == null) return;
+                        final ok = await StorageService.addPlaylistItemRaw({
+                          'title': torrent.filename,
+                          'url': '',
+                          'restrictedLink': torrent.links[0],
+                          'apiKey': _apiKey,
+                        });
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+                        );
+                      },
+                      icon: const Icon(Icons.playlist_add, size: 18),
+                    label: const Text('Add to Playlist'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF8B5CF6),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      ),
+                    ),
+                  ),
                 ] else ...[
                   Container(
                     decoration: BoxDecoration(
@@ -2378,6 +2410,39 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                       label: const Text('Play'),
                       style: TextButton.styleFrom(
                         foregroundColor: const Color(0xFFE50914),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      ),
+                    ),
+                  ),
+                  // Multi-file: add entire torrent collection as a single playlist item
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: const Color(0xFF475569).withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        if (_apiKey == null) return;
+                        final ok = await StorageService.addPlaylistItemRaw({
+                          'title': torrent.filename,
+                          'kind': 'collection',
+                          'rdTorrentId': torrent.id,
+                          'apiKey': _apiKey,
+                          // optional hint for UI
+                          'count': torrent.links.length,
+                        });
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(ok ? 'Added collection to playlist' : 'Already in playlist')),
+                        );
+                      },
+                      icon: const Icon(Icons.playlist_add, size: 18),
+                      label: const Text('Add to Playlist'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF8B5CF6),
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       ),
                     ),
@@ -3487,6 +3552,23 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
+  Future<void> _addFileToPlaylist(RDTorrent torrent, int index, StateSetter setLocal) async {
+    if (_apiKey == null) return;
+    try {
+      final item = {
+        'title': torrent.filename,
+        'url': '',
+        'restrictedLink': torrent.links[index],
+        'apiKey': _apiKey,
+      };
+      final ok = await StorageService.addPlaylistItemRaw(item);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+      );
+    } catch (_) {}
+  }
+
   Future<void> _downloadFileOnDemand(RDTorrent torrent, int index, String fileName, StateSetter setLocal, Set<int> added, Map<int, bool> unrestrictingFiles) async {
     if (_apiKey == null) return;
     
@@ -3533,6 +3615,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     required bool isUnrestricting,
     required bool showPlayButtons,
     required VoidCallback onPlay,
+    required VoidCallback onAddToPlaylist,
     required VoidCallback onDownload,
     required VoidCallback onSelect,
     required int index,
@@ -3732,6 +3815,28 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            // Add to playlist button (always enabled for videos)
+                            if (isVideo) ...[
+                              Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFF475569).withValues(alpha: 0.5)),
+                                ),
+                                child: OutlinedButton.icon(
+                                  onPressed: isUnrestricting ? null : onAddToPlaylist,
+                                  icon: const Icon(Icons.playlist_add, size: 18),
+                                  label: const Text(
+                                    'Playlist',
+                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    foregroundColor: Colors.grey[300],
                                   ),
                                 ),
                               ),

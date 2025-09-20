@@ -5,6 +5,7 @@ import 'screens/debrid_downloads_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/magic_tv_screen.dart';
+import 'screens/playlist_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
 import 'services/account_service.dart';
@@ -206,6 +207,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const DebridDownloadsScreen(),
     const DownloadsScreen(),
     const DebrifyTVScreen(),
+    const PlaylistScreen(),
     const SettingsScreen(),
   ];
 
@@ -214,6 +216,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Real Debrid',
     'Downloads',
     'Debrify TV',
+    'Playlist',
     'Settings',
   ];
 
@@ -222,6 +225,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.cloud_download_rounded,
     Icons.download_for_offline_rounded,
     Icons.auto_awesome_rounded,
+    Icons.playlist_play_rounded,
     Icons.settings_rounded,
   ];
 
