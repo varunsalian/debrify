@@ -1518,28 +1518,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	Widget _buildCustomAspectRatioVideo() {
 		final aspectRatio = _getCustomAspectRatio();
 		if (aspectRatio == null) {
-			return FittedBox(
+			// No forced aspect ratio; let the Video widget scale internally
+			return mkv.Video(
+				controller: _videoController,
+				controls: null,
 				fit: _currentFit(),
-				child: SizedBox(
-					width: 1920,
-					height: 1080,
-					child: mkv.Video(controller: _videoController, controls: null),
-				),
 			);
 		}
 		
+		// Forced aspect ratio: center the constrained box and let Video cover inside it
 		return Center(
 			child: AspectRatio(
 				aspectRatio: aspectRatio,
-				child: ClipRect(
-					child: FittedBox(
-						fit: BoxFit.cover,
-						child: SizedBox(
-							width: 1920,
-							height: 1080,
-							child: mkv.Video(controller: _videoController, controls: null),
-						),
-					),
+				child: mkv.Video(
+					controller: _videoController,
+					controls: null,
+					fit: BoxFit.cover,
 				),
 			),
 		);
@@ -2007,16 +2001,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						children: [
 							// Video texture (media_kit renderer)
 							if (isReady && !_isTransitioning)
-								_getCustomAspectRatio() != null
-									? _buildCustomAspectRatioVideo()
-									: FittedBox(
-										fit: _currentFit(),
-										child: SizedBox(
-											width: 1920,
-											height: 1080,
-											child: mkv.Video(controller: _videoController, controls: null),
-										),
-									)
+				_getCustomAspectRatio() != null
+					? _buildCustomAspectRatioVideo()
+					: mkv.Video(
+						controller: _videoController,
+						controls: null,
+						fit: _currentFit(),
+					)
 							else if (_isTransitioning)
 								// Black screen during transitions to hide previous frame
 								Container(color: Colors.black)
