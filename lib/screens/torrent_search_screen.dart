@@ -888,37 +888,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               backgroundColor: Colors.transparent,
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1E293B), Color(0xFF111827)],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.25)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 24, offset: const Offset(0, 12)),
-                  ],
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF374151)),
                 ),
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       children: const [
-                        Icon(Icons.bolt_rounded, color: Color(0xFF6366F1)),
+                        Icon(Icons.bolt_rounded, color: Color(0xFF6366F1), size: 20),
                         SizedBox(width: 8),
-                        Text('Choose an action', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                        Text('Choose an action', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
-                          child: _PremiumActionButton(
-                            icon: Icons.play_circle_fill_rounded,
+                          child: _CompactActionButton(
+                            icon: Icons.play_arrow_rounded,
                             title: 'Play',
-                            subtitle: 'Open in player',
-                            gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                            color: const Color(0xFF6366F1),
                             onTap: () async {
                               Navigator.of(ctx).pop();
                               await _playFromResult(
@@ -933,29 +925,34 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: hasAnyVideo,
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: _PremiumActionButton(
+                          child: _CompactActionButton(
                             icon: Icons.download_rounded,
                             title: 'Download',
-                            subtitle: 'Choose files',
-                            gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+                            color: const Color(0xFF10B981),
                             onTap: () {
                               Navigator.of(ctx).pop();
                               if (hasAnyVideo) {
-                                final rdTorrent = RDTorrent(
-                                  id: result['torrentId'].toString(),
-                                  filename: torrentName,
-                                  hash: '',
-                                  bytes: 0,
-                                  host: '',
-                                  split: 0,
-                                  progress: 0,
-                                  status: '',
-                                  added: DateTime.now().toIso8601String(),
-                                  links: links.map((e) => e.toString()).toList(),
-                                );
-                                MainPageBridge.openDebridOptions?.call(rdTorrent);
+                                // Check if single video file - download directly
+                                if (links.length == 1) {
+                                  _downloadFile(downloadLink, torrentName);
+                                } else {
+                                  // Multiple video files - show file selection
+                                  final rdTorrent = RDTorrent(
+                                    id: result['torrentId'].toString(),
+                                    filename: torrentName,
+                                    hash: '',
+                                    bytes: 0,
+                                    host: '',
+                                    split: 0,
+                                    progress: 0,
+                                    status: '',
+                                    added: DateTime.now().toIso8601String(),
+                                    links: links.map((e) => e.toString()).toList(),
+                                  );
+                                  MainPageBridge.openDebridOptions?.call(rdTorrent);
+                                }
                               } else {
                                 if (links.length > 1) {
                                   _showDownloadSelectionDialog(links, torrentName);
@@ -968,10 +965,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     TextButton(
                       onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('Cancel'),
+                      child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
                     ),
                   ],
                 ),
@@ -1037,24 +1034,43 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
         break;
       case 'download':
-        // Download file(s)
-        if (fileSelection == 'video' && links.length > 1) {
-          // Multiple video files - show selection dialog for download
-          _showDownloadSelectionDialog(links, torrentName);
+        // Download file(s) - use same logic as "choose" case
+        if (hasAnyVideo) {
+          // Check if single video file - download directly
+          if (links.length == 1) {
+            await _downloadFile(downloadLink, torrentName);
+          } else {
+            // Multiple video files - show file selection
+            final rdTorrent = RDTorrent(
+              id: result['torrentId'].toString(),
+              filename: torrentName,
+              hash: '',
+              bytes: 0,
+              host: '',
+              split: 0,
+              progress: 0,
+              status: '',
+              added: DateTime.now().toIso8601String(),
+              links: links.map((e) => e.toString()).toList(),
+            );
+            MainPageBridge.openDebridOptions?.call(rdTorrent);
+          }
         } else {
-          // Single file - download directly
-          await _downloadFile(downloadLink, torrentName);
+          if (links.length > 1) {
+            _showDownloadSelectionDialog(links, torrentName);
+          } else {
+            await _downloadFile(downloadLink, torrentName);
+          }
         }
         break;
     }
   }
 
-  // Premium action button widget for the chooser dialog
-  Widget _PremiumActionButton({
+  // Compact action button widget for the chooser dialog
+  Widget _CompactActionButton({
     required IconData icon,
     required String title,
-    required String subtitle,
-    required LinearGradient gradient,
+    required Color color,
     required VoidCallback onTap,
     bool enabled = true,
   }) {
@@ -1062,35 +1078,27 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       opacity: enabled ? 1.0 : 0.5,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            gradient: enabled ? gradient : LinearGradient(colors: [const Color(0xFF334155), const Color(0xFF1F2937)]),
-            boxShadow: [
-              BoxShadow(color: gradient.colors.first.withValues(alpha: 0.25), blurRadius: 14, offset: const Offset(0, 8)),
-            ],
+            color: enabled ? color.withValues(alpha: 0.1) : const Color(0xFF374151),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: enabled ? color.withValues(alpha: 0.3) : const Color(0xFF4B5563)),
           ),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                child: Icon(icon, color: Colors.white),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-                    const SizedBox(height: 1),
-                    Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                  ],
+              Icon(icon, color: enabled ? color : Colors.grey, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                title, 
+                style: TextStyle(
+                  color: enabled ? color : Colors.grey, 
+                  fontWeight: FontWeight.w600, 
+                  fontSize: 14
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 20),
             ],
           ),
         ),

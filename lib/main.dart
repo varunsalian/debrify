@@ -239,6 +239,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _pages[1] = DebridDownloadsScreen(initialTorrentForOptions: torrent);
       });
       _onItemTapped(1);
+      // Reset the page after a delay to prevent recurring dialogs
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _pages[1] = const DebridDownloadsScreen();
+          });
+        }
+      });
     };
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
