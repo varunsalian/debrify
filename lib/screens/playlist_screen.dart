@@ -398,29 +398,56 @@ class _PlaylistCard extends StatelessWidget {
             Positioned(
               top: 8,
               right: 8,
-              child: IconButton(
-                icon: const Icon(Icons.more_vert, color: Colors.white70),
-                onPressed: () async {
-                  // Position the menu relative to this button
-                  final RenderBox? button = context.findRenderObject() as RenderBox?;
-                  final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-                  RelativeRect position = const RelativeRect.fromLTRB(0, 0, 0, 0);
-                  if (button != null) {
-                    final Offset topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
-                    final Offset bottomRight = button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay);
-                    position = RelativeRect.fromRect(Rect.fromPoints(topLeft, bottomRight), Offset.zero & overlay.size);
-                  }
-                  final action = await showMenu<String>(
+              child: GestureDetector(
+                onTap: () async {
+                  final confirmed = await showDialog<bool>(
                     context: context,
-                    position: position,
-                    items: const [
-                      PopupMenuItem(value: 'remove', child: Text('Remove from playlist')),
-                    ],
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF1E293B),
+                      title: const Text(
+                        'Remove from Playlist',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      content: Text(
+                        'Are you sure you want to remove "$title" from your playlist?',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text(
+                            'Remove',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
                   );
-                  if (action == 'remove') {
+                  if (confirmed == true) {
                     onRemove();
                   }
                 },
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                  ),
+                  child: const Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
               ),
             ),
             const Positioned(
