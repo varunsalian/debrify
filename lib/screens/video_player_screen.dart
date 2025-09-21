@@ -10,6 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
+import '../services/episode_info_service.dart';
 import '../models/series_playlist.dart';
 
 
@@ -36,6 +37,7 @@ class VideoPlayerScreen extends StatefulWidget {
 	final String? subtitle;
 	final List<PlaylistEntry>? playlist;
 	final int? startIndex;
+	final String? rdTorrentId; // For updating playlist poster
     // Optional: Debrify TV provider to fetch the next playable item (url & title)
     final Future<Map<String, String>?> Function()? requestMagicNext;
     // Advanced: start each video at a random timestamp
@@ -58,6 +60,7 @@ class VideoPlayerScreen extends StatefulWidget {
 		this.subtitle,
 		this.playlist,
 		this.startIndex,
+		this.rdTorrentId,
         this.requestMagicNext,
         this.startFromRandom = false,
         this.hideSeekbar = false,
@@ -832,7 +835,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		if (seriesPlaylist != null && seriesPlaylist.isSeries) {
 			// Preload episode information in the background
-			seriesPlaylist.fetchEpisodeInfo().then((_) {
+			seriesPlaylist.fetchEpisodeInfo().then((_) async {
+				// Extract poster URL from series data and save to playlist
+				await _saveSeriesPosterToPlaylist(seriesPlaylist);
+				
 				// Trigger UI update to show the episode info
 				if (mounted) {
 					setState(() {});
@@ -840,6 +846,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			}).catchError((error) {
 				// Silently handle errors - this is just preloading
 			});
+		}
+	}
+
+	/// Save series poster URL to playlist item
+	Future<void> _saveSeriesPosterToPlaylist(SeriesPlaylist seriesPlaylist) async {
+		if (seriesPlaylist.seriesTitle == null) return;
+		
+		// Get the rdTorrentId from the widget parameter
+		final rdTorrentId = widget.rdTorrentId;
+		if (rdTorrentId == null || rdTorrentId.isEmpty) return;
+		
+		// Try to get series info to extract poster URL
+		try {
+			final seriesInfo = await EpisodeInfoService.getSeriesInfo(seriesPlaylist.seriesTitle!);
+			if (seriesInfo != null && seriesInfo['image'] != null) {
+				final posterUrl = seriesInfo['image']['original'] ?? seriesInfo['image']['medium'];
+				if (posterUrl != null && posterUrl.isNotEmpty) {
+					// Save poster URL to playlist item
+					await StorageService.updatePlaylistItemPoster(rdTorrentId, posterUrl);
+				}
+			}
+		} catch (e) {
+			// Silently fail - poster is optional
 		}
 	}
 

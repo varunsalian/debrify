@@ -660,6 +660,20 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_playlistKey);
   }
+
+  /// Update an existing playlist item with poster URL
+  /// Uses rdTorrentId to find and update the item
+  static Future<bool> updatePlaylistItemPoster(String rdTorrentId, String posterUrl) async {
+    final items = await getPlaylistItemsRaw();
+    final itemIndex = items.indexWhere((item) => 
+      (item['rdTorrentId'] as String?) == rdTorrentId);
+    
+    if (itemIndex == -1) return false;
+    
+    items[itemIndex]['posterUrl'] = posterUrl;
+    await _savePlaylistItemsRaw(items);
+    return true;
+  }
 }
 
 class ApiKeyValidator {

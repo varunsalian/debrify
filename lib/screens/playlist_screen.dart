@@ -53,6 +53,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   builder: (_) => VideoPlayerScreen(
                     videoUrl: downloadLink,
                     title: finalTitle,
+                    rdTorrentId: rdTorrentId,
                   ),
                 ),
               );
@@ -201,6 +202,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               subtitle: '${entries.length} files',
               playlist: entries,
               startIndex: 0,
+              rdTorrentId: rdTorrentId,
             ),
           ),
         );
@@ -219,6 +221,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         builder: (_) => VideoPlayerScreen(
           videoUrl: url,
           title: title,
+          rdTorrentId: rdTorrentId,
         ),
       ),
     );
@@ -283,6 +286,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               final String title = (item['title'] as String?) ?? 'Video';
               return _PlaylistCard(
                 title: title,
+                posterUrl: item['posterUrl'] as String?,
                 onPlay: () => _playItem(item),
                 onRemove: () => _removeItem(item),
               );
@@ -296,11 +300,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
 class _PlaylistCard extends StatelessWidget {
   final String title;
+  final String? posterUrl;
   final VoidCallback onPlay;
   final VoidCallback onRemove;
 
   const _PlaylistCard({
     required this.title,
+    this.posterUrl,
     required this.onPlay,
     required this.onRemove,
   });
@@ -317,18 +323,78 @@ class _PlaylistCard extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+            // Show poster if available, otherwise show title
+            if (posterUrl != null && posterUrl!.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  children: [
+                    Image.network(
+                      posterUrl!,
+                      width: double.infinity,
+                      height: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        // Fallback to title display if image fails to load
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              title,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    // Show title overlay on poster
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.8),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
-            ),
             Positioned(
               top: 8,
               right: 8,
