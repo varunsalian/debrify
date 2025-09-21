@@ -1147,20 +1147,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: enabled ? color.withValues(alpha: 0.3) : const Color(0xFF4B5563)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: enabled ? color : Colors.grey, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                title, 
-                style: TextStyle(
-                  color: enabled ? color : Colors.grey, 
-                  fontWeight: FontWeight.w600, 
-                  fontSize: 14
-                ),
-              ),
-            ],
+          child: Center(
+            child: Icon(icon, color: enabled ? color : Colors.grey, size: 20),
           ),
         ),
       ),
