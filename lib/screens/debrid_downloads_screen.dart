@@ -2215,36 +2215,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // Small download button (only for single-file torrents)
-                    if (torrent.links.length == 1)
-                      IconButton(
-                        tooltip: 'Download',
-                        onPressed: () async {
-                          if (_apiKey == null) return;
-                          try {
-                            final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
-                            final link = unrestrict['download'] as String;
-                            await DownloadService.instance.enqueueDownload(
-                              url: link,
-                              fileName: torrent.filename,
-                              context: context,
-                              torrentName: torrent.filename,
-                            );
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Added to downloads')),
-                              );
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Failed to start download: $e')),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.download_rounded, color: Color(0xFF10B981)),
-                      ),
                   ],
                 ),
                 
@@ -2315,26 +2285,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                ),
              ),
              child: Row(
+               mainAxisAlignment: MainAxisAlignment.center,
                children: [
-                 // File options button
-                                   Expanded(
-                    child: TextButton.icon(
-                      onPressed: () => _handleFileOptions(torrent),
-                      icon: torrent.links.length > 1
-                          ? const Icon(Icons.more_horiz, size: 18)
-                          : const Icon(Icons.copy, size: 18),
-                      label: Text(
-                        torrent.links.length > 1 
-                          ? 'Download Options (${torrent.links.length})'
-                          : 'Copy Download Link',
-                      ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF6366F1),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                 ),
-                 
                 // Play button
                 if (torrent.links.length == 1) ...[
                   Container(
@@ -2345,7 +2297,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         ),
                       ),
                     ),
-                    child: TextButton.icon(
+                    child: IconButton(
                       onPressed: () => _handlePlayVideo(torrent),
                       icon: Icon(
                         FileUtils.isProblematicVideo(torrent.filename)
@@ -2353,14 +2305,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                           : Icons.play_arrow,
                         size: 18,
                       ),
-                      label: Text(
-                        FileUtils.isProblematicVideo(torrent.filename) ? 'Play*' : 'Play',
-                      ),
-                      style: TextButton.styleFrom(
+                      style: IconButton.styleFrom(
                         foregroundColor: FileUtils.isProblematicVideo(torrent.filename)
                           ? const Color(0xFFF59E0B)
                           : const Color(0xFFE50914),
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.all(12),
                       ),
                     ),
                   ),
@@ -2373,7 +2322,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         ),
                       ),
                     ),
-                    child: TextButton.icon(
+                    child: IconButton(
                       onPressed: () async {
                         if (_apiKey == null) return;
                         final ok = await StorageService.addPlaylistItemRaw({
@@ -2388,10 +2337,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         );
                       },
                       icon: const Icon(Icons.playlist_add, size: 18),
-                    label: const Text('Add to Playlist'),
-                      style: TextButton.styleFrom(
+                      style: IconButton.styleFrom(
                         foregroundColor: const Color(0xFF8B5CF6),
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.all(12),
                       ),
                     ),
                   ),
@@ -2404,13 +2352,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         ),
                       ),
                     ),
-                    child: TextButton.icon(
+                    child: IconButton(
                       onPressed: () => _handlePlayMultiFileTorrent(torrent),
                       icon: const Icon(Icons.play_arrow, size: 18),
-                      label: const Text('Play'),
-                      style: TextButton.styleFrom(
+                      style: IconButton.styleFrom(
                         foregroundColor: const Color(0xFFE50914),
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.all(12),
                       ),
                     ),
                   ),
@@ -2423,7 +2370,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         ),
                       ),
                     ),
-                    child: TextButton.icon(
+                    child: IconButton(
                       onPressed: () async {
                         if (_apiKey == null) return;
                         final ok = await StorageService.addPlaylistItemRaw({
@@ -2440,14 +2387,78 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         );
                       },
                       icon: const Icon(Icons.playlist_add, size: 18),
-                      label: const Text('Add to Playlist'),
-                      style: TextButton.styleFrom(
+                      style: IconButton.styleFrom(
                         foregroundColor: const Color(0xFF8B5CF6),
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.all(12),
                       ),
                     ),
                   ),
                 ],
+                 
+                 // File options button
+                 Container(
+                   decoration: BoxDecoration(
+                     border: Border(
+                       left: BorderSide(
+                         color: const Color(0xFF475569).withValues(alpha: 0.3),
+                       ),
+                     ),
+                   ),
+                   child: IconButton(
+                     onPressed: () => _handleFileOptions(torrent),
+                     icon: torrent.links.length > 1
+                         ? const Icon(Icons.more_horiz, size: 18)
+                         : const Icon(Icons.copy, size: 18),
+                     style: IconButton.styleFrom(
+                       foregroundColor: const Color(0xFF6366F1),
+                       padding: const EdgeInsets.all(12),
+                     ),
+                   ),
+                 ),
+                 
+                 // Download button (only for single-file torrents)
+                 if (torrent.links.length == 1) ...[
+                   Container(
+                     decoration: BoxDecoration(
+                       border: Border(
+                         left: BorderSide(
+                           color: const Color(0xFF475569).withValues(alpha: 0.3),
+                         ),
+                       ),
+                     ),
+                     child: IconButton(
+                       onPressed: () async {
+                         if (_apiKey == null) return;
+                         try {
+                           final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
+                           final link = unrestrict['download'] as String;
+                           await DownloadService.instance.enqueueDownload(
+                             url: link,
+                             fileName: torrent.filename,
+                             context: context,
+                             torrentName: torrent.filename,
+                           );
+                           if (mounted) {
+                             ScaffoldMessenger.of(context).showSnackBar(
+                               const SnackBar(content: Text('Added to downloads')),
+                             );
+                           }
+                         } catch (e) {
+                           if (mounted) {
+                             ScaffoldMessenger.of(context).showSnackBar(
+                               SnackBar(content: Text('Failed to start download: $e')),
+                             );
+                           }
+                         }
+                       },
+                       icon: const Icon(Icons.download_rounded, size: 18),
+                       style: IconButton.styleFrom(
+                         foregroundColor: const Color(0xFF10B981),
+                         padding: const EdgeInsets.all(12),
+                       ),
+                     ),
+                   ),
+                 ],
                  
                  // Delete button
                  Container(
@@ -2458,13 +2469,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                        ),
                      ),
                    ),
-                   child: TextButton.icon(
+                   child: IconButton(
                      onPressed: () => _handleDeleteTorrent(torrent),
                      icon: const Icon(Icons.delete_outline, size: 18),
-                     label: const Text('Delete'),
-                     style: TextButton.styleFrom(
+                     style: IconButton.styleFrom(
                        foregroundColor: const Color(0xFFEF4444),
-                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                       padding: const EdgeInsets.all(12),
                      ),
                    ),
                  ),
@@ -2510,34 +2520,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Download',
-                      onPressed: () async {
-                        if (_apiKey == null) return;
-                        try {
-                          final unrestrict = await DebridService.unrestrictLink(_apiKey!, download.link);
-                          final link = unrestrict['download'] as String;
-                          await DownloadService.instance.enqueueDownload(
-                            url: link,
-                            fileName: download.filename,
-                            context: context,
-                            torrentName: download.filename,
-                          );
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Added to downloads')),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Failed to start download: $e')),
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.download_rounded, color: Color(0xFF10B981)),
                     ),
                   ],
                 ),
@@ -2609,20 +2591,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               ),
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Copy link button
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => _handleDownloadAction(download),
-                    icon: const Icon(Icons.copy, size: 18),
-                    label: const Text('Copy Download Link'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF6366F1),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                
                 // Play button (if streamable)
                 if (download.streamable == 1) ...[
                   Container(
@@ -2633,7 +2603,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         ),
                       ),
                     ),
-                    child: TextButton.icon(
+                    child: IconButton(
                       onPressed: () => _handlePlayDownload(download),
                       icon: Icon(
                         FileUtils.isProblematicVideo(download.filename)
@@ -2641,18 +2611,76 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                           : Icons.play_arrow,
                         size: 18,
                       ),
-                      label: Text(
-                        FileUtils.isProblematicVideo(download.filename) ? 'Play*' : 'Play',
-                      ),
-                      style: TextButton.styleFrom(
+                      style: IconButton.styleFrom(
                         foregroundColor: FileUtils.isProblematicVideo(download.filename)
                           ? const Color(0xFFF59E0B)
                           : const Color(0xFFE50914),
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.all(12),
                       ),
                     ),
                   ),
                 ],
+                
+                // Download button
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: const Color(0xFF475569).withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                  child: IconButton(
+                    onPressed: () async {
+                      if (_apiKey == null) return;
+                      try {
+                        final unrestrict = await DebridService.unrestrictLink(_apiKey!, download.link);
+                        final link = unrestrict['download'] as String;
+                        await DownloadService.instance.enqueueDownload(
+                          url: link,
+                          fileName: download.filename,
+                          context: context,
+                          torrentName: download.filename,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Added to downloads')),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to start download: $e')),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.download_rounded, size: 18),
+                    style: IconButton.styleFrom(
+                      foregroundColor: const Color(0xFF10B981),
+                      padding: const EdgeInsets.all(12),
+                    ),
+                  ),
+                ),
+                
+                // Copy link button
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: const Color(0xFF475569).withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                  child: IconButton(
+                    onPressed: () => _handleDownloadAction(download),
+                    icon: const Icon(Icons.copy, size: 18),
+                    style: IconButton.styleFrom(
+                      foregroundColor: const Color(0xFF6366F1),
+                      padding: const EdgeInsets.all(12),
+                    ),
+                  ),
+                ),
                 
                 // Delete button
                 Container(
@@ -2663,13 +2691,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                       ),
                     ),
                   ),
-                  child: TextButton.icon(
+                  child: IconButton(
                     onPressed: () => _handleDeleteDownload(download),
                     icon: const Icon(Icons.delete_outline, size: 18),
-                    label: const Text('Delete'),
-                    style: TextButton.styleFrom(
+                    style: IconButton.styleFrom(
                       foregroundColor: const Color(0xFFEF4444),
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      padding: const EdgeInsets.all(12),
                     ),
                   ),
                 ),
