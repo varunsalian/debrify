@@ -920,6 +920,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 torrentName: torrentName,
                                 apiKey: apiKey,
                                 fileSelection: fileSelection,
+                                torrentId: result['torrentId']?.toString(),
                               );
                             },
                             enabled: hasAnyVideo,
@@ -1043,6 +1044,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           torrentName: torrentName,
           apiKey: apiKey,
           fileSelection: fileSelection,
+          torrentId: result['torrentId']?.toString(),
         );
         break;
       case 'copy':
@@ -1089,6 +1091,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           torrentName: torrentName,
           apiKey: apiKey,
           fileSelection: fileSelection,
+          torrentId: result['torrentId']?.toString(),
         );
         break;
       case 'download':
@@ -1171,10 +1174,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     required String torrentName,
     required String apiKey,
     required String fileSelection,
+    String? torrentId,
   }) async {
     // If multiple RD links exist, treat as multi-file playlist (series pack, multi-episode, etc.)
     if (links.length > 1) {
-      await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey, 0);
+      await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey, 0, torrentId);
       return;
     }
     try {
@@ -1183,11 +1187,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
       if (FileUtils.isVideoMimeType(mimeType)) {
         if (!mounted) return;
+        
+        // Fetch actual torrent filename for resume key parity with Debrid screen
+        String finalTitle = torrentName;
+        try {
+          if (torrentId != null && torrentId.isNotEmpty) {
+            final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
+            final filename = torrentInfo['filename']?.toString();
+            if (filename != null && filename.isNotEmpty) {
+              finalTitle = filename;
+            }
+          }
+        } catch (_) {
+          // Fallback to torrentName if fetch fails
+        }
+        
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => VideoPlayerScreen(
               videoUrl: videoUrl,
-              title: torrentName,
+              title: finalTitle,
             ),
           ),
         );
@@ -1261,7 +1280,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _handlePlayMultiFileTorrentWithInfo(List<dynamic> links, List<dynamic>? files, Map<String, dynamic>? updatedInfo, String torrentName, String apiKey, int index) async {
+  Future<void> _handlePlayMultiFileTorrentWithInfo(List<dynamic> links, List<dynamic>? files, Map<String, dynamic>? updatedInfo, String torrentName, String apiKey, int index, String? torrentId) async {
     try {
       // Show loading dialog
       showDialog(
@@ -1595,11 +1614,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         initialVideoUrl = entries.first.url;
       }
       
+      // Fetch actual torrent filename for resume key parity with Debrid screen
+      String finalTitle = torrentName;
+      try {
+        if (torrentId != null && torrentId.isNotEmpty) {
+          final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
+          final filename = torrentInfo['filename']?.toString();
+          if (filename != null && filename.isNotEmpty) {
+            finalTitle = filename;
+          }
+        }
+      } catch (_) {
+        // Fallback to torrentName if fetch fails
+      }
+      
       			Navigator.of(context).push(
 				MaterialPageRoute(
 					builder: (context) => VideoPlayerScreen(
 						videoUrl: initialVideoUrl,
-						title: torrentName,
+						title: finalTitle,
 						subtitle: '${entries.length} files',
 						playlist: entries.isNotEmpty ? entries : null,
 						startIndex: 0,
