@@ -2325,16 +2325,34 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     child: IconButton(
                       onPressed: () async {
                         if (_apiKey == null) return;
-                        final ok = await StorageService.addPlaylistItemRaw({
-                          'title': torrent.filename,
-                          'url': '',
-                          'restrictedLink': torrent.links[0],
-                          'apiKey': _apiKey,
-                        });
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
-                        );
+                        
+                        try {
+                          // Check if it's a video file before adding to playlist
+                          final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
+                          final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
+                          
+                          // Check if it's actually a video using MIME type
+                          if (FileUtils.isVideoMimeType(mimeType)) {
+                            final ok = await StorageService.addPlaylistItemRaw({
+                              'title': torrent.filename,
+                              'url': '',
+                              'restrictedLink': torrent.links[0],
+                              'apiKey': _apiKey,
+                            });
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+                            );
+                          } else {
+                            if (mounted) {
+                              _showError('This file is not a video (MIME type: $mimeType)');
+                            }
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            _showError('Failed to validate file: ${e.toString()}');
+                          }
+                        }
                       },
                       icon: const Icon(Icons.playlist_add, size: 18),
                       style: IconButton.styleFrom(
@@ -3581,19 +3599,35 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
   Future<void> _addFileToPlaylist(RDTorrent torrent, int index, StateSetter setLocal) async {
     if (_apiKey == null) return;
+    
     try {
-      final item = {
-        'title': torrent.filename,
-        'url': '',
-        'restrictedLink': torrent.links[index],
-        'apiKey': _apiKey,
-      };
-      final ok = await StorageService.addPlaylistItemRaw(item);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
-      );
-    } catch (_) {}
+      // Check if it's a video file before adding to playlist
+      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
+      final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
+      
+      // Check if it's actually a video using MIME type
+      if (FileUtils.isVideoMimeType(mimeType)) {
+        final item = {
+          'title': torrent.filename,
+          'url': '',
+          'restrictedLink': torrent.links[index],
+          'apiKey': _apiKey,
+        };
+        final ok = await StorageService.addPlaylistItemRaw(item);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+        );
+      } else {
+        if (mounted) {
+          _showError('This file is not a video (MIME type: $mimeType)');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Failed to validate file: ${e.toString()}');
+      }
+    }
   }
 
   Future<void> _downloadFileOnDemand(RDTorrent torrent, int index, String fileName, StateSetter setLocal, Set<int> added, Map<int, bool> unrestrictingFiles) async {
@@ -3842,28 +3876,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            // Add to playlist button (always enabled for videos)
-                            if (isVideo) ...[
-                              Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: const Color(0xFF475569).withValues(alpha: 0.5)),
-                                ),
-                                child: OutlinedButton.icon(
-                                  onPressed: isUnrestricting ? null : onAddToPlaylist,
-                                  icon: const Icon(Icons.playlist_add, size: 18),
-                                  label: const Text(
-                                    'Playlist',
-                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    foregroundColor: Colors.grey[300],
                                   ),
                                 ),
                               ),
