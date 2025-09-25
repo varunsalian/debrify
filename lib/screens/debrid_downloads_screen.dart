@@ -2338,6 +2338,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                               'url': '',
                               'restrictedLink': torrent.links[0],
                               'apiKey': _apiKey,
+                              'rdTorrentId': torrent.id,
+                              'kind': 'single',
                             });
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -3612,6 +3614,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           'url': '',
           'restrictedLink': torrent.links[index],
           'apiKey': _apiKey,
+          'rdTorrentId': torrent.id,
+          'kind': 'single',
         };
         final ok = await StorageService.addPlaylistItemRaw(item);
         if (!mounted) return;
