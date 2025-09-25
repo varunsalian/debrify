@@ -81,11 +81,13 @@ class PlaylistEntry {
 	final String title;
 	final String? restrictedLink; // The original restricted link from debrid
 	final String? apiKey; // API key for unrestricting
+	final String? torrentHash; // SHA1 Hash of the torrent
 	const PlaylistEntry({
 		required this.url, 
 		required this.title, 
 		this.restrictedLink,
 		this.apiKey,
+		this.torrentHash,
 	});
 }
 

@@ -6,12 +6,14 @@ class PlaylistEntry {
   final String title;
   final String? restrictedLink;
   final String? apiKey;
+  final String? torrentHash;
   
   const PlaylistEntry({
     required this.url, 
     required this.title, 
     this.restrictedLink,
     this.apiKey,
+    this.torrentHash,
   });
 }
 

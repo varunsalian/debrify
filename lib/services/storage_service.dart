@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'debrid_service.dart';
 
@@ -636,15 +637,61 @@ class StorageService {
   }
 
   /// Add a new playlist item if it does not already exist.
-  /// Expected item shape (MVP): { url, title, restrictedLink, apiKey }
+  /// Expected item shape (MVP): { url, title, restrictedLink, apiKey, rdTorrentId }
   /// Returns true if inserted, false if duplicate.
   static Future<bool> addPlaylistItemRaw(Map<String, dynamic> item) async {
     final items = await getPlaylistItemsRaw();
     final newKey = computePlaylistDedupeKey(item);
     final exists = items.any((e) => computePlaylistDedupeKey(e) == newKey);
     if (exists) return false;
+    
     final enriched = Map<String, dynamic>.from(item);
     enriched['addedAt'] = DateTime.now().millisecondsSinceEpoch;
+    
+    // Fetch and add torrent hash if we have a torrent ID
+    final String? rdTorrentId = item['rdTorrentId'] as String?;
+    final String? apiKey = item['apiKey'] as String?;
+    
+    if (rdTorrentId != null && rdTorrentId.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
+      try {
+        // Import DebridService here to avoid circular dependency
+        final response = await http.get(
+          Uri.parse('https://api.real-debrid.com/rest/1.0/torrents/info/$rdTorrentId'),
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+          },
+        );
+        
+        if (response.statusCode == 200) {
+          final torrentInfo = json.decode(response.body);
+          final String? hash = torrentInfo['hash'] as String?;
+          if (hash != null && hash.isNotEmpty) {
+            enriched['torrent_hash'] = hash;
+            print('✅ Torrent hash fetched and stored: $hash for torrent ID: $rdTorrentId');
+          } else {
+            print('⚠️ No hash found in torrent info for torrent ID: $rdTorrentId');
+          }
+        } else {
+          print('❌ Failed to fetch torrent info. Status code: ${response.statusCode} for torrent ID: $rdTorrentId');
+        }
+      } catch (e) {
+        print('❌ Error fetching torrent hash for torrent ID: $rdTorrentId - $e');
+        // Silently continue without hash if fetch fails
+        // This ensures playlist addition doesn't fail due to hash fetch issues
+      }
+    } else {
+      print('ℹ️ Skipping torrent hash fetch - missing rdTorrentId or apiKey');
+    }
+    
+    // Log what's being saved to database
+    print('📝 Adding playlist item to database:');
+    print('   Title: ${enriched['title']}');
+    print('   Kind: ${enriched['kind']}');
+    print('   rdTorrentId: ${enriched['rdTorrentId']}');
+    print('   torrent_hash: ${enriched['torrent_hash'] ?? 'null'}');
+    print('   restrictedLink: ${enriched['restrictedLink'] ?? 'null'}');
+    print('   addedAt: ${DateTime.fromMillisecondsSinceEpoch(enriched['addedAt']).toIso8601String()}');
+    
     items.add(enriched);
     await _savePlaylistItemsRaw(items);
     return true;

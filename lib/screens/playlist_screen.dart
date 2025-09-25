@@ -32,6 +32,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Future<void> _playItem(Map<String, dynamic> item) async {
     final String title = (item['title'] as String?) ?? 'Video';
     final String? rdTorrentId = item['rdTorrentId'] as String?;
+    final String? torrentHash = item['torrent_hash'] as String?;
     final String kind = (item['kind'] as String?) ?? 'single';
     
     // Handle single file torrents (from Let me choose or direct adds)
@@ -170,15 +171,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[linkIndex]);
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
-                entries.add(PlaylistEntry(url: url, title: finalFilename));
+                entries.add(PlaylistEntry(url: url, title: finalFilename, torrentHash: torrentHash));
               } else {
-                entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey));
+                entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey, torrentHash: torrentHash));
               }
             } catch (_) {
-              entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey));
+              entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey, torrentHash: torrentHash));
             }
           } else {
-            entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey));
+            entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey, torrentHash: torrentHash));
           }
         }
 
