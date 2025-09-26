@@ -621,7 +621,7 @@ class StorageService {
     }
   }
 
-  static Future<void> _savePlaylistItemsRaw(List<Map<String, dynamic>> items) async {
+  static Future<void> savePlaylistItemsRaw(List<Map<String, dynamic>> items) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_playlistKey, jsonEncode(items));
   }
@@ -693,14 +693,14 @@ class StorageService {
     print('   addedAt: ${DateTime.fromMillisecondsSinceEpoch(enriched['addedAt']).toIso8601String()}');
     
     items.add(enriched);
-    await _savePlaylistItemsRaw(items);
+    await savePlaylistItemsRaw(items);
     return true;
   }
 
   static Future<void> removePlaylistItemByKey(String dedupeKey) async {
     final items = await getPlaylistItemsRaw();
     items.removeWhere((e) => computePlaylistDedupeKey(e) == dedupeKey);
-    await _savePlaylistItemsRaw(items);
+    await savePlaylistItemsRaw(items);
   }
 
   static Future<void> clearPlaylist() async {
@@ -718,7 +718,7 @@ class StorageService {
     if (itemIndex == -1) return false;
     
     items[itemIndex]['posterUrl'] = posterUrl;
-    await _savePlaylistItemsRaw(items);
+    await savePlaylistItemsRaw(items);
     return true;
   }
 }

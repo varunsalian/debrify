@@ -72,9 +72,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           }
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${e.toString()}')),
-          );
+          // Check if we can recover using torrent hash
+          if (torrentHash != null && torrentHash.isNotEmpty) {
+            await _attemptRecovery(item);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: ${e.toString()}')),
+            );
+          }
         }
         return;
       }
@@ -209,7 +214,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         );
       } catch (_) {
         if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-        // Silent fail for MVP
+        // Check if we can recover using torrent hash
+        if (torrentHash != null && torrentHash.isNotEmpty) {
+          await _attemptRecovery(item);
+        } else {
+          // Silent fail for MVP
+        }
       }
       return;
     }
@@ -226,6 +236,93 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _attemptRecovery(Map<String, dynamic> item) async {
+    final String? torrentHash = item['torrent_hash'] as String?;
+    final String? apiKey = item['apiKey'] as String?;
+    final String title = (item['title'] as String?) ?? 'Video';
+    
+    if (torrentHash == null || torrentHash.isEmpty || apiKey == null || apiKey.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Content no longer available')),
+      );
+      return;
+    }
+
+    // Show recovery loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        backgroundColor: Color(0xFF1E293B),
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Reconstructing playlist...', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Reconstruct magnet link
+      final magnetLink = 'magnet:?xt=urn:btih:$torrentHash';
+      
+      // Re-add torrent to Real Debrid
+      final result = await DebridService.addTorrentToDebridPreferVideos(apiKey, magnetLink);
+      final newTorrentId = result['torrentId'] as String?;
+      final newLinks = result['links'] as List<dynamic>? ?? [];
+      
+      if (newTorrentId != null && newTorrentId.isNotEmpty && newLinks.isNotEmpty) {
+        // Update playlist item with new torrent info
+        await _updatePlaylistItemWithNewTorrent(item, newTorrentId, newLinks);
+        
+        // Close loading dialog
+        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        
+        // Retry playback with updated item
+        await _playItem(item);
+      } else {
+        // Close loading dialog
+        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Content no longer available')),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Content no longer available')),
+      );
+    }
+  }
+
+  Future<void> _updatePlaylistItemWithNewTorrent(Map<String, dynamic> item, String newTorrentId, List<dynamic> newLinks) async {
+    // Update the item with new torrent info
+    item['rdTorrentId'] = newTorrentId;
+    
+    // For single files, update the restrictedLink with the first new link
+    if (item['kind'] == 'single' && newLinks.isNotEmpty) {
+      item['restrictedLink'] = newLinks[0].toString();
+    }
+    
+    // Save updated playlist
+    final items = await StorageService.getPlaylistItemsRaw();
+    final itemIndex = items.indexWhere((playlistItem) => 
+      StorageService.computePlaylistDedupeKey(playlistItem) == StorageService.computePlaylistDedupeKey(item));
+    
+    if (itemIndex != -1) {
+      items[itemIndex] = item;
+      await StorageService.savePlaylistItemsRaw(items);
+    }
   }
 
   Future<void> _removeItem(Map<String, dynamic> item) async {
