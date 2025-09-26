@@ -204,28 +204,28 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
-    const DebridDownloadsScreen(),
+    const PlaylistScreen(),
     const DownloadsScreen(),
     const DebrifyTVScreen(),
-    const PlaylistScreen(),
+    const DebridDownloadsScreen(),
     const SettingsScreen(),
   ];
 
   final List<String> _titles = [
     'Torrent Search',
-    'Real Debrid',
+    'Playlist',
     'Downloads',
     'Debrify TV',
-    'Playlist',
+    'Real Debrid',
     'Settings',
   ];
 
   final List<IconData> _icons = [
     Icons.search_rounded,
-    Icons.cloud_download_rounded,
+    Icons.playlist_play_rounded,
     Icons.download_for_offline_rounded,
     Icons.auto_awesome_rounded,
-    Icons.playlist_play_rounded,
+    Icons.cloud_download_rounded,
     Icons.settings_rounded,
   ];
 
@@ -240,14 +240,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openDebridOptions = (RDTorrent torrent) {
       if (!mounted) return;
       setState(() {
-        _pages[1] = DebridDownloadsScreen(initialTorrentForOptions: torrent);
+        _pages[4] = DebridDownloadsScreen(initialTorrentForOptions: torrent);
       });
-      _onItemTapped(1);
+      _onItemTapped(4);
       // Reset the page after a delay to prevent recurring dialogs
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           setState(() {
-            _pages[1] = const DebridDownloadsScreen();
+            _pages[4] = const DebridDownloadsScreen();
           });
         }
       });
@@ -330,7 +330,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             currentIndex: _selectedIndex,
             items: buildDefaultNavItems(_icons, _titles),
             onTap: _onItemTapped,
-            badges: const [0, 0, 0, 0, 0],
+            badges: const [0, 0, 0, 0, 0, 0],
             haptics: true,
           ),
           automaticallyImplyLeading: false,
