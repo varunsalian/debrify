@@ -627,6 +627,10 @@ class StorageService {
   }
 
   static String computePlaylistDedupeKey(Map<String, dynamic> item) {
+    final String? torrentHash = item['torrent_hash'] as String?;
+    if (torrentHash != null && torrentHash.isNotEmpty) {
+      return 'hash:${torrentHash}'.toLowerCase();
+    }
     final String? rdId = (item['rdTorrentId'] as String?);
     if (rdId != null && rdId.isNotEmpty) {
       return 'rd:${rdId}'.toLowerCase();

@@ -40,6 +40,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       final String? restrictedLink = item['restrictedLink'] as String?;
       final String? apiKey = await StorageService.getApiKey();
       if (restrictedLink != null && restrictedLink.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
+        print('🎬 PLAY: Attempting to play single file, title="$title"');
         try {
           final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
           final downloadLink = unrestrictResult['download']?.toString() ?? '';
@@ -71,11 +72,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             );
           }
         } catch (e) {
+          print('❌ PLAY ERROR: Failed to unrestrict single file, error=$e');
           if (!mounted) return;
           // Check if we can recover using torrent hash
           if (torrentHash != null && torrentHash.isNotEmpty) {
+            print('🔄 PLAY: Triggering recovery for single file, torrentHash="$torrentHash"');
             await _attemptRecovery(item);
           } else {
+            print('❌ PLAY: No torrent hash available for single file recovery');
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Error: ${e.toString()}')),
             );
@@ -89,6 +93,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
       final String? apiKey = await StorageService.getApiKey();
       if (apiKey == null || apiKey.isEmpty) return;
+      
+      print('🎬 PLAY: Attempting to play collection torrentId="$rdTorrentId", title="$title"');
       try {
         // Show loading (non-blocking)
         showDialog(
@@ -212,12 +218,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ),
           ),
         );
-      } catch (_) {
+      } catch (e) {
+        print('❌ PLAY ERROR: Failed to get torrent info for torrentId="$rdTorrentId", error=$e');
         if (Navigator.of(context).canPop()) Navigator.of(context).pop();
         // Check if we can recover using torrent hash
         if (torrentHash != null && torrentHash.isNotEmpty) {
+          print('🔄 PLAY: Triggering recovery for torrentHash="$torrentHash"');
           await _attemptRecovery(item);
         } else {
+          print('❌ PLAY: No torrent hash available for recovery');
           // Silent fail for MVP
         }
       }
@@ -242,8 +251,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final String? torrentHash = item['torrent_hash'] as String?;
     final String? apiKey = await StorageService.getApiKey();
     final String title = (item['title'] as String?) ?? 'Video';
+    final String? rdTorrentId = item['rdTorrentId'] as String?;
+    
+    print('🔄 RECOVERY START: title="$title", rdTorrentId="$rdTorrentId", torrentHash="$torrentHash"');
     
     if (torrentHash == null || torrentHash.isEmpty || apiKey == null || apiKey.isEmpty) {
+      print('❌ RECOVERY FAILED: Missing torrentHash or apiKey');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Content no longer available')),
@@ -270,16 +283,22 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     try {
       // Reconstruct magnet link
       final magnetLink = 'magnet:?xt=urn:btih:$torrentHash';
+      print('🔗 RECOVERY: Reconstructing magnet link: $magnetLink');
       
       // Re-add torrent to Real Debrid
+      print('📤 RECOVERY: Adding torrent to Real Debrid...');
       final result = await DebridService.addTorrentToDebridPreferVideos(apiKey, magnetLink);
       final newTorrentId = result['torrentId'] as String?;
       final newLinks = result['links'] as List<dynamic>? ?? [];
       
+      print('✅ RECOVERY: Got new torrentId="$newTorrentId", linksCount=${newLinks.length}');
+      
       if (newTorrentId != null && newTorrentId.isNotEmpty && newLinks.isNotEmpty) {
+        print('💾 RECOVERY: Updating playlist item with new torrent info...');
         // Update playlist item with new torrent info
         await _updatePlaylistItemWithNewTorrent(item, newTorrentId, newLinks);
         
+        print('🔄 RECOVERY: Item updated, retrying playback...');
         // Close loading dialog
         if (Navigator.of(context).canPop()) Navigator.of(context).pop();
         
@@ -295,6 +314,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         );
       }
     } catch (e) {
+      print('❌ RECOVERY ERROR: $e');
       // Close loading dialog
       if (Navigator.of(context).canPop()) Navigator.of(context).pop();
       
@@ -306,22 +326,32 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _updatePlaylistItemWithNewTorrent(Map<String, dynamic> item, String newTorrentId, List<dynamic> newLinks) async {
+    print('💾 UPDATE: Starting update for item with title="${item['title']}"');
+    print('💾 UPDATE: Old rdTorrentId="${item['rdTorrentId']}" -> New rdTorrentId="$newTorrentId"');
+    
     // Update the item with new torrent info
     item['rdTorrentId'] = newTorrentId;
     
     // For single files, update the restrictedLink with the first new link
     if (item['kind'] == 'single' && newLinks.isNotEmpty) {
       item['restrictedLink'] = newLinks[0].toString();
+      print('💾 UPDATE: Updated restrictedLink for single file');
     }
     
     // Save updated playlist
     final items = await StorageService.getPlaylistItemsRaw();
+    final itemKey = StorageService.computePlaylistDedupeKey(item);
     final itemIndex = items.indexWhere((playlistItem) => 
-      StorageService.computePlaylistDedupeKey(playlistItem) == StorageService.computePlaylistDedupeKey(item));
+      StorageService.computePlaylistDedupeKey(playlistItem) == itemKey);
+    
+    print('💾 UPDATE: Found item at index $itemIndex with key="$itemKey"');
     
     if (itemIndex != -1) {
       items[itemIndex] = item;
       await StorageService.savePlaylistItemsRaw(items);
+      print('✅ UPDATE: Successfully saved updated item to storage');
+    } else {
+      print('❌ UPDATE: Item not found in storage for update');
     }
   }
 
