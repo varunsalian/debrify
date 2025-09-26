@@ -2860,7 +2860,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: torrent.links[i],
-                  apiKey: _apiKey,
                 ));
               }
             } catch (e) {
@@ -2869,7 +2868,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: torrent.links[i],
-                apiKey: _apiKey,
               ));
             }
           } else {
@@ -2878,7 +2876,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               url: '', // Empty URL - will be filled when unrestricted
               title: finalFilename,
               restrictedLink: torrent.links[i],
-              apiKey: _apiKey,
             ));
           }
         }
@@ -2919,7 +2916,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: torrent.links[i],
-                  apiKey: _apiKey,
                 ));
               }
             } catch (e) {
@@ -2928,7 +2924,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: torrent.links[i],
-                apiKey: _apiKey,
               ));
             }
           } else {
@@ -2937,7 +2932,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               url: '', // Empty URL - will be filled when unrestricted
               title: finalFilename,
               restrictedLink: torrent.links[i],
-              apiKey: _apiKey,
             ));
           }
         }

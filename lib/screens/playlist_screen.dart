@@ -38,7 +38,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Handle single file torrents (from Let me choose or direct adds)
     if (kind == 'single') {
       final String? restrictedLink = item['restrictedLink'] as String?;
-      final String? apiKey = item['apiKey'] as String?;
+      final String? apiKey = await StorageService.getApiKey();
       if (restrictedLink != null && restrictedLink.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
         try {
           final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
@@ -87,7 +87,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     
     // Handle collection torrents (multi-file/series)
     if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-      final String? apiKey = item['apiKey'] as String?;
+      final String? apiKey = await StorageService.getApiKey();
       if (apiKey == null || apiKey.isEmpty) return;
       try {
         // Show loading (non-blocking)
@@ -178,13 +178,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               if (url.isNotEmpty) {
                 entries.add(PlaylistEntry(url: url, title: finalFilename, torrentHash: torrentHash));
               } else {
-                entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey, torrentHash: torrentHash));
+                entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash));
               }
             } catch (_) {
-              entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey, torrentHash: torrentHash));
+              entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash));
             }
           } else {
-            entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], apiKey: apiKey, torrentHash: torrentHash));
+            entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash));
           }
         }
 
@@ -240,7 +240,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Future<void> _attemptRecovery(Map<String, dynamic> item) async {
     final String? torrentHash = item['torrent_hash'] as String?;
-    final String? apiKey = item['apiKey'] as String?;
+    final String? apiKey = await StorageService.getApiKey();
     final String title = (item['title'] as String?) ?? 'Video';
     
     if (torrentHash == null || torrentHash.isEmpty || apiKey == null || apiKey.isEmpty) {

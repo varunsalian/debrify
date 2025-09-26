@@ -80,13 +80,11 @@ class PlaylistEntry {
 	final String url;
 	final String title;
 	final String? restrictedLink; // The original restricted link from debrid
-	final String? apiKey; // API key for unrestricting
 	final String? torrentHash; // SHA1 Hash of the torrent
 	const PlaylistEntry({
 		required this.url, 
 		required this.title, 
 		this.restrictedLink,
-		this.apiKey,
 		this.torrentHash,
 	});
 }
@@ -274,10 +272,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 			final entry = widget.playlist![initialIndex];
 			if (entry.url.isNotEmpty) {
 				initialUrl = entry.url;
-			} else if (entry.restrictedLink != null && entry.apiKey != null) {
+			} else if (entry.restrictedLink != null) {
 				try {
-					final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
-					initialUrl = unrestrictResult['download'] ?? '';
+					final apiKey = await StorageService.getApiKey();
+					if (apiKey != null && apiKey.isNotEmpty) {
+						final unrestrictResult = await DebridService.unrestrictLink(apiKey, entry.restrictedLink!);
+						initialUrl = unrestrictResult['download'] ?? '';
+					}
 				} catch (e) {
 					// Only fall back to widget.videoUrl if unrestriction fails
 					if (widget.videoUrl.isNotEmpty) {
@@ -791,10 +792,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Check if we need to unrestrict this link
 		String videoUrl = entry.url;
-		if (entry.restrictedLink != null && entry.apiKey != null) {
+		if (entry.restrictedLink != null) {
 			try {
-				final unrestrictResult = await DebridService.unrestrictLink(entry.apiKey!, entry.restrictedLink!);
-				videoUrl = unrestrictResult['download'] ?? entry.url;
+				final apiKey = await StorageService.getApiKey();
+				if (apiKey != null && apiKey.isNotEmpty) {
+					final unrestrictResult = await DebridService.unrestrictLink(apiKey, entry.restrictedLink!);
+					videoUrl = unrestrictResult['download'] ?? entry.url;
+				}
 				// Update the playlist entry with the unrestricted URL
 				// Note: We can't modify the const PlaylistEntry, so we'll use the unrestricted URL directly
 			} catch (e) {
@@ -1196,10 +1200,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						String currentVideoUrl = '';
 						if (currentEntry.url.isNotEmpty) {
 							currentVideoUrl = currentEntry.url;
-						} else if (currentEntry.restrictedLink != null && currentEntry.apiKey != null) {
+						} else if (currentEntry.restrictedLink != null) {
 							try {
-								final unrestrictResult = await DebridService.unrestrictLink(currentEntry.apiKey!, currentEntry.restrictedLink!);
-								currentVideoUrl = unrestrictResult['download'] ?? '';
+								final apiKey = await StorageService.getApiKey();
+								if (apiKey != null && apiKey.isNotEmpty) {
+									final unrestrictResult = await DebridService.unrestrictLink(apiKey, currentEntry.restrictedLink!);
+									currentVideoUrl = unrestrictResult['download'] ?? '';
+								}
 							} catch (e) {
 							}
 						}

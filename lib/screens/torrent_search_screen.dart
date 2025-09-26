@@ -918,7 +918,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 files: files,
                                 updatedInfo: updatedInfo,
                                 torrentName: torrentName,
-                                apiKey: apiKey,
                                 fileSelection: fileSelection,
                                 torrentId: result['torrentId']?.toString(),
                               );
@@ -1042,7 +1041,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           files: files,
           updatedInfo: updatedInfo,
           torrentName: torrentName,
-          apiKey: apiKey,
           fileSelection: fileSelection,
           torrentId: result['torrentId']?.toString(),
         );
@@ -1089,7 +1087,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           files: files,
           updatedInfo: updatedInfo,
           torrentName: torrentName,
-          apiKey: apiKey,
           fileSelection: fileSelection,
           torrentId: result['torrentId']?.toString(),
         );
@@ -1160,10 +1157,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     required List<dynamic>? files,
     required Map<String, dynamic>? updatedInfo,
     required String torrentName,
-    required String apiKey,
     required String fileSelection,
     String? torrentId,
   }) async {
+    final String? apiKey = await StorageService.getApiKey();
+    if (apiKey == null || apiKey.isEmpty) return;
     // If multiple RD links exist, treat as multi-file playlist (series pack, multi-episode, etc.)
     if (links.length > 1) {
       await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey, 0, torrentId);
@@ -1471,7 +1469,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: links[i],
-                  apiKey: apiKey,
                 ));
               }
             } catch (e) {
@@ -1480,7 +1477,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: links[i],
-                apiKey: apiKey,
               ));
             }
           } else {
@@ -1489,7 +1485,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               url: '', // Empty URL - will be filled when unrestricted
               title: finalFilename,
               restrictedLink: links[i],
-              apiKey: apiKey,
             ));
           }
         }
@@ -1530,7 +1525,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: links[i],
-                  apiKey: apiKey,
                 ));
               }
             } catch (e) {
@@ -1539,7 +1533,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: links[i],
-                apiKey: apiKey,
               ));
             }
           } else {
@@ -1548,7 +1541,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               url: '', // Empty URL - will be filled when unrestricted
               title: finalFilename,
               restrictedLink: links[i],
-              apiKey: apiKey,
             ));
           }
         }

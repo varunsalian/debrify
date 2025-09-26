@@ -637,7 +637,7 @@ class StorageService {
   }
 
   /// Add a new playlist item if it does not already exist.
-  /// Expected item shape (MVP): { url, title, restrictedLink, apiKey, rdTorrentId }
+  /// Expected item shape (MVP): { url, title, restrictedLink, rdTorrentId }
   /// Returns true if inserted, false if duplicate.
   static Future<bool> addPlaylistItemRaw(Map<String, dynamic> item) async {
     final items = await getPlaylistItemsRaw();
@@ -650,7 +650,7 @@ class StorageService {
     
     // Fetch and add torrent hash if we have a torrent ID
     final String? rdTorrentId = item['rdTorrentId'] as String?;
-    final String? apiKey = item['apiKey'] as String?;
+    final String? apiKey = await getApiKey();
     
     if (rdTorrentId != null && rdTorrentId.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
       try {
@@ -680,7 +680,7 @@ class StorageService {
         // This ensures playlist addition doesn't fail due to hash fetch issues
       }
     } else {
-      print('ℹ️ Skipping torrent hash fetch - missing rdTorrentId or apiKey');
+      print('ℹ️ Skipping torrent hash fetch - missing rdTorrentId or API key');
     }
     
     // Log what's being saved to database
