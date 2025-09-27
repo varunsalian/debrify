@@ -26,6 +26,9 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         resValue("string", "app_name", "Debrify")
+        
+        // OAuth redirect scheme for flutter_appauth
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.debrify.app"
     }
 
     buildTypes {

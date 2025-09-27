@@ -221,6 +221,59 @@ class DropboxService {
     }
   }
 
+  /// Upload string content to the /Apps/Debrify folder
+  static Future<DropboxUploadResult> uploadStringContent(String content, String fileName) async {
+    try {
+      final accessToken = await DropboxAuthService.getAccessToken();
+      if (accessToken == null) {
+        return DropboxUploadResult(
+          success: false,
+          error: 'No access token available',
+        );
+      }
+
+      final contentBytes = utf8.encode(content);
+      final dropboxPath = '/Apps/Debrify/$fileName';
+
+      final request = http.Request('POST', Uri.parse('$_contentUrl/files/upload'));
+      request.headers['Authorization'] = 'Bearer $accessToken';
+      request.headers['Dropbox-API-Arg'] = json.encode({
+        'path': dropboxPath,
+        'mode': 'overwrite',
+        'autorename': false,
+        'mute': false,
+      });
+      request.headers['Content-Type'] = 'application/octet-stream';
+      request.bodyBytes = contentBytes;
+
+      final streamedResponse = await request.send();
+      final responseBody = await streamedResponse.stream.bytesToString();
+
+      if (streamedResponse.statusCode == 200) {
+        final data = json.decode(responseBody);
+        return DropboxUploadResult(
+          success: true,
+          fileId: data['id'],
+          filePath: data['path_display'],
+          fileName: data['name'],
+          size: data['size'],
+        );
+      } else {
+        debugPrint('Failed to upload string content: ${streamedResponse.statusCode} - $responseBody');
+        return DropboxUploadResult(
+          success: false,
+          error: 'Failed to upload string content: ${streamedResponse.statusCode}',
+        );
+      }
+    } catch (e) {
+      debugPrint('Dropbox uploadStringContent error: $e');
+      return DropboxUploadResult(
+        success: false,
+        error: 'Failed to upload string content: $e',
+      );
+    }
+  }
+
   /// Upload a file to the /debrify folder
   static Future<DropboxUploadResult> uploadFile(String localPath, String fileName) async {
     try {
@@ -241,7 +294,7 @@ class DropboxService {
       }
 
       final fileBytes = await file.readAsBytes();
-      final dropboxPath = '/debrify/$fileName';
+      final dropboxPath = '/Apps/Debrify/$fileName';
 
       final request = http.Request('POST', Uri.parse('$_contentUrl/files/upload'));
       request.headers['Authorization'] = 'Bearer $accessToken';
@@ -282,6 +335,52 @@ class DropboxService {
     }
   }
 
+  /// Delete a file from the /debrify folder
+  static Future<DropboxDeleteResult> deleteFile(String fileName) async {
+    try {
+      final accessToken = await DropboxAuthService.getAccessToken();
+      if (accessToken == null) {
+        return DropboxDeleteResult(
+          success: false,
+          error: 'No access token available',
+        );
+      }
+
+      final dropboxPath = '/Apps/Debrify/$fileName';
+      final requestBody = {
+        'path': dropboxPath,
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/files/delete_v2'),
+        headers: {
+          'Authorization': 'Bearer $accessToken',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode == 200) {
+        return DropboxDeleteResult(
+          success: true,
+          fileName: fileName,
+        );
+      } else {
+        debugPrint('Failed to delete file: ${response.statusCode} - ${response.body}');
+        return DropboxDeleteResult(
+          success: false,
+          error: 'Failed to delete file: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      debugPrint('Dropbox deleteFile error: $e');
+      return DropboxDeleteResult(
+        success: false,
+        error: 'Failed to delete file: $e',
+      );
+    }
+  }
+
   /// Download a file from the /debrify folder
   static Future<DropboxDownloadResult> downloadFile(String fileName) async {
     try {
@@ -293,7 +392,8 @@ class DropboxService {
         );
       }
 
-      final dropboxPath = '/debrify/$fileName';
+      final dropboxPath = '/Apps/Debrify/$fileName';
+      debugPrint('🔍 Downloading file from path: $dropboxPath');
 
       final request = http.Request('POST', Uri.parse('$_contentUrl/files/download'));
       request.headers['Authorization'] = 'Bearer $accessToken';
@@ -301,6 +401,9 @@ class DropboxService {
 
       final streamedResponse = await request.send();
       final responseBody = await streamedResponse.stream.bytesToString();
+
+      debugPrint('🔍 Download response status: ${streamedResponse.statusCode}');
+      debugPrint('🔍 Download response body: $responseBody');
 
       if (streamedResponse.statusCode == 200) {
         return DropboxDownloadResult(
@@ -407,6 +510,19 @@ class DropboxDownloadResult {
   DropboxDownloadResult({
     required this.success,
     this.content,
+    this.fileName,
+    this.error,
+  });
+}
+
+/// Result class for Dropbox delete operations
+class DropboxDeleteResult {
+  final bool success;
+  final String? fileName;
+  final String? error;
+
+  DropboxDeleteResult({
+    required this.success,
     this.fileName,
     this.error,
   });

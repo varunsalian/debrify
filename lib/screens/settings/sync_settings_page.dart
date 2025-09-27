@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/sync_settings_viewmodel.dart';
+import '../../services/playlist_sync_service.dart';
 
 class SyncSettingsPage extends StatefulWidget {
   const SyncSettingsPage({super.key});
@@ -11,12 +12,23 @@ class SyncSettingsPage extends StatefulWidget {
 
 class _SyncSettingsPageState extends State<SyncSettingsPage> {
   late SyncSettingsViewModel _viewModel;
+  PlaylistSyncStatus? _playlistSyncStatus;
 
   @override
   void initState() {
     super.initState();
     _viewModel = SyncSettingsViewModel();
     _viewModel.initialize();
+    _loadPlaylistSyncStatus();
+  }
+
+  Future<void> _loadPlaylistSyncStatus() async {
+    final status = await PlaylistSyncService.getSyncStatus();
+    if (mounted) {
+      setState(() {
+        _playlistSyncStatus = status;
+      });
+    }
   }
 
   @override
@@ -146,6 +158,60 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
 
                   const SizedBox(height: 16),
 
+                  // Playlist Sync Status Card (only show if connected)
+                  if (viewModel.isConnected) ...[
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.playlist_play_rounded,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Playlist Sync',
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _playlistSyncStatus?.statusText ?? 'Checking sync status...',
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          color: _playlistSyncStatus?.errorMessage != null 
+                                            ? Theme.of(context).colorScheme.error
+                                            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (viewModel.isLoading)
+                                  const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Error Message
                   if (viewModel.errorMessage != null)
                     Card(
@@ -266,7 +332,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Your data will be securely synced to your Dropbox account in the /debrify folder. This includes your watch progress, preferences, and other app data.',
+                            'Your playlist data will be securely synced to your Dropbox account. This includes all your saved videos, series, and watchlists.',
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),

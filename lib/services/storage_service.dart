@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'debrid_service.dart';
+import 'playlist_sync_service.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
@@ -698,6 +699,12 @@ class StorageService {
     
     items.add(enriched);
     await savePlaylistItemsRaw(items);
+    
+    // Sync to Dropbox if connected
+    if (await PlaylistSyncService.isConnected()) {
+      await PlaylistSyncService.uploadPlaylist();
+    }
+    
     return true;
   }
 
@@ -705,11 +712,21 @@ class StorageService {
     final items = await getPlaylistItemsRaw();
     items.removeWhere((e) => computePlaylistDedupeKey(e) == dedupeKey);
     await savePlaylistItemsRaw(items);
+    
+    // Sync to Dropbox if connected
+    if (await PlaylistSyncService.isConnected()) {
+      await PlaylistSyncService.uploadPlaylist();
+    }
   }
 
   static Future<void> clearPlaylist() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_playlistKey);
+    
+    // Sync to Dropbox if connected
+    if (await PlaylistSyncService.isConnected()) {
+      await PlaylistSyncService.uploadPlaylist();
+    }
   }
 
   /// Update an existing playlist item with poster URL

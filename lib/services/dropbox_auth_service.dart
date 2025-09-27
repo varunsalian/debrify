@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 class DropboxAuthService {
   static const String _storageKeyAccessToken = 'dropbox_access_token';
@@ -23,7 +24,8 @@ class DropboxAuthService {
   static const List<String> _scopes = [
     'account_info.read',
     'files.metadata.write',
-    'files.content.write'
+    'files.content.write',
+    'files.content.read'
   ];
 
   /// Get the appropriate redirect URI based on the current platform
@@ -248,6 +250,25 @@ class DropboxAuthService {
     await prefs.remove(_storageKeyFolderPath);
   }
 
+  /// Force complete re-authentication (for scope issues)
+  static Future<void> forceReAuthenticate() async {
+    debugPrint('🔄 Force re-authenticating to get fresh token with all scopes...');
+    
+    // Clear all tokens first
+    await disconnect();
+    
+    // Wait a moment for cleanup
+    await Future.delayed(const Duration(seconds: 1));
+    
+    // Re-authenticate
+    final result = await authenticate();
+    if (result.success) {
+      debugPrint('✅ Force re-authentication successful');
+    } else {
+      debugPrint('❌ Force re-authentication failed: ${result.error}');
+    }
+  }
+
   /// Revoke the access token via Dropbox API
   static Future<void> _revokeToken(String accessToken) async {
     final client = HttpClient();
@@ -282,3 +303,4 @@ class DropboxAuthResult {
     this.error,
   });
 }
+

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dropbox_auth_service.dart';
 import 'dropbox_service.dart';
+import 'playlist_sync_service.dart';
 
 class SyncSettingsViewModel extends ChangeNotifier {
   bool _isLoading = false;
@@ -65,6 +66,9 @@ class SyncSettingsViewModel extends ChangeNotifier {
       // Step 3: Store account info (App Folder access provides dedicated folder automatically)
       await DropboxAuthService.storeAccountInfo(email, '/Apps/Debrify');
 
+      // Step 4: Initial playlist sync - upload local playlist to Dropbox
+      await PlaylistSyncService.uploadPlaylist();
+
       // Update UI state
       _accountEmail = email;
       _isConnected = true;
@@ -83,6 +87,10 @@ class SyncSettingsViewModel extends ChangeNotifier {
     _clearError();
 
     try {
+      // Clear sync status (but keep remote data safe in Dropbox)
+      await PlaylistSyncService.clearSyncStatus();
+      
+      // Disconnect from Dropbox
       await DropboxAuthService.disconnect();
       
       // Update UI state
@@ -189,5 +197,26 @@ class SyncSettingsViewModel extends ChangeNotifier {
   /// Clear any error message (public method for UI)
   void clearError() {
     _clearError();
+  }
+
+  /// Manually sync playlist to Dropbox
+  Future<void> syncPlaylistNow() async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      if (!_isConnected) {
+        _setError('Not connected to Dropbox');
+        return;
+      }
+
+      await PlaylistSyncService.uploadPlaylist();
+      _clearError();
+
+    } catch (e) {
+      _setError('Sync failed: $e');
+    } finally {
+      _setLoading(false);
+    }
   }
 }
