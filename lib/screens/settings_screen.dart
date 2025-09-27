@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../services/account_service.dart';
+import '../services/sync_settings_viewmodel.dart';
 import 'settings/real_debrid_settings_page.dart';
+import 'settings/sync_settings_page.dart';
 
 import 'settings/download_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
@@ -17,6 +19,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   String? _apiKeySummary;
+  String? _syncStatusSummary;
 
   @override
   void initState() {
@@ -32,14 +35,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final user = AccountService.currentUser;
       setState(() {
         _apiKeySummary = user != null ? user.premiumStatusText : 'Connected';
-        _loading = false;
       });
     } else {
       setState(() {
         _apiKeySummary = 'Not connected';
-        _loading = false;
       });
     }
+
+    // Load sync status
+    final syncViewModel = SyncSettingsViewModel();
+    await syncViewModel.initialize();
+    setState(() {
+      _syncStatusSummary = syncViewModel.isConnected 
+        ? 'Connected as ${syncViewModel.accountEmail ?? 'Dropbox'}' 
+        : 'Not connected';
+      _loading = false;
+    });
+    syncViewModel.dispose();
   }
 
   @override
@@ -177,6 +189,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const RealDebridSettingsPage()),
+              );
+              await _loadSummaries();
+              setState(() {});
+            },
+          ),
+
+          const SizedBox(height: 12),
+          // Sync Data
+          _SectionTile(
+            icon: Icons.cloud_sync_rounded,
+            title: 'Sync Data',
+            subtitle: _syncStatusSummary ?? 'Not connected',
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SyncSettingsPage()),
               );
               await _loadSummaries();
               setState(() {});

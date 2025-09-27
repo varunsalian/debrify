@@ -62,6 +62,11 @@ dependencies:
   google_fonts: ^6.2.1
   animations: ^2.0.11
 
+  # Dropbox OAuth2 integration
+  flutter_appauth: ^6.0.3
+  crypto: ^3.0.3
+  provider: ^6.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
