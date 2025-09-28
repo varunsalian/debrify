@@ -11,7 +11,7 @@ class DropboxService {
   /// Get current account information including email
   static Future<DropboxAccountResult> getCurrentAccount() async {
     try {
-      final accessToken = await DropboxAuthService.getAccessToken();
+      String? accessToken = await DropboxAuthService.getAccessToken();
       if (accessToken == null) {
         return DropboxAccountResult(
           success: false,
@@ -19,14 +19,28 @@ class DropboxService {
         );
       }
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/users/get_current_account'),
-        headers: {
-          'Authorization': 'Bearer $accessToken',
-          'Content-Type': 'application/json',
-        },
-        body: 'null', // Dropbox API expects 'null' for empty request body
-      );
+      Future<http.Response> _send(String token) {
+        return http.post(
+          Uri.parse('$_baseUrl/users/get_current_account'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: 'null',
+        );
+      }
+
+      var response = await _send(accessToken);
+
+      if (response.statusCode == 401) {
+        final refresh = await DropboxAuthService.refreshAccessToken();
+        if (refresh.success && refresh.accessToken != null) {
+          accessToken = refresh.accessToken!;
+          response = await _send(accessToken);
+        } else {
+          return DropboxAccountResult(success: false, error: 'Failed to refresh access token');
+        }
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -56,7 +70,7 @@ class DropboxService {
   /// Create the /debrify folder in the app folder
   static Future<DropboxFolderResult> createDebrifyFolder() async {
     try {
-      final accessToken = await DropboxAuthService.getAccessToken();
+      String? accessToken = await DropboxAuthService.getAccessToken();
       if (accessToken == null) {
         return DropboxFolderResult(
           success: false,
@@ -69,14 +83,27 @@ class DropboxService {
         'autorename': false,
       };
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/files/create_folder_v2'),
-        headers: {
-          'Authorization': 'Bearer $accessToken',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(requestBody),
-      );
+      Future<http.Response> _send(String token) {
+        return http.post(
+          Uri.parse('$_baseUrl/files/create_folder_v2'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: json.encode(requestBody),
+        );
+      }
+
+      var response = await _send(accessToken);
+      if (response.statusCode == 401) {
+        final refresh = await DropboxAuthService.refreshAccessToken();
+        if (refresh.success && refresh.accessToken != null) {
+          accessToken = refresh.accessToken!;
+          response = await _send(accessToken);
+        } else {
+          return DropboxFolderResult(success: false, error: 'Failed to refresh access token');
+        }
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -109,7 +136,7 @@ class DropboxService {
   /// Get metadata for an existing folder
   static Future<DropboxFolderResult> _getFolderMetadata(String path) async {
     try {
-      final accessToken = await DropboxAuthService.getAccessToken();
+      String? accessToken = await DropboxAuthService.getAccessToken();
       if (accessToken == null) {
         return DropboxFolderResult(
           success: false,
@@ -124,14 +151,27 @@ class DropboxService {
         'include_has_explicit_shared_members': false,
       };
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/files/get_metadata'),
-        headers: {
-          'Authorization': 'Bearer $accessToken',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(requestBody),
-      );
+      Future<http.Response> _send(String token) {
+        return http.post(
+          Uri.parse('$_baseUrl/files/get_metadata'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: json.encode(requestBody),
+        );
+      }
+
+      var response = await _send(accessToken);
+      if (response.statusCode == 401) {
+        final refresh = await DropboxAuthService.refreshAccessToken();
+        if (refresh.success && refresh.accessToken != null) {
+          accessToken = refresh.accessToken!;
+          response = await _send(accessToken);
+        } else {
+          return DropboxFolderResult(success: false, error: 'Failed to refresh access token');
+        }
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -171,7 +211,7 @@ class DropboxService {
   /// List contents of the /debrify folder
   static Future<DropboxListResult> listDebrifyFolder() async {
     try {
-      final accessToken = await DropboxAuthService.getAccessToken();
+      String? accessToken = await DropboxAuthService.getAccessToken();
       if (accessToken == null) {
         return DropboxListResult(
           success: false,
@@ -187,14 +227,27 @@ class DropboxService {
         'include_has_explicit_shared_members': false,
       };
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/files/list_folder'),
-        headers: {
-          'Authorization': 'Bearer $accessToken',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(requestBody),
-      );
+      Future<http.Response> _send(String token) {
+        return http.post(
+          Uri.parse('$_baseUrl/files/list_folder'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: json.encode(requestBody),
+        );
+      }
+
+      var response = await _send(accessToken);
+      if (response.statusCode == 401) {
+        final refresh = await DropboxAuthService.refreshAccessToken();
+        if (refresh.success && refresh.accessToken != null) {
+          accessToken = refresh.accessToken!;
+          response = await _send(accessToken);
+        } else {
+          return DropboxListResult(success: false, error: 'Failed to refresh access token');
+        }
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -224,7 +277,7 @@ class DropboxService {
   /// Upload string content to the /Apps/Debrify folder
   static Future<DropboxUploadResult> uploadStringContent(String content, String fileName) async {
     try {
-      final accessToken = await DropboxAuthService.getAccessToken();
+      String? accessToken = await DropboxAuthService.getAccessToken();
       if (accessToken == null) {
         return DropboxUploadResult(
           success: false,
@@ -235,19 +288,34 @@ class DropboxService {
       final contentBytes = utf8.encode(content);
       final dropboxPath = '/Apps/Debrify/$fileName';
 
-      final request = http.Request('POST', Uri.parse('$_contentUrl/files/upload'));
-      request.headers['Authorization'] = 'Bearer $accessToken';
-      request.headers['Dropbox-API-Arg'] = json.encode({
-        'path': dropboxPath,
-        'mode': 'overwrite',
-        'autorename': false,
-        'mute': false,
-      });
-      request.headers['Content-Type'] = 'application/octet-stream';
-      request.bodyBytes = contentBytes;
+      Future<http.StreamedResponse> _send(String token) {
+        final request = http.Request('POST', Uri.parse('$_contentUrl/files/upload'));
+        request.headers['Authorization'] = 'Bearer $token';
+        request.headers['Dropbox-API-Arg'] = json.encode({
+          'path': dropboxPath,
+          'mode': 'overwrite',
+          'autorename': false,
+          'mute': false,
+        });
+        request.headers['Content-Type'] = 'application/octet-stream';
+        request.bodyBytes = contentBytes;
+        return request.send();
+      }
 
-      final streamedResponse = await request.send();
-      final responseBody = await streamedResponse.stream.bytesToString();
+      var streamedResponse = await _send(accessToken);
+      var responseBody = await streamedResponse.stream.bytesToString();
+
+      if (streamedResponse.statusCode == 401 ||
+          responseBody.contains('expired_access_token')) {
+        final refresh = await DropboxAuthService.refreshAccessToken();
+        if (refresh.success && refresh.accessToken != null) {
+          accessToken = refresh.accessToken!;
+          streamedResponse = await _send(accessToken!);
+          responseBody = await streamedResponse.stream.bytesToString();
+        } else {
+          return DropboxUploadResult(success: false, error: 'Failed to refresh access token');
+        }
+      }
 
       if (streamedResponse.statusCode == 200) {
         final data = json.decode(responseBody);
@@ -277,7 +345,7 @@ class DropboxService {
   /// Upload a file to the /debrify folder
   static Future<DropboxUploadResult> uploadFile(String localPath, String fileName) async {
     try {
-      final accessToken = await DropboxAuthService.getAccessToken();
+      String? accessToken = await DropboxAuthService.getAccessToken();
       if (accessToken == null) {
         return DropboxUploadResult(
           success: false,
@@ -296,19 +364,34 @@ class DropboxService {
       final fileBytes = await file.readAsBytes();
       final dropboxPath = '/Apps/Debrify/$fileName';
 
-      final request = http.Request('POST', Uri.parse('$_contentUrl/files/upload'));
-      request.headers['Authorization'] = 'Bearer $accessToken';
-      request.headers['Dropbox-API-Arg'] = json.encode({
-        'path': dropboxPath,
-        'mode': 'add',
-        'autorename': true,
-        'mute': false,
-      });
-      request.headers['Content-Type'] = 'application/octet-stream';
-      request.bodyBytes = fileBytes;
+      Future<http.StreamedResponse> _send(String token) {
+        final request = http.Request('POST', Uri.parse('$_contentUrl/files/upload'));
+        request.headers['Authorization'] = 'Bearer $token';
+        request.headers['Dropbox-API-Arg'] = json.encode({
+          'path': dropboxPath,
+          'mode': 'add',
+          'autorename': true,
+          'mute': false,
+        });
+        request.headers['Content-Type'] = 'application/octet-stream';
+        request.bodyBytes = fileBytes;
+        return request.send();
+      }
 
-      final streamedResponse = await request.send();
-      final responseBody = await streamedResponse.stream.bytesToString();
+      var streamedResponse = await _send(accessToken);
+      var responseBody = await streamedResponse.stream.bytesToString();
+
+      if (streamedResponse.statusCode == 401 ||
+          responseBody.contains('expired_access_token')) {
+        final refresh = await DropboxAuthService.refreshAccessToken();
+        if (refresh.success && refresh.accessToken != null) {
+          accessToken = refresh.accessToken!;
+          streamedResponse = await _send(accessToken!);
+          responseBody = await streamedResponse.stream.bytesToString();
+        } else {
+          return DropboxUploadResult(success: false, error: 'Failed to refresh access token');
+        }
+      }
 
       if (streamedResponse.statusCode == 200) {
         final data = json.decode(responseBody);
@@ -338,7 +421,7 @@ class DropboxService {
   /// Delete a file from the /debrify folder
   static Future<DropboxDeleteResult> deleteFile(String fileName) async {
     try {
-      final accessToken = await DropboxAuthService.getAccessToken();
+      String? accessToken = await DropboxAuthService.getAccessToken();
       if (accessToken == null) {
         return DropboxDeleteResult(
           success: false,
@@ -351,14 +434,27 @@ class DropboxService {
         'path': dropboxPath,
       };
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/files/delete_v2'),
-        headers: {
-          'Authorization': 'Bearer $accessToken',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(requestBody),
-      );
+      Future<http.Response> _send(String token) {
+        return http.post(
+          Uri.parse('$_baseUrl/files/delete_v2'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: json.encode(requestBody),
+        );
+      }
+
+      var response = await _send(accessToken);
+      if (response.statusCode == 401) {
+        final refresh = await DropboxAuthService.refreshAccessToken();
+        if (refresh.success && refresh.accessToken != null) {
+          accessToken = refresh.accessToken!;
+          response = await _send(accessToken);
+        } else {
+          return DropboxDeleteResult(success: false, error: 'Failed to refresh access token');
+        }
+      }
 
       if (response.statusCode == 200) {
         return DropboxDeleteResult(
@@ -384,7 +480,7 @@ class DropboxService {
   /// Download a file from the /debrify folder
   static Future<DropboxDownloadResult> downloadFile(String fileName) async {
     try {
-      final accessToken = await DropboxAuthService.getAccessToken();
+      String? accessToken = await DropboxAuthService.getAccessToken();
       if (accessToken == null) {
         return DropboxDownloadResult(
           success: false,
@@ -395,15 +491,38 @@ class DropboxService {
       final dropboxPath = '/Apps/Debrify/$fileName';
       debugPrint('🔍 Downloading file from path: $dropboxPath');
 
-      final request = http.Request('POST', Uri.parse('$_contentUrl/files/download'));
-      request.headers['Authorization'] = 'Bearer $accessToken';
-      request.headers['Dropbox-API-Arg'] = json.encode({'path': dropboxPath});
+      // Helper to perform the actual download using the provided token
+      Future<http.StreamedResponse> _sendDownload(String token) async {
+        final request = http.Request('POST', Uri.parse('$_contentUrl/files/download'));
+        request.headers['Authorization'] = 'Bearer $token';
+        request.headers['Dropbox-API-Arg'] = json.encode({'path': dropboxPath});
+        return request.send();
+      }
 
-      final streamedResponse = await request.send();
-      final responseBody = await streamedResponse.stream.bytesToString();
+      // First attempt
+      var streamedResponse = await _sendDownload(accessToken);
+      var responseBody = await streamedResponse.stream.bytesToString();
 
       debugPrint('🔍 Download response status: ${streamedResponse.statusCode}');
       debugPrint('🔍 Download response body: $responseBody');
+
+      // If token expired, refresh once and retry
+      if (streamedResponse.statusCode == 401 ||
+          responseBody.contains('expired_access_token')) {
+        debugPrint('🔄 Access token expired. Refreshing token and retrying download...');
+        final refresh = await DropboxAuthService.refreshAccessToken();
+        if (refresh.success && refresh.accessToken != null) {
+          accessToken = refresh.accessToken!;
+          streamedResponse = await _sendDownload(accessToken!);
+          responseBody = await streamedResponse.stream.bytesToString();
+          debugPrint('🔍 Retry download status: ${streamedResponse.statusCode}');
+        } else {
+          return DropboxDownloadResult(
+            success: false,
+            error: 'Failed to refresh access token: ${refresh.error ?? 'unknown error'}',
+          );
+        }
+      }
 
       if (streamedResponse.statusCode == 200) {
         return DropboxDownloadResult(
@@ -411,13 +530,13 @@ class DropboxService {
           content: responseBody,
           fileName: fileName,
         );
-      } else {
-        debugPrint('Failed to download file: ${streamedResponse.statusCode} - $responseBody');
-        return DropboxDownloadResult(
-          success: false,
-          error: 'Failed to download file: ${streamedResponse.statusCode}',
-        );
       }
+
+      debugPrint('Failed to download file: ${streamedResponse.statusCode} - $responseBody');
+      return DropboxDownloadResult(
+        success: false,
+        error: 'Failed to download file: ${streamedResponse.statusCode}',
+      );
     } catch (e) {
       debugPrint('Dropbox downloadFile error: $e');
       return DropboxDownloadResult(

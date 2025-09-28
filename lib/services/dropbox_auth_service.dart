@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
+import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
@@ -92,42 +93,21 @@ class DropboxAuthService {
   static Future<DropboxAuthResult> authenticate() async {
     try {
       final flutterAppAuth = FlutterAppAuth();
-
-      // Generate PKCE parameters
-      final codeVerifier = _generateCodeVerifier();
-      final codeChallenge = _generateCodeChallenge(codeVerifier);
-
-      // Prepare authorization request
       final authorizationRequest = AuthorizationTokenRequest(
         _dropboxAppKey,
         _redirectUri,
-        issuer: 'https://www.dropbox.com',
         scopes: _scopes,
         serviceConfiguration: const AuthorizationServiceConfiguration(
           authorizationEndpoint: _authorizationEndpoint,
           tokenEndpoint: _tokenEndpoint,
         ),
-        additionalParameters: {
-          'token_access_type': 'offline', // Request refresh token
-          'code_challenge': codeChallenge,
-          'code_challenge_method': 'S256',
-        },
+        additionalParameters: {'token_access_type': 'offline'},
         preferEphemeralSession: false,
       );
-
-      // Perform authorization
-      final authorizationTokenResponse = await flutterAppAuth.authorizeAndExchangeCode(
-        authorizationRequest,
-      );
-
+      final authorizationTokenResponse = await flutterAppAuth.authorizeAndExchangeCode(authorizationRequest);
       if (authorizationTokenResponse == null) {
-        return DropboxAuthResult(
-          success: false,
-          error: 'Authorization was cancelled or failed',
-        );
+        return DropboxAuthResult(success: false, error: 'Authorization was cancelled or failed');
       }
-
-      // Store tokens and basic info
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_storageKeyAccessToken, authorizationTokenResponse.accessToken!);
       await prefs.setString(_storageKeyRefreshToken, authorizationTokenResponse.refreshToken!);
@@ -152,15 +132,13 @@ class DropboxAuthService {
         await prefs.setString(_storageKeyAccountEmail, email);
       }
 
-      return DropboxAuthResult(
-        success: true,
-        accessToken: authorizationTokenResponse.accessToken!,
-        refreshToken: authorizationTokenResponse.refreshToken!,
-        email: email,
-      );
+      return DropboxAuthResult(success: true, accessToken: authorizationTokenResponse.accessToken!, refreshToken: authorizationTokenResponse.refreshToken!, email: email);
 
     } catch (e) {
       debugPrint('Dropbox authentication error: $e');
+      if (e is PlatformException) {
+        debugPrint('Dropbox auth details: code=${e.code}, message=${e.message}');
+      }
       return DropboxAuthResult(
         success: false,
         error: 'Authentication failed: $e',
@@ -179,39 +157,46 @@ class DropboxAuthService {
         );
       }
 
-      final flutterAppAuth = FlutterAppAuth();
-      
-      final tokenRequest = TokenRequest(
-        _dropboxAppKey,
-        _redirectUri,
-        refreshToken: refreshToken,
-        serviceConfiguration: const AuthorizationServiceConfiguration(
-          authorizationEndpoint: _authorizationEndpoint,
-          tokenEndpoint: _tokenEndpoint,
-        ),
+      // Dropbox rejects unknown field "redirect_uri" for refresh; perform direct HTTP refresh
+      final response = await http.post(
+        Uri.parse(_tokenEndpoint),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: {
+          'grant_type': 'refresh_token',
+          'refresh_token': refreshToken,
+          'client_id': _dropboxAppKey,
+        },
       );
 
-      final tokenResponse = await flutterAppAuth.token(tokenRequest);
-      
-      if (tokenResponse == null) {
+      if (response.statusCode != 200) {
         return DropboxAuthResult(
           success: false,
-          error: 'Token refresh failed',
+          error: 'Token refresh failed: ${response.body}',
         );
       }
 
-      // Update stored access token
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final newAccessToken = data['access_token'] as String?;
+      final newRefreshToken = data['refresh_token'] as String?; // may be null
+      if (newAccessToken == null) {
+        return DropboxAuthResult(
+          success: false,
+          error: 'Token refresh failed: missing access_token',
+        );
+      }
+
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_storageKeyAccessToken, tokenResponse.accessToken!);
-      
-      if (tokenResponse.refreshToken != null) {
-        await prefs.setString(_storageKeyRefreshToken, tokenResponse.refreshToken!);
+      await prefs.setString(_storageKeyAccessToken, newAccessToken);
+      if (newRefreshToken != null) {
+        await prefs.setString(_storageKeyRefreshToken, newRefreshToken);
       }
 
       return DropboxAuthResult(
         success: true,
-        accessToken: tokenResponse.accessToken!,
-        refreshToken: tokenResponse.refreshToken ?? refreshToken,
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken ?? refreshToken,
       );
 
     } catch (e) {

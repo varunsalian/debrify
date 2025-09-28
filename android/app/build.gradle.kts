@@ -27,7 +27,7 @@ android {
         versionName = flutter.versionName
         resValue("string", "app_name", "Debrify")
         
-        // OAuth redirect scheme for flutter_appauth
+        // Scheme must match the redirect URI used in code & Dropbox console
         manifestPlaceholders["appAuthRedirectScheme"] = "com.debrify.app"
     }
 
