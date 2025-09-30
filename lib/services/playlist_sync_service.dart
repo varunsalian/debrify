@@ -56,6 +56,12 @@ class PlaylistSyncService {
       );
       
       if (uploadResult.success) {
+        // Clear deletion timestamps after successful upload
+        final deletionTimestamps = await StorageService.getAllDeletionTimestamps();
+        for (final key in deletionTimestamps.keys) {
+          await StorageService.clearDeletionTimestamp(key);
+        }
+        
         // Update sync status
         await _updateSyncStatus(true, DateTime.now());
         debugPrint('✅ Playlist uploaded successfully');
@@ -161,30 +167,71 @@ class PlaylistSyncService {
     await prefs.remove('${_syncStatusKey}_error');
   }
 
-  /// Merge local and remote playlists using deduplication key
+  /// Merge local and remote playlists using timestamp-based conflict resolution
   static Future<List<Map<String, dynamic>>> _mergePlaylists(
     List<Map<String, dynamic>> localItems,
     List<Map<String, dynamic>> remoteItems,
   ) async {
+    // Get deletion timestamps
+    final deletionTimestamps = await StorageService.getAllDeletionTimestamps();
+    
     final Map<String, Map<String, dynamic>> mergedMap = {};
     
-    // Add all remote items first (remote items take precedence for existing entries)
-    for (final remoteItem in remoteItems) {
-      final key = StorageService.computePlaylistDedupeKey(remoteItem);
-      mergedMap[key] = remoteItem;
+    // Create maps for easier lookup
+    final Map<String, Map<String, dynamic>> localMap = {};
+    final Map<String, Map<String, dynamic>> remoteMap = {};
+    
+    for (final item in localItems) {
+      final key = StorageService.computePlaylistDedupeKey(item);
+      localMap[key] = item;
     }
     
-    // Add local items that don't exist in remote (local wins for new entries)
-    int localItemsAdded = 0;
-    for (final localItem in localItems) {
-      final key = StorageService.computePlaylistDedupeKey(localItem);
-      if (!mergedMap.containsKey(key)) {
+    for (final item in remoteItems) {
+      final key = StorageService.computePlaylistDedupeKey(item);
+      remoteMap[key] = item;
+    }
+    
+    // Get all unique keys from both local and remote
+    final allKeys = <String>{...localMap.keys, ...remoteMap.keys};
+    
+    for (final key in allKeys) {
+      final localItem = localMap[key];
+      final remoteItem = remoteMap[key];
+      final deletionTime = deletionTimestamps[key];
+      
+      // Check if this item was deleted locally
+      if (deletionTime != null) {
+        // If remote item exists, check if it's newer than deletion
+        if (remoteItem != null) {
+          final remoteTime = remoteItem['lastModified'] as int? ?? remoteItem['addedAt'] as int? ?? 0;
+          if (remoteTime > deletionTime) {
+            // Remote item is newer than deletion, keep it
+            mergedMap[key] = remoteItem;
+          } else {
+            // Deletion is newer, skip this item (don't add to merged)
+          }
+        }
+        continue;
+      }
+      
+      if (localItem != null && remoteItem != null) {
+        // Both exist - use timestamp to decide
+        final localTime = localItem['lastModified'] as int? ?? localItem['addedAt'] as int? ?? 0;
+        final remoteTime = remoteItem['lastModified'] as int? ?? remoteItem['addedAt'] as int? ?? 0;
+        
+        if (localTime > remoteTime) {
+          mergedMap[key] = localItem;
+        } else {
+          mergedMap[key] = remoteItem;
+        }
+      } else if (localItem != null) {
+        // Only exists locally
         mergedMap[key] = localItem;
-        localItemsAdded++;
+      } else if (remoteItem != null) {
+        // Only exists remotely
+        mergedMap[key] = remoteItem;
       }
     }
-    
-    debugPrint('🔄 Merge result: ${localItemsAdded} new local items added, ${mergedMap.length} total items');
     
     // Convert back to list and sort by addedAt (newest first)
     final mergedList = mergedMap.values.toList();

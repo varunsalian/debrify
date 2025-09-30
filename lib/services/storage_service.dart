@@ -710,6 +710,11 @@ class StorageService {
 
   static Future<void> removePlaylistItemByKey(String dedupeKey) async {
     final items = await getPlaylistItemsRaw();
+    
+    // Store deletion timestamp for sync purposes
+    final currentTime = DateTime.now().millisecondsSinceEpoch;
+    await _storeDeletionTimestamp(dedupeKey, currentTime);
+    
     items.removeWhere((e) => computePlaylistDedupeKey(e) == dedupeKey);
     await savePlaylistItemsRaw(items);
     
@@ -741,6 +746,46 @@ class StorageService {
     items[itemIndex]['posterUrl'] = posterUrl;
     await savePlaylistItemsRaw(items);
     return true;
+  }
+
+  /// Store deletion timestamp for sync conflict resolution
+  static Future<void> _storeDeletionTimestamp(String dedupeKey, int timestamp) async {
+    final prefs = await SharedPreferences.getInstance();
+    final deletionKey = 'deletion_$dedupeKey';
+    await prefs.setInt(deletionKey, timestamp);
+  }
+
+  /// Get deletion timestamp for a specific key
+  static Future<int?> getDeletionTimestamp(String dedupeKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final deletionKey = 'deletion_$dedupeKey';
+    return prefs.getInt(deletionKey);
+  }
+
+  /// Clear deletion timestamp (called after successful sync)
+  static Future<void> clearDeletionTimestamp(String dedupeKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final deletionKey = 'deletion_$dedupeKey';
+    await prefs.remove(deletionKey);
+  }
+
+  /// Get all deletion timestamps
+  static Future<Map<String, int>> getAllDeletionTimestamps() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys();
+    final deletions = <String, int>{};
+    
+    for (final key in keys) {
+      if (key.startsWith('deletion_')) {
+        final dedupeKey = key.substring(9); // Remove 'deletion_' prefix
+        final timestamp = prefs.getInt(key);
+        if (timestamp != null) {
+          deletions[dedupeKey] = timestamp;
+        }
+      }
+    }
+    
+    return deletions;
   }
 }
 
