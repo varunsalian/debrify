@@ -23,11 +23,13 @@ class MovieCollectionBrowser extends StatefulWidget {
 class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
   MovieGroup _group = MovieGroup.main;
   final Map<int, Map<String, dynamic>> _progressByIndex = {};
+  int _lastCurrentIndex = -1;
 
   @override
   void initState() {
     super.initState();
     _loadProgress();
+    _syncGroupWithCurrent();
   }
 
   @override
@@ -36,6 +38,9 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
     if (oldWidget.playlist != widget.playlist) {
       _progressByIndex.clear();
       _loadProgress();
+    }
+    if (oldWidget.currentIndex != widget.currentIndex) {
+      _syncGroupWithCurrent();
     }
   }
 
@@ -52,6 +57,20 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
     }
     await Future.wait(futures);
     if (mounted) setState(() {});
+  }
+
+  void _syncGroupWithCurrent() {
+    if (widget.currentIndex == _lastCurrentIndex) return;
+    _lastCurrentIndex = widget.currentIndex;
+    if (_lastCurrentIndex >= 0 && _lastCurrentIndex < widget.playlist.length) {
+      final groupsNow = _groups();
+      if (groupsNow[MovieGroup.extras]!.contains(_lastCurrentIndex)) {
+        _group = MovieGroup.extras;
+      } else {
+        _group = MovieGroup.main;
+      }
+      if (mounted) setState(() {});
+    }
   }
 
   Map<MovieGroup, List<int>> _groups() {
@@ -93,6 +112,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
 
   @override
   Widget build(BuildContext context) {
+    // no auto group switching during build; handled on index change
     final groups = _groups();
     final visible = _group == MovieGroup.main ? groups[MovieGroup.main]! : groups[MovieGroup.extras]!;
     final mainCount = groups[MovieGroup.main]!.length;
@@ -113,7 +133,11 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
               PopupMenuButton<MovieGroup>(
                 color: const Color(0xFF1A1A1A),
                 initialValue: _group,
-                onSelected: (v) => setState(() => _group = v),
+                onSelected: (v) {
+                  if (_group != v) {
+                    setState(() => _group = v);
+                  }
+                },
                 itemBuilder: (context) => [
                   PopupMenuItem(value: MovieGroup.main, child: Text('Main ($mainCount)', style: const TextStyle(color: Colors.white))),
                   PopupMenuItem(value: MovieGroup.extras, child: Text('Extras ($extrasCount)', style: const TextStyle(color: Colors.white))),

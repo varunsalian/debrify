@@ -636,6 +636,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		return main;
 	}
 
+	Future<void> _playRandom() async {
+		final entries = widget.playlist ?? const [];
+		if (entries.isEmpty) return;
+		final rnd = math.Random();
+		final nextIndex = rnd.nextInt(entries.length);
+		_isManualEpisodeSelection = true;
+		_allowResumeForManualSelection = false;
+		_manualSelectionResetTimer?.cancel();
+		_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+			_isManualEpisodeSelection = false;
+			_allowResumeForManualSelection = false;
+		});
+		await _loadPlaylistIndex(nextIndex, autoplay: true);
+	}
+
 	/// Find the previous logical episode index
 	int _findPreviousEpisodeIndex() {
 		final seriesPlaylist = _seriesPlaylist;
@@ -1841,14 +1856,14 @@ Widget _buildSimplePlaylist() {
 										width: 1,
 									),
 								),
-								child: IconButton(
-									icon: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
-									onPressed: () => Navigator.of(context).pop(),
-									style: IconButton.styleFrom(
-										padding: const EdgeInsets.all(8),
-										minimumSize: const Size(36, 36),
+									child: IconButton(
+										icon: const Icon(Icons.shuffle_rounded, color: Colors.white, size: 20),
+										onPressed: _playRandom,
+										style: IconButton.styleFrom(
+											padding: const EdgeInsets.all(8),
+											minimumSize: const Size(36, 36),
+										),
 									),
-								),
 							),
 						],
 					),
@@ -2382,7 +2397,8 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 												hasPrevious: _hasPreviousEpisode(),
 												hideSeekbar: widget.hideSeekbar,
 												hideOptions: widget.hideOptions,
-												hideBackButton: widget.hideBackButton,
+																hideBackButton: widget.hideBackButton,
+																onRandom: _playRandom,
 											),
 										),
 									);
@@ -2470,6 +2486,7 @@ class _Controls extends StatelessWidget {
 	final bool hideSeekbar;
 	final bool hideOptions;
 	final bool hideBackButton;
+	final VoidCallback onRandom;
 
 
 	const _Controls({
@@ -2501,6 +2518,7 @@ class _Controls extends StatelessWidget {
 		required this.hideSeekbar,
 		required this.hideOptions,
 		required this.hideBackButton,
+		required this.onRandom,
 	});
 	
 	String _getAspectRatioName() {
@@ -2793,14 +2811,12 @@ class _Controls extends StatelessWidget {
 													),
 												
 												// Orientation button
-												_NetflixControlButton(
-													icon: isLandscape 
-														? Icons.fullscreen_exit_rounded 
-														: Icons.fullscreen_rounded,
-													label: isLandscape ? 'Exit' : 'Full',
-													onPressed: onRotate,
-													isCompact: true,
-												),
+										_NetflixControlButton(
+											icon: Icons.shuffle_rounded,
+																		label: 'Random',
+																		onPressed: onRandom,
+											isCompact: true,
+										),
 											],
 										),
 									),
