@@ -109,7 +109,6 @@ enum _AspectMode {
   aspect5_4,
 }
 
-enum _FilesGroup { main, extras }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProviderStateMixin {
 	late mk.Player _player;
@@ -141,42 +140,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	bool _isAutoAdvancing = false; // Track if episode is auto-advancing
 	bool _allowResumeForManualSelection = false; // Allow resuming for manual selections with progress
 	Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
-	_FilesGroup _selectedFilesGroup = _FilesGroup.main;
 
-	Map<_FilesGroup, List<int>> _getPlaylistGroups() {
-		final List<PlaylistEntry> entries = widget.playlist ?? const [];
-		final List<int> main = [];
-		final List<int> extras = [];
-		if (entries.isEmpty) return {_FilesGroup.main: main, _FilesGroup.extras: extras};
-		int maxSize = -1;
-		for (int i = 0; i < entries.length; i++) {
-			final s = entries[i].sizeBytes ?? -1;
-			if (s > maxSize) maxSize = s;
-		}
-		final double threshold = maxSize > 0 ? maxSize * 0.70 : -1;
-		final RegExp rx = RegExp(r'\b(sample|trailer)\b', caseSensitive: false);
-		for (int i = 0; i < entries.length; i++) {
-			final e = entries[i];
-			final name = e.title;
-			final hasKeyword = rx.hasMatch(name);
-			final size = e.sizeBytes;
-			final isSmall = (threshold > 0 && size != null && size < threshold);
-			if (hasKeyword && isSmall) {
-				extras.add(i);
-			} else {
-				main.add(i);
-			}
-		}
-		// Sorting: Main by size desc, Extras by size asc
-		int sizeOf(int idx) => entries[idx].sizeBytes ?? -1;
-		main.sort((a, b) => (sizeOf(b)).compareTo(sizeOf(a)));
-		extras.sort((a, b) {
-			final sa = entries[a].sizeBytes ?? 0;
-			final sb = entries[b].sizeBytes ?? 0;
-			return sa.compareTo(sb);
-		});
-		return {_FilesGroup.main: main, _FilesGroup.extras: extras};
-	}
 
 	// media_kit state
 	bool _isReady = false;
@@ -1790,7 +1754,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		);
 	}
 
-	Widget _buildSimplePlaylist() {
+// Legacy simple playlist helpers removed
+/*
+Widget _buildSimplePlaylist() {
 		return Container(
 			height: MediaQuery.of(context).size.height * 0.85,
 			padding: const EdgeInsets.all(20),
@@ -2034,12 +2000,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		);
 	}
 
-	/// Get finished episodes for simple playlist (non-series content)
-	Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
+/// Get finished episodes for simple playlist (non-series content)
+Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 		// For simple playlists, we don't track finished episodes
 		// This is mainly for series content
-		return <int>{};
-	}
+  return <int>{};
+}
+	*/
 
 	@override
 	Widget build(BuildContext context) {
