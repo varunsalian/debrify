@@ -259,11 +259,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 						}
 					}
 					
-					if (lastPlayedIndex != -1) {
-						initialIndex = lastPlayedIndex;
-					} else {
-						initialIndex = widget.startIndex ?? 0;
-					}
+						if (lastPlayedIndex != -1) {
+							initialIndex = lastPlayedIndex;
+						} else {
+							// Pick the first item from Main group (by year asc then size desc)
+							final indices = _getMainGroupIndices(widget.playlist!);
+							initialIndex = indices.isNotEmpty ? indices.first : (widget.startIndex ?? 0);
+						}
 				} else {
 					// Not a series or no series playlist, use the provided startIndex
 					initialIndex = widget.startIndex ?? 0;

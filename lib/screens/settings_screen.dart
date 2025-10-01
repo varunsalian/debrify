@@ -171,6 +171,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
 
           const SizedBox(height: 12),
+          _SectionTile(
+            icon: Icons.cleaning_services_rounded,
+            title: 'Clear Playback Data',
+            subtitle: 'Remove watched history, resume points, and track choices',
+            onTap: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Clear playback data?'),
+                  content: const Text(
+                    'This will delete all saved playback history across movies and series, '
+                    'including resume positions, finished markers, and audio/subtitle selections. '
+                    'This cannot be undone.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await StorageService.clearAllPlaybackData();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Playback data cleared')),
+                );
+                setState(() {});
+              }
+            },
+          ),
+
+          const SizedBox(height: 12),
           // Real Debrid
           _SectionTile(
             icon: Icons.cloud_download_rounded,

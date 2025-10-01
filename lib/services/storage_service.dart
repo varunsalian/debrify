@@ -417,6 +417,13 @@ class StorageService {
     }
   }
 
+  /// Clear all playback-related data (series and video states, track prefs, legacy resume)
+  static Future<void> clearAllPlaybackData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_playbackStateKey);
+    await prefs.remove(_videoResumeKey);
+  }
+
   // Video resume map helpers (legacy - keeping for backward compatibility)
   static Future<Map<String, dynamic>> _getVideoResumeMap() async {
     final prefs = await SharedPreferences.getInstance();
