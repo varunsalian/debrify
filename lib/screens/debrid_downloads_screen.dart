@@ -1215,13 +1215,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   );
                 }
                 
-                // Create mapping from filtered file index to original file index
-                final Map<int, int> fileIndexMapping = {};
-                for (int i = 0; i < files.length; i++) {
-                  final file = files[i];
-                  final originalIndex = allFiles.indexOf(file);
-                  fileIndexMapping[i] = originalIndex;
-                }
+                // NOTE: Real-Debrid returns links[] in the same order as the selected files list
+                // We therefore use the index within the filtered `files` list directly to index links[]
                 
                 bool downloadingAll = false;
                 int addCount = 0;
@@ -1340,9 +1335,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                   isSelected: isSelected,
                                   isUnrestricting: isUnrestricting,
                                   showPlayButtons: showPlayButtons,
-                                  onPlay: () => _playFileOnDemand(torrent, fileIndexMapping[index]!, setLocal, unrestrictingFiles),
-                                  onAddToPlaylist: () => _addFileToPlaylist(torrent, fileIndexMapping[index]!, setLocal),
-                                  onDownload: () => _downloadFileOnDemand(torrent, fileIndexMapping[index]!, fileName, setLocal, added, unrestrictingFiles),
+                                  onPlay: () => _playFileOnDemand(torrent, index, setLocal, unrestrictingFiles),
+                                  onAddToPlaylist: () => _addFileToPlaylist(torrent, index, setLocal),
+                                  onDownload: () => _downloadFileOnDemand(torrent, index, fileName, setLocal, added, unrestrictingFiles),
                                   onSelect: () {
                                     setLocal(() {
                                       if (isSelected) {
@@ -1410,8 +1405,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                     unrestrictingFiles[index] = true;
                                                   });
                                                   
-                                                  final originalIndex = fileIndexMapping[index]!;
-                                                  final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[originalIndex]);
+                                                  // Use index within filtered `files` to index into torrent.links
+                                                  final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
                                                   final url = (unrestrictResult['download'] ?? '').toString();
                                                   
                                                   if (url.isNotEmpty) {
@@ -1539,8 +1534,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                         unrestrictingFiles[i] = true;
                                                       });
                                                       
-                                                      final originalIndex = fileIndexMapping[i]!;
-                                                      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[originalIndex]);
+                                                      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[i]);
                                                       final url = (unrestrictResult['download'] ?? '').toString();
                                                       
                                                       if (url.isNotEmpty) {
@@ -3652,7 +3646,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       if (downloadLink.isNotEmpty) {
         await DownloadService.instance.enqueueDownload(
           url: downloadLink,
-          fileName: fileName,
+          // Use RD-provided filename if available to avoid mismatches
+          fileName: (unrestrictResult['filename']?.toString() ?? fileName),
           context: context,
           torrentName: torrent.filename,
         );
