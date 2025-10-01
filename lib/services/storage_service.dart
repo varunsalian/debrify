@@ -424,6 +424,11 @@ class StorageService {
     await prefs.remove(_videoResumeKey);
   }
 
+  // Internal helper for services needing shared prefs quickly
+  static Future<SharedPreferences> _getPrefs() async {
+    return await SharedPreferences.getInstance();
+  }
+
   // Video resume map helpers (legacy - keeping for backward compatibility)
   static Future<Map<String, dynamic>> _getVideoResumeMap() async {
     final prefs = await SharedPreferences.getInstance();

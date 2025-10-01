@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../services/account_service.dart';
+import '../services/download_service.dart';
 import 'settings/real_debrid_settings_page.dart';
 
 import 'settings/download_settings_page.dart';
@@ -167,6 +168,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => const TorrentSettingsPage()),
               );
               setState(() {});
+            },
+          ),
+
+          const SizedBox(height: 12),
+          _SectionTile(
+            icon: Icons.storage_rounded,
+            title: 'Clear Download Data',
+            subtitle: 'Remove queued/running history and pending download queue',
+            onTap: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Clear download data?'),
+                  content: const Text(
+                    'This will delete all local download records and pending queue entries.\n'
+                    'It will not delete files already saved to disk. This is useful for starting fresh during testing.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await DownloadService.instance.clearDownloadDatabase();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Download data cleared')),
+                );
+                setState(() {});
+              }
             },
           ),
 

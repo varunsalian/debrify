@@ -1900,12 +1900,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       for (final link in links) {
         final url = (link['download'] ?? '').toString();
         final fileName = (link['filename'] ?? 'file').toString();
+        final restricted = (link['restrictedLink'] ?? '').toString();
         if (url.isEmpty) continue;
+        final meta = jsonEncode({
+          'restrictedLink': restricted,
+          'apiKey': _apiKey ?? '',
+          'torrentHash': (link['torrentHash'] ?? '').toString(),
+          'fileIndex': link['fileIndex'] ?? '',
+        });
         await DownloadService.instance.enqueueDownload(
           url: url,
           fileName: fileName,
           context: context,
           torrentName: torrentName,
+          meta: meta,
         );
       }
       
@@ -1979,11 +1987,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Future<void> _downloadFile(String downloadLink, String fileName, {String? torrentName}) async {
     try {
+      final meta = jsonEncode({
+        'restrictedLink': (downloadLink.startsWith('http') ? '' : downloadLink),
+        'apiKey': _apiKey ?? '',
+      });
       await DownloadService.instance.enqueueDownload(
         url: downloadLink,
         fileName: fileName,
         context: context,
         torrentName: torrentName ?? fileName, // Use provided torrent name or fileName as fallback
+        meta: meta,
       );
       
       ScaffoldMessenger.of(context).showSnackBar(

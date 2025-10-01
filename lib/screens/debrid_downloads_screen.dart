@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:flutter/services.dart';
 import '../models/rd_torrent.dart';
 import '../models/debrid_download.dart';
@@ -1410,11 +1411,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                   final url = (unrestrictResult['download'] ?? '').toString();
                                                   
                                                   if (url.isNotEmpty) {
+                                                    final meta = jsonEncode({
+                                                      'restrictedLink': torrent.links[index],
+                                                      'apiKey': _apiKey ?? '',
+                                                      'torrentHash': (torrent.id ?? '').toString(),
+                                                      'fileIndex': index,
+                                                    });
                                                     await DownloadService.instance.enqueueDownload(
                                                       url: url,
                                                       fileName: fileName,
                                                       context: context,
                                                       torrentName: torrent.filename,
+                                                      meta: meta,
                                                     );
                                                     setLocal(() {
                                                       added.add(index);
@@ -1538,11 +1546,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                       final url = (unrestrictResult['download'] ?? '').toString();
                                                       
                                                       if (url.isNotEmpty) {
+                                                        final meta = jsonEncode({
+                                                          'restrictedLink': torrent.links[i],
+                                                          'apiKey': _apiKey ?? '',
+                                                          'torrentHash': (torrent.id ?? '').toString(),
+                                                          'fileIndex': i,
+                                                        });
                                                         await DownloadService.instance.enqueueDownload(
                                                           url: url,
                                                           fileName: fileName,
                                                           context: context,
                                                           torrentName: torrent.filename,
+                                                          meta: meta,
                                                         );
                                                         setLocal(() {
                                                           added.add(i);
@@ -2446,11 +2461,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                          try {
                            final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
                            final link = unrestrict['download'] as String;
+                           final meta = jsonEncode({
+                             'restrictedLink': torrent.links.first,
+                             'apiKey': _apiKey ?? '',
+                             'torrentHash': (torrent.id ?? '').toString(),
+                             'fileIndex': 0,
+                           });
                            await DownloadService.instance.enqueueDownload(
                              url: link,
                              fileName: torrent.filename,
                              context: context,
                              torrentName: torrent.filename,
+                             meta: meta,
                            );
                            if (mounted) {
                              ScaffoldMessenger.of(context).showSnackBar(
@@ -2650,11 +2672,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                       try {
                         final unrestrict = await DebridService.unrestrictLink(_apiKey!, download.link);
                         final link = unrestrict['download'] as String;
+                        final meta = jsonEncode({
+                          'restrictedLink': download.link,
+                          'apiKey': _apiKey ?? '',
+                          'torrentHash': (download.torrentId ?? '').toString(),
+                          'fileIndex': download.fileIndex ?? '',
+                        });
                         await DownloadService.instance.enqueueDownload(
                           url: link,
                           fileName: download.filename,
                           context: context,
                           torrentName: download.filename,
+                          meta: meta,
                         );
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
