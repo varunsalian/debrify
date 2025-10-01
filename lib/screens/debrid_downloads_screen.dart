@@ -2675,8 +2675,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         final meta = jsonEncode({
                           'restrictedLink': download.link,
                           'apiKey': _apiKey ?? '',
-                          'torrentHash': (download.torrentId ?? '').toString(),
-                          'fileIndex': download.fileIndex ?? '',
+                          // Best-effort placeholders; DebridDownload doesn't expose torrentId/fileIndex
+                          'torrentHash': '',
+                          'fileIndex': '',
                         });
                         await DownloadService.instance.enqueueDownload(
                           url: link,

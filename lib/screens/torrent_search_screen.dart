@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:flutter/services.dart';
 import '../models/torrent.dart';
 import '../services/torrent_service.dart';
@@ -31,6 +32,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _isLoading = false;
   String _errorMessage = '';
   bool _hasSearched = false;
+  String? _apiKey;
   
   // Search engine toggles
   bool _useTorrentsCsv = true;
@@ -61,6 +63,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     
     _listAnimationController.forward();
     _loadDefaultSettings();
+    StorageService.getApiKey().then((k) { setState(() { _apiKey = k; }); });
   }
 
   Future<void> _loadDefaultSettings() async {
