@@ -71,7 +71,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         }
       }
       
-      // Fallback to first season if current episode not found or not a series
+      // Fallback
       _selectedSeason = widget.seriesPlaylist.seasons.first.seasonNumber;
     }
   }
@@ -419,7 +419,6 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
           Navigator.of(context).pop();
           widget.onEpisodeSelected(episode.seriesInfo.season!, episode.seriesInfo.episode!);
-        } else {
         }
       },
       child: Container(

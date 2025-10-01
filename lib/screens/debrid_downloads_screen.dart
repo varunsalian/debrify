@@ -2837,6 +2837,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           }
           
           final finalFilename = filename ?? 'Unknown File';
+          final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
           
           // Check if we have a corresponding link
           if (i >= torrent.links.length) {
@@ -2853,6 +2854,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 entries.add(PlaylistEntry(
                   url: url,
                   title: finalFilename,
+                  sizeBytes: sizeBytes,
                 ));
               } else {
                 // If unrestriction failed or returned empty URL, add as restricted link
@@ -2860,6 +2862,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: torrent.links[i],
+                  sizeBytes: sizeBytes,
                 ));
               }
             } catch (e) {
@@ -2868,6 +2871,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: torrent.links[i],
+                sizeBytes: sizeBytes,
               ));
             }
           } else {
@@ -2876,6 +2880,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               url: '', // Empty URL - will be filled when unrestricted
               title: finalFilename,
               restrictedLink: torrent.links[i],
+              sizeBytes: sizeBytes,
             ));
           }
         }
@@ -2893,6 +2898,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           }
           
           final finalFilename = filename ?? 'Unknown File';
+          final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
           
           // Check if we have a corresponding link
           if (i >= torrent.links.length) {
@@ -2909,6 +2915,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 entries.add(PlaylistEntry(
                   url: url,
                   title: finalFilename,
+                  sizeBytes: sizeBytes,
                 ));
               } else {
                 // If unrestriction failed or returned empty URL, add as restricted link
@@ -2916,6 +2923,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: torrent.links[i],
+                  sizeBytes: sizeBytes,
                 ));
               }
             } catch (e) {
@@ -2924,6 +2932,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: torrent.links[i],
+                sizeBytes: sizeBytes,
               ));
             }
           } else {
@@ -2932,6 +2941,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               url: '', // Empty URL - will be filled when unrestricted
               title: finalFilename,
               restrictedLink: torrent.links[i],
+              sizeBytes: sizeBytes,
             ));
           }
         }

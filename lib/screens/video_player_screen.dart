@@ -16,6 +16,7 @@ import '../models/series_playlist.dart';
 
 
 import '../widgets/series_browser.dart';
+import '../widgets/movie_collection_browser.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -81,11 +82,13 @@ class PlaylistEntry {
 	final String title;
 	final String? restrictedLink; // The original restricted link from debrid
 	final String? torrentHash; // SHA1 Hash of the torrent
+	final int? sizeBytes; // Original file size in bytes, when known
 	const PlaylistEntry({
 		required this.url, 
 		required this.title, 
 		this.restrictedLink,
 		this.torrentHash,
+		this.sizeBytes,
 	});
 }
 
@@ -105,6 +108,8 @@ enum _AspectMode {
   aspect3_2,
   aspect5_4,
 }
+
+enum _FilesGroup { main, extras }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProviderStateMixin {
 	late mk.Player _player;
@@ -136,6 +141,42 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	bool _isAutoAdvancing = false; // Track if episode is auto-advancing
 	bool _allowResumeForManualSelection = false; // Allow resuming for manual selections with progress
 	Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
+	_FilesGroup _selectedFilesGroup = _FilesGroup.main;
+
+	Map<_FilesGroup, List<int>> _getPlaylistGroups() {
+		final List<PlaylistEntry> entries = widget.playlist ?? const [];
+		final List<int> main = [];
+		final List<int> extras = [];
+		if (entries.isEmpty) return {_FilesGroup.main: main, _FilesGroup.extras: extras};
+		int maxSize = -1;
+		for (int i = 0; i < entries.length; i++) {
+			final s = entries[i].sizeBytes ?? -1;
+			if (s > maxSize) maxSize = s;
+		}
+		final double threshold = maxSize > 0 ? maxSize * 0.70 : -1;
+		final RegExp rx = RegExp(r'\b(sample|trailer)\b', caseSensitive: false);
+		for (int i = 0; i < entries.length; i++) {
+			final e = entries[i];
+			final name = e.title;
+			final hasKeyword = rx.hasMatch(name);
+			final size = e.sizeBytes;
+			final isSmall = (threshold > 0 && size != null && size < threshold);
+			if (hasKeyword && isSmall) {
+				extras.add(i);
+			} else {
+				main.add(i);
+			}
+		}
+		// Sorting: Main by size desc, Extras by size asc
+		int sizeOf(int idx) => entries[idx].sizeBytes ?? -1;
+		main.sort((a, b) => (sizeOf(b)).compareTo(sizeOf(a)));
+		extras.sort((a, b) {
+			final sa = entries[a].sizeBytes ?? 0;
+			final sb = entries[b].sizeBytes ?? 0;
+			return sa.compareTo(sb);
+		});
+		return {_FilesGroup.main: main, _FilesGroup.extras: extras};
+	}
 
 	// media_kit state
 	bool _isReady = false;
@@ -560,9 +601,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	int _findNextEpisodeIndex() {
 		final seriesPlaylist = _seriesPlaylist;
 		if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-			// For non-series content, just advance to next index
-			if (widget.playlist != null && _currentIndex + 1 < widget.playlist!.length) {
-				return _currentIndex + 1;
+			// For non-series content (movies), advance within the Main group order
+			if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
+			final indices = _getMainGroupIndices(widget.playlist!);
+			if (indices.isEmpty) return -1;
+			final pos = indices.indexOf(_currentIndex);
+			if (pos == -1) {
+				// If current not in Main, move to first Main
+				return indices.first;
+			}
+			if (pos + 1 < indices.length) {
+				return indices[pos + 1];
 			}
 			return -1;
 		}
@@ -594,13 +643,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 	}
 
+	/// Compute the Main group indices for movie collections (size >= 70% of largest)
+	List<int> _getMainGroupIndices(List<PlaylistEntry> entries) {
+		int maxSize = -1;
+		for (final e in entries) {
+			final s = e.sizeBytes ?? -1;
+			if (s > maxSize) maxSize = s;
+		}
+		final double threshold = maxSize > 0 ? maxSize * 0.70 : -1;
+		final main = <int>[];
+		for (int i = 0; i < entries.length; i++) {
+			final e = entries[i];
+			final isSmall = threshold > 0 && (e.sizeBytes != null && e.sizeBytes! < threshold);
+			if (!isSmall) main.add(i);
+		}
+		int sizeOf(int idx) => entries[idx].sizeBytes ?? -1;
+		int? yearOf(int idx) {
+			final m = RegExp(r'\b(19|20)\d{2}\b').firstMatch(entries[idx].title);
+			if (m != null) return int.tryParse(m.group(0)!);
+			return null;
+		}
+		main.sort((a, b) {
+			final ya = yearOf(a);
+			final yb = yearOf(b);
+			if (ya != null && yb != null) return ya.compareTo(yb); // older first
+			return sizeOf(b).compareTo(sizeOf(a));
+		});
+		return main;
+	}
+
 	/// Find the previous logical episode index
 	int _findPreviousEpisodeIndex() {
 		final seriesPlaylist = _seriesPlaylist;
 		if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-			// For non-series content, just go to previous index
-			if (_currentIndex > 0) {
-				return _currentIndex - 1;
+			// For non-series content (movies), move within Main group order
+			if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
+			final indices = _getMainGroupIndices(widget.playlist!);
+			if (indices.isEmpty) return -1;
+			final pos = indices.indexOf(_currentIndex);
+			if (pos == -1) {
+				return indices.first;
+			}
+			if (pos - 1 >= 0) {
+				return indices[pos - 1];
 			}
 			return -1;
 		}
@@ -1645,7 +1730,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							),
 						),
 						child: seriesPlaylist != null && seriesPlaylist.isSeries
-							? SeriesBrowser(
+								? SeriesBrowser(
 								seriesPlaylist: seriesPlaylist,
 								currentEpisodeIndex: _currentIndex,
 								onEpisodeSelected: (season, episode) async {
@@ -1683,9 +1768,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 											);
 										}
 									}
-								},
-							  )
-							: _buildSimplePlaylist(),
+									},
+								  )
+								: MovieCollectionBrowser(
+									playlist: widget.playlist ?? const [],
+									currentIndex: _currentIndex,
+									onSelectIndex: (idx) async {
+										_isManualEpisodeSelection = true;
+										_allowResumeForManualSelection = false;
+										_manualSelectionResetTimer?.cancel();
+										_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+											_isManualEpisodeSelection = false;
+											_allowResumeForManualSelection = false;
+										});
+										await _loadPlaylistIndex(idx, autoplay: true);
+									},
+								),
 					),
 				);
 			},
@@ -1716,7 +1814,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							),
 							const SizedBox(width: 12),
 							const Text(
-								'All Files',
+							'All Files',
 								style: TextStyle(
 									color: Colors.white,
 									fontWeight: FontWeight.w700,
@@ -1725,6 +1823,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 								),
 							),
 							const Spacer(),
+						Builder(
+							builder: (context) {
+								final groups = _getPlaylistGroups();
+								final mainCount = groups[_FilesGroup.main]!.length;
+								final extrasCount = groups[_FilesGroup.extras]!.length;
+								return Container(
+									decoration: BoxDecoration(
+										color: Colors.black.withOpacity(0.4),
+										borderRadius: BorderRadius.circular(8),
+										border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+									),
+									child: PopupMenuButton<_FilesGroup>(
+										padding: const EdgeInsets.symmetric(horizontal: 12),
+										color: const Color(0xFF1A1A1A),
+										position: PopupMenuPosition.under,
+										initialValue: _selectedFilesGroup,
+										onSelected: (value) => setState(() => _selectedFilesGroup = value),
+										itemBuilder: (context) => [
+											PopupMenuItem(
+												value: _FilesGroup.main,
+												child: Text('Main ($mainCount)', style: const TextStyle(color: Colors.white)),
+											),
+											PopupMenuItem(
+												value: _FilesGroup.extras,
+												child: Text('Extras ($extrasCount)', style: const TextStyle(color: Colors.white)),
+											),
+										],
+										child: Row(
+											children: [
+												Icon(Icons.filter_list, color: Colors.white.withOpacity(0.9), size: 18),
+												const SizedBox(width: 6),
+												Text(
+													_selectedFilesGroup == _FilesGroup.main ? 'Main ($mainCount)' : 'Extras ($extrasCount)',
+													style: const TextStyle(color: Colors.white, fontSize: 12),
+												),
+												const SizedBox(width: 6),
+												const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
+											],
+										),
+									),
+								);
+							},
+						),
 							Container(
 								decoration: BoxDecoration(
 									color: Colors.black.withOpacity(0.4),
@@ -1752,11 +1893,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 							builder: (context, snapshot) {
 								final finishedEpisodes = snapshot.data ?? <int>{};
 								
-								return ListView.builder(
-									shrinkWrap: true,
-									itemCount: widget.playlist!.length,
-									itemBuilder: (context, index) {
-										final entry = widget.playlist![index];
+						final groups = _getPlaylistGroups();
+						final visibleIndices = _selectedFilesGroup == _FilesGroup.main
+							? groups[_FilesGroup.main]!
+							: groups[_FilesGroup.extras]!;
+						return ListView.builder(
+							shrinkWrap: true,
+							itemCount: visibleIndices.length,
+							itemBuilder: (context, visibleIdx) {
+								final index = visibleIndices[visibleIdx];
+								final entry = widget.playlist![index];
 										final active = index == _currentIndex;
 										final isFinished = finishedEpisodes.contains(index);
 										

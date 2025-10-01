@@ -174,6 +174,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           String? filename = f['name']?.toString() ?? f['filename']?.toString() ?? f['path']?.toString();
           if (filename != null && filename.startsWith('/')) filename = filename.split('/').last;
           final finalFilename = filename ?? 'Unknown File';
+          final int? sizeBytes = (f is Map) ? (f['bytes'] as int?) : null;
 
           // Map to original index to pick RD link via usedOriginalIndices position
           final originalIndex = allFiles.indexOf(f);
@@ -186,15 +187,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[linkIndex]);
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
-                entries.add(PlaylistEntry(url: url, title: finalFilename, torrentHash: torrentHash));
+                entries.add(PlaylistEntry(url: url, title: finalFilename, torrentHash: torrentHash, sizeBytes: sizeBytes));
               } else {
-                entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash));
+                entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash, sizeBytes: sizeBytes));
               }
             } catch (_) {
-              entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash));
+              entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash, sizeBytes: sizeBytes));
             }
           } else {
-            entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash));
+            entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash, sizeBytes: sizeBytes));
           }
         }
 
