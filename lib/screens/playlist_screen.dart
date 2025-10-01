@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../services/storage_service.dart';
 import '../services/debrid_service.dart';
-import '../services/playlist_sync_service.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import 'video_player_screen.dart';
@@ -24,21 +23,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _syncAndLoadPlaylist() async {
-    // Sync from Dropbox if connected
-    if (await PlaylistSyncService.isConnected()) {
-      await PlaylistSyncService.downloadPlaylist();
-    }
-    
     // Load and return playlist data
     return await StorageService.getPlaylistItemsRaw();
   }
 
   Future<void> _refresh() async {
-    // Sync from Dropbox if connected
-    if (await PlaylistSyncService.isConnected()) {
-      await PlaylistSyncService.downloadPlaylist();
-    }
-    
     setState(() {
       _loader = StorageService.getPlaylistItemsRaw();
     });
