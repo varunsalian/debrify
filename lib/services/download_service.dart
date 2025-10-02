@@ -532,17 +532,21 @@ class DownloadService {
       _net = _computeEffectiveNet(results);
       // On valid connectivity, nudge scheduler to resume paused items
       if (_net != ConnectivityResult.none) {
-        // Try to resume paused Android tasks as capacity allows
         if (Platform.isAndroid) {
           final paused = AndroidDownloadHistory.instance
               .all()
               .where((r) => r.status == TaskStatus.paused)
               .map((r) => r.taskId)
+              .where((id) => !id.startsWith('queued-'))
               .toList(growable: false);
-          debugPrint('NET OK → scheduled resume ${paused.length} tasks');
+          int scheduled = 0;
           for (final id in paused) {
-            try { await AndroidNativeDownloader.resume(id); } catch (_) {}
+            if (!_pendingResumeAndroid.contains(id)) {
+              _pendingResumeAndroid.add(id);
+              scheduled++;
+            }
           }
+          debugPrint('NET OK → scheduled resume $scheduled tasks');
         }
         unawaited(_reevaluateQueue());
       }
@@ -721,6 +725,20 @@ class DownloadService {
           }
         }
       }
+    }
+    // On Android: seed paused/enqueued/running tasks into pending resume to let scheduler handle capacity
+    if (Platform.isAndroid) {
+      final hist = AndroidDownloadHistory.instance.all();
+      int seeded = 0;
+      for (final r in hist) {
+        if (r.status == TaskStatus.paused || r.status == TaskStatus.enqueued || r.status == TaskStatus.running) {
+          if (!r.taskId.startsWith('queued-') && !_pendingResumeAndroid.contains(r.taskId)) {
+            _pendingResumeAndroid.add(r.taskId);
+            seeded++;
+          }
+        }
+      }
+      if (seeded > 0) debugPrint('DL INIT: android seeded $seeded tasks for resume');
     }
     _started = true;
     _initializing = false;
@@ -1052,10 +1070,34 @@ class DownloadService {
       if (Platform.isAndroid && _pendingResumeAndroid.isNotEmpty) {
         final taskId = _pendingResumeAndroid.first;
         _pendingResumeAndroid.remove(taskId);
-        final ok = await AndroidNativeDownloader.resume(taskId);
+        // Skip if already running/enqueued
+        final hist = AndroidDownloadHistory.instance.all().firstWhere(
+          (r) => r.taskId == taskId,
+          orElse: () => TaskRecord(DownloadTask(taskId: taskId, url: '', filename: 'download'), TaskStatus.notFound, 0.0, -1),
+        );
+        if (hist.status == TaskStatus.running || hist.status == TaskStatus.enqueued) {
+          continue;
+        }
+        bool ok = false;
+        try { ok = await AndroidNativeDownloader.resume(taskId); } catch (_) { ok = false; }
         if (ok) {
           resumedSomeone = true;
           runningCount += 1;
+        } else {
+          // Resume failed: fall back to re-enqueue based on durable record
+          final recId = _resolveRecordIdForTaskId(taskId);
+          if (recId != null) {
+            final rec = _records[recId];
+            if (rec != null) {
+              final url = (rec['url'] ?? '').toString();
+              final name = (rec['displayName'] ?? 'download').toString();
+              final meta = rec['meta'] as String?;
+              final tname = rec['torrentName'] as String?;
+              if (url.isNotEmpty || (meta != null && meta.isNotEmpty)) {
+                unawaited(enqueueDownload(url: url, fileName: name, meta: meta, torrentName: tname));
+              }
+            }
+          }
         }
       } else if (!Platform.isAndroid && _pendingResumeNonAndroid.isNotEmpty) {
         final entry = _pendingResumeNonAndroid.entries.first;

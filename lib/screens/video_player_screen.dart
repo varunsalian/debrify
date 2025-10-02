@@ -154,6 +154,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	StreamSubscription? _playSub;
 	StreamSubscription? _paramsSub;
 	StreamSubscription? _completedSub;
+	
+	void _skipCredits() {
+		final d = _duration;
+		if (d.inMilliseconds <= 0) return;
+		// Seek to 1s before end to trigger completion cleanly
+		final target = d - const Duration(seconds: 1);
+		if (target.isNegative) return;
+		_player.seek(target);
+		// Optionally trigger next if series
+		if (_hasNextEpisode() || widget.requestMagicNext != null) {
+			_goToNextEpisode();
+		}
+	}
 
 	// Gesture state
 	_GestureMode _mode = _GestureMode.none;
@@ -2389,7 +2402,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 													final newPos = duration * v;
 													_player.seek(newPos);
 												},
-												onSeekBarChangeEnd: () {
+										onSeekBarChangeEnd: () {
 													_isSeekingWithSlider = false;
 													_scheduleAutoHide();
 												},
@@ -2399,8 +2412,10 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 												hasPrevious: _hasPreviousEpisode(),
 												hideSeekbar: widget.hideSeekbar,
 												hideOptions: widget.hideOptions,
-																hideBackButton: widget.hideBackButton,
-																onRandom: _playRandom,
+										hideBackButton: widget.hideBackButton,
+										onRandom: _playRandom,
+										enableSkipCredits: widget.requestMagicNext == null,
+										onSkipCredits: _skipCredits,
 											),
 										),
 									);
@@ -2489,6 +2504,8 @@ class _Controls extends StatelessWidget {
 	final bool hideOptions;
 	final bool hideBackButton;
 	final VoidCallback onRandom;
+	final bool enableSkipCredits;
+	final VoidCallback onSkipCredits;
 
 
 	const _Controls({
@@ -2521,6 +2538,8 @@ class _Controls extends StatelessWidget {
 		required this.hideOptions,
 		required this.hideBackButton,
 		required this.onRandom,
+		required this.enableSkipCredits,
+		required this.onSkipCredits,
 	});
 	
 	String _getAspectRatioName() {
@@ -2605,6 +2624,8 @@ class _Controls extends StatelessWidget {
 	Widget build(BuildContext context) {
 		final total = duration.inMilliseconds <= 0 ? const Duration(seconds: 1) : duration;
 		final progress = (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+		final Duration remaining = duration.inMilliseconds > 0 ? (duration - position) : Duration.zero;
+		final bool canShowSkip = enableSkipCredits && duration.inMilliseconds > 0 && position > Duration.zero && remaining.inSeconds <= 30;
 
 		return Stack(
 			children: [
@@ -2690,6 +2711,38 @@ class _Controls extends StatelessWidget {
 							child: Column(
 								mainAxisSize: MainAxisSize.min,
 								children: [
+	                                    if (canShowSkip)
+	                                      Align(
+	                                        alignment: Alignment.centerRight,
+	                                        child: Container(
+	                                          decoration: BoxDecoration(
+	                                            gradient: const LinearGradient(
+	                                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+	                                              begin: Alignment.topLeft,
+	                                              end: Alignment.bottomRight,
+	                                            ),
+	                                            borderRadius: BorderRadius.circular(16),
+	                                            boxShadow: [
+	                                              BoxShadow(
+	                                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+	                                                blurRadius: 12,
+	                                                offset: const Offset(0, 6),
+	                                              ),
+	                                            ],
+	                                            border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+	                                          ),
+	                                          child: TextButton.icon(
+	                                            onPressed: onSkipCredits,
+	                                            icon: const Icon(Icons.skip_next_rounded, color: Colors.white),
+	                                            label: const Text('Skip credits', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+	                                            style: TextButton.styleFrom(
+	                                              backgroundColor: Colors.transparent,
+	                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+	                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+	                                            ),
+	                                          ),
+	                                        ),
+	                                      ),
 									// Progress bar with time indicators
 									Row(
 										children: [
