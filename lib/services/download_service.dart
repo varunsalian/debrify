@@ -11,6 +11,7 @@ import 'android_native_downloader.dart';
 import 'android_download_history.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class DownloadEntry {
   final Task task;
@@ -70,6 +71,22 @@ class DownloadService {
   bool _initializing = false;
   StreamSubscription<Map<String, dynamic>>? _androidEventsSub;
   bool _batteryCheckShown = false;
+  ConnectivityResult _net = ConnectivityResult.wifi; // default optimistic
+  StreamSubscription<List<ConnectivityResult>>? _netSub;
+
+  ConnectivityResult _computeEffectiveNet(List<ConnectivityResult> results) {
+    if (results.isEmpty) return ConnectivityResult.none;
+    if (results.contains(ConnectivityResult.none)) return ConnectivityResult.none;
+    // Treat ethernet/wired/vpn as acceptable like Wi-Fi for large downloads
+    if (results.contains(ConnectivityResult.wifi) ||
+        results.contains(ConnectivityResult.ethernet) ||
+        results.contains(ConnectivityResult.vpn)) {
+      return ConnectivityResult.wifi;
+    }
+    if (results.contains(ConnectivityResult.mobile)) return ConnectivityResult.mobile;
+    // Fallback to the first known state
+    return results.first;
+  }
 
   // Queuing
   final List<_PendingRequest> _pending = [];
@@ -87,6 +104,19 @@ class DownloadService {
   static const String _recordsFile = 'downloads_db_v1.json';
 
   Map<String, Map<String, dynamic>> _records = {}; // recordId -> record map
+
+  String? _resolveRecordIdForTaskId(String taskId) {
+    // If the taskId itself is a known record key (queued placeholder), return it
+    if (_records.containsKey(taskId)) return taskId;
+    // Otherwise, search by pluginTaskId → queued record id
+    for (final e in _records.entries) {
+      final pid = (e.value['pluginTaskId'] ?? '').toString();
+      if (pid == taskId && pid.isNotEmpty) {
+        return e.key;
+      }
+    }
+    return null;
+  }
 
   Future<String> _recordsFilePath() async {
     final dir = await getApplicationSupportDirectory();
@@ -124,6 +154,29 @@ class DownloadService {
     existing['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
     _records[recordId] = existing;
     unawaited(_saveRecords());
+  }
+
+  Map<String, String> _buildResumeHeaders(String finalPath, Map<String, String>? baseHeaders, Map<String, dynamic>? rec) {
+    final Map<String, String> headers = {};
+    if (baseHeaders != null) headers.addAll(baseHeaders);
+    try {
+      final file = File(finalPath);
+      if (file.existsSync()) {
+        final partial = file.lengthSync();
+        if (partial > 0) {
+          headers['Range'] = 'bytes=$partial-';
+          final etag = rec != null ? (rec['etag'] as String?) : null;
+          final lastMod = rec != null ? (rec['lastModified'] as String?) : null;
+          if (etag != null && etag.isNotEmpty) {
+            headers['If-Range'] = etag;
+          } else if (lastMod != null && lastMod.isNotEmpty) {
+            headers['If-Range'] = lastMod;
+          }
+          debugPrint('DL RESUME: path=$finalPath partial=$partial rangeSet=true ifRange=' + (headers['If-Range'] ?? ''));
+        }
+      }
+    } catch (_) {}
+    return headers;
   }
 
   String _computeContentKey(String? meta, String url, String? fileName, String? torrentName) {
@@ -232,13 +285,13 @@ class DownloadService {
       if (list is! List) return;
       debugPrint('DL INIT: pending entries found=${list.length}');
       final Set<String> seenKeys = {};
+      await _loadRecords();
       for (final item in list) {
         if (item is Map<String, dynamic>) {
           final queuedId = (item['queuedId'] ?? '') as String;
           final url = (item['url'] ?? '') as String;
           if (queuedId.isEmpty || url.isEmpty) continue;
           // Skip if this task was canceled previously (persisted in records)
-          await _loadRecords();
           final rec = _records[queuedId];
           if (rec != null && rec['state'] == 'canceled') {
             debugPrint('DL INIT: skipping canceled pending queuedId=$queuedId');
@@ -472,10 +525,32 @@ class DownloadService {
     _initializing = true;
 
     await _ensureNotificationPermission();
+    // Track connectivity for transient handling and auto-resume
+    final initial = await Connectivity().checkConnectivity();
+    _net = _computeEffectiveNet(initial);
+    _netSub ??= Connectivity().onConnectivityChanged.listen((results) async {
+      _net = _computeEffectiveNet(results);
+      // On valid connectivity, nudge scheduler to resume paused items
+      if (_net != ConnectivityResult.none) {
+        // Try to resume paused Android tasks as capacity allows
+        if (Platform.isAndroid) {
+          final paused = AndroidDownloadHistory.instance
+              .all()
+              .where((r) => r.status == TaskStatus.paused)
+              .map((r) => r.taskId)
+              .toList(growable: false);
+          debugPrint('NET OK → scheduled resume ${paused.length} tasks');
+          for (final id in paused) {
+            try { await AndroidNativeDownloader.resume(id); } catch (_) {}
+          }
+        }
+        unawaited(_reevaluateQueue());
+      }
+    });
 
     if (Platform.isAndroid) {
       await AndroidDownloadHistory.instance.initialize();
-      _androidEventsSub = AndroidNativeDownloader.events.listen((event) {
+      _androidEventsSub = AndroidNativeDownloader.events.listen((event) async {
         final type = event['type'] as String?;
         final String taskId = (event['taskId'] ?? '').toString();
         final task = DownloadTask(
@@ -483,10 +558,12 @@ class DownloadService {
           url: event['url'] ?? '',
           filename: event['fileName'] ?? 'download',
         );
+        final String? recId = _resolveRecordIdForTaskId(taskId);
         switch (type) {
           case 'started':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+            if (recId != null) _upsertRecord(recId, {'state': 'running', 'pluginTaskId': taskId});
             break;
           case 'progress':
             final total = (event['total'] as num?)?.toInt() ?? 0;
@@ -499,17 +576,20 @@ class DownloadService {
           case 'paused':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+            if (recId != null) _upsertRecord(recId, {'state': 'paused'});
             // Paused frees a slot; try to start next
             _reevaluateQueue();
             break;
           case 'resumed':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+            if (recId != null) _upsertRecord(recId, {'state': 'running'});
             break;
           case 'canceled':
             AndroidDownloadHistory.instance.upsert(task, TaskStatus.canceled, -2.0);
             _statusController.add(TaskStatusUpdate(task, TaskStatus.canceled));
             _lastFileByTaskId.remove(taskId);
+            if (recId != null) _upsertRecord(recId, {'state': 'canceled'});
             _reevaluateQueue();
             break;
           case 'complete':
@@ -520,11 +600,31 @@ class DownloadService {
             if (uri.isNotEmpty) {
               _lastFileByTaskId[taskId] = (uri, mime);
             }
+            if (recId != null) _upsertRecord(recId, {'state': 'complete'});
             _reevaluateQueue();
             break;
           case 'error':
-            AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
-            _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+            // Classify with immediate connectivity read; be transient-default safe
+            ConnectivityResult nowNet;
+            try {
+              final nowList = await Connectivity().checkConnectivity();
+              nowNet = _computeEffectiveNet(nowList);
+            } catch (_) {
+              nowNet = _net; // fallback to cached
+            }
+            final bool cachedNone = _net == ConnectivityResult.none;
+            final bool nowNone = nowNet == ConnectivityResult.none;
+            if (nowNone || cachedNone) {
+              debugPrint('ANDR ERR net=${nowNone ? 'none' : _net.name} → paused');
+              AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
+              _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+              if (recId != null) _upsertRecord(recId, {'state': 'paused'});
+            } else {
+              debugPrint('ANDR ERR net=${nowNet.name} → failed');
+              AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+              _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+              if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+            }
             _lastFileByTaskId.remove(taskId);
             _reevaluateQueue();
             break;
@@ -588,7 +688,13 @@ class DownloadService {
         Future<void> reenqueueFromMeta() async {
           debugPrint('DL INIT: re-enqueue from meta for taskId=${task.taskId} name=$displayName');
           if (meta != null) {
-            await enqueueDownload(url: url ?? '', fileName: displayName, meta: meta, torrentName: torrentName);
+            final ck = _computeContentKey(meta, url ?? '', displayName, torrentName);
+            final bool dup = _pending.any((p) => p.contentKey == ck);
+            if (!dup) {
+              await enqueueDownload(url: url ?? '', fileName: displayName, meta: meta, torrentName: torrentName);
+            } else {
+              debugPrint('DL INIT: skip re-enqueue duplicate contentKey=$ck');
+            }
           }
         }
 
@@ -706,7 +812,7 @@ class DownloadService {
       'createdAt': DateTime.now().millisecondsSinceEpoch,
     });
 
-    // Add to in-memory pending queue
+    // Add to in-memory pending queue (prevent duplicates by contentKey)
     final pending = _PendingRequest(
       queuedId: queuedId,
       url: url,
@@ -719,7 +825,11 @@ class DownloadService {
       torrentName: torrentName,
       contentKey: contentKey,
     );
-    _pending.add(pending);
+    if (_pending.any((p) => p.contentKey == contentKey)) {
+      debugPrint('DL: skip enqueue duplicate contentKey=$contentKey');
+    } else {
+      _pending.add(pending);
+    }
     _pendingById[queuedId] = pending;
     await _persistPending();
 
@@ -754,7 +864,15 @@ class DownloadService {
         unawaited(_reevaluateQueue());
         return true;
       }
-      return AndroidNativeDownloader.resume(task.taskId);
+      try {
+        return await AndroidNativeDownloader.resume(task.taskId);
+      } catch (_) {
+        // If native resume fails (unknown id or already resumed), downgrade to enqueued and let reevaluator proceed
+        AndroidDownloadHistory.instance.upsert(task as DownloadTask, TaskStatus.enqueued, 0.0);
+        _statusController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
+        unawaited(_reevaluateQueue());
+        return false;
+      }
     } else {
       final dbList = await FileDownloader().database.allRecords();
       runningCount = dbList.where((r) => r.status == TaskStatus.running).length;
@@ -794,10 +912,29 @@ class DownloadService {
     }
 
     if (Platform.isAndroid) {
-      await AndroidNativeDownloader.cancel(task.taskId);
+      // If already canceled/complete/failed in history, avoid native calls
+      final hist = AndroidDownloadHistory.instance.all().firstWhere(
+        (r) => r.taskId == task.taskId,
+        orElse: () => TaskRecord(task as DownloadTask, TaskStatus.notFound, 0.0, -1),
+      );
+      if (hist.status == TaskStatus.canceled || hist.status == TaskStatus.complete || hist.status == TaskStatus.failed) {
+        AndroidDownloadHistory.instance.removeById(task.taskId);
+        _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
+        final recId = _resolveRecordIdForTaskId(task.taskId);
+        if (recId != null) _upsertRecord(recId, {'state': 'canceled'});
+        return;
+      }
+      try {
+        await AndroidNativeDownloader.cancel(task.taskId);
+      } catch (_) {}
       AndroidDownloadHistory.instance.removeById(task.taskId);
       _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
-      _upsertRecord(task.taskId, {'state': 'canceled'});
+      final recId = _resolveRecordIdForTaskId(task.taskId);
+      if (recId != null) {
+        _upsertRecord(recId, {'state': 'canceled'});
+      } else {
+        _upsertRecord(task.taskId, {'state': 'canceled'});
+      }
       return;
     }
     await FileDownloader().cancel(task as DownloadTask);
@@ -997,25 +1134,7 @@ class DownloadService {
           try { final d = Directory(finalPath).parent; if (!await d.exists()) { await d.create(recursive: true); } } catch (_) {}
 
           // Build headers for Range resume based on partial size and validators
-          Map<String, String> headers = {};
-          if (p.headers != null) headers.addAll(p.headers!);
-          try {
-            final file = File(finalPath);
-            if (await file.exists()) {
-              final partial = await file.length();
-              if (partial > 0) {
-                headers['Range'] = 'bytes=$partial-';
-                final etag = rec != null ? (rec['etag'] as String?) : null;
-                final lastMod = rec != null ? (rec['lastModified'] as String?) : null;
-                if (etag != null && etag.isNotEmpty) {
-                  headers['If-Range'] = etag;
-                } else if (lastMod != null && lastMod.isNotEmpty) {
-                  headers['If-Range'] = lastMod;
-                }
-                debugPrint('DL RESUME: path=$finalPath partial=$partial rangeSet=true ifRange=' + (headers['If-Range'] ?? ''));
-              }
-            }
-          } catch (_) {}
+          Map<String, String> headers = _buildResumeHeaders(finalPath, p.headers, rec);
 
           final (BaseDirectory baseDir, String relativeDir, String relFilename) = await Task.split(filePath: finalPath);
           final task = DownloadTask(
