@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   StreamSubscription? _bytesSub;
 
   List<TaskRecord> _records = [];
+  Map<String, DownloadRecordDetails> _recordDetails = {};
   bool _loading = true;
 
   // Live progress snapshots keyed by taskId to show speed/ETA/sizes
@@ -35,6 +37,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   // Move progress after completion (0..1, or failed)
   final Map<String, double> _moveProgressByTaskId = {};
   final Set<String> _moveFailed = {};
+  final Set<String> _busyGroupIds = {};
 
 
 
@@ -82,11 +85,186 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
   Future<void> _refresh() async {
     final list = await DownloadService.instance.allRecords();
+    final details = DownloadService.instance.allRecordDetailsSnapshot();
     if (!mounted) return;
     setState(() {
       _records = list;
+      _recordDetails = details;
       _loading = false;
     });
+  }
+
+  Future<void> _runGroupAction(String groupId, Future<void> Function() action) async {
+    if (!mounted) return;
+    setState(() {
+      _busyGroupIds.add(groupId);
+    });
+    try {
+      await action();
+      await _refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Action failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyGroupIds.remove(groupId);
+        });
+      }
+    }
+  }
+
+  Future<void> _pauseGroup(TorrentDownloadGroup group) async {
+    final queuedIds = <String>[];
+    final runningTasks = <Task>[];
+
+    for (final item in group.items) {
+      switch (item.record.status) {
+        case TaskStatus.running:
+          runningTasks.add(item.record.task);
+          break;
+        case TaskStatus.enqueued:
+        case TaskStatus.waitingToRetry:
+          queuedIds.add(item.record.task.taskId);
+          break;
+        default:
+          break;
+      }
+    }
+
+    if (queuedIds.isNotEmpty) {
+      await DownloadService.instance.pauseQueuedTasksByIds(queuedIds);
+    }
+
+    for (final task in runningTasks) {
+      await DownloadService.instance.pause(task);
+    }
+  }
+
+  Future<void> _resumeGroup(TorrentDownloadGroup group) async {
+    final queuedIds = <String>[];
+    final tasksToResume = <Task>[];
+
+    for (final item in group.items) {
+      final status = item.record.status;
+      final taskId = item.record.task.taskId;
+      switch (status) {
+        case TaskStatus.paused:
+          if (DownloadService.instance.isPausedQueuedTask(taskId)) {
+            queuedIds.add(taskId);
+          } else {
+            tasksToResume.add(item.record.task);
+          }
+          break;
+        case TaskStatus.enqueued:
+        case TaskStatus.waitingToRetry:
+          if (DownloadService.instance.isPausedQueuedTask(taskId)) {
+            queuedIds.add(taskId);
+          } else {
+            tasksToResume.add(item.record.task);
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    for (final task in tasksToResume) {
+      await DownloadService.instance.resume(task);
+    }
+
+    if (queuedIds.isNotEmpty) {
+      await DownloadService.instance.resumeQueuedTasksByIds(queuedIds);
+    }
+  }
+
+  Future<void> _cancelGroup(TorrentDownloadGroup group) async {
+    for (final item in group.items) {
+      final status = item.record.status;
+      if (status != TaskStatus.complete && status != TaskStatus.canceled) {
+        await DownloadService.instance.cancel(item.record.task);
+      }
+    }
+  }
+
+  Future<void> _handleClearFinished(List<TorrentDownloadGroup> groups) async {
+    final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Clear all finished?'),
+            content: const Text('This removes completed entries from the list.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Clear All'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirm) return;
+
+    for (final group in groups) {
+      for (final item in group.items) {
+        await DownloadService.instance.deleteRecord(item.record);
+      }
+    }
+    await _refresh();
+  }
+
+  Future<void> _openGroupDetail(TorrentDownloadGroup group) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TorrentDownloadDetailScreen(
+          groupId: group.id,
+          groupTitle: group.title,
+          initialGroup: group,
+        ),
+      ),
+    );
+    await _refresh();
+  }
+
+  Widget _buildFinishedTab(List<TorrentDownloadGroup> groups) {
+    if (groups.isEmpty) {
+      return const Center(child: Text('No downloads'));
+    }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Row(
+            children: [
+              const Text('Finished', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _busyGroupIds.isEmpty
+                    ? () => _handleClearFinished(groups)
+                    : null,
+                icon: const Icon(Icons.delete_sweep_rounded),
+                label: const Text('Clear All'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _TorrentGroupList(
+            groups: groups,
+            busyGroupIds: _busyGroupIds,
+            isFinishedTab: true,
+            onOpenGroup: _openGroupDetail,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -398,24 +576,19 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final inProgress = _records
-        .where((r) =>
-            r.status == TaskStatus.enqueued ||
-            r.status == TaskStatus.running ||
-            r.status == TaskStatus.waitingToRetry ||
-            r.status == TaskStatus.paused)
-        .toList();
-    final finished = _records
-        .where((r) =>
-            r.status == TaskStatus.complete ||
-            r.status == TaskStatus.canceled ||
-            r.status == TaskStatus.failed ||
-            r.status == TaskStatus.notFound)
-        .toList();
+    final groups = buildTorrentGroups(
+      records: _records,
+      detailsByRecordId: _recordDetails,
+      progressByTaskId: _progressByTaskId,
+      rawBytes: _bytesByTaskId,
+      moveProgressByTaskId: _moveProgressByTaskId,
+      moveFailed: _moveFailed,
+    );
+    final inProgressGroups = groups.where((g) => !g.isFinished).toList();
+    final finishedGroups = groups.where((g) => g.isFinished).toList();
 
     return Column(
       children: [
-        // Default-folder reminder removed
         Container(
           margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -435,7 +608,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
               borderRadius: BorderRadius.circular(10),
             ),
             labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
-            unselectedLabelColor: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+            unselectedLabelColor:
+                Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
             tabs: const [
               Tab(text: 'In Progress'),
               Tab(text: 'Finished'),
@@ -453,7 +627,12 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,23 +647,19 @@ class _DownloadsScreenState extends State<DownloadsScreen>
               : TabBarView(
                   controller: _tabController,
                   children: [
-                    _DownloadList(
-                      records: inProgress,
-                      onChanged: _refresh,
-                      progressByTaskId: _progressByTaskId,
-                      moveProgressByTaskId: _moveProgressByTaskId,
-                      moveFailed: _moveFailed,
-                      rawBytes: _bytesByTaskId,
+                    _TorrentGroupList(
+                      groups: inProgressGroups,
+                      busyGroupIds: _busyGroupIds,
+                      isFinishedTab: false,
+                      onOpenGroup: _openGroupDetail,
+                      onPauseAll: (group) =>
+                          _runGroupAction(group.id, () => _pauseGroup(group)),
+                      onResumeAll: (group) =>
+                          _runGroupAction(group.id, () => _resumeGroup(group)),
+                      onCancelAll: (group) =>
+                          _runGroupAction(group.id, () => _cancelGroup(group)),
                     ),
-                    _DownloadList(
-                      records: finished,
-                      onChanged: _refresh,
-                      progressByTaskId: _progressByTaskId,
-                      moveProgressByTaskId: _moveProgressByTaskId,
-                      moveFailed: _moveFailed,
-                      rawBytes: _bytesByTaskId,
-                      isFinishedTab: true,
-                    ),
+                    _buildFinishedTab(finishedGroups),
                   ],
                 ),
         ),
@@ -496,15 +671,13 @@ class _DownloadsScreenState extends State<DownloadsScreen>
               backgroundColor: Theme.of(context).colorScheme.primary,
               foregroundColor: Theme.of(context).colorScheme.onPrimary,
               onPressed: () async {
-                // Check clipboard for download links first
                 final data = await Clipboard.getData('text/plain');
                 String? clipboardUrl;
-                
+
                 if (data?.text != null && data!.text!.isNotEmpty) {
                   final url = data.text!.trim();
                   if (_isDownloadLink(url)) {
                     clipboardUrl = url;
-                    // Show a brief message that a download link was found
                     if (mounted) {
                       final uri = Uri.tryParse(url);
                       final fileName = uri?.path.split('/').last ?? 'file';
@@ -517,8 +690,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                     }
                   }
                 }
-                
-                // Show dialog with clipboard URL if it's a download link
+
                 await _showAddDialog(initialUrl: clipboardUrl);
               },
               icon: const Icon(Icons.add),
@@ -646,115 +818,978 @@ class _PreviewCard extends StatelessWidget {
   }
 }
 
-class _DownloadList extends StatelessWidget {
-  final List<TaskRecord> records;
-  final Future<void> Function() onChanged;
-  final Map<String, TaskProgressUpdate> progressByTaskId;
-  final Map<String, double> moveProgressByTaskId;
-  final Set<String> moveFailed;
-  final Map<String, (int bytes, int? total)> rawBytes;
-  final bool isFinishedTab;
+enum TorrentGroupState { moving, downloading, queued, paused, waiting, failed, canceled, completed }
 
-  const _DownloadList({
-    required this.records,
-    required this.onChanged,
-    required this.progressByTaskId,
-    required this.moveProgressByTaskId,
-    required this.moveFailed,
-    required this.rawBytes,
-    this.isFinishedTab = false,
+extension TorrentGroupStateExt on TorrentGroupState {
+  String get label {
+    switch (this) {
+      case TorrentGroupState.moving:
+        return 'Moving';
+      case TorrentGroupState.downloading:
+        return 'Downloading';
+      case TorrentGroupState.queued:
+        return 'Queued';
+      case TorrentGroupState.paused:
+        return 'Paused';
+      case TorrentGroupState.waiting:
+        return 'Waiting';
+      case TorrentGroupState.failed:
+        return 'Needs attention';
+      case TorrentGroupState.canceled:
+        return 'Canceled';
+      case TorrentGroupState.completed:
+        return 'Completed';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case TorrentGroupState.moving:
+        return Icons.folder_copy_rounded;
+      case TorrentGroupState.downloading:
+        return Icons.download_rounded;
+      case TorrentGroupState.queued:
+        return Icons.queue_rounded;
+      case TorrentGroupState.paused:
+        return Icons.pause_circle_rounded;
+      case TorrentGroupState.waiting:
+        return Icons.schedule_rounded;
+      case TorrentGroupState.failed:
+        return Icons.error_outline_rounded;
+      case TorrentGroupState.canceled:
+        return Icons.cancel_rounded;
+      case TorrentGroupState.completed:
+        return Icons.check_circle_rounded;
+    }
+  }
+
+  int get sortPriority {
+    switch (this) {
+      case TorrentGroupState.moving:
+        return 0;
+      case TorrentGroupState.downloading:
+        return 1;
+      case TorrentGroupState.queued:
+        return 2;
+      case TorrentGroupState.paused:
+        return 3;
+      case TorrentGroupState.waiting:
+        return 4;
+      case TorrentGroupState.failed:
+        return 5;
+      case TorrentGroupState.canceled:
+        return 6;
+      case TorrentGroupState.completed:
+        return 7;
+    }
+  }
+}
+
+class TorrentMeta {
+  final String? torrentHash;
+  final int? fileIndex;
+  final String? restrictedLink;
+  final String? apiKey;
+
+  const TorrentMeta({
+    this.torrentHash,
+    this.fileIndex,
+    this.restrictedLink,
+    this.apiKey,
+  });
+
+  bool get hasHash => torrentHash != null && torrentHash!.isNotEmpty;
+}
+
+TorrentMeta parseTorrentMeta(String? meta) {
+  if (meta == null || meta.isEmpty) return const TorrentMeta();
+  try {
+    final decoded = jsonDecode(meta);
+    if (decoded is Map) {
+      String? hash;
+      int? fileIndex;
+      String? restrictedLink;
+      String? apiKey;
+
+      final dynamic rawHash = decoded['torrentHash'];
+      if (rawHash != null && rawHash.toString().isNotEmpty) {
+        hash = rawHash.toString();
+      }
+
+      final dynamic rawIndex = decoded['fileIndex'];
+      if (rawIndex is num) {
+        fileIndex = rawIndex.toInt();
+      } else if (rawIndex is String) {
+        fileIndex = int.tryParse(rawIndex);
+      }
+
+      final dynamic rawRestricted = decoded['restrictedLink'];
+      if (rawRestricted != null && rawRestricted.toString().isNotEmpty) {
+        restrictedLink = rawRestricted.toString();
+      }
+
+      final dynamic rawApiKey = decoded['apiKey'];
+      if (rawApiKey != null && rawApiKey.toString().isNotEmpty) {
+        apiKey = rawApiKey.toString();
+      }
+
+      return TorrentMeta(
+        torrentHash: hash,
+        fileIndex: fileIndex,
+        restrictedLink: restrictedLink,
+        apiKey: apiKey,
+      );
+    }
+  } catch (_) {}
+  return const TorrentMeta();
+}
+
+class TorrentDownloadItem {
+  final TaskRecord record;
+  final DownloadRecordDetails? details;
+  final TorrentMeta meta;
+
+  const TorrentDownloadItem({
+    required this.record,
+    required this.details,
+    required this.meta,
+  });
+}
+
+class TorrentDownloadGroup {
+  final String id;
+  final String title;
+  final String? torrentHash;
+  final DateTime latestCreatedAt;
+  final List<TorrentDownloadItem> items;
+  final int totalFiles;
+  final int completedFiles;
+  final int runningFiles;
+  final int queuedFiles;
+  final int pausedFiles;
+  final int waitingFiles;
+  final int failedFiles;
+  final int canceledFiles;
+  final int notFoundFiles;
+  final double progress;
+  final int? totalBytes;
+  final int? downloadedBytes;
+  final double speedBytesPerSecond;
+  final Duration? eta;
+  final bool hasMoveInProgress;
+  final bool hasMoveFailure;
+  final TorrentGroupState state;
+  final String statusLabel;
+
+  const TorrentDownloadGroup({
+    required this.id,
+    required this.title,
+    required this.torrentHash,
+    required this.latestCreatedAt,
+    required this.items,
+    required this.totalFiles,
+    required this.completedFiles,
+    required this.runningFiles,
+    required this.queuedFiles,
+    required this.pausedFiles,
+    required this.waitingFiles,
+    required this.failedFiles,
+    required this.canceledFiles,
+    required this.notFoundFiles,
+    required this.progress,
+    required this.totalBytes,
+    required this.downloadedBytes,
+    required this.speedBytesPerSecond,
+    required this.eta,
+    required this.hasMoveInProgress,
+    required this.hasMoveFailure,
+    required this.state,
+    required this.statusLabel,
+  });
+
+  bool get isFinished =>
+      state == TorrentGroupState.completed || state == TorrentGroupState.canceled;
+
+  bool get hasIssues => failedFiles > 0 || hasMoveFailure || notFoundFiles > 0;
+
+  bool get hasActive =>
+      runningFiles > 0 || queuedFiles > 0 || pausedFiles > 0 || waitingFiles > 0 || hasMoveInProgress;
+}
+
+class _TorrentGroupBuilder {
+  final String id;
+  String title;
+  bool titleIsFallback;
+  String? torrentHash;
+  DateTime latestCreatedAt;
+  final List<TorrentDownloadItem> items = [];
+  int totalFiles = 0;
+  int completedFiles = 0;
+  int runningFiles = 0;
+  int queuedFiles = 0;
+  int pausedFiles = 0;
+  int waitingFiles = 0;
+  int failedFiles = 0;
+  int canceledFiles = 0;
+  int notFoundFiles = 0;
+  double totalBytes = 0;
+  double downloadedBytes = 0;
+  double fallbackProgressSum = 0;
+  int fallbackProgressCount = 0;
+  double speedBytesPerSecond = 0;
+  bool hasMoveInProgress = false;
+  bool hasMoveFailure = false;
+
+  _TorrentGroupBuilder({
+    required this.id,
+    required this.title,
+    required this.titleIsFallback,
+    required this.torrentHash,
+    required this.latestCreatedAt,
+  });
+
+  void add({
+    required TaskRecord record,
+    required DownloadRecordDetails? details,
+    required TorrentMeta meta,
+    required TaskProgressUpdate? progress,
+    required (int bytes, int? total)? raw,
+    required double? moveProgress,
+    required bool moveFailed,
+  }) {
+    items.add(TorrentDownloadItem(record: record, details: details, meta: meta));
+    totalFiles += 1;
+
+    final created = record.task.creationTime;
+    if (created.isAfter(latestCreatedAt)) {
+      latestCreatedAt = created;
+    }
+
+    switch (record.status) {
+      case TaskStatus.running:
+        runningFiles += 1;
+        break;
+      case TaskStatus.enqueued:
+        queuedFiles += 1;
+        break;
+      case TaskStatus.waitingToRetry:
+        waitingFiles += 1;
+        break;
+      case TaskStatus.paused:
+        pausedFiles += 1;
+        break;
+      case TaskStatus.complete:
+        completedFiles += 1;
+        break;
+      case TaskStatus.canceled:
+        canceledFiles += 1;
+        break;
+      case TaskStatus.failed:
+        failedFiles += 1;
+        break;
+      case TaskStatus.notFound:
+        notFoundFiles += 1;
+        failedFiles += 1;
+        break;
+    }
+
+    if (meta.hasHash && (torrentHash == null || torrentHash!.isEmpty)) {
+      torrentHash = meta.torrentHash;
+    }
+
+    if (titleIsFallback) {
+      final choice = _deriveTitle(record, details, meta);
+      if (!choice.fallback) {
+        title = choice.title;
+        titleIsFallback = false;
+      } else if (title.isEmpty && choice.title.isNotEmpty) {
+        title = choice.title;
+      }
+    }
+
+    if (moveProgress != null && moveProgress > 0 && moveProgress < 1) {
+      hasMoveInProgress = true;
+    }
+    if (moveFailed) {
+      hasMoveFailure = true;
+    }
+
+    final progressValue = _progressValue(record, progress);
+    final int? total = raw?.$2 ?? _expectedTotalBytes(record, progress);
+    int? downloaded = raw?.$1;
+    if (downloaded == null && total != null && total > 0) {
+      downloaded = (progressValue * total).clamp(0, total).round();
+    } else if (downloaded == null && record.status == TaskStatus.complete && total != null && total > 0) {
+      downloaded = total;
+    }
+
+    if (total != null && total > 0) {
+      totalBytes += total;
+      downloadedBytes += (downloaded ?? (record.status == TaskStatus.complete ? total : 0));
+    } else {
+      fallbackProgressSum += progressValue;
+      fallbackProgressCount += 1;
+    }
+
+    if (progress != null && progress.hasNetworkSpeed && record.status == TaskStatus.running) {
+      speedBytesPerSecond += progress.networkSpeed * 1024 * 1024;
+    }
+  }
+
+  TorrentDownloadGroup build() {
+    final int? totalBytesInt = totalBytes > 0 ? totalBytes.round() : null;
+    final int? downloadedBytesInt = totalBytesInt != null
+        ? downloadedBytes.clamp(0, totalBytes).round()
+        : null;
+
+    double effectiveProgress;
+    if (totalBytesInt != null && totalBytesInt > 0) {
+      effectiveProgress = (downloadedBytesInt ?? 0) / totalBytesInt;
+    } else if (fallbackProgressCount > 0) {
+      effectiveProgress = fallbackProgressSum / fallbackProgressCount;
+    } else {
+      effectiveProgress = 0.0;
+    }
+    effectiveProgress = effectiveProgress.clamp(0.0, 1.0);
+
+    Duration? eta;
+    if (speedBytesPerSecond > 0 && totalBytesInt != null && downloadedBytesInt != null) {
+      final remaining = totalBytesInt - downloadedBytesInt;
+      if (remaining > 0) {
+        eta = Duration(seconds: (remaining / speedBytesPerSecond).round());
+      }
+    }
+
+    final state = _deriveGroupState(
+      hasMoveInProgress: hasMoveInProgress,
+      running: runningFiles,
+      queued: queuedFiles,
+      paused: pausedFiles,
+      waiting: waitingFiles,
+      failed: failedFiles,
+      canceled: canceledFiles,
+      completed: completedFiles,
+      total: totalFiles,
+    );
+
+    final label = _deriveStatusLabel(
+      state,
+      hasMoveFailure,
+      failedFiles,
+      pausedFiles,
+      queuedFiles,
+      waitingFiles,
+    );
+
+    return TorrentDownloadGroup(
+      id: id,
+      title: title.isNotEmpty ? title : 'Download ${id.hashCode & 0xFFFF}',
+      torrentHash: torrentHash,
+      latestCreatedAt: latestCreatedAt,
+      items: List.unmodifiable(items),
+      totalFiles: totalFiles,
+      completedFiles: completedFiles,
+      runningFiles: runningFiles,
+      queuedFiles: queuedFiles,
+      pausedFiles: pausedFiles,
+      waitingFiles: waitingFiles,
+      failedFiles: failedFiles,
+      canceledFiles: canceledFiles,
+      notFoundFiles: notFoundFiles,
+      progress: effectiveProgress,
+      totalBytes: totalBytesInt,
+      downloadedBytes: downloadedBytesInt,
+      speedBytesPerSecond: speedBytesPerSecond,
+      eta: eta,
+      hasMoveInProgress: hasMoveInProgress,
+      hasMoveFailure: hasMoveFailure,
+      state: state,
+      statusLabel: label,
+    );
+  }
+}
+
+class _TitleChoice {
+  final String title;
+  final bool fallback;
+  const _TitleChoice(this.title, this.fallback);
+}
+
+_TitleChoice _deriveTitle(TaskRecord record, DownloadRecordDetails? details, TorrentMeta meta) {
+  final torrentName = details?.torrentName?.trim();
+  if (torrentName != null && torrentName.isNotEmpty) {
+    return _TitleChoice(torrentName, false);
+  }
+  if (meta.torrentHash != null && meta.torrentHash!.isNotEmpty) {
+    final hash = meta.torrentHash!;
+    final shortHash = hash.length > 7 ? hash.substring(0, 7) : hash;
+    return _TitleChoice('Torrent $shortHash', true);
+  }
+  final display = details?.displayName?.trim();
+  if (display != null && display.isNotEmpty) {
+    return _TitleChoice(display, true);
+  }
+  final filename = record.task.filename.trim();
+  if (filename.isNotEmpty) {
+    return _TitleChoice(filename, true);
+  }
+  return _TitleChoice('Download', true);
+}
+
+double _progressValue(TaskRecord record, TaskProgressUpdate? progress) {
+  if (record.status == TaskStatus.complete) return 1.0;
+  final double? live = progress?.progress;
+  if (live != null && !live.isNaN && live >= 0) {
+    return live.clamp(0.0, 1.0);
+  }
+  final double fallback = record.progress;
+  if (!fallback.isNaN && fallback >= 0) {
+    return fallback.clamp(0.0, 1.0);
+  }
+  return 0.0;
+}
+
+int? _expectedTotalBytes(TaskRecord record, TaskProgressUpdate? progress) {
+  if (progress != null && progress.hasExpectedFileSize && progress.expectedFileSize > 0) {
+    return progress.expectedFileSize;
+  }
+  if (record.expectedFileSize > 0) {
+    return record.expectedFileSize;
+  }
+  return null;
+}
+
+TorrentGroupState _deriveGroupState({
+  required bool hasMoveInProgress,
+  required int running,
+  required int queued,
+  required int paused,
+  required int waiting,
+  required int failed,
+  required int canceled,
+  required int completed,
+  required int total,
+}) {
+  if (hasMoveInProgress) return TorrentGroupState.moving;
+  if (running > 0) return TorrentGroupState.downloading;
+  if (queued > 0) return TorrentGroupState.queued;
+  if (paused > 0) return TorrentGroupState.paused;
+  if (waiting > 0) return TorrentGroupState.waiting;
+  if (failed > 0) return TorrentGroupState.failed;
+  if (canceled >= total && total > 0) return TorrentGroupState.canceled;
+  if (completed >= total && total > 0) return TorrentGroupState.completed;
+  return TorrentGroupState.waiting;
+}
+
+String _deriveStatusLabel(
+  TorrentGroupState state,
+  bool hasMoveFailure,
+  int failed,
+  int paused,
+  int queued,
+  int waiting,
+) {
+  if (hasMoveFailure) return 'Move failed';
+  switch (state) {
+    case TorrentGroupState.moving:
+      return 'Moving to destination';
+    case TorrentGroupState.downloading:
+      return 'Downloading';
+    case TorrentGroupState.queued:
+      return queued > 1 ? '$queued in queue' : 'Queued';
+    case TorrentGroupState.paused:
+      return paused > 1 ? '$paused paused' : 'Paused';
+    case TorrentGroupState.waiting:
+      return waiting > 1 ? '$waiting waiting' : 'Waiting';
+    case TorrentGroupState.failed:
+      return failed > 1 ? '$failed failed' : 'Needs attention';
+    case TorrentGroupState.canceled:
+      return 'Canceled';
+    case TorrentGroupState.completed:
+      return 'Completed';
+  }
+}
+
+List<TorrentDownloadGroup> buildTorrentGroups({
+  required List<TaskRecord> records,
+  required Map<String, DownloadRecordDetails> detailsByRecordId,
+  required Map<String, TaskProgressUpdate> progressByTaskId,
+  required Map<String, (int bytes, int? total)> rawBytes,
+  required Map<String, double> moveProgressByTaskId,
+  required Set<String> moveFailed,
+}) {
+  if (records.isEmpty) return const [];
+
+  final Map<String, DownloadRecordDetails> detailsByTaskId = {};
+  for (final entry in detailsByRecordId.entries) {
+    detailsByTaskId[entry.key] = entry.value;
+    final pluginId = entry.value.pluginTaskId;
+    if (pluginId != null && pluginId.isNotEmpty) {
+      detailsByTaskId[pluginId] = entry.value;
+    }
+  }
+
+  final Map<String, _TorrentGroupBuilder> builders = {};
+
+  for (final record in records) {
+    final details = detailsByTaskId[record.task.taskId];
+    final meta = parseTorrentMeta(details?.meta);
+    final groupId = _deriveGroupId(record, details, meta);
+    final builder = builders.putIfAbsent(groupId, () {
+      final choice = _deriveTitle(record, details, meta);
+      final created = details?.createdAt != null && details!.createdAt! > 0
+          ? DateTime.fromMillisecondsSinceEpoch(details.createdAt!)
+          : record.task.creationTime;
+      return _TorrentGroupBuilder(
+        id: groupId,
+        title: choice.title,
+        titleIsFallback: choice.fallback,
+        torrentHash: meta.torrentHash,
+        latestCreatedAt: created,
+      );
+    });
+
+    builder.add(
+      record: record,
+      details: details,
+      meta: meta,
+      progress: progressByTaskId[record.task.taskId],
+      raw: rawBytes[record.task.taskId],
+      moveProgress: moveProgressByTaskId[record.task.taskId],
+      moveFailed: moveFailed.contains(record.task.taskId),
+    );
+  }
+
+  final groups = builders.values.map((b) => b.build()).toList();
+  groups.sort((a, b) {
+    final cmp = a.state.sortPriority.compareTo(b.state.sortPriority);
+    if (cmp != 0) return cmp;
+    return b.latestCreatedAt.compareTo(a.latestCreatedAt);
+  });
+  return groups;
+}
+
+String _deriveGroupId(TaskRecord record, DownloadRecordDetails? details, TorrentMeta meta) {
+  if (meta.torrentHash != null && meta.torrentHash!.isNotEmpty) {
+    return 'hash:${meta.torrentHash!.toLowerCase()}';
+  }
+  final torrentName = details?.torrentName;
+  if (torrentName != null && torrentName.trim().isNotEmpty) {
+    return 'name:${torrentName.trim().toLowerCase()}';
+  }
+  return 'task:${record.task.taskId}';
+}
+
+String formatBytes(int bytes) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  double size = bytes.toDouble();
+  int unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit++;
+  }
+  final String value;
+  if (unit == 0) {
+    value = size.round().toString();
+  } else if (size >= 10) {
+    value = size.toStringAsFixed(1);
+  } else {
+    value = size.toStringAsFixed(2);
+  }
+  return '$value ${units[unit]}';
+}
+
+String formatSpeed(double bytesPerSecond) {
+  if (bytesPerSecond <= 0) return '-- MB/s';
+  final megabytes = bytesPerSecond / (1024 * 1024);
+  if (megabytes >= 1) {
+    return '${megabytes.toStringAsFixed(megabytes >= 10 ? 1 : 2)} MB/s';
+  }
+  final kilobytes = bytesPerSecond / 1024;
+  return '${kilobytes.toStringAsFixed(kilobytes >= 10 ? 1 : 2)} kB/s';
+}
+
+String formatEta(Duration? eta) {
+  if (eta == null || eta.isNegative) return '--';
+  if (eta.inHours >= 1) {
+    final hours = eta.inHours;
+    final minutes = eta.inMinutes.remainder(60);
+    return '${hours}h ${minutes}m';
+  }
+  if (eta.inMinutes >= 1) {
+    final minutes = eta.inMinutes;
+    final seconds = eta.inSeconds.remainder(60);
+    return '${minutes}m ${seconds}s';
+  }
+  return '${eta.inSeconds}s';
+}
+
+class _TorrentGroupList extends StatelessWidget {
+  final List<TorrentDownloadGroup> groups;
+  final Set<String> busyGroupIds;
+  final bool isFinishedTab;
+  final void Function(TorrentDownloadGroup) onOpenGroup;
+  final Future<void> Function(TorrentDownloadGroup)? onPauseAll;
+  final Future<void> Function(TorrentDownloadGroup)? onResumeAll;
+  final Future<void> Function(TorrentDownloadGroup)? onCancelAll;
+
+  const _TorrentGroupList({
+    required this.groups,
+    required this.busyGroupIds,
+    required this.isFinishedTab,
+    required this.onOpenGroup,
+    this.onPauseAll,
+    this.onResumeAll,
+    this.onCancelAll,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (records.isEmpty) {
-      return const Center(
-        child: Text('No downloads'),
-      );
+    if (groups.isEmpty) {
+      return const Center(child: Text('No downloads'));
     }
-    
-    if (!isFinishedTab) {
-      return ListView.separated(
-        padding: const EdgeInsets.all(12),
-        itemCount: records.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, index) => PressableScale(
-          child: _DownloadTile(
-            record: records[index],
-            onChanged: onChanged,
-            progress: progressByTaskId[records[index].task.taskId],
-            moveProgress: moveProgressByTaskId[records[index].task.taskId],
-            moveFailed: moveFailed.contains(records[index].task.taskId),
-            rawBytes: rawBytes[records[index].task.taskId]?.$1,
-            rawTotal: rawBytes[records[index].task.taskId]?.$2,
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: groups.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final group = groups[index];
+        final bool isBusy = busyGroupIds.contains(group.id);
+
+        final bool canPause = !isFinishedTab && !isBusy && onPauseAll != null &&
+            (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
+        final bool canResume = !isFinishedTab && !isBusy && onResumeAll != null &&
+            (group.pausedFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
+        final bool canCancel = !isBusy && onCancelAll != null &&
+            (group.hasActive || group.failedFiles > 0 || group.notFoundFiles > 0);
+
+        VoidCallback? pause = canPause ? () => onPauseAll!(group) : null;
+        VoidCallback? resume = canResume ? () => onResumeAll!(group) : null;
+        VoidCallback? cancel = canCancel ? () => onCancelAll!(group) : null;
+
+        return PressableScale(
+          onTap: () => onOpenGroup(group),
+          child: _TorrentGroupCard(
+            group: group,
+            isBusy: isBusy,
+            isFinished: isFinishedTab,
+            onPauseAll: pause,
+            onResumeAll: resume,
+            onCancelAll: cancel,
           ),
+        );
+      },
+    );
+  }
+}
+
+class _TorrentGroupCard extends StatelessWidget {
+  final TorrentDownloadGroup group;
+  final bool isBusy;
+  final bool isFinished;
+  final VoidCallback? onPauseAll;
+  final VoidCallback? onResumeAll;
+  final VoidCallback? onCancelAll;
+
+  const _TorrentGroupCard({
+    required this.group,
+    required this.isBusy,
+    required this.isFinished,
+    this.onPauseAll,
+    this.onResumeAll,
+    this.onCancelAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final Color stateColor = _groupStateColor(theme, group.state);
+    final textTheme = theme.textTheme;
+
+    final summaryParts = <String>[
+      '${group.completedFiles}/${group.totalFiles} files',
+    ];
+    if (group.runningFiles > 0) {
+      summaryParts.add('${group.runningFiles} downloading');
+    }
+    if (group.queuedFiles > 0) {
+      summaryParts.add('${group.queuedFiles} queued');
+    }
+    if (group.pausedFiles > 0) {
+      summaryParts.add('${group.pausedFiles} paused');
+    }
+    if (group.failedFiles > 0) {
+      summaryParts.add('${group.failedFiles} failed');
+    }
+    if (group.hasMoveInProgress) {
+      summaryParts.add('moving');
+    }
+
+    final chips = <Widget>[
+      _InfoChip(
+        icon: Icons.layers_rounded,
+        label: '${group.totalFiles} files',
+      ),
+    ];
+
+    if (group.downloadedBytes != null && group.totalBytes != null) {
+      chips.add(
+        _InfoChip(
+          icon: Icons.data_usage_rounded,
+          label: '${formatBytes(group.downloadedBytes!)} / ${formatBytes(group.totalBytes!)}',
+        ),
+      );
+    } else if (group.totalBytes != null) {
+      chips.add(
+        _InfoChip(
+          icon: Icons.data_usage_rounded,
+          label: formatBytes(group.totalBytes!),
         ),
       );
     }
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-          child: Row(
-            children: [
-              const Text('Finished', style: TextStyle(fontWeight: FontWeight.w600)),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Clear all finished?'),
-                          content: const Text('This removes finished items from the list.'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Cancel'),
+    if (group.speedBytesPerSecond > 0) {
+      chips.add(
+        _InfoChip(
+          icon: Icons.speed_rounded,
+          label: formatSpeed(group.speedBytesPerSecond),
+        ),
+      );
+    }
+    if (group.eta != null && !group.eta!.isNegative) {
+      chips.add(
+        _InfoChip(
+          icon: Icons.timer_rounded,
+          label: formatEta(group.eta),
+        ),
+      );
+    }
+    if (group.failedFiles > 0 || group.notFoundFiles > 0) {
+      chips.add(
+        _InfoChip(
+          icon: Icons.error_outline_rounded,
+          label: '${group.failedFiles + group.notFoundFiles} issues',
+          foreground: theme.colorScheme.error,
+          background: theme.colorScheme.error.withOpacity(0.12),
+        ),
+      );
+    }
+    if (group.hasMoveFailure) {
+      chips.add(
+        _InfoChip(
+          icon: Icons.folder_off_rounded,
+          label: 'Move failed',
+          foreground: theme.colorScheme.error,
+          background: theme.colorScheme.error.withOpacity(0.12),
+        ),
+      );
+    }
+    if (group.torrentHash != null && group.torrentHash!.isNotEmpty) {
+      final hash = group.torrentHash!;
+      final shortHash = hash.length > 12 ? '${hash.substring(0, 12)}…' : hash;
+      chips.add(
+        _InfoChip(
+          icon: Icons.tag_rounded,
+          label: shortHash.toUpperCase(),
+        ),
+      );
+    }
+
+    final actions = <Widget>[];
+    if (onPauseAll != null) {
+      actions.add(
+        TextButton.icon(
+          onPressed: onPauseAll,
+          icon: const Icon(Icons.pause_rounded),
+          label: const Text('Pause'),
+        ),
+      );
+    }
+    if (onResumeAll != null) {
+      actions.add(
+        TextButton.icon(
+          onPressed: onResumeAll,
+          icon: const Icon(Icons.play_arrow_rounded),
+          label: const Text('Resume'),
+        ),
+      );
+    }
+    if (onCancelAll != null) {
+      actions.add(
+        TextButton.icon(
+          onPressed: onCancelAll,
+          icon: const Icon(Icons.delete_rounded),
+          label: const Text('Cancel'),
+        ),
+      );
+    }
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: theme.colorScheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: stateColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(group.state.icon, color: stateColor, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              group.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                             ),
-                            FilledButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text('Clear All'),
+                          ),
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: stateColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              group.statusLabel,
+                              style: textTheme.labelSmall?.copyWith(
+                                color: stateColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (isBusy) ...[
+                            const SizedBox(width: 12),
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        summaryParts.join(' • '),
+                        style: textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                      ) ??
-                      false;
-                  if (!confirm) return;
-                  for (final r in List<TaskRecord>.from(records)) {
-                    await DownloadService.instance.deleteRecord(r);
-                  }
-                  await onChanged();
-                },
-                icon: const Icon(Icons.delete_sweep_rounded),
-                label: const Text('Clear All'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: records.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) => PressableScale(
-              child: _DownloadTile(
-                record: records[index],
-                onChanged: onChanged,
-                progress: progressByTaskId[records[index].task.taskId],
-                moveProgress: moveProgressByTaskId[records[index].task.taskId],
-                moveFailed: moveFailed.contains(records[index].task.taskId),
-                rawBytes: rawBytes[records[index].task.taskId]?.$1,
-                rawTotal: rawBytes[records[index].task.taskId]?.$2,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: group.progress.isNaN ? 0 : group.progress.clamp(0.0, 1.0),
+                minHeight: 8,
+                backgroundColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                valueColor: AlwaysStoppedAnimation(stateColor),
               ),
             ),
-          ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: chips,
+            ),
+            if (actions.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              OverflowBar(
+                spacing: 12,
+                overflowSpacing: 12,
+                alignment: MainAxisAlignment.start,
+                children: actions,
+              ),
+            ],
+          ],
         ),
-      ],
+      ),
     );
   }
 }
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? foreground;
+  final Color? background;
+
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    this.foreground,
+    this.background,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final Color fg = foreground ?? theme.colorScheme.onSurfaceVariant;
+    final Color bg = background ?? theme.colorScheme.surfaceVariant.withOpacity(0.4);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(color: fg, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Color _groupStateColor(ThemeData theme, TorrentGroupState state) {
+  switch (state) {
+    case TorrentGroupState.moving:
+      return theme.colorScheme.tertiary;
+    case TorrentGroupState.downloading:
+      return theme.colorScheme.primary;
+    case TorrentGroupState.queued:
+      return const Color(0xFFF59E0B);
+    case TorrentGroupState.paused:
+      return const Color(0xFF38BDF8);
+    case TorrentGroupState.waiting:
+      return const Color(0xFF22D3EE);
+    case TorrentGroupState.failed:
+      return theme.colorScheme.error;
+    case TorrentGroupState.canceled:
+      return theme.colorScheme.outline;
+    case TorrentGroupState.completed:
+      return const Color(0xFF22C55E);
+  }
+}
+
 
 class _DownloadTile extends StatelessWidget {
   final TaskRecord record;
@@ -794,17 +1829,6 @@ class _DownloadTile extends StatelessWidget {
       case TaskStatus.notFound:
         return 'Not found';
     }
-  }
-
-  String _fmtBytes(int bytes) {
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    double size = bytes.toDouble();
-    int unit = 0;
-    while (size >= 1024 && unit < units.length - 1) {
-      size /= 1024;
-      unit++;
-    }
-    return '${size.toStringAsFixed(1)} ${units[unit]}';
   }
 
   @override
@@ -923,8 +1947,8 @@ class _DownloadTile extends StatelessWidget {
                     _StatChip(icon: Icons.speed, label: speedStr),
                   _StatChip(
                     icon: Icons.storage_rounded,
-                    label: '${downloadedBytes != null ? _fmtBytes(downloadedBytes) : '—'} / '
-                        '${totalBytes != null ? _fmtBytes(totalBytes) : '—'}',
+                    label:
+                        '${downloadedBytes != null ? formatBytes(downloadedBytes) : '—'} / ${totalBytes != null ? formatBytes(totalBytes) : '—'}',
                   ),
                   if (etaStr != null)
                     _StatChip(icon: Icons.timer, label: 'ETA $etaStr'),
@@ -942,7 +1966,7 @@ class _DownloadTile extends StatelessWidget {
                 children: [
                   _StatChip(
                     icon: Icons.storage_rounded,
-                    label: _fmtBytes(totalBytes),
+                    label: formatBytes(totalBytes),
                   ),
                 ],
               ),
@@ -1063,4 +2087,299 @@ class _StatChip extends StatelessWidget {
       ),
     );
   }
-} 
+}
+
+class TorrentDownloadDetailScreen extends StatefulWidget {
+  final String groupId;
+  final String groupTitle;
+  final TorrentDownloadGroup initialGroup;
+
+  const TorrentDownloadDetailScreen({
+    super.key,
+    required this.groupId,
+    required this.groupTitle,
+    required this.initialGroup,
+  });
+
+  @override
+  State<TorrentDownloadDetailScreen> createState() => _TorrentDownloadDetailScreenState();
+}
+
+class _TorrentDownloadDetailScreenState extends State<TorrentDownloadDetailScreen> {
+  final Map<String, TaskProgressUpdate> _progressByTaskId = {};
+  final Map<String, (int bytes, int? total)> _bytesByTaskId = {};
+  final Map<String, double> _moveProgressByTaskId = {};
+  final Set<String> _moveFailed = {};
+
+  Map<String, DownloadRecordDetails> _recordDetails = {};
+  List<TaskRecord> _records = [];
+  TorrentDownloadGroup? _group;
+  bool _loading = true;
+  bool _busy = false;
+
+  StreamSubscription<TaskProgressUpdate>? _progressSub;
+  StreamSubscription<TaskStatusUpdate>? _statusSub;
+  StreamSubscription? _bytesSub;
+  StreamSubscription<MoveProgressUpdate>? _moveSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _group = widget.initialGroup;
+    _init();
+  }
+
+  Future<void> _init() async {
+    await DownloadService.instance.initialize();
+    _progressSub = DownloadService.instance.progressStream.listen((update) {
+      if (!mounted) return;
+      setState(() {
+        _progressByTaskId[update.task.taskId] = update;
+      });
+      _recomputeGroup();
+    });
+    _statusSub = DownloadService.instance.statusStream.listen((_) => _refresh());
+    _bytesSub = DownloadService.instance.bytesProgressStream.listen((evt) {
+      if (!mounted) return;
+      setState(() {
+        _bytesByTaskId[evt.taskId] = (evt.bytes, evt.total >= 0 ? evt.total : null);
+      });
+      _recomputeGroup();
+    }, onError: (_) {});
+    _moveSub = DownloadService.instance.moveProgressStream.listen((move) {
+      if (!mounted) return;
+      setState(() {
+        if (move.failed) {
+          _moveFailed.add(move.taskId);
+          _moveProgressByTaskId.remove(move.taskId);
+        } else if (move.done) {
+          _moveProgressByTaskId[move.taskId] = 1.0;
+        } else {
+          _moveProgressByTaskId[move.taskId] = move.progress;
+        }
+      });
+      _recomputeGroup();
+    });
+    await _refresh();
+  }
+
+  @override
+  void dispose() {
+    _progressSub?.cancel();
+    _statusSub?.cancel();
+    _bytesSub?.cancel();
+    _moveSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    final list = await DownloadService.instance.allRecords();
+    final details = DownloadService.instance.allRecordDetailsSnapshot();
+    if (!mounted) return;
+    setState(() {
+      _records = list;
+      _recordDetails = details;
+      _loading = false;
+    });
+    _recomputeGroup();
+  }
+
+  void _recomputeGroup() {
+    if (!mounted) return;
+    final groups = buildTorrentGroups(
+      records: _records,
+      detailsByRecordId: _recordDetails,
+      progressByTaskId: _progressByTaskId,
+      rawBytes: _bytesByTaskId,
+      moveProgressByTaskId: _moveProgressByTaskId,
+      moveFailed: _moveFailed,
+    );
+    TorrentDownloadGroup? match;
+    for (final group in groups) {
+      if (group.id == widget.groupId) {
+        match = group;
+        break;
+      }
+    }
+    setState(() {
+      _group = match ?? _group;
+    });
+  }
+
+  Future<void> _runAction(Future<void> Function() action) async {
+    if (!mounted) return;
+    setState(() {
+      _busy = true;
+    });
+    try {
+      await action();
+      await _refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Action failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _pauseAll() async {
+    final group = _group;
+    if (group == null) return;
+    final queuedIds = <String>[];
+    final runningTasks = <Task>[];
+
+    for (final item in group.items) {
+      switch (item.record.status) {
+        case TaskStatus.running:
+          runningTasks.add(item.record.task);
+          break;
+        case TaskStatus.enqueued:
+        case TaskStatus.waitingToRetry:
+          queuedIds.add(item.record.task.taskId);
+          break;
+        default:
+          break;
+      }
+    }
+
+    if (queuedIds.isNotEmpty) {
+      await DownloadService.instance.pauseQueuedTasksByIds(queuedIds);
+    }
+
+    for (final task in runningTasks) {
+      await DownloadService.instance.pause(task);
+    }
+  }
+
+  Future<void> _resumeAll() async {
+    final group = _group;
+    if (group == null) return;
+    final queuedIds = <String>[];
+    final tasksToResume = <Task>[];
+
+    for (final item in group.items) {
+      final status = item.record.status;
+      final taskId = item.record.task.taskId;
+      switch (status) {
+        case TaskStatus.paused:
+          if (DownloadService.instance.isPausedQueuedTask(taskId)) {
+            queuedIds.add(taskId);
+          } else {
+            tasksToResume.add(item.record.task);
+          }
+          break;
+        case TaskStatus.enqueued:
+        case TaskStatus.waitingToRetry:
+          if (DownloadService.instance.isPausedQueuedTask(taskId)) {
+            queuedIds.add(taskId);
+          } else {
+            tasksToResume.add(item.record.task);
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    for (final task in tasksToResume) {
+      await DownloadService.instance.resume(task);
+    }
+
+    if (queuedIds.isNotEmpty) {
+      await DownloadService.instance.resumeQueuedTasksByIds(queuedIds);
+    }
+  }
+
+  Future<void> _cancelAll() async {
+    final group = _group;
+    if (group == null) return;
+    for (final item in group.items) {
+      final status = item.record.status;
+      if (status != TaskStatus.complete && status != TaskStatus.canceled) {
+        await DownloadService.instance.cancel(item.record.task);
+      }
+    }
+  }
+
+  Widget _buildBody() {
+    if (_loading && _group == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final group = _group;
+    if (group == null) {
+      return const Center(child: Text('Download group not found'));
+    }
+
+    final items = group.items;
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        itemCount: items.length + 1,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _TorrentGroupCard(
+              group: group,
+              isBusy: _busy,
+              isFinished: group.isFinished,
+              onPauseAll: group.runningFiles > 0
+                  ? () => _runAction(_pauseAll)
+                  : null,
+              onResumeAll: (!group.isFinished &&
+                      (group.pausedFiles > 0 ||
+                          group.queuedFiles > 0 ||
+                          group.waitingFiles > 0))
+                  ? () => _runAction(_resumeAll)
+                  : null,
+              onCancelAll: (!group.isFinished &&
+                      (group.hasActive || group.failedFiles > 0 || group.notFoundFiles > 0))
+                  ? () => _runAction(_cancelAll)
+                  : null,
+            );
+          }
+
+          final item = items[index - 1];
+          final taskId = item.record.task.taskId;
+          return PressableScale(
+            child: _DownloadTile(
+              record: item.record,
+              onChanged: _refresh,
+              progress: _progressByTaskId[taskId],
+              moveProgress: _moveProgressByTaskId[taskId],
+              moveFailed: _moveFailed.contains(taskId),
+              rawBytes: _bytesByTaskId[taskId]?.$1,
+              rawTotal: _bytesByTaskId[taskId]?.$2,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _group?.title ?? widget.groupTitle;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        actions: [
+          IconButton(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: _buildBody(),
+    );
+  }
+}

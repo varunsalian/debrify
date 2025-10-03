@@ -91,6 +91,7 @@ class DownloadService {
   // Queuing
   final List<_PendingRequest> _pending = [];
   final Map<String, _PendingRequest> _pendingById = {};
+  final Map<String, _PendingRequest> _pausedPending = {};
   final Map<String, TaskRecord> _nonAndroidQueuedRecords = {};
   // Resumes awaiting capacity
   final Set<String> _pendingResumeAndroid = {};
@@ -104,6 +105,129 @@ class DownloadService {
   static const String _recordsFile = 'downloads_db_v1.json';
 
   Map<String, Map<String, dynamic>> _records = {}; // recordId -> record map
+
+  DownloadRecordDetails? recordDetailsForTaskId(String taskId) {
+    final recId = _resolveRecordIdForTaskId(taskId);
+    if (recId == null) return null;
+    final data = _records[recId];
+    if (data == null) return null;
+    return DownloadRecordDetails.fromMap(recId, data);
+  }
+
+  DownloadRecordDetails? recordDetailsForRecordId(String recordId) {
+    final data = _records[recordId];
+    if (data == null) return null;
+    return DownloadRecordDetails.fromMap(recordId, data);
+  }
+
+  Map<String, DownloadRecordDetails> allRecordDetailsSnapshot() {
+    final Map<String, DownloadRecordDetails> result = {};
+    for (final entry in _records.entries) {
+      result[entry.key] = DownloadRecordDetails.fromMap(entry.key, entry.value);
+    }
+    return result;
+  }
+
+  bool isPausedQueuedTask(String taskId) => _pausedPending.containsKey(taskId);
+
+  Future<void> pauseQueuedTasksByIds(Iterable<String> taskIds) async {
+    final ids = taskIds.where((id) => id.isNotEmpty).toSet();
+    if (ids.isEmpty) return;
+
+    bool changedPending = false;
+
+    Future<void> updateRecordState(String recordId) async {
+      if (recordId.isEmpty) return;
+      _upsertRecord(recordId, {'state': 'paused'});
+    }
+
+    for (final id in ids) {
+      final pending = _pendingById.remove(id);
+      if (pending != null) {
+        _pending.remove(pending);
+        _pausedPending[pending.queuedId] = pending;
+        changedPending = true;
+
+        await updateRecordState(pending.queuedId);
+
+        final downloadTask = DownloadTask(
+          taskId: pending.queuedId,
+          url: pending.url,
+          filename: (pending.providedFileName?.isNotEmpty ?? false)
+              ? pending.providedFileName!
+              : 'download',
+        );
+
+        if (Platform.isAndroid) {
+          AndroidDownloadHistory.instance
+              .upsert(downloadTask, TaskStatus.paused, -5.0);
+        } else {
+          _nonAndroidQueuedRecords[pending.queuedId] = TaskRecord(
+            downloadTask,
+            TaskStatus.paused,
+            -5.0,
+            -1,
+          );
+        }
+
+        _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.paused));
+      } else {
+        final recId = _resolveRecordIdForTaskId(id);
+        if (recId != null) {
+          await updateRecordState(recId);
+        }
+      }
+    }
+
+    if (changedPending) {
+      await _persistPending();
+    }
+  }
+
+  Future<void> resumeQueuedTasksByIds(Iterable<String> taskIds) async {
+    final ids = taskIds.where((id) => id.isNotEmpty).toSet();
+    if (ids.isEmpty) return;
+
+    bool changedPending = false;
+
+    for (final id in ids) {
+      final paused = _pausedPending.remove(id);
+      if (paused != null) {
+        _pending.add(paused);
+        _pendingById[paused.queuedId] = paused;
+        changedPending = true;
+
+        _upsertRecord(paused.queuedId, {'state': 'queued'});
+
+        final downloadTask = DownloadTask(
+          taskId: paused.queuedId,
+          url: paused.url,
+          filename: (paused.providedFileName?.isNotEmpty ?? false)
+              ? paused.providedFileName!
+              : 'download',
+        );
+
+        if (Platform.isAndroid) {
+          AndroidDownloadHistory.instance
+              .upsert(downloadTask, TaskStatus.enqueued, 0.0);
+        } else {
+          _nonAndroidQueuedRecords[paused.queuedId] = TaskRecord(
+            downloadTask,
+            TaskStatus.enqueued,
+            0.0,
+            -1,
+          );
+        }
+
+        _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.enqueued));
+      }
+    }
+
+    if (changedPending) {
+      await _persistPending();
+      unawaited(_reevaluateQueue());
+    }
+  }
 
   String? _resolveRecordIdForTaskId(String taskId) {
     // If the taskId itself is a known record key (queued placeholder), return it
@@ -929,6 +1053,29 @@ class DownloadService {
       return;
     }
 
+    final pausedPending = _pausedPending.remove(task.taskId);
+    if (pausedPending != null) {
+      final canceledTask = DownloadTask(
+        taskId: pausedPending.queuedId,
+        url: pausedPending.url,
+        filename: (pausedPending.providedFileName?.isNotEmpty ?? false)
+            ? pausedPending.providedFileName!
+            : 'download',
+      );
+
+      if (Platform.isAndroid) {
+        AndroidDownloadHistory.instance.removeById(pausedPending.queuedId);
+      } else {
+        _nonAndroidQueuedRecords.remove(pausedPending.queuedId);
+      }
+
+      _statusController.add(
+        TaskStatusUpdate(canceledTask, TaskStatus.canceled),
+      );
+      _upsertRecord(pausedPending.queuedId, {'state': 'canceled'});
+      return;
+    }
+
     if (Platform.isAndroid) {
       // If already canceled/complete/failed in history, avoid native calls
       final hist = AndroidDownloadHistory.instance.all().firstWhere(
@@ -1331,6 +1478,83 @@ class DownloadService {
       // Schedule a new pass
       unawaited(_reevaluateQueue());
     }
+  }
+}
+
+class DownloadRecordDetails {
+  final String recordId;
+  final String? url;
+  final String? displayName;
+  final String? state;
+  final String? meta;
+  final String? torrentName;
+  final String? contentKey;
+  final String? destPath;
+  final String? pluginTaskId;
+  final int? createdAt;
+  final int? updatedAt;
+
+  const DownloadRecordDetails({
+    required this.recordId,
+    this.url,
+    this.displayName,
+    this.state,
+    this.meta,
+    this.torrentName,
+    this.contentKey,
+    this.destPath,
+    this.pluginTaskId,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory DownloadRecordDetails.fromMap(String recordId, Map<String, dynamic> map) {
+    return DownloadRecordDetails(
+      recordId: recordId,
+      url: _maybeString(map['url']),
+      displayName: _maybeString(map['displayName']),
+      state: _maybeString(map['state']),
+      meta: _maybeString(map['meta']),
+      torrentName: _maybeString(map['torrentName']),
+      contentKey: _maybeString(map['contentKey']),
+      destPath: _maybeString(map['destPath']),
+      pluginTaskId: _maybeString(map['pluginTaskId']),
+      createdAt: (map['createdAt'] as num?)?.toInt(),
+      updatedAt: (map['updatedAt'] as num?)?.toInt(),
+    );
+  }
+
+  DownloadRecordDetails copyWith({
+    String? url,
+    String? displayName,
+    String? state,
+    String? meta,
+    String? torrentName,
+    String? contentKey,
+    String? destPath,
+    String? pluginTaskId,
+    int? createdAt,
+    int? updatedAt,
+  }) {
+    return DownloadRecordDetails(
+      recordId: recordId,
+      url: url ?? this.url,
+      displayName: displayName ?? this.displayName,
+      state: state ?? this.state,
+      meta: meta ?? this.meta,
+      torrentName: torrentName ?? this.torrentName,
+      contentKey: contentKey ?? this.contentKey,
+      destPath: destPath ?? this.destPath,
+      pluginTaskId: pluginTaskId ?? this.pluginTaskId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  static String? _maybeString(dynamic value) {
+    if (value == null) return null;
+    final str = value.toString();
+    return str.isEmpty ? null : str;
   }
 }
 
