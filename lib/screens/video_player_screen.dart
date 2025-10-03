@@ -2421,6 +2421,53 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 									);
 								},
 							),
+							// Skip Credits button (completely independent of other controls visibility)
+							if (isReady)
+								StreamBuilder<Duration>(
+									stream: _player.stream.position,
+									builder: (context, snapshot) {
+										final pos = snapshot.data ?? Duration.zero;
+										final Duration remaining = duration.inMilliseconds > 0 ? (duration - pos) : Duration.zero;
+										final bool canShowSkip = widget.requestMagicNext == null && duration.inMilliseconds > 0 && pos > Duration.zero && remaining.inSeconds <= 30;
+										
+										return Positioned(
+											bottom: 100,
+											right: 20,
+											child: AnimatedOpacity(
+												opacity: canShowSkip ? 1 : 0,
+												duration: const Duration(milliseconds: 300),
+												child: Container(
+													decoration: BoxDecoration(
+														gradient: const LinearGradient(
+															colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+															begin: Alignment.topLeft,
+															end: Alignment.bottomRight,
+														),
+														borderRadius: BorderRadius.circular(16),
+														boxShadow: [
+															BoxShadow(
+																color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+																blurRadius: 12,
+																offset: const Offset(0, 6),
+															),
+														],
+														border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+													),
+													child: TextButton.icon(
+														onPressed: _skipCredits,
+														icon: const Icon(Icons.skip_next_rounded, color: Colors.white),
+														label: const Text('Skip credits', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+														style: TextButton.styleFrom(
+															backgroundColor: Colors.transparent,
+															padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+															shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+														),
+													),
+												),
+											),
+										);
+									},
+								),
 						],
 					),
 				),
@@ -2701,48 +2748,13 @@ class _Controls extends StatelessWidget {
 									const SizedBox(width: 48),
 							],
 						),
-
-
-
-						// Netflix-style Bottom Bar with all controls (conditionally shown)
-						if (!hideOptions)
-							Container(
+								// Netflix-style Bottom Bar with all controls (conditionally shown)
+								if (!hideOptions)
+									Container(
 								padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
 							child: Column(
 								mainAxisSize: MainAxisSize.min,
-								children: [
-	                                    if (canShowSkip)
-	                                      Align(
-	                                        alignment: Alignment.centerRight,
-	                                        child: Container(
-	                                          decoration: BoxDecoration(
-	                                            gradient: const LinearGradient(
-	                                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-	                                              begin: Alignment.topLeft,
-	                                              end: Alignment.bottomRight,
-	                                            ),
-	                                            borderRadius: BorderRadius.circular(16),
-	                                            boxShadow: [
-	                                              BoxShadow(
-	                                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
-	                                                blurRadius: 12,
-	                                                offset: const Offset(0, 6),
-	                                              ),
-	                                            ],
-	                                            border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
-	                                          ),
-	                                          child: TextButton.icon(
-	                                            onPressed: onSkipCredits,
-	                                            icon: const Icon(Icons.skip_next_rounded, color: Colors.white),
-	                                            label: const Text('Skip credits', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-	                                            style: TextButton.styleFrom(
-	                                              backgroundColor: Colors.transparent,
-	                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-	                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-	                                            ),
-	                                          ),
-	                                        ),
-	                                      ),
+									children: [
 									// Progress bar with time indicators
 									Row(
 										children: [
