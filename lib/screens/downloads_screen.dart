@@ -956,6 +956,20 @@ class TorrentDownloadItem {
   });
 }
 
+class ActiveDownloadInfo {
+  final String fileName;
+  final String? eta;
+  final String? speed;
+  final bool hasQueued;
+
+  const ActiveDownloadInfo({
+    required this.fileName,
+    this.eta,
+    this.speed,
+    this.hasQueued = false,
+  });
+}
+
 class TorrentDownloadGroup {
   final String id;
   final String title;
@@ -980,6 +994,7 @@ class TorrentDownloadGroup {
   final bool hasMoveFailure;
   final TorrentGroupState state;
   final String statusLabel;
+  final ActiveDownloadInfo? activeDownload;
 
   const TorrentDownloadGroup({
     required this.id,
@@ -1005,6 +1020,7 @@ class TorrentDownloadGroup {
     required this.hasMoveFailure,
     required this.state,
     required this.statusLabel,
+    required this.activeDownload,
   });
 
   bool get isFinished =>
@@ -1039,6 +1055,9 @@ class _TorrentGroupBuilder {
   double speedBytesPerSecond = 0;
   bool hasMoveInProgress = false;
   bool hasMoveFailure = false;
+  String? _firstRunningName;
+  String? _firstRunningEta;
+  String? _firstRunningSpeed;
 
   _TorrentGroupBuilder({
     required this.id,
@@ -1068,6 +1087,17 @@ class _TorrentGroupBuilder {
     switch (record.status) {
       case TaskStatus.running:
         runningFiles += 1;
+        if (_firstRunningName == null) {
+          _firstRunningName = (details?.displayName?.trim().isNotEmpty ?? false)
+              ? details!.displayName!.trim()
+              : record.task.filename;
+          if (progress != null && progress.hasTimeRemaining) {
+            _firstRunningEta = formatEta(progress.timeRemaining);
+          }
+          if (progress != null && progress.hasNetworkSpeed) {
+            _firstRunningSpeed = progress.networkSpeedAsString;
+          }
+        }
         break;
       case TaskStatus.enqueued:
         queuedFiles += 1;
@@ -1181,6 +1211,18 @@ class _TorrentGroupBuilder {
       waitingFiles,
     );
 
+    final aggregatedEta = eta != null ? formatEta(eta) : null;
+    final aggregatedSpeed = speedBytesPerSecond > 0 ? formatSpeed(speedBytesPerSecond) : null;
+    ActiveDownloadInfo? activeDownload;
+    if (_firstRunningName != null) {
+      activeDownload = ActiveDownloadInfo(
+        fileName: _firstRunningName!,
+        eta: _firstRunningEta ?? aggregatedEta,
+        speed: _firstRunningSpeed ?? aggregatedSpeed,
+        hasQueued: (queuedFiles + waitingFiles) > 0,
+      );
+    }
+
     return TorrentDownloadGroup(
       id: id,
       title: title.isNotEmpty ? title : 'Download ${id.hashCode & 0xFFFF}',
@@ -1205,6 +1247,7 @@ class _TorrentGroupBuilder {
       hasMoveFailure: hasMoveFailure,
       state: state,
       statusLabel: label,
+      activeDownload: activeDownload,
     );
   }
 }
@@ -1460,7 +1503,7 @@ class _TorrentGroupList extends StatelessWidget {
         final bool canPause = !isFinishedTab && !isBusy && onPauseAll != null &&
             (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
         final bool canResume = !isFinishedTab && !isBusy && onResumeAll != null &&
-            (group.pausedFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
+            group.pausedFiles > 0;
         final bool canCancel = !isBusy && onCancelAll != null &&
             (group.hasActive || group.failedFiles > 0 || group.notFoundFiles > 0);
 
@@ -1482,6 +1525,125 @@ class _TorrentGroupList extends StatelessWidget {
       },
     );
   }
+}
+
+String _primaryStatusText(TorrentDownloadGroup group) {
+  String base;
+  switch (group.state) {
+    case TorrentGroupState.moving:
+      base = 'Finishing up';
+      break;
+    case TorrentGroupState.downloading:
+      base = group.runningFiles > 1
+          ? 'Downloading ${_countLabel(group.runningFiles, 'file')}'
+          : 'Downloading';
+      break;
+    case TorrentGroupState.queued:
+      base = 'In queue';
+      break;
+    case TorrentGroupState.paused:
+      base = group.pausedFiles > 1
+          ? 'Paused ${_countLabel(group.pausedFiles, 'file')}'
+          : 'Paused';
+      break;
+    case TorrentGroupState.waiting:
+      base = 'Waiting to retry';
+      break;
+    case TorrentGroupState.failed:
+      base = 'Needs attention';
+      break;
+    case TorrentGroupState.canceled:
+      base = 'Canceled';
+      break;
+    case TorrentGroupState.completed:
+      base = 'Completed';
+      break;
+  }
+
+  final suffix = <String>[];
+  if (group.state != TorrentGroupState.downloading && group.runningFiles > 0) {
+    suffix.add(_countLabel(group.runningFiles, 'downloading'));
+  }
+  if (group.state != TorrentGroupState.paused && group.pausedFiles > 0) {
+    suffix.add(_countLabel(group.pausedFiles, 'paused'));
+  }
+  if (group.state != TorrentGroupState.queued && group.queuedFiles > 0) {
+    suffix.add(_countLabel(group.queuedFiles, 'queued'));
+  }
+  if (group.state != TorrentGroupState.waiting && group.waitingFiles > 0) {
+    suffix.add(_countLabel(group.waitingFiles, 'waiting'));
+  }
+  if (group.state != TorrentGroupState.failed && (group.failedFiles > 0 || group.notFoundFiles > 0 || group.hasMoveFailure)) {
+    final issues = group.failedFiles + group.notFoundFiles;
+    if (group.hasMoveFailure) {
+      suffix.add('move retry');
+    }
+    if (issues > 0) {
+      suffix.add(_countLabel(issues, 'issue'));
+    }
+  }
+  if (group.hasMoveInProgress && group.state != TorrentGroupState.moving) {
+    suffix.add('moving');
+  }
+
+  if (suffix.isNotEmpty) {
+    base = '$base (${suffix.join(' • ')})';
+  }
+  return base;
+}
+
+String _bucketLine(TorrentDownloadGroup group) {
+  final buckets = <String>[];
+  buckets.add('${group.completedFiles}/${group.totalFiles} done');
+  if (group.runningFiles > 0) {
+    buckets.add(_countLabel(group.runningFiles, 'downloading'));
+  }
+  if (group.queuedFiles > 0) {
+    buckets.add(_countLabel(group.queuedFiles, 'queued'));
+  }
+  if (group.pausedFiles > 0) {
+    buckets.add(_countLabel(group.pausedFiles, 'paused'));
+  }
+  if (group.waitingFiles > 0) {
+    buckets.add(_countLabel(group.waitingFiles, 'waiting'));
+  }
+  if (group.failedFiles > 0 || group.notFoundFiles > 0) {
+    buckets.add(_countLabel(group.failedFiles + group.notFoundFiles, 'failed'));
+  }
+  return buckets.join(' • ');
+}
+
+String _countLabel(int count, String word) {
+  final normalized = word.endsWith('s') ? word.substring(0, word.length - 1) : word;
+  final plural = '${normalized}s';
+  switch (normalized) {
+    case 'issue':
+      return count == 1 ? '1 issue' : '$count issues';
+    case 'queued':
+      return count == 1 ? '1 queued' : '$count queued';
+    case 'paused':
+      return count == 1 ? '1 paused' : '$count paused';
+    case 'waiting':
+      return count == 1 ? '1 waiting' : '$count waiting';
+    case 'downloading':
+      return count == 1 ? '1 downloading' : '$count downloading';
+    default:
+      return count == 1 ? '1 $normalized' : '$count $plural';
+  }
+}
+
+String _activeMetrics(ActiveDownloadInfo info) {
+  final parts = <String>[];
+  if (info.eta != null && info.eta!.isNotEmpty && info.eta! != '--') {
+    parts.add('≈ ${info.eta} left');
+  }
+  if (info.speed != null && info.speed!.isNotEmpty && info.speed! != '-- MB/s') {
+    parts.add(info.speed!);
+  }
+  if (info.hasQueued) {
+    parts.add('Next file starts afterward');
+  }
+  return parts.join(' • ');
 }
 
 class _TorrentGroupCard extends StatelessWidget {
@@ -1507,24 +1669,9 @@ class _TorrentGroupCard extends StatelessWidget {
     final Color stateColor = _groupStateColor(theme, group.state);
     final textTheme = theme.textTheme;
 
-    final summaryParts = <String>[
-      '${group.completedFiles}/${group.totalFiles} files',
-    ];
-    if (group.runningFiles > 0) {
-      summaryParts.add('${group.runningFiles} downloading');
-    }
-    if (group.queuedFiles > 0) {
-      summaryParts.add('${group.queuedFiles} queued');
-    }
-    if (group.pausedFiles > 0) {
-      summaryParts.add('${group.pausedFiles} paused');
-    }
-    if (group.failedFiles > 0) {
-      summaryParts.add('${group.failedFiles} failed');
-    }
-    if (group.hasMoveInProgress) {
-      summaryParts.add('moving');
-    }
+    final String primaryStatusText = _primaryStatusText(group);
+    final String bucketLine = _bucketLine(group);
+    final ActiveDownloadInfo? active = group.activeDownload;
 
     final chips = <Widget>[
       _InfoChip(
@@ -1652,28 +1799,52 @@ class _TorrentGroupCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Text(
-                              group.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: stateColor.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              group.statusLabel,
-                              style: textTheme.labelSmall?.copyWith(
-                                color: stateColor,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  group.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  primaryStatusText,
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: stateColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (bucketLine.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    bucketLine,
+                                    style: textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                                if (active != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Current: ${active.fileName}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  if (_activeMetrics(active).isNotEmpty)
+                                    Text(
+                                      _activeMetrics(active),
+                                      style: textTheme.bodySmall?.copyWith(
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                ],
+                              ],
                             ),
                           ),
                           if (isBusy) ...[
@@ -1685,13 +1856,6 @@ class _TorrentGroupCard extends StatelessWidget {
                             ),
                           ],
                         ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        summaryParts.join(' • '),
-                        style: textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
                       ),
                     ],
                   ),
@@ -2331,13 +2495,13 @@ class _TorrentDownloadDetailScreenState extends State<TorrentDownloadDetailScree
               group: group,
               isBusy: _busy,
               isFinished: group.isFinished,
-              onPauseAll: group.runningFiles > 0
-                  ? () => _runAction(_pauseAll)
-                  : null,
-              onResumeAll: (!group.isFinished &&
-                      (group.pausedFiles > 0 ||
+              onPauseAll: (!group.isFinished &&
+                      (group.runningFiles > 0 ||
                           group.queuedFiles > 0 ||
                           group.waitingFiles > 0))
+                  ? () => _runAction(_pauseAll)
+                  : null,
+              onResumeAll: (!group.isFinished && group.pausedFiles > 0)
                   ? () => _runAction(_resumeAll)
                   : null,
               onCancelAll: (!group.isFinished &&
