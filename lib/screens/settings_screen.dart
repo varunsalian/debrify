@@ -4,7 +4,6 @@ import '../services/account_service.dart';
 import '../services/download_service.dart';
 import 'settings/real_debrid_settings_page.dart';
 
-import 'settings/download_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
 import '../widgets/shimmer.dart';
 
@@ -261,18 +260,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
 
-          const SizedBox(height: 12),
-          _SectionTile(
-            icon: Icons.tune_rounded,
-            title: 'Download Settings',
-            subtitle: 'Parallel downloads and more',
-            onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const DownloadSettingsPage()),
-              );
-              setState(() {});
-            },
-          ),
         ],
       ),
     );

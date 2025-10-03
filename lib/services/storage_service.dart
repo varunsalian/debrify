@@ -10,7 +10,6 @@ class StorageService {
   static const String _batteryOptStatusKey = 'battery_opt_status_v1'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
-  static const String _maxParallelDownloadsKey = 'max_parallel_downloads_v1';
   static const String _defaultTorrentsCsvEnabledKey = 'default_torrents_csv_enabled';
   static const String _defaultPirateBayEnabledKey = 'default_pirate_bay_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
@@ -72,17 +71,13 @@ class StorageService {
     await prefs.setString(_batteryOptStatusKey, status);
   }
 
-  // Download settings
+  // Download settings - Fixed to 1 parallel download
   static Future<int> getMaxParallelDownloads() async {
-    final prefs = await SharedPreferences.getInstance();
-    final val = prefs.getInt(_maxParallelDownloadsKey);
-    if (val == null || val <= 0) return 2; // default
-    return val;
+    return 1; // Always return 1 for single download at a time
   }
 
   static Future<void> setMaxParallelDownloads(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_maxParallelDownloadsKey, value.clamp(1, 8));
+    // No-op: parallel downloads are fixed to 1
   }
 
   // Default search engine settings
