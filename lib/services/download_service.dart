@@ -97,11 +97,13 @@ class DownloadService {
   final Set<String> _pendingResumeAndroid = {};
   final Map<String, DownloadTask> _pendingResumeNonAndroid = {};
   final Set<String> _nonAndroidResumeQueuedOverlay = {};
+  final Set<String> _canceledDuringStart = {};
   bool _reevaluating = false;
   bool _reevaluateScheduled = false;
 
   // Persistence for pending queue (crash-safe, survives restarts)
   static const String _pendingKey = 'pending_download_queue_v1';
+  static const String _pausedKey = 'paused_download_queue_v1';
   static const String _recordsFile = 'downloads_db_v1.json';
 
   Map<String, Map<String, dynamic>> _records = {}; // recordId -> record map
@@ -135,6 +137,7 @@ class DownloadService {
     if (ids.isEmpty) return;
 
     bool changedPending = false;
+    bool changedPaused = false;
 
     Future<void> updateRecordState(String recordId) async {
       if (recordId.isEmpty) return;
@@ -144,9 +147,12 @@ class DownloadService {
     for (final id in ids) {
       final pending = _pendingById.remove(id);
       if (pending != null) {
+        pending.canceled = true;
         _pending.remove(pending);
         _pausedPending[pending.queuedId] = pending;
         changedPending = true;
+        changedPaused = true;
+        _canceledDuringStart.add(pending.queuedId);
 
         await updateRecordState(pending.queuedId);
 
@@ -172,15 +178,47 @@ class DownloadService {
 
         _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.paused));
       } else {
+        _canceledDuringStart.add(id);
         final recId = _resolveRecordIdForTaskId(id);
         if (recId != null) {
           await updateRecordState(recId);
+          final rec = _records[recId];
+          final reconstructed = rec != null
+              ? _pendingFromRecordData(recId, rec)
+              : null;
+          if (reconstructed != null && !_pausedPending.containsKey(recId)) {
+            reconstructed.canceled = true;
+            _pausedPending[recId] = reconstructed;
+            changedPaused = true;
+            final downloadTask = DownloadTask(
+              taskId: recId,
+              url: reconstructed.url,
+              filename: reconstructed.providedFileName ?? 'download',
+            );
+            if (Platform.isAndroid) {
+              AndroidDownloadHistory.instance
+                  .upsert(downloadTask, TaskStatus.paused, -5.0);
+            } else {
+              _nonAndroidQueuedRecords[recId] = TaskRecord(
+                downloadTask,
+                TaskStatus.paused,
+                -5.0,
+                -1,
+              );
+            }
+            _statusController.add(
+              TaskStatusUpdate(downloadTask, TaskStatus.paused),
+            );
+          }
         }
       }
     }
 
     if (changedPending) {
       await _persistPending();
+    }
+    if (changedPaused) {
+      await _persistPaused();
     }
   }
 
@@ -189,13 +227,16 @@ class DownloadService {
     if (ids.isEmpty) return;
 
     bool changedPending = false;
+    bool changedPaused = false;
 
     for (final id in ids) {
       final paused = _pausedPending.remove(id);
       if (paused != null) {
-        _pending.add(paused);
-        _pendingById[paused.queuedId] = paused;
+        paused.canceled = false;
+        _addPendingRequest(_pending, _pendingById, paused, atFront: true);
         changedPending = true;
+        changedPaused = true;
+        _canceledDuringStart.remove(paused.queuedId);
 
         _upsertRecord(paused.queuedId, {'state': 'queued'});
 
@@ -220,9 +261,47 @@ class DownloadService {
         }
 
         _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.enqueued));
+      } else {
+        _canceledDuringStart.remove(id);
+        final recId = _resolveRecordIdForTaskId(id);
+        if (recId != null) {
+          final rec = _records[recId];
+          if (rec != null) {
+            final reconstructed = _pendingFromRecordData(recId, rec);
+            if (reconstructed != null) {
+              reconstructed.canceled = false;
+              _addPendingRequest(_pending, _pendingById, reconstructed, atFront: true);
+              changedPending = true;
+              _upsertRecord(reconstructed.queuedId, {'state': 'queued'});
+
+              final downloadTask = DownloadTask(
+                taskId: reconstructed.queuedId,
+                url: reconstructed.url,
+                filename: reconstructed.providedFileName ?? 'download',
+              );
+              if (Platform.isAndroid) {
+                AndroidDownloadHistory.instance
+                    .upsert(downloadTask, TaskStatus.enqueued, 0.0);
+              } else {
+                _nonAndroidQueuedRecords[reconstructed.queuedId] = TaskRecord(
+                  downloadTask,
+                  TaskStatus.enqueued,
+                  0.0,
+                  -1,
+                );
+              }
+              _statusController.add(
+                TaskStatusUpdate(downloadTask, TaskStatus.enqueued),
+              );
+            }
+          }
+        }
       }
     }
 
+    if (changedPaused) {
+      await _persistPaused();
+    }
     if (changedPending) {
       await _persistPending();
       unawaited(_reevaluateQueue());
@@ -367,6 +446,7 @@ class DownloadService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_pendingKey);
+      await prefs.remove(_pausedKey);
     } catch (_) {}
     // Best-effort clear of non-Android plugin DB (Android handled via native history elsewhere)
     if (!Platform.isAndroid) {
@@ -382,7 +462,32 @@ class DownloadService {
   Future<void> _persistPending() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final data = _pending
+    final data = _pending
+        .map((p) => {
+              'queuedId': p.queuedId,
+              'url': p.url,
+              'providedFileName': p.providedFileName,
+              'headers': p.headers,
+              'wifiOnly': p.wifiOnly,
+              'retries': p.retries,
+              'meta': p.meta,
+              'torrentName': p.torrentName,
+              'contentKey': p.contentKey,
+              'destPath': p.destPath,
+            })
+        .toList();
+      await prefs.setString(_pendingKey, jsonEncode(data));
+    } catch (_) {}
+  }
+
+  Future<void> _persistPaused() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_pausedPending.isEmpty) {
+        await prefs.remove(_pausedKey);
+        return;
+      }
+      final data = _pausedPending.values
           .map((p) => {
                 'queuedId': p.queuedId,
                 'url': p.url,
@@ -393,9 +498,148 @@ class DownloadService {
                 'meta': p.meta,
                 'torrentName': p.torrentName,
                 'contentKey': p.contentKey,
+                'destPath': p.destPath,
               })
           .toList();
-      await prefs.setString(_pendingKey, jsonEncode(data));
+      await prefs.setString(_pausedKey, jsonEncode(data));
+    } catch (_) {}
+  }
+
+  _PendingRequest? _pendingFromStoredMap(Map<String, dynamic> item) {
+    final queuedId = (item['queuedId'] ?? '') as String;
+    final url = (item['url'] ?? '') as String;
+    if (queuedId.isEmpty || url.isEmpty) return null;
+    final providedFileName = item['providedFileName'] as String?;
+    final meta = item['meta'] as String?;
+    final torrentName = item['torrentName'] as String?;
+    final headers = (item['headers'] as Map?)?.cast<String, String>();
+    final wifiOnly = (item['wifiOnly'] as bool?) ?? false;
+    final retries = (item['retries'] as int?) ?? 3;
+    final contentKey = (item['contentKey'] as String?) ??
+        _computeContentKey(meta, url, providedFileName, torrentName);
+    return _PendingRequest(
+      queuedId: queuedId,
+      url: url,
+      providedFileName: providedFileName,
+      headers: headers,
+      wifiOnly: wifiOnly,
+      retries: retries,
+      meta: meta,
+      context: null,
+      torrentName: torrentName,
+      contentKey: contentKey,
+      destPath: item['destPath'] as String?,
+    );
+  }
+
+  _PendingRequest? _pendingFromRecordData(String recordId, Map<String, dynamic> rec) {
+    final url = (rec['url'] ?? '') as String;
+    if (url.isEmpty) return null;
+    final displayName = rec['displayName'] as String?;
+    final meta = rec['meta'] as String?;
+    final torrentName = rec['torrentName'] as String?;
+    final headers = (rec['headers'] as Map?)?.cast<String, String>();
+    final wifiOnly = (rec['wifiOnly'] as bool?) ?? false;
+    final retries = (rec['retries'] as int?) ?? 3;
+    final contentKey = (rec['contentKey'] as String?) ??
+        _computeContentKey(meta, url, displayName, torrentName);
+    return _PendingRequest(
+      queuedId: recordId,
+      url: url,
+      providedFileName: displayName,
+      headers: headers,
+      wifiOnly: wifiOnly,
+      retries: retries,
+      meta: meta,
+      context: null,
+      torrentName: torrentName,
+      contentKey: contentKey,
+      destPath: rec['destPath'] as String?,
+    );
+  }
+
+  Future<bool> _queueFromRecord(String recordId,
+      {required bool paused, bool insertFront = true}) async {
+    final rec = _records[recordId];
+    if (rec == null) return false;
+    final pending = _pendingFromRecordData(recordId, rec);
+    if (pending == null) return false;
+
+    if (paused) {
+      if (_pausedPending.containsKey(recordId)) return true;
+      pending.canceled = true;
+      _pausedPending[recordId] = pending;
+      _upsertRecord(recordId, {'state': 'paused'});
+
+      final downloadTask = DownloadTask(
+        taskId: recordId,
+        url: pending.url,
+        filename: pending.providedFileName ?? 'download',
+      );
+      if (Platform.isAndroid) {
+        AndroidDownloadHistory.instance
+            .upsert(downloadTask, TaskStatus.paused, -5.0);
+      } else {
+        _nonAndroidQueuedRecords[recordId] = TaskRecord(
+          downloadTask,
+          TaskStatus.paused,
+          -5.0,
+          -1,
+        );
+      }
+      _statusController.add(
+        TaskStatusUpdate(downloadTask, TaskStatus.paused),
+      );
+      await _persistPaused();
+      return true;
+    }
+
+    if (_pendingById.containsKey(recordId)) return true;
+    pending.canceled = false;
+    _addPendingRequest(_pending, _pendingById, pending, atFront: insertFront);
+    _upsertRecord(recordId, {'state': 'queued'});
+    await _persistPending();
+    return true;
+  }
+
+  Future<void> _restorePaused() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_pausedKey);
+      if (raw == null || raw.isEmpty) return;
+      final list = jsonDecode(raw);
+      if (list is! List) return;
+      _pausedPending.clear();
+      for (final item in list) {
+        if (item is! Map<String, dynamic>) continue;
+        final pending = _pendingFromStoredMap(item);
+        if (pending == null) continue;
+        final rec = _records[pending.queuedId];
+        if (rec != null && rec['state'] == 'canceled') {
+          continue;
+        }
+        _pausedPending[pending.queuedId] = pending;
+        final downloadTask = DownloadTask(
+          taskId: pending.queuedId,
+          url: pending.url,
+          filename: pending.providedFileName ?? 'download',
+        );
+        if (Platform.isAndroid) {
+          AndroidDownloadHistory.instance
+              .upsert(downloadTask, TaskStatus.paused, -5.0);
+        } else {
+          _nonAndroidQueuedRecords[pending.queuedId] = TaskRecord(
+            downloadTask,
+            TaskStatus.paused,
+            -5.0,
+            -1,
+          );
+        }
+        _statusController.add(
+          TaskStatusUpdate(downloadTask, TaskStatus.paused),
+        );
+      }
+      await _persistPaused();
     } catch (_) {}
   }
 
@@ -409,55 +653,47 @@ class DownloadService {
       if (list is! List) return;
       debugPrint('DL INIT: pending entries found=${list.length}');
       final Set<String> seenKeys = {};
-      await _loadRecords();
       for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          final queuedId = (item['queuedId'] ?? '') as String;
-          final url = (item['url'] ?? '') as String;
-          if (queuedId.isEmpty || url.isEmpty) continue;
-          // Skip if this task was canceled previously (persisted in records)
-          final rec = _records[queuedId];
-          if (rec != null && rec['state'] == 'canceled') {
-            debugPrint('DL INIT: skipping canceled pending queuedId=$queuedId');
-            continue;
-          }
-          final providedFileName = (item['providedFileName'] as String?);
-          final meta = (item['meta'] as String?);
-          final torrentName = (item['torrentName'] as String?);
-          final contentKey = (item['contentKey'] as String?) ?? _computeContentKey(meta, url, providedFileName, torrentName);
-          if (contentKey.isNotEmpty && seenKeys.contains(contentKey)) {
-            debugPrint('DL INIT: skipping duplicate pending contentKey=$contentKey');
-            continue;
-          }
-          final p = _PendingRequest(
-            queuedId: queuedId,
-            url: url,
-            providedFileName: providedFileName,
-            headers: (item['headers'] as Map?)?.cast<String, String>(),
-            wifiOnly: (item['wifiOnly'] as bool?) ?? false,
-            retries: (item['retries'] as int?) ?? 3,
-            meta: meta,
-            context: null,
-            torrentName: torrentName,
-            contentKey: contentKey,
-          );
-          // Recreate placeholder queued record for UI continuity
-          if (Platform.isAndroid) {
-            final t = DownloadTask(taskId: queuedId, url: url, filename: p.providedFileName ?? 'download');
-            AndroidDownloadHistory.instance.upsert(t, TaskStatus.enqueued, 0.0);
-            _statusController.add(TaskStatusUpdate(t, TaskStatus.enqueued));
-          } else {
-            _nonAndroidQueuedRecords[queuedId] = TaskRecord(DownloadTask(taskId: queuedId, url: url, filename: p.providedFileName ?? 'download'), TaskStatus.enqueued, 0.0, -1);
-            _statusController.add(TaskStatusUpdate(_nonAndroidQueuedRecords[queuedId]!.task, TaskStatus.enqueued));
-          }
-          _pending.add(p);
-          _pendingById[queuedId] = p;
-          if (contentKey.isNotEmpty) seenKeys.add(contentKey);
-          debugPrint('DL INIT: restored pending queuedId=$queuedId name=${p.providedFileName ?? 'download'}');
+        if (item is! Map<String, dynamic>) continue;
+        final pending = _pendingFromStoredMap(item);
+        if (pending == null) continue;
+        final queuedId = pending.queuedId;
+        if (_pausedPending.containsKey(queuedId)) {
+          continue;
         }
+        final rec = _records[queuedId];
+        if (rec != null && rec['state'] == 'canceled') {
+          debugPrint('DL INIT: skipping canceled pending queuedId=$queuedId');
+          continue;
+        }
+        if (pending.contentKey.isNotEmpty && seenKeys.contains(pending.contentKey)) {
+          debugPrint('DL INIT: skipping duplicate pending contentKey=${pending.contentKey}');
+          continue;
+        }
+        final downloadTask = DownloadTask(
+          taskId: queuedId,
+          url: pending.url,
+          filename: pending.providedFileName ?? 'download',
+        );
+        if (Platform.isAndroid) {
+          AndroidDownloadHistory.instance
+              .upsert(downloadTask, TaskStatus.enqueued, 0.0);
+        } else {
+          _nonAndroidQueuedRecords[queuedId] = TaskRecord(
+            downloadTask,
+            TaskStatus.enqueued,
+            0.0,
+            -1,
+          );
+        }
+        _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.enqueued));
+        _addPendingRequest(_pending, _pendingById, pending, atFront: false);
+        if (pending.contentKey.isNotEmpty) {
+          seenKeys.add(pending.contentKey);
+        }
+        debugPrint('DL INIT: restored pending queuedId=$queuedId name=${pending.providedFileName ?? 'download'}');
       }
-      // Prevent re-importing the same set on next launch
-      await prefs.remove(_pendingKey);
+      await _persistPending();
     } catch (_) {}
   }
 
@@ -792,34 +1028,46 @@ class DownloadService {
     }
 
     // Restore any pending queue persisted from a previous run
-    await _restorePending();
     await _loadRecords();
+    await _restorePaused();
+    await _restorePending();
     debugPrint('DL INIT: loaded records count=${_records.length}');
     // On non-Android: try to resume tasks on startup
     if (!Platform.isAndroid) {
       final records = await FileDownloader().database.allRecords();
       debugPrint('DL INIT: plugin records count=${records.length}');
-      // Build reverse map: pluginTaskId -> record
-      Map<String, Map<String, dynamic>> byPluginId = {};
+      // Build reverse map: pluginTaskId -> recordId
+      final Map<String, String> recordIdByPluginId = {};
       for (final e in _records.entries) {
         final pluginId = (e.value['pluginTaskId'] ?? '') as String;
-        if (pluginId.isNotEmpty) byPluginId[pluginId] = e.value;
+        if (pluginId.isNotEmpty) recordIdByPluginId[pluginId] = e.key;
       }
       for (final r in records) {
         final task = r.task as DownloadTask;
-        final rec = byPluginId[task.taskId] ?? _records[task.taskId];
+        final recordId = recordIdByPluginId[task.taskId] ?? task.taskId;
+        final rec = _records[recordId];
         final String? meta = rec != null ? (rec['meta'] as String?) : null;
         final String? displayName = rec != null ? (rec['displayName'] as String?) : null;
         final String? url = rec != null ? (rec['url'] as String?) : null;
         final String? torrentName = rec != null ? (rec['torrentName'] as String?) : null;
 
-        Future<void> reenqueueFromMeta() async {
+        Future<void> reenqueueFromMeta({bool insertFront = true}) async {
           debugPrint('DL INIT: re-enqueue from meta for taskId=${task.taskId} name=$displayName');
+          if (await _queueFromRecord(recordId, paused: false, insertFront: insertFront)) {
+            return;
+          }
           if (meta != null) {
             final ck = _computeContentKey(meta, url ?? '', displayName, torrentName);
             final bool dup = _pending.any((p) => p.contentKey == ck);
             if (!dup) {
-              await enqueueDownload(url: url ?? '', fileName: displayName, meta: meta, torrentName: torrentName);
+              await enqueueDownload(
+                url: url ?? '',
+                fileName: displayName,
+                meta: meta,
+                torrentName: torrentName,
+                insertAtFront: insertFront,
+                destPath: rec?['destPath'] as String?,
+              );
             } else {
               debugPrint('DL INIT: skip re-enqueue duplicate contentKey=$ck');
             }
@@ -829,23 +1077,47 @@ class DownloadService {
         if (r.status == TaskStatus.paused || r.status == TaskStatus.enqueued) {
           final canResume = await FileDownloader().taskCanResume(task);
           debugPrint('DL INIT: taskId=${task.taskId} status=${r.status} canResume=$canResume');
+          bool resumed = false;
           if (canResume) {
-            try { await FileDownloader().resume(task); debugPrint('DL INIT: resumed taskId=${task.taskId}'); } catch (_) { await reenqueueFromMeta(); }
-          } else {
+            try {
+              await FileDownloader().resume(task);
+              debugPrint('DL INIT: resumed taskId=${task.taskId}');
+              resumed = true;
+            } catch (e) {
+              debugPrint('DL INIT: resume failed for taskId=${task.taskId} error=$e');
+            }
+          }
+          if (!resumed) {
             // Cancel and delete stale record to free capacity
             try { await FileDownloader().cancel(task); } catch (_) {}
             try { await FileDownloader().database.deleteRecordWithId(task.taskId); } catch (_) {}
-            await reenqueueFromMeta();
+            final queued = await _queueFromRecord(recordId, paused: r.status == TaskStatus.paused, insertFront: true);
+            if (!queued) {
+              await reenqueueFromMeta(insertFront: true);
+            }
           }
         } else if (r.status == TaskStatus.running) {
           // Nudge running tasks to ensure the plugin is actually progressing; if not resumable, re-enqueue
           final canResume = await FileDownloader().taskCanResume(task);
           debugPrint('DL INIT: running taskId=${task.taskId} canResume=$canResume');
-          if (!canResume) {
+          bool resumed = false;
+          if (canResume) {
+            try {
+              await FileDownloader().resume(task);
+              debugPrint('DL INIT: resumed running taskId=${task.taskId}');
+              resumed = true;
+            } catch (e) {
+              debugPrint('DL INIT: resume running failed taskId=${task.taskId} error=$e');
+            }
+          }
+          if (!resumed) {
             // Cancel and delete stale record to free capacity
             try { await FileDownloader().cancel(task); } catch (_) {}
             try { await FileDownloader().database.deleteRecordWithId(task.taskId); } catch (_) {}
-            await reenqueueFromMeta();
+            final queued = await _queueFromRecord(recordId, paused: false, insertFront: true);
+            if (!queued) {
+              await reenqueueFromMeta(insertFront: true);
+            }
           }
         }
       }
@@ -915,6 +1187,8 @@ class DownloadService {
     String? meta,
     BuildContext? context,
     String? torrentName,
+    bool insertAtFront = false,
+    String? destPath,
   }) async {
     await initialize();
 
@@ -952,6 +1226,10 @@ class DownloadService {
       'torrentName': torrentName,
       'contentKey': contentKey,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'wifiOnly': wifiOnly,
+      'retries': retries,
+      'headers': headers,
+      if (destPath != null) 'destPath': destPath,
     });
 
     // Add to in-memory pending queue (prevent duplicates by contentKey)
@@ -966,13 +1244,9 @@ class DownloadService {
       context: context,
       torrentName: torrentName,
       contentKey: contentKey,
+      destPath: destPath,
     );
-    if (_pending.any((p) => p.contentKey == contentKey)) {
-      debugPrint('DL: skip enqueue duplicate contentKey=$contentKey');
-    } else {
-      _pending.add(pending);
-    }
-    _pendingById[queuedId] = pending;
+    _addPendingRequest(_pending, _pendingById, pending, atFront: insertAtFront);
     await _persistPending();
 
     // Try to start if capacity allows
@@ -1041,6 +1315,10 @@ class DownloadService {
       final pending = _pendingById.remove(task.taskId);
       if (pending != null) {
         _pending.remove(pending);
+        _upsertRecord(pending.queuedId, {'state': 'canceled'});
+        _canceledDuringStart.add(pending.queuedId);
+      } else {
+        _upsertRecord(task.taskId, {'state': 'canceled'});
       }
       if (Platform.isAndroid) {
         AndroidDownloadHistory.instance.removeById(task.taskId);
@@ -1050,6 +1328,7 @@ class DownloadService {
         _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
       }
       unawaited(_reevaluateQueue());
+      await _persistPending();
       return;
     }
 
@@ -1073,6 +1352,8 @@ class DownloadService {
         TaskStatusUpdate(canceledTask, TaskStatus.canceled),
       );
       _upsertRecord(pausedPending.queuedId, {'state': 'canceled'});
+      _canceledDuringStart.remove(pausedPending.queuedId);
+      await _persistPaused();
       return;
     }
 
@@ -1291,7 +1572,12 @@ class DownloadService {
     while (runningCount < maxParallel && _pending.isNotEmpty) {
       var p = _pending.removeAt(0);
       _pendingById.remove(p.queuedId);
+      final bool wasCanceled = p.canceled || _canceledDuringStart.remove(p.queuedId);
       await _persistPending();
+      if (wasCanceled) {
+        debugPrint('DL START: skipped canceled pending queuedId=${p.queuedId}');
+        continue;
+      }
       try {
         // On-demand unrestriction: if URL is restricted, unrestrict it first
         String finalUrl = p.url;
@@ -1384,12 +1670,15 @@ class DownloadService {
           // Prefer persisted destination path for resume capability
           String finalPath;
           final rec = _records[p.queuedId];
-          if (rec != null && (rec['destPath'] as String?) != null && (rec['destPath'] as String).isNotEmpty) {
+          if (p.destPath != null && p.destPath!.isNotEmpty && File(p.destPath!).existsSync()) {
+            finalPath = p.destPath!;
+          } else if (rec != null && (rec['destPath'] as String?) != null && (rec['destPath'] as String).isNotEmpty) {
             finalPath = rec['destPath'] as String;
           } else {
             final (dirAbsPath, filename) = await _smartLocationFor(finalUrl, finalFileName, p.torrentName);
             finalPath = '$dirAbsPath/$filename';
             _upsertRecord(p.queuedId, {'destPath': finalPath});
+            p.destPath = finalPath;
           }
           try { final d = Directory(finalPath).parent; if (!await d.exists()) { await d.create(recursive: true); } } catch (_) {}
 
@@ -1569,6 +1858,8 @@ class _PendingRequest {
   final BuildContext? context;
   final String? torrentName;
   final String contentKey;
+  bool canceled;
+  String? destPath;
 
   _PendingRequest({
     required this.queuedId,
@@ -1581,5 +1872,25 @@ class _PendingRequest {
     required this.context,
     required this.torrentName,
     required this.contentKey,
+    this.canceled = false,
+    this.destPath,
   });
-} 
+}
+
+void _addPendingRequest(
+  List<_PendingRequest> pendingList,
+  Map<String, _PendingRequest> pendingById,
+  _PendingRequest request, {
+  bool atFront = false,
+}) {
+  if (pendingList.any((p) => p.contentKey == request.contentKey)) {
+    debugPrint('DL: skip enqueue duplicate contentKey=${request.contentKey}');
+    return;
+  }
+  if (atFront) {
+    pendingList.insert(0, request);
+  } else {
+    pendingList.add(request);
+  }
+  pendingById[request.queuedId] = request;
+}

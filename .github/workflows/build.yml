@@ -2,7 +2,7 @@ name: Build and Upload APK
 
 on:
   push:
-    branches: [ main, master]
+    branches: [ main, master, download_optimizations]
   pull_request:
     branches: [ main, master]
 
