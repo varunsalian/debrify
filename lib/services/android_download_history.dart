@@ -72,8 +72,8 @@ class AndroidDownloadHistory {
 
       final r = rank(a.status).compareTo(rank(b.status));
       if (r != 0) return r;
-      return a.task.creationTime.compareTo(b.task.creationTime);
+      return b.task.creationTime.compareTo(a.task.creationTime);
     });
     return list;
   }
-} 
+}

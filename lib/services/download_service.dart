@@ -976,8 +976,33 @@ class DownloadService {
       }
       return r;
     }).toList();
+    int rank(TaskStatus s) {
+      switch (s) {
+        case TaskStatus.running:
+          return 0;
+        case TaskStatus.enqueued:
+          return 1;
+        case TaskStatus.paused:
+          return 2;
+        case TaskStatus.waitingToRetry:
+          return 3;
+        case TaskStatus.complete:
+          return 4;
+        case TaskStatus.canceled:
+          return 5;
+        case TaskStatus.failed:
+          return 6;
+        case TaskStatus.notFound:
+          return 7;
+      }
+    }
+
     final merged = [..._nonAndroidQueuedRecords.values, ...adjusted];
-    merged.sort((a, b) => a.task.creationTime.compareTo(b.task.creationTime));
+    merged.sort((a, b) {
+      final ranked = rank(a.status).compareTo(rank(b.status));
+      if (ranked != 0) return ranked;
+      return b.task.creationTime.compareTo(a.task.creationTime);
+    });
     return merged;
   }
 
