@@ -1121,6 +1121,52 @@ class DownloadService {
       _pendingById.remove(p.queuedId);
       await _persistPending();
       try {
+        // On-demand unrestriction: if URL is restricted, unrestrict it first
+        String finalUrl = p.url;
+        String finalFileName = p.providedFileName ?? 'download';
+        
+        debugPrint('DL START: url=${p.url}, meta=${p.meta}');
+        
+        if (p.meta != null && p.meta!.isNotEmpty) {
+          try {
+            final meta = jsonDecode(p.meta!);
+            final restrictedLink = (meta['restrictedLink'] ?? '') as String;
+            final apiKey = (meta['apiKey'] ?? '') as String;
+            
+            debugPrint('DL META: restrictedLink=$restrictedLink, apiKey=${apiKey.isNotEmpty ? "present" : "missing"}');
+            debugPrint('DL COMPARE: p.url=${p.url} == restrictedLink=$restrictedLink ? ${p.url == restrictedLink}');
+            
+            // If we have meta with restricted link info, always unrestrict
+            // This handles the case where we pass restricted links directly as URLs
+            if (restrictedLink.isNotEmpty && apiKey.isNotEmpty) {
+              debugPrint('DL UNRESTRICT: Starting unrestriction for: $finalFileName');
+              final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
+              final unrestrictedUrl = (unrestrictResult['download'] ?? '').toString();
+              final rdFileName = (unrestrictResult['filename'] ?? '').toString();
+              
+              debugPrint('DL UNRESTRICT RESULT: url=$unrestrictedUrl, filename=$rdFileName');
+              
+              if (unrestrictedUrl.isNotEmpty) {
+                finalUrl = unrestrictedUrl;
+                if (rdFileName.isNotEmpty) {
+                  finalFileName = rdFileName;
+                }
+                debugPrint('DL SUCCESS: Unrestricted to $finalUrl with filename $finalFileName');
+              } else {
+                debugPrint('DL ERROR: Unrestriction returned empty URL');
+                throw Exception('Failed to unrestrict link - empty URL returned');
+              }
+            } else {
+              debugPrint('DL SKIP: Not unrestricting - restrictedLink empty: ${restrictedLink.isEmpty}, apiKey empty: ${apiKey.isEmpty}');
+            }
+          } catch (e) {
+            debugPrint('DL ERROR: On-demand unrestriction failed: $e');
+            throw Exception('Failed to unrestrict link: $e');
+          }
+        } else {
+          debugPrint('DL SKIP: No meta information provided');
+        }
+        
         // Fresh-link policy: if start fails due to expired URL, we'll refresh below in catch
         if (Platform.isAndroid) {
           // Remove queued placeholder
@@ -1130,10 +1176,10 @@ class DownloadService {
           await _ensureBatteryExemptions(p.context);
 
           final String name;
-          if (p.providedFileName != null && p.providedFileName!.isNotEmpty) {
-            name = p.providedFileName!;
+          if (finalFileName.isNotEmpty) {
+            name = finalFileName;
           } else {
-            final (_dir, fn) = await _smartLocationFor(p.url, null, p.torrentName);
+            final (_dir, fn) = await _smartLocationFor(finalUrl, null, p.torrentName);
             name = fn;
           }
 
@@ -1142,7 +1188,7 @@ class DownloadService {
               : 'Debrify';
 
           final taskId = await AndroidNativeDownloader.start(
-            url: p.url,
+            url: finalUrl,
             fileName: name,
             subDir: subDir,
             headers: p.headers,
@@ -1150,13 +1196,13 @@ class DownloadService {
           if (taskId == null) {
             throw Exception('Failed to start download');
           }
-          final task = DownloadTask(taskId: taskId, url: p.url, filename: name);
+          final task = DownloadTask(taskId: taskId, url: finalUrl, filename: name);
           AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
           _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
           _upsertRecord(p.queuedId, {
             'state': 'running',
             'pluginTaskId': taskId,
-            'url': p.url,
+            'url': finalUrl,
             'displayName': name,
           });
         } else {
@@ -1169,7 +1215,7 @@ class DownloadService {
           if (rec != null && (rec['destPath'] as String?) != null && (rec['destPath'] as String).isNotEmpty) {
             finalPath = rec['destPath'] as String;
           } else {
-            final (dirAbsPath, filename) = await _smartLocationFor(p.url, p.providedFileName, p.torrentName);
+            final (dirAbsPath, filename) = await _smartLocationFor(finalUrl, finalFileName, p.torrentName);
             finalPath = '$dirAbsPath/$filename';
             _upsertRecord(p.queuedId, {'destPath': finalPath});
           }
@@ -1180,7 +1226,7 @@ class DownloadService {
 
           final (BaseDirectory baseDir, String relativeDir, String relFilename) = await Task.split(filePath: finalPath);
           final task = DownloadTask(
-            url: p.url,
+            url: finalUrl,
             headers: headers.isEmpty ? null : headers,
             filename: relFilename,
             directory: relativeDir,
@@ -1197,11 +1243,11 @@ class DownloadService {
           _upsertRecord(p.queuedId, {
             'state': 'running',
             'pluginTaskId': task.taskId,
-            'url': p.url,
+            'url': finalUrl,
             'displayName': relFilename,
           });
           // capture validators for the refreshed URL
-          unawaited(_captureValidatorsAndSave(p.queuedId, p.url));
+          unawaited(_captureValidatorsAndSave(p.queuedId, finalUrl));
         }
         runningCount += 1;
       } catch (e) {

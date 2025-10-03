@@ -1426,41 +1426,27 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                   fileName = fileName.split('/').last;
                                                 }
                                                 
-                                                // Unrestrict the link for this file
+                                                // Queue download with restricted link (unrestriction happens on-demand)
                                                 try {
-                                                  setLocal(() {
-                                                    unrestrictingFiles[index] = true;
+                                                  final meta = jsonEncode({
+                                                    'restrictedLink': torrent.links[index],
+                                                    'apiKey': _apiKey ?? '',
+                                                    'torrentHash': (torrent.id ?? '').toString(),
+                                                    'fileIndex': index,
                                                   });
-                                                  
-                                                  // Use index within filtered `files` to index into torrent.links
-                                                  final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
-                                                  final url = (unrestrictResult['download'] ?? '').toString();
-                                                  
-                                                  if (url.isNotEmpty) {
-                                                    final meta = jsonEncode({
-                                                      'restrictedLink': torrent.links[index],
-                                                      'apiKey': _apiKey ?? '',
-                                                      'torrentHash': (torrent.id ?? '').toString(),
-                                                      'fileIndex': index,
-                                                    });
-                                                    await DownloadService.instance.enqueueDownload(
-                                                      url: url,
-                                                      fileName: fileName,
-                                                      context: context,
-                                                      torrentName: torrent.filename,
-                                                      meta: meta,
-                                                    );
-                                                    setLocal(() {
-                                                      added.add(index);
-                                                      addCount = i + 1;
-                                                    });
-                                                  }
+                                                  await DownloadService.instance.enqueueDownload(
+                                                    url: torrent.links[index], // Use restricted link directly
+                                                    fileName: fileName,
+                                                    context: context,
+                                                    torrentName: torrent.filename,
+                                                    meta: meta,
+                                                  );
+                                                  setLocal(() {
+                                                    added.add(index);
+                                                    addCount = i + 1;
+                                                  });
                                                 } catch (e) {
                                                   // Handle error silently for batch operations
-                                                } finally {
-                                                  setLocal(() {
-                                                    unrestrictingFiles[index] = false;
-                                                  });
                                                 }
                                               }
                                               setLocal(() {
@@ -1562,40 +1548,27 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                       fileName = fileName.split('/').last;
                                                     }
                                                     
-                                                    // Unrestrict the link for this file
+                                                    // Queue download with restricted link (unrestriction happens on-demand)
                                                     try {
-                                                      setLocal(() {
-                                                        unrestrictingFiles[i] = true;
+                                                      final meta = jsonEncode({
+                                                        'restrictedLink': torrent.links[i],
+                                                        'apiKey': _apiKey ?? '',
+                                                        'torrentHash': (torrent.id ?? '').toString(),
+                                                        'fileIndex': i,
                                                       });
-                                                      
-                                                      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[i]);
-                                                      final url = (unrestrictResult['download'] ?? '').toString();
-                                                      
-                                                      if (url.isNotEmpty) {
-                                                        final meta = jsonEncode({
-                                                          'restrictedLink': torrent.links[i],
-                                                          'apiKey': _apiKey ?? '',
-                                                          'torrentHash': (torrent.id ?? '').toString(),
-                                                          'fileIndex': i,
-                                                        });
-                                                        await DownloadService.instance.enqueueDownload(
-                                                          url: url,
-                                                          fileName: fileName,
-                                                          context: context,
-                                                          torrentName: torrent.filename,
-                                                          meta: meta,
-                                                        );
-                                                        setLocal(() {
-                                                          added.add(i);
-                                                          addCount = i + 1;
-                                                        });
-                                                      }
+                                                      await DownloadService.instance.enqueueDownload(
+                                                        url: torrent.links[i], // Use restricted link directly
+                                                        fileName: fileName,
+                                                        context: context,
+                                                        torrentName: torrent.filename,
+                                                        meta: meta,
+                                                      );
+                                                      setLocal(() {
+                                                        added.add(i);
+                                                        addCount = i + 1;
+                                                      });
                                                     } catch (e) {
                                                       // Handle error silently for batch operations
-                                                    } finally {
-                                                      setLocal(() {
-                                                        unrestrictingFiles[i] = false;
-                                                      });
                                                     }
                                                   }
                                                   setLocal(() => downloadingAll = false);
@@ -2485,8 +2458,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                        onPressed: () async {
                          if (_apiKey == null) return;
                          try {
-                           final unrestrict = await DebridService.unrestrictLink(_apiKey!, torrent.links.first);
-                           final link = unrestrict['download'] as String;
                            final meta = jsonEncode({
                              'restrictedLink': torrent.links.first,
                              'apiKey': _apiKey ?? '',
@@ -2494,7 +2465,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                              'fileIndex': 0,
                            });
                            await DownloadService.instance.enqueueDownload(
-                             url: link,
+                             url: torrent.links.first, // Use restricted link directly
                              fileName: torrent.filename,
                              context: context,
                              torrentName: torrent.filename,
@@ -2696,8 +2667,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     onPressed: () async {
                       if (_apiKey == null) return;
                       try {
-                        final unrestrict = await DebridService.unrestrictLink(_apiKey!, download.link);
-                        final link = unrestrict['download'] as String;
                         final meta = jsonEncode({
                           'restrictedLink': download.link,
                           'apiKey': _apiKey ?? '',
@@ -2706,7 +2675,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                           'fileIndex': '',
                         });
                         await DownloadService.instance.enqueueDownload(
-                          url: link,
+                          url: download.link, // Use restricted link directly
                           fileName: download.filename,
                           context: context,
                           torrentName: download.filename,

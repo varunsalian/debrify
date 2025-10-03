@@ -1674,54 +1674,33 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Future<void> _showDownloadSelectionDialog(List<dynamic> links, String torrentName) async {
-    // First, unrestrict all links to get proper download URLs and filenames
+    // Show file selection dialog immediately (no upfront unrestriction)
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null) return;
 
-    // Show loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        backgroundColor: Color(0xFF1E293B),
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text(
-              'Preparing download links…',
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final List<Map<String, dynamic>> unrestrictedLinks = [];
-      for (final link in links) {
-        try {
-          final res = await DebridService.unrestrictLink(apiKey, link);
-          final url = (res['download'] ?? '').toString();
-          final fname = (res['filename'] ?? '').toString();
-          final mime = (res['mimeType'] ?? '').toString();
-          if (url.isEmpty) continue;
-          // Filter to videos only
-          if (FileUtils.isVideoMimeType(mime) || FileUtils.isVideoFile(fname)) {
-            unrestrictedLinks.add({
-              'download': url,
-              'filename': fname.isNotEmpty ? fname : 'Video File',
-            });
-          }
-        } catch (_) {
-          // Skip problematic item
-          continue;
+    // Create file list with restricted links (unrestriction happens on-demand)
+    final List<Map<String, dynamic>> fileList = [];
+    for (int i = 0; i < links.length; i++) {
+      final link = links[i];
+      // Extract filename from link if possible, otherwise use generic name
+      String fileName = 'File ${i + 1}';
+      try {
+        final uri = Uri.parse(link);
+        if (uri.pathSegments.isNotEmpty) {
+          fileName = uri.pathSegments.last;
         }
+      } catch (_) {
+        // Use default filename
       }
+      
+      fileList.add({
+        'restrictedLink': link,
+        'filename': fileName,
+        'fileIndex': i,
+      });
+    }
 
-      if (mounted) Navigator.of(context).pop(); // close loading
-
-      if (unrestrictedLinks.isEmpty) {
+    if (fileList.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1799,12 +1778,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ),
                       subtitle: Text(
-                        'Download all ${unrestrictedLinks.length} videos',
+                        'Download all ${fileList.length} files',
                         style: TextStyle(color: Colors.grey[400]),
                       ),
                       onTap: () async {
                         Navigator.of(context).pop();
-                        await _downloadAllFiles(unrestrictedLinks, torrentName);
+                        await _downloadAllFiles(fileList, torrentName);
                       },
                     ),
                     const Divider(color: Colors.grey),
@@ -1812,10 +1791,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     Expanded(
                       child: ListView.builder(
                         shrinkWrap: true,
-                        itemCount: unrestrictedLinks.length,
+                        itemCount: fileList.length,
                         itemBuilder: (context, index) {
-                          final link = unrestrictedLinks[index];
-                          final fileName = link['filename'] as String;
+                          final file = fileList[index];
+                          final fileName = file['filename'] as String;
                           return ListTile(
                             leading: const Icon(
                               Icons.video_file,
@@ -1833,7 +1812,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ),
                             onTap: () async {
                               Navigator.of(context).pop();
-                              await _downloadFile(link['download'], fileName, torrentName: torrentName);
+                              await _downloadFile(file['restrictedLink'], fileName, torrentName: torrentName);
                             },
                           );
                         },
@@ -1854,65 +1833,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           );
         },
       );
-    } catch (e) {
-      if (mounted) {
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.error,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Failed to prepare download links: ${e.toString()}',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF1E293B),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    }
   }
 
 
 
-  Future<void> _downloadAllFiles(List<Map<String, dynamic>> links, String torrentName) async {
+  Future<void> _downloadAllFiles(List<Map<String, dynamic>> files, String torrentName) async {
     try {
       // Start downloads for all files
-      for (final link in links) {
-        final url = (link['download'] ?? '').toString();
-        final fileName = (link['filename'] ?? 'file').toString();
-        final restricted = (link['restrictedLink'] ?? '').toString();
-        if (url.isEmpty) continue;
+      for (final file in files) {
+        final restrictedLink = (file['restrictedLink'] ?? '').toString();
+        final fileName = (file['filename'] ?? 'file').toString();
+        if (restrictedLink.isEmpty) continue;
         final meta = jsonEncode({
-          'restrictedLink': restricted,
+          'restrictedLink': restrictedLink,
           'apiKey': _apiKey ?? '',
-          'torrentHash': (link['torrentHash'] ?? '').toString(),
-          'fileIndex': link['fileIndex'] ?? '',
+          'torrentHash': (file['torrentHash'] ?? '').toString(),
+          'fileIndex': file['fileIndex'] ?? '',
         });
         await DownloadService.instance.enqueueDownload(
-          url: url,
+          url: restrictedLink, // Use restricted link directly
           fileName: fileName,
           context: context,
           torrentName: torrentName,
@@ -1939,7 +1878,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Started downloading ${links.length} videos! Check Downloads tab for progress.',
+                  'Started downloading ${files.length} files! Check Downloads tab for progress.',
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
@@ -1991,11 +1930,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _downloadFile(String downloadLink, String fileName, {String? torrentName}) async {
     try {
       final meta = jsonEncode({
-        'restrictedLink': (downloadLink.startsWith('http') ? '' : downloadLink),
+        'restrictedLink': downloadLink,
         'apiKey': _apiKey ?? '',
+        'torrentHash': '',
+        'fileIndex': '',
       });
       await DownloadService.instance.enqueueDownload(
-        url: downloadLink,
+        url: downloadLink, // Use restricted link directly
         fileName: fileName,
         context: context,
         torrentName: torrentName ?? fileName, // Use provided torrent name or fileName as fallback
