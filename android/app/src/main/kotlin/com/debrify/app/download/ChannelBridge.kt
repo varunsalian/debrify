@@ -24,6 +24,4 @@ object ChannelBridge {
 			// ignore if no listeners
 		}
 	}
-
-	fun hasSink(): Boolean = eventSink != null
-}
+} 
