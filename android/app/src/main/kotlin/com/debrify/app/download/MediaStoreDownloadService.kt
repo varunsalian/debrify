@@ -15,11 +15,16 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import androidx.core.app.TaskStackBuilder
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.channels.FileChannel
@@ -43,6 +48,9 @@ class MediaStoreDownloadService : Service() {
 		private const val NOTIFICATION_CHANNEL_NAME = "Downloads"
 		private const val SERVICE_NOTIFICATION_ID = 9000
 		private const val GROUP_KEY_DOWNLOADS = "com.debrify.app.downloads.GROUP"
+		private const val PREF_PENDING_EVENTS = "pending_events_queue"
+		private const val STALE_STATE_MS = 24L * 60L * 60L * 1000L
+		private const val MAX_PENDING_EVENTS = 100
 	}
 
 	private data class DownloadState(
@@ -62,15 +70,174 @@ class MediaStoreDownloadService : Service() {
 		@Volatile var connection: HttpURLConnection? = null,
 		@Volatile var input: InputStream? = null,
 		@Volatile var running: Boolean = false,
+		@Volatile var updatedAt: Long = System.currentTimeMillis(),
 	)
 
 	private lateinit var notificationManager: NotificationManager
 	private val states = ConcurrentHashMap<String, DownloadState>()
+	private val prefs by lazy { getSharedPreferences("med_store_dl_state", Context.MODE_PRIVATE) }
+
+	private fun persistState(state: DownloadState) {
+		try {
+			state.updatedAt = System.currentTimeMillis()
+			val obj = JSONObject().apply {
+				put("taskId", state.taskId)
+				put("url", state.url)
+				put("fileName", state.fileName)
+				put("subDir", state.subDir)
+				put("mimeType", state.mimeType)
+				put("paused", state.paused)
+				put("downloaded", state.downloaded)
+				put("total", state.total)
+				put("updatedAt", state.updatedAt)
+				state.etag?.let { put("etag", it) }
+				state.lastModified?.let { put("lastModified", it) }
+				state.uri?.let { put("uri", it.toString()) }
+				val headersObj = JSONObject()
+				state.headers.forEach { (k, v) -> headersObj.put(k, v) }
+				put("headers", headersObj)
+			}
+			prefs.edit().putString(state.taskId, obj.toString()).apply()
+		} catch (_: Exception) {}
+	}
+
+	private fun restoreState(taskId: String): DownloadState? {
+		val raw = prefs.getString(taskId, null) ?: return null
+		return try {
+			val obj = JSONObject(raw)
+			@Suppress("UNCHECKED_CAST")
+			val headers = hashMapOf<String, String>()
+			obj.optJSONObject("headers")?.let { json ->
+				val keys = json.keys()
+				while (keys.hasNext()) {
+					val key = keys.next()
+					headers[key] = json.optString(key)
+				}
+			}
+			val state = DownloadState(
+				taskId = obj.getString("taskId"),
+				url = obj.getString("url"),
+				fileName = obj.optString("fileName", "download"),
+				subDir = obj.optString("subDir", "Debrify"),
+				mimeType = obj.optString("mimeType", "application/octet-stream"),
+				headers = headers,
+			)
+			state.paused = obj.optBoolean("paused", false)
+			state.downloaded = obj.optLong("downloaded", 0L)
+			state.total = obj.optLong("total", -1L)
+			state.updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+			state.etag = obj.optString("etag", null)
+			state.lastModified = obj.optString("lastModified", null)
+			val uriStr = obj.optString("uri", null)
+			if (!uriStr.isNullOrEmpty()) state.uri = Uri.parse(uriStr)
+			state
+		} catch (_: Exception) { null }
+	}
+
+	private fun clearPersistedState(taskId: String) {
+		try {
+			prefs.edit().remove(taskId).apply()
+		} catch (_: Exception) {}
+	}
+
+	private fun shouldPersistType(type: String?): Boolean = when (type) {
+		"paused", "resumed", "canceled", "complete", "error", "started" -> true
+		else -> false
+	}
+
+	private fun enqueueEvent(event: Map<String, Any?>) {
+		try {
+			val raw = prefs.getString(PREF_PENDING_EVENTS, null)
+			val arr = if (raw.isNullOrEmpty()) JSONArray() else JSONArray(raw)
+			val obj = JSONObject()
+			event.forEach { (key, value) ->
+				obj.put(key, when (value) {
+					null -> JSONObject.NULL
+					is Uri -> value.toString()
+					is Number, is Boolean, is String -> value
+					else -> value.toString()
+				})
+			}
+			arr.put(obj)
+			if (arr.length() > MAX_PENDING_EVENTS) {
+				val overflow = arr.length() - MAX_PENDING_EVENTS
+				for (i in 0 until overflow) {
+					arr.remove(0)
+				}
+			}
+			prefs.edit().putString(PREF_PENDING_EVENTS, arr.toString()).apply()
+		} catch (_: Exception) {}
+	}
+
+	private fun postEvent(event: Map<String, Any?>) {
+		ChannelBridge.emit(event)
+		val type = event["type"] as? String
+		if (shouldPersistType(type) && !ChannelBridge.hasSink()) {
+			enqueueEvent(event)
+		}
+	}
+
+	private fun bootstrapPersistedStates() {
+		val snapshot = prefs.all
+		if (snapshot.isEmpty()) return
+		val now = System.currentTimeMillis()
+		snapshot.forEach { (key, _) ->
+			if (key == PREF_PENDING_EVENTS) return@forEach
+			val state = restoreState(key) ?: run {
+				clearPersistedState(key)
+				return@forEach
+			}
+			if (now - state.updatedAt > STALE_STATE_MS) {
+				clearPersistedState(key)
+				return@forEach
+			}
+			state.running = false
+			states[key] = state
+		}
+		if (states.isEmpty()) return
+		startForeground(SERVICE_NOTIFICATION_ID, buildSummaryNotification())
+		states.values.forEach { state ->
+			if (state.paused) {
+				notifyTask(state, "Paused", indeterminate = false, completed = false)
+				postEvent(mapOf(
+					"type" to "paused",
+					"taskId" to state.taskId,
+					"fileName" to state.fileName,
+					"subDir" to state.subDir,
+				))
+			} else {
+				notifyTask(state, "Resuming...", indeterminate = true, completed = false)
+				postEvent(mapOf(
+					"type" to "resumed",
+					"taskId" to state.taskId,
+					"fileName" to state.fileName,
+					"subDir" to state.subDir,
+				))
+				Thread { startOrResume(state, fresh = false) }.start()
+			}
+		}
+		updateSummaryNotification()
+	}
+
+	private fun isNetworkAvailable(): Boolean {
+		val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+		return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			val network = cm.activeNetwork ?: return false
+			val caps = cm.getNetworkCapabilities(network) ?: return false
+			caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+				caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+		} else {
+			@Suppress("DEPRECATION")
+			val info = cm.activeNetworkInfo
+			info != null && info.isConnected
+		}
+	}
 
 	override fun onCreate() {
 		super.onCreate()
 		notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 		createNotificationChannel()
+		bootstrapPersistedStates()
 	}
 
 	override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -86,23 +253,48 @@ class MediaStoreDownloadService : Service() {
 
 				val state = DownloadState(taskId, url, fileName, subDir, mimeType, headers)
 				states[taskId] = state
+				persistState(state)
 				if (states.size == 1) {
 					startForeground(SERVICE_NOTIFICATION_ID, buildSummaryNotification())
 				} else {
 					updateSummaryNotification()
 				}
 				notifyTask(state, "Preparing...", indeterminate = true, completed = false)
-				Thread { try { startOrResume(state, fresh = true) } catch (t: Throwable) { try { notifyTask(state, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to (t.message ?: "crash"))) } }.start()
+				Thread {
+					try { startOrResume(state, fresh = true) } catch (t: Throwable) {
+						try { notifyTask(state, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}
+						postEvent(mapOf(
+							"type" to "error",
+							"taskId" to state.taskId,
+							"message" to (t.message ?: "crash"),
+							"fileName" to state.fileName,
+							"subDir" to state.subDir,
+						))
+					}
+				}.start()
 			}
 			ACTION_PAUSE -> {
 				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return START_NOT_STICKY
-				states[taskId]?.let { s ->
+				var state = states[taskId]
+				if (state == null) {
+					restoreState(taskId)?.let {
+						state = it
+						states[taskId] = it
+					}
+				}
+				val pauseState = state ?: run {
+					postEvent(mapOf("type" to "error", "taskId" to taskId, "message" to "pause_state_missing"))
+					return START_NOT_STICKY
+				}
+				states[taskId] = pauseState
+				pauseState.let { s ->
 					s.paused = true
 					try { s.connection?.disconnect() } catch (_: Exception) {}
 					try { s.input?.close() } catch (_: Exception) {}
 					notifyTask(s, "Paused", indeterminate = false, completed = false)
 					updateSummaryNotification()
-					ChannelBridge.emit(mapOf(
+					persistState(s)
+					postEvent(mapOf(
 						"type" to "paused",
 						"taskId" to taskId,
 						"fileName" to s.fileName,
@@ -112,12 +304,35 @@ class MediaStoreDownloadService : Service() {
 			}
 			ACTION_RESUME -> {
 				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return START_NOT_STICKY
-				states[taskId]?.let { s ->
+				var state = states[taskId]
+				if (state == null) {
+					restoreState(taskId)?.let {
+						state = it
+						states[taskId] = it
+					}
+				}
+				val resumeState = state ?: run {
+					postEvent(mapOf("type" to "error", "taskId" to taskId, "message" to "resume_state_missing"))
+					return START_NOT_STICKY
+				}
+				resumeState.let { s ->
 					if (s.running) return START_NOT_STICKY
 					s.paused = false
-					Thread { try { startOrResume(s, fresh = false) } catch (t: Throwable) { try { notifyTask(s, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}; ChannelBridge.emit(mapOf("type" to "error", "taskId" to s.taskId, "message" to (t.message ?: "crash"))) } }.start()
+					persistState(s)
+					Thread {
+						try { startOrResume(s, fresh = false) } catch (t: Throwable) {
+							try { notifyTask(s, "Error", indeterminate = true, completed = false) } catch (_: Exception) {}
+							postEvent(mapOf(
+								"type" to "error",
+								"taskId" to s.taskId,
+								"message" to (t.message ?: "crash"),
+								"fileName" to s.fileName,
+								"subDir" to s.subDir,
+							))
+						}
+					}.start()
 					updateSummaryNotification()
-					ChannelBridge.emit(mapOf(
+					postEvent(mapOf(
 						"type" to "resumed",
 						"taskId" to taskId,
 						"fileName" to s.fileName,
@@ -127,12 +342,22 @@ class MediaStoreDownloadService : Service() {
 			}
 			ACTION_CANCEL -> {
 				val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return START_NOT_STICKY
-				states[taskId]?.let { s ->
+				var state = states[taskId]
+				if (state == null) {
+					restoreState(taskId)?.let {
+						state = it
+						states[taskId] = it
+					}
+				}
+				state?.let { s ->
 					s.canceled = true
 					try { s.connection?.disconnect() } catch (_: Exception) {}
 					try { s.input?.close() } catch (_: Exception) {}
-					s.uri?.let { try { contentResolver.delete(it, null, null) } catch (_: Exception) {} }
-					ChannelBridge.emit(mapOf(
+					val uri = s.uri
+					if (uri != null) {
+						try { contentResolver.delete(uri, null, null) } catch (_: Exception) {}
+					}
+					postEvent(mapOf(
 						"type" to "canceled",
 						"taskId" to taskId,
 						"fileName" to s.fileName,
@@ -140,6 +365,30 @@ class MediaStoreDownloadService : Service() {
 					))
 					states.remove(taskId)
 					notificationManager.cancel(taskNotificationId(taskId))
+					clearPersistedState(taskId)
+				} ?: run {
+					val raw = prefs.getString(taskId, null)
+					val fallback = if (raw != null) {
+						try {
+							val obj = JSONObject(raw)
+							mapOf(
+								"fileName" to obj.optString("fileName", "download"),
+								"subDir" to obj.optString("subDir", "Debrify"),
+						)
+						} catch (_: Exception) {
+							null
+						}
+					} else null
+					postEvent(
+						mutableMapOf<String, Any?>(
+							"type" to "canceled",
+							"taskId" to taskId,
+						).apply {
+							fallback?.forEach { (k, v) -> this[k] = v }
+						}
+					)
+					notificationManager.cancel(taskNotificationId(taskId))
+					clearPersistedState(taskId)
 				}
 				if (states.isEmpty()) {
 					stopForeground(STOP_FOREGROUND_REMOVE)
@@ -206,18 +455,31 @@ class MediaStoreDownloadService : Service() {
 				uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
 				if (uri == null) {
 					notifyTask(state, "Failed to create destination", indeterminate = true, completed = false)
-					ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to "no destination"))
+					postEvent(mapOf(
+						"type" to "error",
+						"taskId" to state.taskId,
+						"message" to "no destination",
+						"fileName" to state.fileName,
+						"subDir" to state.subDir,
+					))
 					stopSelfSafely(); return
 				}
 				state.uri = uri
-				ChannelBridge.emit(mapOf("type" to "started", "taskId" to state.taskId, "fileName" to state.fileName, "subDir" to state.subDir))
+				persistState(state)
+				postEvent(mapOf(
+					"type" to "started",
+					"taskId" to state.taskId,
+					"fileName" to state.fileName,
+					"subDir" to state.subDir,
+				))
 			}
 
 			// Always confirm bytes already written on disk
-			uri?.let { confirmed ->
-				val onDisk = existingSize(confirmed)
-				if (onDisk > 0L) state.downloaded = onDisk
-			}
+				uri?.let { confirmed ->
+					val onDisk = existingSize(confirmed)
+					if (onDisk > 0L) state.downloaded = onDisk
+					persistState(state)
+				}
 
 			val url = URL(state.url)
 			connection = (url.openConnection() as HttpURLConnection).apply {
@@ -237,9 +499,9 @@ class MediaStoreDownloadService : Service() {
 			val resp = connection.responseCode
 			// Handle resume edge cases before opening output stream
 			if (state.downloaded > 0L && resp == HttpURLConnection.HTTP_OK) {
-				// Server ignored Range; restart from 0 by truncating existing file
-				state.downloaded = 0L
-				if (uri != null) {
+					// Server ignored Range; restart from 0 by truncating existing file
+					state.downloaded = 0L
+					if (uri != null) {
 					try {
 						val pfd = contentResolver.openFileDescriptor(uri!!, "rw")
 						val fos = FileOutputStream(pfd!!.fileDescriptor)
@@ -249,7 +511,8 @@ class MediaStoreDownloadService : Service() {
 						fos.close()
 						pfd.close()
 					} catch (_: Exception) {}
-				}
+					}
+					persistState(state)
 			} else if (state.downloaded > 0L && resp == 416) {
 				// 416: already fully downloaded on server side; treat as complete
 				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -257,7 +520,7 @@ class MediaStoreDownloadService : Service() {
 					contentResolver.update(uri!!, done, null, null)
 				}
 				notifyTask(state, "Download complete", indeterminate = false, completed = true)
-				ChannelBridge.emit(mapOf(
+				postEvent(mapOf(
 					"type" to "complete",
 					"taskId" to state.taskId,
 					"bytes" to state.total,
@@ -269,6 +532,7 @@ class MediaStoreDownloadService : Service() {
 					"mimeType" to state.mimeType,
 				))
 				states.remove(state.taskId)
+				clearPersistedState(state.taskId)
 				notificationManager.cancel(taskNotificationId(state.taskId))
 				if (states.isEmpty()) {
 					stopForeground(STOP_FOREGROUND_REMOVE)
@@ -306,6 +570,7 @@ class MediaStoreDownloadService : Service() {
 							state.downloaded = start
 						}
 					}
+					persistState(state)
 				}
 			}
 
@@ -317,6 +582,7 @@ class MediaStoreDownloadService : Service() {
 			// Only update validators if present
 			connection.getHeaderField("ETag")?.let { state.etag = it }
 			connection.getHeaderField("Last-Modified")?.let { state.lastModified = it }
+			persistState(state)
 
 			input = BufferedInputStream(connection.inputStream)
 			state.input = input
@@ -339,15 +605,18 @@ class MediaStoreDownloadService : Service() {
 			notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
 			updateSummaryNotification()
 			if (state.downloaded == 0L) {
-				ChannelBridge.emit(mapOf(
-					"type" to "progress",
-					"taskId" to state.taskId,
-					"bytes" to state.downloaded,
-					"total" to state.total,
-					"fileName" to state.fileName,
-					"subDir" to state.subDir,
-					"url" to state.url,
-				))
+				postEvent(
+					mapOf(
+						"type" to "progress",
+						"taskId" to state.taskId,
+						"bytes" to state.downloaded,
+						"total" to state.total,
+						"fileName" to state.fileName,
+						"subDir" to state.subDir,
+						"url" to state.url,
+					),
+				)
+				persistState(state)
 			}
 
 			while (true) {
@@ -360,15 +629,18 @@ class MediaStoreDownloadService : Service() {
 				val now = System.currentTimeMillis()
 				if (now - lastUpdate > 500) {
 					notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
-					ChannelBridge.emit(mapOf(
-						"type" to "progress",
-						"taskId" to state.taskId,
-						"bytes" to state.downloaded,
-						"total" to state.total,
-						"fileName" to state.fileName,
-						"subDir" to state.subDir,
-						"url" to state.url,
-					))
+					postEvent(
+						mapOf(
+							"type" to "progress",
+							"taskId" to state.taskId,
+							"bytes" to state.downloaded,
+							"total" to state.total,
+							"fileName" to state.fileName,
+							"subDir" to state.subDir,
+							"url" to state.url,
+						),
+					)
+					persistState(state)
 					lastUpdate = now
 				}
 			}
@@ -380,19 +652,22 @@ class MediaStoreDownloadService : Service() {
 					contentResolver.update(uri!!, done, null, null)
 				}
 				notifyTask(state, "Download complete", indeterminate = false, completed = true)
-				ChannelBridge.emit(mapOf(
-					"type" to "complete",
-					"taskId" to state.taskId,
-					"bytes" to state.total,
-					"total" to state.total,
-					"fileName" to state.fileName,
-					"subDir" to state.subDir,
-					"url" to state.url,
-					"contentUri" to (uri?.toString() ?: ""),
-					"mimeType" to state.mimeType,
-				))
-				states.remove(state.taskId)
-				notificationManager.cancel(taskNotificationId(state.taskId))
+				postEvent(
+					mapOf(
+						"type" to "complete",
+						"taskId" to state.taskId,
+						"bytes" to state.total,
+						"total" to state.total,
+						"fileName" to state.fileName,
+						"subDir" to state.subDir,
+						"url" to state.url,
+						"contentUri" to (uri?.toString() ?: ""),
+						"mimeType" to state.mimeType,
+					),
+				)
+					states.remove(state.taskId)
+					clearPersistedState(state.taskId)
+					notificationManager.cancel(taskNotificationId(state.taskId))
 				if (states.isEmpty()) {
 					stopForeground(STOP_FOREGROUND_REMOVE)
 					notificationManager.cancel(SERVICE_NOTIFICATION_ID)
@@ -407,9 +682,20 @@ class MediaStoreDownloadService : Service() {
 		} catch (e: Exception) {
 			if (state.paused) {
 				notifyTask(state, "Paused", indeterminate = false, completed = false)
+			} else if (!state.canceled && e is IOException && !isNetworkAvailable()) {
+				state.paused = true
+				persistState(state)
+				notifyTask(state, "Paused", indeterminate = false, completed = false)
+				updateSummaryNotification()
+				postEvent(mapOf(
+					"type" to "paused",
+					"taskId" to state.taskId,
+					"fileName" to state.fileName,
+					"subDir" to state.subDir,
+				))
 			} else if (!state.canceled) {
 				notifyTask(state, "Download failed", indeterminate = true, completed = false)
-				ChannelBridge.emit(mapOf(
+				postEvent(mapOf(
 					"type" to "error",
 					"taskId" to state.taskId,
 					"message" to (e.message ?: "unknown error"),
@@ -425,6 +711,9 @@ class MediaStoreDownloadService : Service() {
 			try { input?.close() } catch (_: Exception) {}
 			try { connection?.disconnect() } catch (_: Exception) {}
 			state.running = false
+			if (!state.canceled && states.containsKey(state.taskId)) {
+				persistState(state)
+			}
 		}
 	}
 

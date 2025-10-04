@@ -8,6 +8,9 @@ import android.os.Bundle
 import android.provider.Settings
 import android.app.UiModeManager
 import android.content.res.Configuration
+import java.util.UUID
+import org.json.JSONArray
+import org.json.JSONObject
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -34,7 +37,7 @@ class MainActivity : FlutterActivity() {
 						return@setMethodCallHandler
 					}
 
-					val taskId = System.currentTimeMillis().toString()
+					val taskId = UUID.randomUUID().toString()
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_START
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
@@ -50,6 +53,7 @@ class MainActivity : FlutterActivity() {
 				"pause" -> {
 					val taskId = call.argument<String>("taskId")
 					if (taskId.isNullOrEmpty()) { result.error("bad_args", "taskId required", null); return@setMethodCallHandler }
+					if (!hasPersistedDownload(taskId)) { result.success(false); return@setMethodCallHandler }
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_PAUSE
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
@@ -60,6 +64,7 @@ class MainActivity : FlutterActivity() {
 				"resume" -> {
 					val taskId = call.argument<String>("taskId")
 					if (taskId.isNullOrEmpty()) { result.error("bad_args", "taskId required", null); return@setMethodCallHandler }
+					if (!hasPersistedDownload(taskId)) { result.success(false); return@setMethodCallHandler }
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_RESUME
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
@@ -70,12 +75,16 @@ class MainActivity : FlutterActivity() {
 				"cancel" -> {
 					val taskId = call.argument<String>("taskId")
 					if (taskId.isNullOrEmpty()) { result.error("bad_args", "taskId required", null); return@setMethodCallHandler }
+					// Allow cancel even if state missing to ensure cleanup
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_CANCEL
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
 					}
 					androidx.core.content.ContextCompat.startForegroundService(this, intent)
 					result.success(true)
+				}
+				"drainNativeEvents" -> {
+					result.success(drainPendingNativeEvents())
 				}
 				"openContentUri" -> {
 					val uriStr = call.argument<String>("uri")
@@ -150,4 +159,32 @@ class MainActivity : FlutterActivity() {
 			}
 		})
 	}
-} 
+
+	private fun hasPersistedDownload(taskId: String): Boolean {
+		val prefs = getSharedPreferences("med_store_dl_state", MODE_PRIVATE)
+		return prefs.contains(taskId)
+	}
+
+	private fun drainPendingNativeEvents(): ArrayList<HashMap<String, Any?>> {
+		val prefs = getSharedPreferences("med_store_dl_state", MODE_PRIVATE)
+		val raw = prefs.getString("pending_events_queue", null)
+		val result = arrayListOf<HashMap<String, Any?>>()
+		if (!raw.isNullOrEmpty()) {
+			try {
+				val arr = JSONArray(raw)
+				for (i in 0 until arr.length()) {
+					val obj = arr.optJSONObject(i) ?: continue
+					val map = HashMap<String, Any?>()
+					val keys = obj.keys()
+					while (keys.hasNext()) {
+						val key = keys.next()
+						map[key] = if (obj.isNull(key)) null else obj.get(key)
+					}
+					result.add(map)
+				}
+			} catch (_: Exception) {}
+		}
+		prefs.edit().remove("pending_events_queue").apply()
+		return result
+	}
+}

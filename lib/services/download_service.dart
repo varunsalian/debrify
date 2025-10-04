@@ -44,7 +44,11 @@ class AndroidBytesProgress {
   final String taskId;
   final int bytes;
   final int total; // -1 if unknown
-  const AndroidBytesProgress({required this.taskId, required this.bytes, required this.total});
+  const AndroidBytesProgress({
+    required this.taskId,
+    required this.bytes,
+    required this.total,
+  });
 }
 
 class DownloadService {
@@ -60,12 +64,14 @@ class DownloadService {
       StreamController.broadcast();
   final StreamController<AndroidBytesProgress> _bytesController =
       StreamController.broadcast();
-  final Map<String, (String contentUri, String mimeType)?> _lastFileByTaskId = {};
+  final Map<String, (String contentUri, String mimeType)?> _lastFileByTaskId =
+      {};
 
   Stream<TaskProgressUpdate> get progressStream => _progressController.stream;
   Stream<TaskStatusUpdate> get statusStream => _statusController.stream;
   Stream<MoveProgressUpdate> get moveProgressStream => _moveController.stream;
-  Stream<AndroidBytesProgress> get bytesProgressStream => _bytesController.stream;
+  Stream<AndroidBytesProgress> get bytesProgressStream =>
+      _bytesController.stream;
 
   bool _started = false;
   bool _initializing = false;
@@ -76,14 +82,16 @@ class DownloadService {
 
   ConnectivityResult _computeEffectiveNet(List<ConnectivityResult> results) {
     if (results.isEmpty) return ConnectivityResult.none;
-    if (results.contains(ConnectivityResult.none)) return ConnectivityResult.none;
+    if (results.contains(ConnectivityResult.none))
+      return ConnectivityResult.none;
     // Treat ethernet/wired/vpn as acceptable like Wi-Fi for large downloads
     if (results.contains(ConnectivityResult.wifi) ||
         results.contains(ConnectivityResult.ethernet) ||
         results.contains(ConnectivityResult.vpn)) {
       return ConnectivityResult.wifi;
     }
-    if (results.contains(ConnectivityResult.mobile)) return ConnectivityResult.mobile;
+    if (results.contains(ConnectivityResult.mobile))
+      return ConnectivityResult.mobile;
     // Fallback to the first known state
     return results.first;
   }
@@ -165,8 +173,11 @@ class DownloadService {
         );
 
         if (Platform.isAndroid) {
-          AndroidDownloadHistory.instance
-              .upsert(downloadTask, TaskStatus.paused, -5.0);
+          AndroidDownloadHistory.instance.upsert(
+            downloadTask,
+            TaskStatus.paused,
+            -5.0,
+          );
         } else {
           _nonAndroidQueuedRecords[pending.queuedId] = TaskRecord(
             downloadTask,
@@ -176,7 +187,9 @@ class DownloadService {
           );
         }
 
-        _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.paused));
+        _statusController.add(
+          TaskStatusUpdate(downloadTask, TaskStatus.paused),
+        );
       } else {
         _canceledDuringStart.add(id);
         final recId = _resolveRecordIdForTaskId(id);
@@ -196,8 +209,11 @@ class DownloadService {
               filename: reconstructed.providedFileName ?? 'download',
             );
             if (Platform.isAndroid) {
-              AndroidDownloadHistory.instance
-                  .upsert(downloadTask, TaskStatus.paused, -5.0);
+              AndroidDownloadHistory.instance.upsert(
+                downloadTask,
+                TaskStatus.paused,
+                -5.0,
+              );
             } else {
               _nonAndroidQueuedRecords[recId] = TaskRecord(
                 downloadTask,
@@ -249,8 +265,11 @@ class DownloadService {
         );
 
         if (Platform.isAndroid) {
-          AndroidDownloadHistory.instance
-              .upsert(downloadTask, TaskStatus.enqueued, 0.0);
+          AndroidDownloadHistory.instance.upsert(
+            downloadTask,
+            TaskStatus.enqueued,
+            0.0,
+          );
         } else {
           _nonAndroidQueuedRecords[paused.queuedId] = TaskRecord(
             downloadTask,
@@ -260,7 +279,9 @@ class DownloadService {
           );
         }
 
-        _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.enqueued));
+        _statusController.add(
+          TaskStatusUpdate(downloadTask, TaskStatus.enqueued),
+        );
       } else {
         _canceledDuringStart.remove(id);
         final recId = _resolveRecordIdForTaskId(id);
@@ -270,7 +291,12 @@ class DownloadService {
             final reconstructed = _pendingFromRecordData(recId, rec);
             if (reconstructed != null) {
               reconstructed.canceled = false;
-              _addPendingRequest(_pending, _pendingById, reconstructed, atFront: true);
+              _addPendingRequest(
+                _pending,
+                _pendingById,
+                reconstructed,
+                atFront: true,
+              );
               changedPending = true;
               _upsertRecord(reconstructed.queuedId, {'state': 'queued'});
 
@@ -280,8 +306,11 @@ class DownloadService {
                 filename: reconstructed.providedFileName ?? 'download',
               );
               if (Platform.isAndroid) {
-                AndroidDownloadHistory.instance
-                    .upsert(downloadTask, TaskStatus.enqueued, 0.0);
+                AndroidDownloadHistory.instance.upsert(
+                  downloadTask,
+                  TaskStatus.enqueued,
+                  0.0,
+                );
               } else {
                 _nonAndroidQueuedRecords[reconstructed.queuedId] = TaskRecord(
                   downloadTask,
@@ -321,6 +350,19 @@ class DownloadService {
     return null;
   }
 
+  DownloadTask _taskSnapshotFor(String taskId) {
+    final recId = _resolveRecordIdForTaskId(taskId);
+    if (recId != null) {
+      final rec = _records[recId];
+      if (rec != null) {
+        final url = (rec['url'] ?? '').toString();
+        final displayName = (rec['displayName'] ?? 'download').toString();
+        return DownloadTask(taskId: taskId, url: url, filename: displayName);
+      }
+    }
+    return DownloadTask(taskId: taskId, url: '', filename: 'download');
+  }
+
   Future<String> _recordsFilePath() async {
     final dir = await getApplicationSupportDirectory();
     final file = File('${dir.path}/$_recordsFile');
@@ -337,7 +379,9 @@ class DownloadService {
       final raw = await File(path).readAsString();
       final data = jsonDecode(raw);
       if (data is Map<String, dynamic>) {
-        _records = data.map((k, v) => MapEntry(k, (v as Map).cast<String, dynamic>()));
+        _records = data.map(
+          (k, v) => MapEntry(k, (v as Map).cast<String, dynamic>()),
+        );
       }
     } catch (_) {
       _records = {};
@@ -359,7 +403,11 @@ class DownloadService {
     unawaited(_saveRecords());
   }
 
-  Map<String, String> _buildResumeHeaders(String finalPath, Map<String, String>? baseHeaders, Map<String, dynamic>? rec) {
+  Map<String, String> _buildResumeHeaders(
+    String finalPath,
+    Map<String, String>? baseHeaders,
+    Map<String, dynamic>? rec,
+  ) {
     final Map<String, String> headers = {};
     if (baseHeaders != null) headers.addAll(baseHeaders);
     try {
@@ -375,14 +423,22 @@ class DownloadService {
           } else if (lastMod != null && lastMod.isNotEmpty) {
             headers['If-Range'] = lastMod;
           }
-          debugPrint('DL RESUME: path=$finalPath partial=$partial rangeSet=true ifRange=' + (headers['If-Range'] ?? ''));
+          debugPrint(
+            'DL RESUME: path=$finalPath partial=$partial rangeSet=true ifRange=' +
+                (headers['If-Range'] ?? ''),
+          );
         }
       }
     } catch (_) {}
     return headers;
   }
 
-  String _computeContentKey(String? meta, String url, String? fileName, String? torrentName) {
+  String _computeContentKey(
+    String? meta,
+    String url,
+    String? fileName,
+    String? torrentName,
+  ) {
     try {
       // Prefer stable identifiers from meta if present
       if (meta != null && meta.isNotEmpty) {
@@ -397,7 +453,9 @@ class DownloadService {
         }
       }
       // Fallback: torrent folder + sanitized fileName
-      final n = (fileName ?? '').isNotEmpty ? fileName! : Uri.parse(url).pathSegments.lastOrNull ?? 'file';
+      final n = (fileName ?? '').isNotEmpty
+          ? fileName!
+          : Uri.parse(url).pathSegments.lastOrNull ?? 'file';
       final t = (torrentName ?? '').trim();
       return 'nf:${t}_${_sanitizeName(n)}';
     } catch (_) {
@@ -422,7 +480,9 @@ class DownloadService {
 
   Future<void> retryAllFailed() async {
     await _loadRecords();
-    final failed = _records.entries.where((e) => (e.value['state'] == 'failed'));
+    final failed = _records.entries.where(
+      (e) => (e.value['state'] == 'failed'),
+    );
     for (final e in failed) {
       final rec = e.value;
       final meta = rec['meta'] as String?;
@@ -430,9 +490,18 @@ class DownloadService {
       final fileName = rec['displayName'] as String?;
       final torrentName = rec['torrentName'] as String?;
       if (meta != null && meta.isNotEmpty) {
-        await enqueueDownload(url: url ?? '', fileName: fileName, meta: meta, torrentName: torrentName);
+        await enqueueDownload(
+          url: url ?? '',
+          fileName: fileName,
+          meta: meta,
+          torrentName: torrentName,
+        );
       } else if (url != null && url.isNotEmpty) {
-        await enqueueDownload(url: url, fileName: fileName, torrentName: torrentName);
+        await enqueueDownload(
+          url: url,
+          fileName: fileName,
+          torrentName: torrentName,
+        );
       }
       _upsertRecord(e.key, {'state': 'queued'});
     }
@@ -462,8 +531,9 @@ class DownloadService {
   Future<void> _persistPending() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-    final data = _pending
-        .map((p) => {
+      final data = _pending
+          .map(
+            (p) => {
               'queuedId': p.queuedId,
               'url': p.url,
               'providedFileName': p.providedFileName,
@@ -474,8 +544,9 @@ class DownloadService {
               'torrentName': p.torrentName,
               'contentKey': p.contentKey,
               'destPath': p.destPath,
-            })
-        .toList();
+            },
+          )
+          .toList();
       await prefs.setString(_pendingKey, jsonEncode(data));
     } catch (_) {}
   }
@@ -488,18 +559,20 @@ class DownloadService {
         return;
       }
       final data = _pausedPending.values
-          .map((p) => {
-                'queuedId': p.queuedId,
-                'url': p.url,
-                'providedFileName': p.providedFileName,
-                'headers': p.headers,
-                'wifiOnly': p.wifiOnly,
-                'retries': p.retries,
-                'meta': p.meta,
-                'torrentName': p.torrentName,
-                'contentKey': p.contentKey,
-                'destPath': p.destPath,
-              })
+          .map(
+            (p) => {
+              'queuedId': p.queuedId,
+              'url': p.url,
+              'providedFileName': p.providedFileName,
+              'headers': p.headers,
+              'wifiOnly': p.wifiOnly,
+              'retries': p.retries,
+              'meta': p.meta,
+              'torrentName': p.torrentName,
+              'contentKey': p.contentKey,
+              'destPath': p.destPath,
+            },
+          )
           .toList();
       await prefs.setString(_pausedKey, jsonEncode(data));
     } catch (_) {}
@@ -515,7 +588,8 @@ class DownloadService {
     final headers = (item['headers'] as Map?)?.cast<String, String>();
     final wifiOnly = (item['wifiOnly'] as bool?) ?? false;
     final retries = (item['retries'] as int?) ?? 3;
-    final contentKey = (item['contentKey'] as String?) ??
+    final contentKey =
+        (item['contentKey'] as String?) ??
         _computeContentKey(meta, url, providedFileName, torrentName);
     return _PendingRequest(
       queuedId: queuedId,
@@ -532,7 +606,10 @@ class DownloadService {
     );
   }
 
-  _PendingRequest? _pendingFromRecordData(String recordId, Map<String, dynamic> rec) {
+  _PendingRequest? _pendingFromRecordData(
+    String recordId,
+    Map<String, dynamic> rec,
+  ) {
     final url = (rec['url'] ?? '') as String;
     if (url.isEmpty) return null;
     final displayName = rec['displayName'] as String?;
@@ -541,7 +618,8 @@ class DownloadService {
     final headers = (rec['headers'] as Map?)?.cast<String, String>();
     final wifiOnly = (rec['wifiOnly'] as bool?) ?? false;
     final retries = (rec['retries'] as int?) ?? 3;
-    final contentKey = (rec['contentKey'] as String?) ??
+    final contentKey =
+        (rec['contentKey'] as String?) ??
         _computeContentKey(meta, url, displayName, torrentName);
     return _PendingRequest(
       queuedId: recordId,
@@ -558,8 +636,11 @@ class DownloadService {
     );
   }
 
-  Future<bool> _queueFromRecord(String recordId,
-      {required bool paused, bool insertFront = true}) async {
+  Future<bool> _queueFromRecord(
+    String recordId, {
+    required bool paused,
+    bool insertFront = true,
+  }) async {
     final rec = _records[recordId];
     if (rec == null) return false;
     final pending = _pendingFromRecordData(recordId, rec);
@@ -577,8 +658,11 @@ class DownloadService {
         filename: pending.providedFileName ?? 'download',
       );
       if (Platform.isAndroid) {
-        AndroidDownloadHistory.instance
-            .upsert(downloadTask, TaskStatus.paused, -5.0);
+        AndroidDownloadHistory.instance.upsert(
+          downloadTask,
+          TaskStatus.paused,
+          -5.0,
+        );
       } else {
         _nonAndroidQueuedRecords[recordId] = TaskRecord(
           downloadTask,
@@ -587,9 +671,7 @@ class DownloadService {
           -1,
         );
       }
-      _statusController.add(
-        TaskStatusUpdate(downloadTask, TaskStatus.paused),
-      );
+      _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.paused));
       await _persistPaused();
       return true;
     }
@@ -625,8 +707,11 @@ class DownloadService {
           filename: pending.providedFileName ?? 'download',
         );
         if (Platform.isAndroid) {
-          AndroidDownloadHistory.instance
-              .upsert(downloadTask, TaskStatus.paused, -5.0);
+          AndroidDownloadHistory.instance.upsert(
+            downloadTask,
+            TaskStatus.paused,
+            -5.0,
+          );
         } else {
           _nonAndroidQueuedRecords[pending.queuedId] = TaskRecord(
             downloadTask,
@@ -666,8 +751,11 @@ class DownloadService {
           debugPrint('DL INIT: skipping canceled pending queuedId=$queuedId');
           continue;
         }
-        if (pending.contentKey.isNotEmpty && seenKeys.contains(pending.contentKey)) {
-          debugPrint('DL INIT: skipping duplicate pending contentKey=${pending.contentKey}');
+        if (pending.contentKey.isNotEmpty &&
+            seenKeys.contains(pending.contentKey)) {
+          debugPrint(
+            'DL INIT: skipping duplicate pending contentKey=${pending.contentKey}',
+          );
           continue;
         }
         final downloadTask = DownloadTask(
@@ -676,8 +764,11 @@ class DownloadService {
           filename: pending.providedFileName ?? 'download',
         );
         if (Platform.isAndroid) {
-          AndroidDownloadHistory.instance
-              .upsert(downloadTask, TaskStatus.enqueued, 0.0);
+          AndroidDownloadHistory.instance.upsert(
+            downloadTask,
+            TaskStatus.enqueued,
+            0.0,
+          );
         } else {
           _nonAndroidQueuedRecords[queuedId] = TaskRecord(
             downloadTask,
@@ -686,12 +777,16 @@ class DownloadService {
             -1,
           );
         }
-        _statusController.add(TaskStatusUpdate(downloadTask, TaskStatus.enqueued));
+        _statusController.add(
+          TaskStatusUpdate(downloadTask, TaskStatus.enqueued),
+        );
         _addPendingRequest(_pending, _pendingById, pending, atFront: false);
         if (pending.contentKey.isNotEmpty) {
           seenKeys.add(pending.contentKey);
         }
-        debugPrint('DL INIT: restored pending queuedId=$queuedId name=${pending.providedFileName ?? 'download'}');
+        debugPrint(
+          'DL INIT: restored pending queuedId=$queuedId name=${pending.providedFileName ?? 'download'}',
+        );
       }
       await _persistPending();
     } catch (_) {}
@@ -719,134 +814,195 @@ class DownloadService {
       String choice = 'denied';
       if (context != null) {
         bool dontAskAgain = false;
-        proceed = await showModalBottomSheet<bool>(
+        proceed =
+            await showModalBottomSheet<bool>(
               context: context,
               isScrollControlled: true,
               backgroundColor: const Color(0xFF0B1220),
               shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
               builder: (ctx) {
                 final kb = MediaQuery.of(ctx).viewInsets.bottom;
                 return Padding(
                   padding: EdgeInsets.only(bottom: kb),
                   child: SafeArea(
                     top: false,
-                    child: StatefulBuilder(builder: (ctx2, setLocal) {
-                      return SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Center(
-                              child: Container(
-                                width: 44,
-                                height: 5,
+                    child: StatefulBuilder(
+                      builder: (ctx2, setLocal) {
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Center(
+                                child: Container(
+                                  width: 44,
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF334155),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF334155),
-                                  borderRadius: BorderRadius.circular(999),
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF6366F1),
+                                      Color(0xFF8B5CF6),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Row(
-                                children: const [
-                                  Icon(Icons.battery_saver, color: Colors.white),
-                                  SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text('Allow background downloads',
+                                child: Row(
+                                  children: const [
+                                    Icon(
+                                      Icons.battery_saver,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Allow background downloads',
                                         style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold)),
+                                          color: Colors.white,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'To keep downloads running reliably in the background, allow the app to ignore battery optimizations.',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    size: 18,
+                                    color: const Color(
+                                      0xFF10B981,
+                                    ).withValues(alpha: 0.9),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Keeps long downloads alive',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'To keep downloads running reliably in the background, allow the app to ignore battery optimizations.',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Icon(Icons.check_circle, size: 18, color: const Color(0xFF10B981).withValues(alpha: 0.9)),
-                                const SizedBox(width: 8),
-                                Text('Keeps long downloads alive', style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                Icon(Icons.check_circle, size: 18, color: const Color(0xFF10B981).withValues(alpha: 0.9)),
-                                const SizedBox(width: 8),
-                                Text('You can change this later in system settings', style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: dontAskAgain,
-                                  onChanged: (v) => setLocal(() => dontAskAgain = v ?? false),
-                                ),
-                                const SizedBox(width: 4),
-                                const Text("Don't ask again"),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: () {
-                                      choice = dontAskAgain ? 'never' : 'denied';
-                                      Navigator.of(ctx2).pop(false);
-                                    },
-                                    style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(color: Color(0xFF334155)),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                    ),
-                                    child: const Text('Not now'),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    size: 18,
+                                    color: const Color(
+                                      0xFF10B981,
+                                    ).withValues(alpha: 0.9),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed: () {
-                                      choice = 'granted';
-                                      Navigator.of(ctx2).pop(true);
-                                    },
-                                    icon: const Icon(Icons.check_circle),
-                                    label: const Text('Allow'),
-                                    style: ElevatedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      backgroundColor: const Color(0xFF6366F1),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                      elevation: 2,
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'You can change this later in system settings',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: dontAskAgain,
+                                    onChanged: (v) => setLocal(
+                                      () => dontAskAgain = v ?? false,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Text("Don't ask again"),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: () {
+                                        choice = dontAskAgain
+                                            ? 'never'
+                                            : 'denied';
+                                        Navigator.of(ctx2).pop(false);
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        side: const BorderSide(
+                                          color: Color(0xFF334155),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Text('Not now'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        choice = 'granted';
+                                        Navigator.of(ctx2).pop(true);
+                                      },
+                                      icon: const Icon(Icons.check_circle),
+                                      label: const Text('Allow'),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
+                                        backgroundColor: const Color(
+                                          0xFF6366F1,
+                                        ),
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                        ),
+                                        elevation: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 );
               },
@@ -859,7 +1015,8 @@ class DownloadService {
       }
 
       // System dialog
-      final ok = await AndroidNativeDownloader.requestIgnoreBatteryOptimizationsForApp();
+      final ok =
+          await AndroidNativeDownloader.requestIgnoreBatteryOptimizationsForApp();
       if (ok) {
         await StorageService.setBatteryOptimizationStatus('granted');
         return true;
@@ -867,7 +1024,11 @@ class DownloadService {
         await StorageService.setBatteryOptimizationStatus('denied');
         if (context != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You can enable background downloads later in Settings.')),
+            const SnackBar(
+              content: Text(
+                'You can enable background downloads later in Settings.',
+              ),
+            ),
           );
         }
         return true; // do not block downloads
@@ -877,7 +1038,98 @@ class DownloadService {
     }
   }
 
+  Future<void> _handleAndroidEvent(Map<String, dynamic> event) async {
+    final String type = (event['type'] ?? '').toString();
+    if (type.isEmpty) return;
+    final String taskId = (event['taskId'] ?? '').toString();
+    if (taskId.isEmpty) return;
 
+    final String url = (event['url'] ?? '').toString();
+    final String fileName = (event['fileName'] ?? 'download').toString();
+    final task = DownloadTask(taskId: taskId, url: url, filename: fileName);
+    final String? recId = _resolveRecordIdForTaskId(taskId);
+
+    switch (type) {
+      case 'started':
+        AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
+        _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+        if (recId != null) {
+          _upsertRecord(recId, {'state': 'running', 'pluginTaskId': taskId});
+        }
+        break;
+      case 'progress':
+        final total = (event['total'] as num?)?.toInt() ?? 0;
+        final bytes = (event['bytes'] as num?)?.toInt() ?? 0;
+        final prog = total > 0 ? (bytes / total).clamp(0.0, 1.0) : 0.0;
+        AndroidDownloadHistory.instance.upsert(
+          task,
+          TaskStatus.running,
+          prog,
+          expectedFileSize: total,
+        );
+        _progressController.add(TaskProgressUpdate(task, prog));
+        _bytesController.add(
+          AndroidBytesProgress(
+            taskId: taskId,
+            bytes: bytes,
+            total: total > 0 ? total : -1,
+          ),
+        );
+        break;
+      case 'paused':
+        AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
+        _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+        if (recId != null) _upsertRecord(recId, {'state': 'paused'});
+        unawaited(_reevaluateQueue());
+        break;
+      case 'resumed':
+        AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
+        _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+        if (recId != null) _upsertRecord(recId, {'state': 'running'});
+        break;
+      case 'canceled':
+        AndroidDownloadHistory.instance.upsert(task, TaskStatus.canceled, -2.0);
+        _statusController.add(TaskStatusUpdate(task, TaskStatus.canceled));
+        _lastFileByTaskId.remove(taskId);
+        if (recId != null) _upsertRecord(recId, {'state': 'canceled'});
+        unawaited(_reevaluateQueue());
+        break;
+      case 'complete':
+        AndroidDownloadHistory.instance.upsert(task, TaskStatus.complete, 1.0);
+        _statusController.add(TaskStatusUpdate(task, TaskStatus.complete));
+        final uri = (event['contentUri'] ?? '').toString();
+        final mime = (event['mimeType'] ?? 'application/octet-stream')
+            .toString();
+        if (uri.isNotEmpty) {
+          _lastFileByTaskId[taskId] = (uri, mime);
+        }
+        if (recId != null) _upsertRecord(recId, {'state': 'complete'});
+        unawaited(_reevaluateQueue());
+        break;
+      case 'error':
+        ConnectivityResult nowNet;
+        try {
+          final nowList = await Connectivity().checkConnectivity();
+          nowNet = _computeEffectiveNet(nowList);
+        } catch (_) {
+          nowNet = _net;
+        }
+        final bool cachedNone = _net == ConnectivityResult.none;
+        final bool nowNone = nowNet == ConnectivityResult.none;
+        if (nowNone || cachedNone) {
+          AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
+          _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+          if (recId != null) _upsertRecord(recId, {'state': 'paused'});
+        } else {
+          AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+          _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+          if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+        }
+        _lastFileByTaskId.remove(taskId);
+        unawaited(_reevaluateQueue());
+        break;
+    }
+  }
 
   Future<void> initialize() async {
     if (_started) return;
@@ -912,88 +1164,18 @@ class DownloadService {
       }
     });
 
+    await _loadRecords();
+
     if (Platform.isAndroid) {
       await AndroidDownloadHistory.instance.initialize();
-      _androidEventsSub = AndroidNativeDownloader.events.listen((event) async {
-        final type = event['type'] as String?;
-        final String taskId = (event['taskId'] ?? '').toString();
-        final task = DownloadTask(
-          taskId: taskId,
-          url: event['url'] ?? '',
-          filename: event['fileName'] ?? 'download',
-        );
-        final String? recId = _resolveRecordIdForTaskId(taskId);
-        switch (type) {
-          case 'started':
-            AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
-            _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
-            if (recId != null) _upsertRecord(recId, {'state': 'running', 'pluginTaskId': taskId});
-            break;
-          case 'progress':
-            final total = (event['total'] as num?)?.toInt() ?? 0;
-            final bytes = (event['bytes'] as num?)?.toInt() ?? 0;
-            final prog = total > 0 ? (bytes / total).clamp(0.0, 1.0) : 0.0;
-            AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, prog, expectedFileSize: total);
-            _progressController.add(TaskProgressUpdate(task, prog));
-            _bytesController.add(AndroidBytesProgress(taskId: taskId, bytes: bytes, total: total > 0 ? total : -1));
-            break;
-          case 'paused':
-            AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
-            _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
-            if (recId != null) _upsertRecord(recId, {'state': 'paused'});
-            // Paused frees a slot; try to start next
-            _reevaluateQueue();
-            break;
-          case 'resumed':
-            AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
-            _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
-            if (recId != null) _upsertRecord(recId, {'state': 'running'});
-            break;
-          case 'canceled':
-            AndroidDownloadHistory.instance.upsert(task, TaskStatus.canceled, -2.0);
-            _statusController.add(TaskStatusUpdate(task, TaskStatus.canceled));
-            _lastFileByTaskId.remove(taskId);
-            if (recId != null) _upsertRecord(recId, {'state': 'canceled'});
-            _reevaluateQueue();
-            break;
-          case 'complete':
-            AndroidDownloadHistory.instance.upsert(task, TaskStatus.complete, 1.0);
-            _statusController.add(TaskStatusUpdate(task, TaskStatus.complete));
-            final uri = (event['contentUri'] ?? '').toString();
-            final mime = (event['mimeType'] ?? 'application/octet-stream').toString();
-            if (uri.isNotEmpty) {
-              _lastFileByTaskId[taskId] = (uri, mime);
-            }
-            if (recId != null) _upsertRecord(recId, {'state': 'complete'});
-            _reevaluateQueue();
-            break;
-          case 'error':
-            // Classify with immediate connectivity read; be transient-default safe
-            ConnectivityResult nowNet;
-            try {
-              final nowList = await Connectivity().checkConnectivity();
-              nowNet = _computeEffectiveNet(nowList);
-            } catch (_) {
-              nowNet = _net; // fallback to cached
-            }
-            final bool cachedNone = _net == ConnectivityResult.none;
-            final bool nowNone = nowNet == ConnectivityResult.none;
-            if (nowNone || cachedNone) {
-              debugPrint('ANDR ERR net=${nowNone ? 'none' : _net.name} → paused');
-              AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
-              _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
-              if (recId != null) _upsertRecord(recId, {'state': 'paused'});
-            } else {
-              debugPrint('ANDR ERR net=${nowNet.name} → failed');
-              AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
-              _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
-              if (recId != null) _upsertRecord(recId, {'state': 'failed'});
-            }
-            _lastFileByTaskId.remove(taskId);
-            _reevaluateQueue();
-            break;
-        }
-      });
+      final pendingEvents = await AndroidNativeDownloader.drainPendingEvents();
+      for (final event in pendingEvents) {
+        await _handleAndroidEvent(event);
+      }
+      await _androidEventsSub?.cancel();
+      _androidEventsSub = AndroidNativeDownloader.events.listen(
+        (event) => unawaited(_handleAndroidEvent(event)),
+      );
     } else {
       // Non-Android: keep plugin notification configuration
       FileDownloader().configureNotification(
@@ -1012,7 +1194,9 @@ class DownloadService {
             _statusController.add(update);
             if (update.status == TaskStatus.canceled) {
               try {
-                await FileDownloader().database.deleteRecordWithId(update.task.taskId);
+                await FileDownloader().database.deleteRecordWithId(
+                  update.task.taskId,
+                );
               } catch (_) {}
             }
             if (update.status == TaskStatus.complete ||
@@ -1028,7 +1212,6 @@ class DownloadService {
     }
 
     // Restore any pending queue persisted from a previous run
-    await _loadRecords();
     await _restorePaused();
     await _restorePending();
     debugPrint('DL INIT: loaded records count=${_records.length}');
@@ -1047,17 +1230,32 @@ class DownloadService {
         final recordId = recordIdByPluginId[task.taskId] ?? task.taskId;
         final rec = _records[recordId];
         final String? meta = rec != null ? (rec['meta'] as String?) : null;
-        final String? displayName = rec != null ? (rec['displayName'] as String?) : null;
+        final String? displayName = rec != null
+            ? (rec['displayName'] as String?)
+            : null;
         final String? url = rec != null ? (rec['url'] as String?) : null;
-        final String? torrentName = rec != null ? (rec['torrentName'] as String?) : null;
+        final String? torrentName = rec != null
+            ? (rec['torrentName'] as String?)
+            : null;
 
         Future<void> reenqueueFromMeta({bool insertFront = true}) async {
-          debugPrint('DL INIT: re-enqueue from meta for taskId=${task.taskId} name=$displayName');
-          if (await _queueFromRecord(recordId, paused: false, insertFront: insertFront)) {
+          debugPrint(
+            'DL INIT: re-enqueue from meta for taskId=${task.taskId} name=$displayName',
+          );
+          if (await _queueFromRecord(
+            recordId,
+            paused: false,
+            insertFront: insertFront,
+          )) {
             return;
           }
           if (meta != null) {
-            final ck = _computeContentKey(meta, url ?? '', displayName, torrentName);
+            final ck = _computeContentKey(
+              meta,
+              url ?? '',
+              displayName,
+              torrentName,
+            );
             final bool dup = _pending.any((p) => p.contentKey == ck);
             if (!dup) {
               await enqueueDownload(
@@ -1076,7 +1274,9 @@ class DownloadService {
 
         if (r.status == TaskStatus.paused || r.status == TaskStatus.enqueued) {
           final canResume = await FileDownloader().taskCanResume(task);
-          debugPrint('DL INIT: taskId=${task.taskId} status=${r.status} canResume=$canResume');
+          debugPrint(
+            'DL INIT: taskId=${task.taskId} status=${r.status} canResume=$canResume',
+          );
           bool resumed = false;
           if (canResume) {
             try {
@@ -1084,14 +1284,24 @@ class DownloadService {
               debugPrint('DL INIT: resumed taskId=${task.taskId}');
               resumed = true;
             } catch (e) {
-              debugPrint('DL INIT: resume failed for taskId=${task.taskId} error=$e');
+              debugPrint(
+                'DL INIT: resume failed for taskId=${task.taskId} error=$e',
+              );
             }
           }
           if (!resumed) {
             // Cancel and delete stale record to free capacity
-            try { await FileDownloader().cancel(task); } catch (_) {}
-            try { await FileDownloader().database.deleteRecordWithId(task.taskId); } catch (_) {}
-            final queued = await _queueFromRecord(recordId, paused: r.status == TaskStatus.paused, insertFront: true);
+            try {
+              await FileDownloader().cancel(task);
+            } catch (_) {}
+            try {
+              await FileDownloader().database.deleteRecordWithId(task.taskId);
+            } catch (_) {}
+            final queued = await _queueFromRecord(
+              recordId,
+              paused: r.status == TaskStatus.paused,
+              insertFront: true,
+            );
             if (!queued) {
               await reenqueueFromMeta(insertFront: true);
             }
@@ -1099,7 +1309,9 @@ class DownloadService {
         } else if (r.status == TaskStatus.running) {
           // Nudge running tasks to ensure the plugin is actually progressing; if not resumable, re-enqueue
           final canResume = await FileDownloader().taskCanResume(task);
-          debugPrint('DL INIT: running taskId=${task.taskId} canResume=$canResume');
+          debugPrint(
+            'DL INIT: running taskId=${task.taskId} canResume=$canResume',
+          );
           bool resumed = false;
           if (canResume) {
             try {
@@ -1107,14 +1319,24 @@ class DownloadService {
               debugPrint('DL INIT: resumed running taskId=${task.taskId}');
               resumed = true;
             } catch (e) {
-              debugPrint('DL INIT: resume running failed taskId=${task.taskId} error=$e');
+              debugPrint(
+                'DL INIT: resume running failed taskId=${task.taskId} error=$e',
+              );
             }
           }
           if (!resumed) {
             // Cancel and delete stale record to free capacity
-            try { await FileDownloader().cancel(task); } catch (_) {}
-            try { await FileDownloader().database.deleteRecordWithId(task.taskId); } catch (_) {}
-            final queued = await _queueFromRecord(recordId, paused: false, insertFront: true);
+            try {
+              await FileDownloader().cancel(task);
+            } catch (_) {}
+            try {
+              await FileDownloader().database.deleteRecordWithId(task.taskId);
+            } catch (_) {}
+            final queued = await _queueFromRecord(
+              recordId,
+              paused: false,
+              insertFront: true,
+            );
             if (!queued) {
               await reenqueueFromMeta(insertFront: true);
             }
@@ -1127,14 +1349,18 @@ class DownloadService {
       final hist = AndroidDownloadHistory.instance.all();
       int seeded = 0;
       for (final r in hist) {
-        if (r.status == TaskStatus.paused || r.status == TaskStatus.enqueued || r.status == TaskStatus.running) {
-          if (!r.taskId.startsWith('queued-') && !_pendingResumeAndroid.contains(r.taskId)) {
+        if (r.status == TaskStatus.paused ||
+            r.status == TaskStatus.enqueued ||
+            r.status == TaskStatus.running) {
+          if (!r.taskId.startsWith('queued-') &&
+              !_pendingResumeAndroid.contains(r.taskId)) {
             _pendingResumeAndroid.add(r.taskId);
             seeded++;
           }
         }
       }
-      if (seeded > 0) debugPrint('DL INIT: android seeded $seeded tasks for resume');
+      if (seeded > 0)
+        debugPrint('DL INIT: android seeded $seeded tasks for resume');
     }
     _started = true;
     _initializing = false;
@@ -1151,8 +1377,8 @@ class DownloadService {
     String filename = (providedFileName?.trim().isNotEmpty ?? false)
         ? providedFileName!.trim()
         : Uri.parse(url).pathSegments.isNotEmpty
-            ? Uri.parse(url).pathSegments.last
-            : 'file';
+        ? Uri.parse(url).pathSegments.last
+        : 'file';
 
     filename = _sanitizeName(filename);
 
@@ -1193,25 +1419,45 @@ class DownloadService {
     await initialize();
 
     // Always queue first, then start based on concurrency limit
-    final providedName = (fileName?.trim().isNotEmpty ?? false) ? _sanitizeName(fileName!.trim()) : null;
+    final providedName = (fileName?.trim().isNotEmpty ?? false)
+        ? _sanitizeName(fileName!.trim())
+        : null;
 
     // Create a queued placeholder task/record for visibility
-    final String queuedId = 'queued-${DateTime.now().millisecondsSinceEpoch}-${url.hashCode}';
-    final String displayName = providedName ?? (() {
-      try {
-        final uri = Uri.parse(url);
-        return _sanitizeName(uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'file');
-      } catch (_) {
-        return 'file';
-      }
-    })();
+    final String queuedId =
+        'queued-${DateTime.now().millisecondsSinceEpoch}-${url.hashCode}';
+    final String displayName =
+        providedName ??
+        (() {
+          try {
+            final uri = Uri.parse(url);
+            return _sanitizeName(
+              uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'file',
+            );
+          } catch (_) {
+            return 'file';
+          }
+        })();
 
-    final queuedTask = DownloadTask(taskId: queuedId, url: url, filename: displayName);
+    final queuedTask = DownloadTask(
+      taskId: queuedId,
+      url: url,
+      filename: displayName,
+    );
 
     if (Platform.isAndroid) {
-      AndroidDownloadHistory.instance.upsert(queuedTask, TaskStatus.enqueued, 0.0);
+      AndroidDownloadHistory.instance.upsert(
+        queuedTask,
+        TaskStatus.enqueued,
+        0.0,
+      );
     } else {
-      _nonAndroidQueuedRecords[queuedId] = TaskRecord(queuedTask, TaskStatus.enqueued, 0.0, -1);
+      _nonAndroidQueuedRecords[queuedId] = TaskRecord(
+        queuedTask,
+        TaskStatus.enqueued,
+        0.0,
+        -1,
+      );
     }
     _statusController.add(TaskStatusUpdate(queuedTask, TaskStatus.enqueued));
 
@@ -1252,12 +1498,32 @@ class DownloadService {
     // Try to start if capacity allows
     unawaited(_reevaluateQueue());
 
-    return DownloadEntry(task: queuedTask, displayName: displayName, directory: '');
+    return DownloadEntry(
+      task: queuedTask,
+      displayName: displayName,
+      directory: '',
+    );
   }
 
   Future<void> pause(Task task) async {
     if (Platform.isAndroid) {
-      await AndroidNativeDownloader.pause(task.taskId);
+      if (task is! DownloadTask) {
+        return;
+      }
+      final ok = await AndroidNativeDownloader.pause(task.taskId);
+      if (!ok) {
+        throw Exception('pause_failed');
+      }
+      AndroidDownloadHistory.instance.upsert(
+        task,
+        TaskStatus.paused,
+        -5.0,
+      );
+      _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+      final recId = _resolveRecordIdForTaskId(task.taskId);
+      if (recId != null) {
+        _upsertRecord(recId, {'state': 'paused'});
+      }
       return;
     }
     if (task is DownloadTask) {
@@ -1270,21 +1536,45 @@ class DownloadService {
     final int maxParallel = await StorageService.getMaxParallelDownloads();
     int runningCount;
     if (Platform.isAndroid) {
+      if (task is! DownloadTask) {
+        return false;
+      }
       final list = AndroidDownloadHistory.instance.all();
       runningCount = list.where((r) => r.status == TaskStatus.running).length;
       if (runningCount >= maxParallel) {
         _pendingResumeAndroid.add(task.taskId);
         // Show as queued
-        AndroidDownloadHistory.instance.upsert(task as DownloadTask, TaskStatus.enqueued, 0.0);
+        AndroidDownloadHistory.instance.upsert(
+          task,
+          TaskStatus.enqueued,
+          0.0,
+        );
         _statusController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
         unawaited(_reevaluateQueue());
         return true;
       }
       try {
-        return await AndroidNativeDownloader.resume(task.taskId);
+        final ok = await AndroidNativeDownloader.resume(task.taskId);
+        if (ok) {
+          AndroidDownloadHistory.instance.upsert(
+            task,
+            TaskStatus.running,
+            0.0,
+          );
+          _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
+          final recId = _resolveRecordIdForTaskId(task.taskId);
+          if (recId != null) {
+            _upsertRecord(recId, {'state': 'running'});
+          }
+        }
+        return ok;
       } catch (_) {
         // If native resume fails (unknown id or already resumed), downgrade to enqueued and let reevaluator proceed
-        AndroidDownloadHistory.instance.upsert(task as DownloadTask, TaskStatus.enqueued, 0.0);
+        AndroidDownloadHistory.instance.upsert(
+          task,
+          TaskStatus.enqueued,
+          0.0,
+        );
         _statusController.add(TaskStatusUpdate(task, TaskStatus.enqueued));
         unawaited(_reevaluateQueue());
         return false;
@@ -1322,10 +1612,14 @@ class DownloadService {
       }
       if (Platform.isAndroid) {
         AndroidDownloadHistory.instance.removeById(task.taskId);
-        _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
+        _statusController.add(
+          TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled),
+        );
       } else {
         _nonAndroidQueuedRecords.remove(task.taskId);
-        _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
+        _statusController.add(
+          TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled),
+        );
       }
       unawaited(_reevaluateQueue());
       await _persistPending();
@@ -1361,20 +1655,33 @@ class DownloadService {
       // If already canceled/complete/failed in history, avoid native calls
       final hist = AndroidDownloadHistory.instance.all().firstWhere(
         (r) => r.taskId == task.taskId,
-        orElse: () => TaskRecord(task as DownloadTask, TaskStatus.notFound, 0.0, -1),
+        orElse: () =>
+            TaskRecord(task as DownloadTask, TaskStatus.notFound, 0.0, -1),
       );
-      if (hist.status == TaskStatus.canceled || hist.status == TaskStatus.complete || hist.status == TaskStatus.failed) {
+      if (hist.status == TaskStatus.canceled ||
+          hist.status == TaskStatus.complete ||
+          hist.status == TaskStatus.failed) {
         AndroidDownloadHistory.instance.removeById(task.taskId);
-        _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
+        _statusController.add(
+          TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled),
+        );
         final recId = _resolveRecordIdForTaskId(task.taskId);
         if (recId != null) _upsertRecord(recId, {'state': 'canceled'});
         return;
       }
+      bool cancelOk;
       try {
-        await AndroidNativeDownloader.cancel(task.taskId);
-      } catch (_) {}
+        cancelOk = await AndroidNativeDownloader.cancel(task.taskId);
+      } catch (_) {
+        cancelOk = false;
+      }
+      if (!cancelOk) {
+        throw Exception('cancel_failed');
+      }
       AndroidDownloadHistory.instance.removeById(task.taskId);
-      _statusController.add(TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled));
+      _statusController.add(
+        TaskStatusUpdate(task as DownloadTask, TaskStatus.canceled),
+      );
       final recId = _resolveRecordIdForTaskId(task.taskId);
       if (recId != null) {
         _upsertRecord(recId, {'state': 'canceled'});
@@ -1397,10 +1704,17 @@ class DownloadService {
     }
     final dbRecords = await FileDownloader().database.allRecords();
     // Overlay queued placeholders and queued-resume status
-    if (_nonAndroidQueuedRecords.isEmpty && _nonAndroidResumeQueuedOverlay.isEmpty) return dbRecords;
+    if (_nonAndroidQueuedRecords.isEmpty &&
+        _nonAndroidResumeQueuedOverlay.isEmpty)
+      return dbRecords;
     final List<TaskRecord> adjusted = dbRecords.map((r) {
       if (_nonAndroidResumeQueuedOverlay.contains(r.taskId)) {
-        return TaskRecord(r.task, TaskStatus.enqueued, r.progress, r.expectedFileSize);
+        return TaskRecord(
+          r.task,
+          TaskStatus.enqueued,
+          r.progress,
+          r.expectedFileSize,
+        );
       }
       return r;
     }).toList();
@@ -1456,7 +1770,7 @@ class DownloadService {
         }
       } catch (e) {
         // Fallback to app documents if Downloads directory is not accessible
-       }
+      }
     }
     return Directory((await getApplicationDocumentsDirectory()).path);
   }
@@ -1468,7 +1782,9 @@ class DownloadService {
         final Directory? downloadsDir = await getDownloadsDirectory();
         if (downloadsDir != null) {
           // Create a subfolder for the app to organize downloads
-          final Directory appDownloadsDir = Directory('${downloadsDir.path}/Debrify');
+          final Directory appDownloadsDir = Directory(
+            '${downloadsDir.path}/Debrify',
+          );
           if (!await appDownloadsDir.exists()) {
             await appDownloadsDir.create(recursive: true);
           }
@@ -1478,7 +1794,7 @@ class DownloadService {
         // Fallback to app documents if Downloads directory is not accessible
       }
     }
-    
+
     // Fallback: Use a stable, app-specific downloads directory under Documents
     final Directory docs = await getApplicationDocumentsDirectory();
     final Directory dlDir = Directory('${docs.path}/downloads');
@@ -1497,7 +1813,8 @@ class DownloadService {
     return cleaned.isEmpty ? 'download' : cleaned;
   }
 
-  (String contentUri, String mimeType)? getLastFileForTask(String taskId) => _lastFileByTaskId[taskId];
+  (String contentUri, String mimeType)? getLastFileForTask(String taskId) =>
+      _lastFileByTaskId[taskId];
 
   Future<void> _reevaluateQueue() async {
     if (_reevaluating) {
@@ -1526,14 +1843,39 @@ class DownloadService {
         // Skip if already running/enqueued
         final hist = AndroidDownloadHistory.instance.all().firstWhere(
           (r) => r.taskId == taskId,
-          orElse: () => TaskRecord(DownloadTask(taskId: taskId, url: '', filename: 'download'), TaskStatus.notFound, 0.0, -1),
+          orElse: () => TaskRecord(
+            DownloadTask(taskId: taskId, url: '', filename: 'download'),
+            TaskStatus.notFound,
+            0.0,
+            -1,
+          ),
         );
-        if (hist.status == TaskStatus.running || hist.status == TaskStatus.enqueued) {
+        if (hist.status == TaskStatus.running ||
+            hist.status == TaskStatus.enqueued) {
           continue;
         }
         bool ok = false;
-        try { ok = await AndroidNativeDownloader.resume(taskId); } catch (_) { ok = false; }
+        try {
+          ok = await AndroidNativeDownloader.resume(taskId);
+        } catch (_) {
+          ok = false;
+        }
         if (ok) {
+          final resumeTask = hist.status == TaskStatus.notFound
+              ? _taskSnapshotFor(taskId)
+              : hist.task;
+          AndroidDownloadHistory.instance.upsert(
+            resumeTask,
+            TaskStatus.running,
+            0.0,
+          );
+          _statusController.add(
+            TaskStatusUpdate(resumeTask, TaskStatus.running),
+          );
+          final recId = _resolveRecordIdForTaskId(taskId);
+          if (recId != null) {
+            _upsertRecord(recId, {'state': 'running'});
+          }
           resumedSomeone = true;
           runningCount += 1;
         } else {
@@ -1547,7 +1889,14 @@ class DownloadService {
               final meta = rec['meta'] as String?;
               final tname = rec['torrentName'] as String?;
               if (url.isNotEmpty || (meta != null && meta.isNotEmpty)) {
-                unawaited(enqueueDownload(url: url, fileName: name, meta: meta, torrentName: tname));
+                unawaited(
+                  enqueueDownload(
+                    url: url,
+                    fileName: name,
+                    meta: meta,
+                    torrentName: tname,
+                  ),
+                );
               }
             }
           }
@@ -1572,7 +1921,8 @@ class DownloadService {
     while (runningCount < maxParallel && _pending.isNotEmpty) {
       var p = _pending.removeAt(0);
       _pendingById.remove(p.queuedId);
-      final bool wasCanceled = p.canceled || _canceledDuringStart.remove(p.queuedId);
+      final bool wasCanceled =
+          p.canceled || _canceledDuringStart.remove(p.queuedId);
       await _persistPending();
       if (wasCanceled) {
         debugPrint('DL START: skipped canceled pending queuedId=${p.queuedId}');
@@ -1582,40 +1932,59 @@ class DownloadService {
         // On-demand unrestriction: if URL is restricted, unrestrict it first
         String finalUrl = p.url;
         String finalFileName = p.providedFileName ?? 'download';
-        
+
         debugPrint('DL START: url=${p.url}, meta=${p.meta}');
-        
+
         if (p.meta != null && p.meta!.isNotEmpty) {
           try {
             final meta = jsonDecode(p.meta!);
             final restrictedLink = (meta['restrictedLink'] ?? '') as String;
             final apiKey = (meta['apiKey'] ?? '') as String;
-            
-            debugPrint('DL META: restrictedLink=$restrictedLink, apiKey=${apiKey.isNotEmpty ? "present" : "missing"}');
-            debugPrint('DL COMPARE: p.url=${p.url} == restrictedLink=$restrictedLink ? ${p.url == restrictedLink}');
-            
+
+            debugPrint(
+              'DL META: restrictedLink=$restrictedLink, apiKey=${apiKey.isNotEmpty ? "present" : "missing"}',
+            );
+            debugPrint(
+              'DL COMPARE: p.url=${p.url} == restrictedLink=$restrictedLink ? ${p.url == restrictedLink}',
+            );
+
             // If we have meta with restricted link info, always unrestrict
             // This handles the case where we pass restricted links directly as URLs
             if (restrictedLink.isNotEmpty && apiKey.isNotEmpty) {
-              debugPrint('DL UNRESTRICT: Starting unrestriction for: $finalFileName');
-              final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
-              final unrestrictedUrl = (unrestrictResult['download'] ?? '').toString();
-              final rdFileName = (unrestrictResult['filename'] ?? '').toString();
-              
-              debugPrint('DL UNRESTRICT RESULT: url=$unrestrictedUrl, filename=$rdFileName');
-              
+              debugPrint(
+                'DL UNRESTRICT: Starting unrestriction for: $finalFileName',
+              );
+              final unrestrictResult = await DebridService.unrestrictLink(
+                apiKey,
+                restrictedLink,
+              );
+              final unrestrictedUrl = (unrestrictResult['download'] ?? '')
+                  .toString();
+              final rdFileName = (unrestrictResult['filename'] ?? '')
+                  .toString();
+
+              debugPrint(
+                'DL UNRESTRICT RESULT: url=$unrestrictedUrl, filename=$rdFileName',
+              );
+
               if (unrestrictedUrl.isNotEmpty) {
                 finalUrl = unrestrictedUrl;
                 if (rdFileName.isNotEmpty) {
                   finalFileName = rdFileName;
                 }
-                debugPrint('DL SUCCESS: Unrestricted to $finalUrl with filename $finalFileName');
+                debugPrint(
+                  'DL SUCCESS: Unrestricted to $finalUrl with filename $finalFileName',
+                );
               } else {
                 debugPrint('DL ERROR: Unrestriction returned empty URL');
-                throw Exception('Failed to unrestrict link - empty URL returned');
+                throw Exception(
+                  'Failed to unrestrict link - empty URL returned',
+                );
               }
             } else {
-              debugPrint('DL SKIP: Not unrestricting - restrictedLink empty: ${restrictedLink.isEmpty}, apiKey empty: ${apiKey.isEmpty}');
+              debugPrint(
+                'DL SKIP: Not unrestricting - restrictedLink empty: ${restrictedLink.isEmpty}, apiKey empty: ${apiKey.isEmpty}',
+              );
             }
           } catch (e) {
             debugPrint('DL ERROR: On-demand unrestriction failed: $e');
@@ -1624,7 +1993,7 @@ class DownloadService {
         } else {
           debugPrint('DL SKIP: No meta information provided');
         }
-        
+
         // Fresh-link policy: if start fails due to expired URL, we'll refresh below in catch
         if (Platform.isAndroid) {
           // Remove queued placeholder
@@ -1637,11 +2006,16 @@ class DownloadService {
           if (finalFileName.isNotEmpty) {
             name = finalFileName;
           } else {
-            final (_dir, fn) = await _smartLocationFor(finalUrl, null, p.torrentName);
+            final (_dir, fn) = await _smartLocationFor(
+              finalUrl,
+              null,
+              p.torrentName,
+            );
             name = fn;
           }
 
-          final String subDir = p.torrentName != null && p.torrentName!.trim().isNotEmpty 
+          final String subDir =
+              p.torrentName != null && p.torrentName!.trim().isNotEmpty
               ? 'Debrify/${_sanitizeName(p.torrentName!.trim())}'
               : 'Debrify';
 
@@ -1654,7 +2028,11 @@ class DownloadService {
           if (taskId == null) {
             throw Exception('Failed to start download');
           }
-          final task = DownloadTask(taskId: taskId, url: finalUrl, filename: name);
+          final task = DownloadTask(
+            taskId: taskId,
+            url: finalUrl,
+            filename: name,
+          );
           AndroidDownloadHistory.instance.upsert(task, TaskStatus.running, 0.0);
           _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
           _upsertRecord(p.queuedId, {
@@ -1670,22 +2048,45 @@ class DownloadService {
           // Prefer persisted destination path for resume capability
           String finalPath;
           final rec = _records[p.queuedId];
-          if (p.destPath != null && p.destPath!.isNotEmpty && File(p.destPath!).existsSync()) {
+          if (p.destPath != null &&
+              p.destPath!.isNotEmpty &&
+              File(p.destPath!).existsSync()) {
             finalPath = p.destPath!;
-          } else if (rec != null && (rec['destPath'] as String?) != null && (rec['destPath'] as String).isNotEmpty) {
+          } else if (rec != null &&
+              (rec['destPath'] as String?) != null &&
+              (rec['destPath'] as String).isNotEmpty) {
             finalPath = rec['destPath'] as String;
           } else {
-            final (dirAbsPath, filename) = await _smartLocationFor(finalUrl, finalFileName, p.torrentName);
+            final (dirAbsPath, filename) = await _smartLocationFor(
+              finalUrl,
+              finalFileName,
+              p.torrentName,
+            );
             finalPath = '$dirAbsPath/$filename';
             _upsertRecord(p.queuedId, {'destPath': finalPath});
             p.destPath = finalPath;
           }
-          try { final d = Directory(finalPath).parent; if (!await d.exists()) { await d.create(recursive: true); } } catch (_) {}
+          try {
+            final d = Directory(finalPath).parent;
+            if (!await d.exists()) {
+              await d.create(recursive: true);
+            }
+          } catch (_) {}
 
           // Build headers for Range resume based on partial size and validators
-          Map<String, String> headers = _buildResumeHeaders(finalPath, p.headers, rec);
+          Map<String, String> headers = _buildResumeHeaders(
+            finalPath,
+            p.headers,
+            rec,
+          );
 
-          final (BaseDirectory baseDir, String relativeDir, String relFilename) = await Task.split(filePath: finalPath);
+          final (
+            BaseDirectory baseDir,
+            String relativeDir,
+            String relFilename,
+          ) = await Task.split(
+            filePath: finalPath,
+          );
           final task = DownloadTask(
             url: finalUrl,
             headers: headers.isEmpty ? null : headers,
@@ -1720,14 +2121,19 @@ class DownloadService {
             final restricted = (meta['restrictedLink'] ?? '') as String;
             final apiKey = (meta['apiKey'] ?? '') as String;
             if (restricted.isNotEmpty && apiKey.isNotEmpty) {
-              final fresh = await DebridService.unrestrictLink(apiKey, restricted);
+              final fresh = await DebridService.unrestrictLink(
+                apiKey,
+                restricted,
+              );
               final freshUrl = (fresh['download'] ?? '').toString();
               final rdName = (fresh['filename'] ?? '').toString();
               if (freshUrl.isNotEmpty) {
                 final refreshed = _PendingRequest(
                   queuedId: p.queuedId,
                   url: freshUrl,
-                  providedFileName: (rdName.isNotEmpty ? rdName : p.providedFileName),
+                  providedFileName: (rdName.isNotEmpty
+                      ? rdName
+                      : p.providedFileName),
                   headers: p.headers,
                   wifiOnly: p.wifiOnly,
                   retries: p.retries,
@@ -1748,16 +2154,40 @@ class DownloadService {
 
         if (!retried) {
           // Mark failed
-        if (Platform.isAndroid) {
-          final failTask = DownloadTask(taskId: p.queuedId, url: p.url, filename: p.providedFileName ?? 'download');
-          AndroidDownloadHistory.instance.upsert(failTask, TaskStatus.failed, -1.0);
-          _statusController.add(TaskStatusUpdate(failTask, TaskStatus.failed));
-        } else {
-          final failTask = DownloadTask(taskId: p.queuedId, url: p.url, filename: p.providedFileName ?? 'download');
-          _nonAndroidQueuedRecords[p.queuedId] = TaskRecord(failTask, TaskStatus.failed, -1.0, -1);
-          _statusController.add(TaskStatusUpdate(failTask, TaskStatus.failed));
-        }
-          _upsertRecord(p.queuedId, {'state': 'failed', 'lastError': e.toString()});
+          if (Platform.isAndroid) {
+            final failTask = DownloadTask(
+              taskId: p.queuedId,
+              url: p.url,
+              filename: p.providedFileName ?? 'download',
+            );
+            AndroidDownloadHistory.instance.upsert(
+              failTask,
+              TaskStatus.failed,
+              -1.0,
+            );
+            _statusController.add(
+              TaskStatusUpdate(failTask, TaskStatus.failed),
+            );
+          } else {
+            final failTask = DownloadTask(
+              taskId: p.queuedId,
+              url: p.url,
+              filename: p.providedFileName ?? 'download',
+            );
+            _nonAndroidQueuedRecords[p.queuedId] = TaskRecord(
+              failTask,
+              TaskStatus.failed,
+              -1.0,
+              -1,
+            );
+            _statusController.add(
+              TaskStatusUpdate(failTask, TaskStatus.failed),
+            );
+          }
+          _upsertRecord(p.queuedId, {
+            'state': 'failed',
+            'lastError': e.toString(),
+          });
         }
       }
     }
@@ -1797,7 +2227,10 @@ class DownloadRecordDetails {
     this.updatedAt,
   });
 
-  factory DownloadRecordDetails.fromMap(String recordId, Map<String, dynamic> map) {
+  factory DownloadRecordDetails.fromMap(
+    String recordId,
+    Map<String, dynamic> map,
+  ) {
     return DownloadRecordDetails(
       recordId: recordId,
       url: _maybeString(map['url']),
@@ -1858,7 +2291,7 @@ class _PendingRequest {
   final BuildContext? context;
   final String? torrentName;
   final String contentKey;
-  bool canceled;
+  bool canceled = false;
   String? destPath;
 
   _PendingRequest({
@@ -1872,7 +2305,6 @@ class _PendingRequest {
     required this.context,
     required this.torrentName,
     required this.contentKey,
-    this.canceled = false,
     this.destPath,
   });
 }
