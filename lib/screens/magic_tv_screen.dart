@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/torrent.dart';
@@ -37,6 +38,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<void>? _prefetchTask;
   String? _activeApiKey;
   final Set<String> _inflightInfohashes = {};
+  final List<PlaylistEntry> _tvPlaylist = [];
+  final ValueNotifier<int> _playlistVersion = ValueNotifier<int>(0);
+  final Set<String> _playlistUrlSet = {};
+  int _currentPlaylistIndex = -1;
+  bool _playlistEnsureRunning = false;
+  final Random _random = Random();
 
   // Progress UI state
   final ValueNotifier<List<String>> _progress = ValueNotifier<List<String>>([]);
@@ -62,6 +69,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _stopPrefetch();
     // Cancel Stage 2 if running
     _stage2Running = false;
+    _playlistVersion.dispose();
     _progress.dispose();
     _keywordsController.dispose();
     super.dispose();
@@ -95,8 +103,147 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .toList();
   }
 
+  void _clearPlaylistState() {
+    _tvPlaylist.clear();
+    _playlistUrlSet.clear();
+    _currentPlaylistIndex = -1;
+    _notifyPlaylistChanged();
+  }
+
+  void _notifyPlaylistChanged() {
+    _playlistVersion.value = _playlistVersion.value + 1;
+  }
+
+  String _inferTitleFromUrl(String url) {
+    final uri = Uri.tryParse(url);
+    final lastSegment = (uri != null && uri.pathSegments.isNotEmpty)
+        ? uri.pathSegments.last
+        : url;
+    return Uri.decodeComponent(lastSegment);
+  }
+
+  int _targetPlaylistLength([int? explicitTarget]) {
+    if (explicitTarget != null) {
+      return explicitTarget;
+    }
+    if (!_launchedPlayer || _currentPlaylistIndex < 0) {
+      return 1;
+    }
+    return _currentPlaylistIndex + 1 + _minPrepared;
+  }
+
+  Future<void> _ensurePlaylistDepth([int? explicitTarget]) async {
+    final int target = _targetPlaylistLength(explicitTarget);
+    if (_playlistEnsureRunning) {
+      while (_playlistEnsureRunning) {
+        await Future.delayed(const Duration(milliseconds: 120));
+      }
+      if (_tvPlaylist.length >= target) {
+        return;
+      }
+    }
+    _playlistEnsureRunning = true;
+    try {
+      while (mounted && !_prefetchStopRequested && _tvPlaylist.length < target) {
+        final int searchLimit = _queue.length < _lookaheadWindow ? _queue.length : _lookaheadWindow;
+        int preparedIndex = -1;
+        for (int i = 0; i < searchLimit; i++) {
+          final item = _queue[i];
+          if (item is Map && item['type'] == 'rd_restricted') {
+            preparedIndex = i;
+            break;
+          }
+        }
+        if (preparedIndex == -1) {
+          final int torrentIndex = _findUnpreparedTorrentIndexInLookahead();
+          if (torrentIndex == -1) {
+            break;
+          }
+          await _prefetchOneAtIndex(torrentIndex);
+          continue;
+        }
+
+        final Map<String, dynamic> prepared = _queue.removeAt(preparedIndex) as Map<String, dynamic>;
+        final playlistEntry = await _convertRestrictedMapToEntry(prepared);
+        if (playlistEntry == null) {
+          continue;
+        }
+        if (_playlistUrlSet.add(playlistEntry.url)) {
+          _tvPlaylist.add(playlistEntry);
+          _notifyPlaylistChanged();
+        }
+      }
+    } finally {
+      _playlistEnsureRunning = false;
+    }
+  }
+
+  Future<PlaylistEntry?> _convertRestrictedMapToEntry(Map<String, dynamic> item) async {
+    try {
+      String directUrl = (item['downloadLink'] as String?) ?? '';
+      if (directUrl.isEmpty) {
+        final String? restricted = item['restrictedLink'] as String?;
+        if (restricted == null || restricted.isEmpty) {
+          return null;
+        }
+        final String? apiKey = _activeApiKey ?? await StorageService.getApiKey();
+        if (apiKey == null || apiKey.isEmpty) {
+          debugPrint('DebrifyTV: Missing API key while unrestricting playlist entry.');
+          return null;
+        }
+        final unrestrict = await DebridService.unrestrictLink(apiKey, restricted);
+        directUrl = unrestrict['download'] as String? ?? '';
+        if (directUrl.isEmpty) {
+          debugPrint('DebrifyTV: Unrestrict returned empty download link.');
+          return null;
+        }
+      }
+
+      if (_playlistUrlSet.contains(directUrl)) {
+        return null;
+      }
+
+      final displayName = (item['displayName'] as String?)?.trim() ?? '';
+      final inferred = _inferTitleFromUrl(directUrl).trim();
+      final title = inferred.isNotEmpty
+          ? inferred
+          : (displayName.isNotEmpty ? displayName : 'Debrify TV');
+
+      final double? randomFraction = _startRandom ? (0.1 + (0.8 * _random.nextDouble())) : null;
+      return PlaylistEntry(
+        url: directUrl,
+        title: title,
+        restrictedLink: item['restrictedLink'] as String?,
+        torrentHash: item['torrentHash'] as String?,
+        sizeBytes: item['sizeBytes'] as int?,
+        randomStartFraction: randomFraction,
+      );
+    } catch (e) {
+      debugPrint('DebrifyTV: Failed to convert prepared entry: $e');
+      return null;
+    }
+  }
+
+  void _handlePlaylistIndexChanged(int index) {
+    _currentPlaylistIndex = index;
+    unawaited(_ensurePlaylistDepth());
+  }
+
+  Future<Map<String, String>?> _requestMagicNextForPlayer() async {
+    final int desiredIndex = _currentPlaylistIndex < 0 ? 0 : _currentPlaylistIndex + 1;
+    final int targetLength = desiredIndex + 1;
+    await _ensurePlaylistDepth(targetLength);
+    if (desiredIndex < _tvPlaylist.length) {
+      final entry = _tvPlaylist[desiredIndex];
+      return {'url': entry.url, 'title': entry.title};
+    }
+    return null;
+  }
+
   Future<void> _watch() async {
     _launchedPlayer = false;
+    _clearPlaylistState();
+    _prefetchStopRequested = false;
     void _log(String m) {
       final copy = List<String>.from(_progress.value)..add(m);
       _progress.value = copy;
@@ -332,94 +479,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      // Helper to infer a filename-like title from a URL
-      String _inferTitleFromUrl(String url) {
-        final uri = Uri.tryParse(url);
-        final last = (uri != null && uri.pathSegments.isNotEmpty)
-            ? uri.pathSegments.last
-            : url;
-        return Uri.decodeComponent(last);
-      }
-
+      _activeApiKey = apiKeyEarly;
       String firstTitle = 'Debrify TV';
 
       Future<Map<String, String>?> requestMagicNext() async {
-        debugPrint('DebrifyTV: requestMagicNext() called. queueSize=${_queue.length}');
-        while (_queue.isNotEmpty) {
-          final item = _queue.removeAt(0);
-          // Case 1: RD-restricted entry (append-only items)
-          if (item is Map && item['type'] == 'rd_restricted') {
-            final String link = item['restrictedLink'] as String? ?? '';
-            final String rdTid = item['torrentId'] as String? ?? '';
-            debugPrint('DebrifyTV: Trying RD link from queue: torrentId=$rdTid');
-            if (link.isEmpty) continue;
-            try {
-              // Silent approach - no progress logging needed
-              final started = DateTime.now();
-              final unrestrict = await DebridService.unrestrictLink(apiKeyEarly, link);
-              final elapsed = DateTime.now().difference(started).inSeconds;
-              final videoUrl = unrestrict['download'] as String?;
-              if (videoUrl != null && videoUrl.isNotEmpty) {
-                debugPrint('DebrifyTV: Success (RD link). Unrestricted in ${elapsed}s');
-                // Silent approach - no progress logging needed
-                final inferred = _inferTitleFromUrl(videoUrl).trim();
-                final display = (item['displayName'] as String?)?.trim();
-                final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
-                firstTitle = chosenTitle;
-                return {'url': videoUrl, 'title': chosenTitle};
-              }
-            } catch (e) {
-              debugPrint('DebrifyTV: RD link failed to unrestrict: $e');
-              continue;
-            }
-          }
-
-          // Case 2: Torrent entry
-          if (item is Torrent) {
-            debugPrint('DebrifyTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
-            final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
-            try {
-              // Silent approach - no progress logging needed
-              final started = DateTime.now();
-              final result = await DebridService.addTorrentToDebridPreferVideos(apiKeyEarly, magnetLink);
-              final elapsed = DateTime.now().difference(started).inSeconds;
-              final videoUrl = result['downloadLink'] as String?;
-              // Append other RD-restricted links from this torrent to the END of the queue
-              final String torrentId = result['torrentId'] as String? ?? '';
-              final List<dynamic> rdLinks = (result['links'] as List<dynamic>? ?? const []);
-              if (rdLinks.isNotEmpty) {
-                for (int i = 1; i < rdLinks.length; i++) {
-                  final String link = rdLinks[i]?.toString() ?? '';
-                  if (link.isEmpty) continue;
-                  final String combined = '$torrentId|$link';
-                  if (_seenRestrictedLinks.contains(link) || _seenLinkWithTorrentId.contains(combined)) {
-                    continue;
-                  }
-                  _seenRestrictedLinks.add(link);
-                  _seenLinkWithTorrentId.add(combined);
-                  _queue.add({
-                    'type': 'rd_restricted',
-                    'restrictedLink': link,
-                    'torrentId': torrentId,
-                    'displayName': item.name,
-                  });
-                }
-              }
-              if (videoUrl != null && videoUrl.isNotEmpty) {
-                debugPrint('DebrifyTV: Success. Got unrestricted URL in ${elapsed}s');
-                // Silent approach - no progress logging needed
-                final inferred = _inferTitleFromUrl(videoUrl).trim();
-                final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
-                firstTitle = chosenTitle;
-                return {'url': videoUrl, 'title': chosenTitle};
-              }
-            } catch (e) {
-              debugPrint('DebrifyTV: Debrid add failed for ${item.infohash}: $e');
-            }
+        debugPrint('DebrifyTV: requestMagicNext() invoked. playlist=${_tvPlaylist.length}, currentIndex=$_currentPlaylistIndex');
+        final result = await _requestMagicNextForPlayer();
+        if (result != null) {
+          final resolved = (result['title'] ?? '').trim();
+          if (resolved.isNotEmpty) {
+            firstTitle = resolved;
           }
         }
-        debugPrint('DebrifyTV: requestMagicNext() queue exhausted.');
-        return null;
+        return result;
       }
 
       final Map<String, Torrent> dedupByInfohash = {};
@@ -474,6 +546,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               if (apiKeyEarly != null && apiKeyEarly.isNotEmpty) {
                 _activeApiKey = apiKeyEarly;
                 _startPrefetch();
+                unawaited(_ensurePlaylistDepth());
               }
 
               // Stage 2: Expand search in background to full (500) WHILE user watches
@@ -512,6 +585,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _lastQueueSize = _queue.length;
                         _lastSearchAt = DateTime.now();
                         debugPrint('DebrifyTV: [Stage 2] Queue expanded to ${_queue.length} (preserved ${preparedOld.length} prepared in head)');
+                        unawaited(_ensurePlaylistDepth());
                       }
                     }
                   } catch (e) {
@@ -531,6 +605,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   builder: (_) => VideoPlayerScreen(
                     videoUrl: firstUrl,
                     title: firstTitleResolved,
+                    playlist: _tvPlaylist,
+                    startIndex: 0,
                     startFromRandom: _startRandom,
                     hideSeekbar: _hideSeekbar,
                     showWatermark: _showWatermark,
@@ -538,12 +614,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     hideOptions: _hideOptions,
                     hideBackButton: _hideBackButton,
                     requestMagicNext: requestMagicNext,
+                    externalPlaylistVersion: _playlistVersion,
+                    onPlaylistIndexChanged: _handlePlaylistIndexChanged,
                   ),
                 ),
               );
 
               // Stop prefetch when player exits
               await _stopPrefetch();
+              _clearPlaylistState();
+              _activeApiKey = null;
             }
           }
         }
@@ -616,15 +696,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    // Helper to infer a filename-like title from a URL
-    String _inferTitleFromUrl(String url) {
-      final uri = Uri.tryParse(url);
-      final last = (uri != null && uri.pathSegments.isNotEmpty)
-          ? uri.pathSegments.last
-          : url;
-      return Uri.decodeComponent(last);
-    }
-
     // Build a provider for "next" requests that reuses the same queue and keywords
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -637,86 +708,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     String firstTitle = 'Debrify TV';
+    _activeApiKey = apiKey;
 
     Future<Map<String, String>?> requestMagicNext() async {
-      debugPrint('MagicTV: requestMagicNext() called. queueSize=${_queue.length}');
-      while (_queue.isNotEmpty) {
-        final item = _queue.removeAt(0);
-        // Case 1: RD-restricted entry (append-only items)
-        if (item is Map && item['type'] == 'rd_restricted') {
-          final String link = item['restrictedLink'] as String? ?? '';
-          final String rdTid = item['torrentId'] as String? ?? '';
-          debugPrint('MagicTV: Trying RD link from queue: torrentId=$rdTid');
-          if (link.isEmpty) continue;
-          try {
-            final started = DateTime.now();
-            final unrestrict = await DebridService.unrestrictLink(apiKey, link);
-            final elapsed = DateTime.now().difference(started).inSeconds;
-            final videoUrl = unrestrict['download'] as String?;
-            if (videoUrl != null && videoUrl.isNotEmpty) {
-              debugPrint('MagicTV: Success (RD link). Unrestricted in ${elapsed}s');
-              // Prefer filename inferred from URL; fallback to any stored displayName
-              final inferred = _inferTitleFromUrl(videoUrl).trim();
-              final display = (item['displayName'] as String?)?.trim();
-              final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
-              firstTitle = chosenTitle;
-              return {'url': videoUrl, 'title': chosenTitle};
-            }
-          } catch (e) {
-            debugPrint('MagicTV: RD link failed to unrestrict: $e');
-            continue;
-          }
-        }
-
-        // Case 2: Torrent entry
-        if (item is Torrent) {
-          debugPrint('MagicTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
-          final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
-          try {
-            final started = DateTime.now();
-            final result = await DebridService.addTorrentToDebridPreferVideos(apiKey, magnetLink);
-            final elapsed = DateTime.now().difference(started).inSeconds;
-            final videoUrl = result['downloadLink'] as String?;
-            // Append other RD-restricted links from this torrent to the END of the queue
-            final String torrentId = result['torrentId'] as String? ?? '';
-            final List<dynamic> rdLinks = (result['links'] as List<dynamic>? ?? const []);
-            if (rdLinks.isNotEmpty) {
-              // We assume we used rdLinks[0] to play; enqueue remaining
-              for (int i = 1; i < rdLinks.length; i++) {
-                final String link = rdLinks[i]?.toString() ?? '';
-                if (link.isEmpty) continue;
-                final String combined = '$torrentId|$link';
-                if (_seenRestrictedLinks.contains(link) || _seenLinkWithTorrentId.contains(combined)) {
-                  continue;
-                }
-                _seenRestrictedLinks.add(link);
-                _seenLinkWithTorrentId.add(combined);
-                _queue.add({
-                  'type': 'rd_restricted',
-                  'restrictedLink': link,
-                  'torrentId': torrentId,
-                  'displayName': item.name,
-                });
-              }
-              if (rdLinks.length > 1) {
-                debugPrint('MagicTV: Enqueued ${rdLinks.length - 1} additional RD links to tail. New queueSize=${_queue.length}');
-              }
-            }
-            if (videoUrl != null && videoUrl.isNotEmpty) {
-              debugPrint('MagicTV: Success. Got unrestricted URL in ${elapsed}s');
-              // Prefer filename inferred from URL; fallback to torrent name
-              final inferred = _inferTitleFromUrl(videoUrl).trim();
-              final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
-              firstTitle = chosenTitle;
-              return {'url': videoUrl, 'title': chosenTitle};
-            }
-          } catch (e) {
-            debugPrint('MagicTV: Debrid add failed for ${item.infohash}: $e');
-          }
+      debugPrint('MagicTV: requestMagicNext() invoked. playlist=${_tvPlaylist.length}, currentIndex=$_currentPlaylistIndex');
+      final result = await _requestMagicNextForPlayer();
+      if (result != null) {
+        final resolved = (result['title'] ?? '').trim();
+        if (resolved.isNotEmpty) {
+          firstTitle = resolved;
         }
       }
-      debugPrint('MagicTV: requestMagicNext() queue exhausted.');
-      return null;
+      return result;
     }
 
     setState(() {
@@ -757,8 +760,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       debugPrint('MagicTV: Launching player. Remaining queue=${_queue.length}');
       // Start background prefetch while player is active
-      _activeApiKey = apiKey;
       _startPrefetch();
+      unawaited(_ensurePlaylistDepth());
       if (_progressOpen && _progressSheetContext != null) {
         Navigator.of(_progressSheetContext!).pop();
       }
@@ -767,6 +770,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
             title: firstTitle,
+            playlist: _tvPlaylist,
+            startIndex: 0,
             startFromRandom: _startRandom,
             hideSeekbar: _hideSeekbar,
             showWatermark: _showWatermark,
@@ -774,11 +779,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideOptions: _hideOptions,
             hideBackButton: _hideBackButton,
             requestMagicNext: requestMagicNext,
+            externalPlaylistVersion: _playlistVersion,
+            onPlaylistIndexChanged: _handlePlaylistIndexChanged,
           ),
         ),
       );
       // Stop prefetch when player exits
       await _stopPrefetch();
+      _clearPlaylistState();
+      _activeApiKey = null;
     } finally {
       if (mounted) {
         setState(() {
@@ -806,69 +815,76 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _status = 'Finding a playable stream...';
     });
 
+    _activeApiKey = apiKey;
+    _clearPlaylistState();
+    _prefetchStopRequested = false;
+
     try {
-      while (_queue.isNotEmpty) {
-        final next = _queue.removeAt(0);
-        final magnetLink = 'magnet:?xt=urn:btih:${next.infohash}';
-        try {
-          final result = await DebridService.addTorrentToDebridPreferVideos(apiKey, magnetLink);
-          final videoUrl = result['downloadLink'] as String?;
-          if (videoUrl != null && videoUrl.isNotEmpty) {
-            if (!mounted) return;
-            setState(() {
-              _status = 'Playing: ${next.name}';
-            });
-            await Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => VideoPlayerScreen(
-                  videoUrl: videoUrl,
-                  title: next.name,
-                  startFromRandom: _startRandom,
-                  hideSeekbar: _hideSeekbar,
-                  showWatermark: _showWatermark,
-                  showVideoTitle: _showVideoTitle,
-                  hideOptions: _hideOptions,
-                  hideBackButton: _hideBackButton,
-                ),
-              ),
-            );
-            break;
-          }
-        } catch (_) {
-          // Skip not readily available / failed items and continue
-          continue;
-        }
+      await _ensurePlaylistDepth(1);
+      final first = await _requestMagicNextForPlayer();
+      if (first == null) {
+        if (!mounted) return;
+        setState(() {
+          _status = 'No playable torrents found. Try different keywords.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All torrents failed to process. Try different keywords or check your internet connection.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
       }
 
-      if (_queue.isEmpty) {
-        // Close popup and show user-friendly message
-        if (_progressOpen && _progressSheetContext != null) {
-          Navigator.of(_progressSheetContext!).pop();
-          _progressOpen = false;
-          _progressSheetContext = null;
-        }
-        
-        if (mounted) {
-          setState(() {
-            _isBusy = false;
-            _status = 'No playable torrents found. Try different keywords.';
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('All torrents failed to process. Try different keywords or check your internet connection.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-      } else {
+      final firstUrl = first['url'] ?? '';
+      if (firstUrl.isEmpty) {
+        if (!mounted) return;
         setState(() {
-          _status = 'Queue has ${_queue.length} remaining';
+          _status = 'No playable torrents found. Try different keywords.';
         });
+        return;
       }
+
+      final resolvedTitle = (first['title'] ?? 'Debrify TV').trim();
+      final firstTitle = resolvedTitle.isNotEmpty ? resolvedTitle : 'Debrify TV';
+
+      Future<Map<String, String>?> requestMagicNext() {
+        return _requestMagicNextForPlayer();
+      }
+
+      _startPrefetch();
+      unawaited(_ensurePlaylistDepth());
+
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(
+            videoUrl: firstUrl,
+            title: firstTitle,
+            playlist: _tvPlaylist,
+            startIndex: 0,
+            startFromRandom: _startRandom,
+            hideSeekbar: _hideSeekbar,
+            showWatermark: _showWatermark,
+            showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            hideBackButton: _hideBackButton,
+            requestMagicNext: requestMagicNext,
+            externalPlaylistVersion: _playlistVersion,
+            onPlaylistIndexChanged: _handlePlaylistIndexChanged,
+          ),
+        ),
+      );
+
+      await _stopPrefetch();
+      _clearPlaylistState();
+      _activeApiKey = null;
     } finally {
+      if (!mounted) return;
       setState(() {
         _isBusy = false;
+        _status = '';
       });
     }
   }
@@ -1238,6 +1254,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       // Convert this queue slot to rd_restricted using first link
       final String headLink = rdLinks.first.toString();
+      final String primaryDownloadLink = result['downloadLink'] as String? ?? '';
       if (headLink.isNotEmpty) {
         if (!_seenRestrictedLinks.contains(headLink) && !_seenLinkWithTorrentId.contains('$torrentId|$headLink')) {
           _seenRestrictedLinks.add(headLink);
@@ -1249,6 +1266,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             'restrictedLink': headLink,
             'torrentId': torrentId,
             'displayName': item.name,
+            'downloadLink': primaryDownloadLink,
+            'torrentHash': item.infohash,
+            'sizeBytes': item.sizeBytes,
           };
         }
       }
@@ -1270,6 +1290,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             'restrictedLink': link,
             'torrentId': torrentId,
             'displayName': item.name,
+            'torrentHash': item.infohash,
+            'sizeBytes': item.sizeBytes,
           });
           appended++;
         }
@@ -1277,6 +1299,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           debugPrint('MagicTV: Prefetch: appended $appended RD links to tail. queueSize=${_queue.length}');
         }
       }
+      unawaited(_ensurePlaylistDepth());
     } catch (e) {
       // On failure, move to tail for retry later
       if (idx < _queue.length && identical(_queue[idx], item)) {

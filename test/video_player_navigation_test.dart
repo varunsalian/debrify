@@ -7,6 +7,8 @@ class PlaylistEntry {
   final String? restrictedLink;
   final String? apiKey;
   final String? torrentHash;
+  final double? randomStartFraction;
+  final int? durationMs;
   
   const PlaylistEntry({
     required this.url, 
@@ -14,6 +16,8 @@ class PlaylistEntry {
     this.restrictedLink,
     this.apiKey,
     this.torrentHash,
+    this.randomStartFraction,
+    this.durationMs,
   });
 }
 
