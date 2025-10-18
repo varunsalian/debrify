@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -54,10 +53,6 @@ class VideoPlayerScreen extends StatefulWidget {
     final bool hideOptions;
     // Hide back button - use device back gesture or escape key
     final bool hideBackButton;
-    // External playlist trigger (e.g., Debrify TV) to notify when playlist list mutates
-    final ValueListenable<int>? externalPlaylistVersion;
-    // Observer for playlist index changes so caller can react (e.g., maintain buffer)
-    final ValueChanged<int>? onPlaylistIndexChanged;
 
 	const VideoPlayerScreen({
 		Key? key,
@@ -74,8 +69,6 @@ class VideoPlayerScreen extends StatefulWidget {
         this.showVideoTitle = true,
         this.hideOptions = false,
         this.hideBackButton = false,
-        this.externalPlaylistVersion,
-        this.onPlaylistIndexChanged,
 	}) : super(key: key);
 
 
@@ -90,16 +83,12 @@ class PlaylistEntry {
 	final String? restrictedLink; // The original restricted link from debrid
 	final String? torrentHash; // SHA1 Hash of the torrent
 	final int? sizeBytes; // Original file size in bytes, when known
-	final double? randomStartFraction; // Optional precomputed random start fraction (0-1)
-	final int? durationMs; // Optional cached duration in milliseconds
 	const PlaylistEntry({
 		required this.url, 
 		required this.title, 
 		this.restrictedLink,
 		this.torrentHash,
 		this.sizeBytes,
-		this.randomStartFraction,
-		this.durationMs,
 	});
 }
 
@@ -126,15 +115,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	late mkv.VideoController _videoController;
 	SeriesPlaylist? _cachedSeriesPlaylist;
 	final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
-	ValueListenable<int>? _playlistVersionListenable;
-	
-	void _handleExternalPlaylistUpdate() {
-		if (!mounted) {
-			return;
-		}
-		_cachedSeriesPlaylist = null;
-		setState(() {});
-	}
 	
 
 	
@@ -174,19 +154,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	StreamSubscription? _playSub;
 	StreamSubscription? _paramsSub;
 	StreamSubscription? _completedSub;
-	
-	void _skipCredits() {
-		final d = _duration;
-		if (d.inMilliseconds <= 0) return;
-		// Seek to 1s before end to trigger completion cleanly
-		final target = d - const Duration(seconds: 1);
-		if (target.isNegative) return;
-		_player.seek(target);
-		// Optionally trigger next if series
-		if (_hasNextEpisode() || widget.requestMagicNext != null) {
-			_goToNextEpisode();
-		}
-	}
 
 	// Gesture state
 	_GestureMode _mode = _GestureMode.none;
@@ -223,8 +190,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 	@override
 	void initState() {
 		super.initState();
-		_playlistVersionListenable = widget.externalPlaylistVersion;
-		_playlistVersionListenable?.addListener(_handleExternalPlaylistUpdate);
 		mk.MediaKit.ensureInitialized();
 		SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 		// Default to landscape when entering the player
@@ -310,10 +275,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 		
 		// Get the initial URL from the determined index
-		PlaylistEntry? initialEntry;
 		if (widget.playlist != null && widget.playlist!.isNotEmpty && initialIndex < widget.playlist!.length) {
 			final entry = widget.playlist![initialIndex];
-			initialEntry = entry;
 			if (entry.url.isNotEmpty) {
 				initialUrl = entry.url;
 			} else if (entry.restrictedLink != null) {
@@ -338,7 +301,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		}
 		
 		_currentIndex = initialIndex;
-		widget.onPlaylistIndexChanged?.call(_currentIndex);
 		_dynamicTitle = widget.title;
 		_player = mk.Player(configuration: mk.PlayerConfiguration(ready: () {
 			_isReady = true;
@@ -348,23 +310,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Only open the player if we have a valid URL
 		if (initialUrl.isNotEmpty) {
-			final entryForRandom = initialEntry;
 			_player.open(mk.Media(initialUrl)).then((_) async {
 				// Wait for the video to load and duration to be available
 				await _waitForVideoReady();
 				// Random start takes precedence over resume
-				final bool usedPresetRandom = await _maybeApplyRandomStart(entryForRandom);
-				if (!usedPresetRandom) {
-					if (widget.startFromRandom) {
-						final dur = _duration;
-						if (dur > Duration.zero) {
-							final fraction = 0.1 + (0.8 * math.Random().nextDouble());
-							final pos = Duration(milliseconds: (dur.inMilliseconds * fraction).floor());
-							await _player.seek(pos);
-						}
-					} else {
-						await _maybeRestoreResume();
+				if (widget.startFromRandom) {
+					final dur = _duration;
+					if (dur > Duration.zero) {
+						final fraction = 0.1 + (0.8 * math.Random().nextDouble());
+						final pos = Duration(milliseconds: (dur.inMilliseconds * fraction).floor());
+						await _player.seek(pos);
 					}
+				} else {
+					await _maybeRestoreResume();
 				}
 				_scheduleAutoHide();
 				// Restore audio and subtitle track preferences
@@ -420,16 +378,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		
 		// Preload episode information if this is a series
 		_preloadEpisodeInfo();
-	}
-
-	@override
-	void didUpdateWidget(covariant VideoPlayerScreen oldWidget) {
-		super.didUpdateWidget(oldWidget);
-		if (oldWidget.externalPlaylistVersion != widget.externalPlaylistVersion) {
-			oldWidget.externalPlaylistVersion?.removeListener(_handleExternalPlaylistUpdate);
-			_playlistVersionListenable = widget.externalPlaylistVersion;
-			_playlistVersionListenable?.addListener(_handleExternalPlaylistUpdate);
-		}
 	}
 
 		// Wait for the video to be ready and duration to be available
@@ -516,20 +464,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Get the current episode title for display
 	String _getCurrentEpisodeTitle() {
-		final bool isDebrifyTV = widget.requestMagicNext != null;
-		if (isDebrifyTV) {
-			if (widget.playlist != null && _currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
-				final title = widget.playlist![_currentIndex].title;
-				if (title.isNotEmpty) {
-					return title;
-				}
-			}
-			if (_dynamicTitle.isNotEmpty) {
-				return _dynamicTitle;
-			}
-			return widget.title;
-		}
-
 		final seriesPlaylist = _seriesPlaylist;
 		if (seriesPlaylist != null && seriesPlaylist.isSeries && widget.playlist != null) {
 			// Find the current episode info
@@ -567,11 +501,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	/// Get the current episode subtitle for display
 	String? _getCurrentEpisodeSubtitle() {
-		if (widget.requestMagicNext != null) {
-			// Debrify TV: prefer a clean look without season/episode metadata
-			return null;
-		}
-
 		final seriesPlaylist = _seriesPlaylist;
 		if (seriesPlaylist != null && seriesPlaylist.isSeries && widget.playlist != null) {
 			// Find the current episode info
@@ -920,43 +849,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 
 
-	Future<bool> _maybeApplyRandomStart(PlaylistEntry? entry) async {
-		if (!widget.startFromRandom || entry == null) {
-			return false;
-		}
-		final double? fractionRaw = entry.randomStartFraction;
-		if (fractionRaw == null) {
-			return false;
-		}
-		final double clampedFraction = fractionRaw.clamp(0.0, 1.0);
-		Duration duration;
-		if (entry.durationMs != null && entry.durationMs! > 0) {
-			duration = Duration(milliseconds: entry.durationMs!);
-		} else {
-			duration = _duration;
-		}
-		if (duration <= Duration.zero) {
-			return false;
-		}
-		final int totalMs = duration.inMilliseconds;
-		int targetMs = (totalMs * clampedFraction).floor();
-		if (targetMs >= totalMs - 1000) {
-			targetMs = totalMs - 1000;
-		}
-		if (targetMs <= 0) {
-			return false;
-		}
-		await _player.seek(Duration(milliseconds: targetMs));
-		return true;
-	}
-
 	Future<void> _loadPlaylistIndex(int index, {bool autoplay = false}) async {
 		if (widget.playlist == null || index < 0 || index >= widget.playlist!.length) return;
 		
 		await _saveResume();
 		final entry = widget.playlist![index];
 		_currentIndex = index;
-		widget.onPlaylistIndexChanged?.call(_currentIndex);
 		
 		// Check if we need to unrestrict this link
 		String videoUrl = entry.url;
@@ -991,19 +889,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 		await _player.open(mk.Media(videoUrl), play: autoplay);
 		// Wait for the video to load and duration to be available
 		await _waitForVideoReady();
-		final bool usedPresetRandom = await _maybeApplyRandomStart(entry);
-		if (!usedPresetRandom) {
-			if (widget.startFromRandom) {
-				final dur = _duration;
-				if (dur > Duration.zero) {
-					final fraction = 0.1 + (0.8 * math.Random().nextDouble());
-					final pos = Duration(milliseconds: (dur.inMilliseconds * fraction).floor());
-					await _player.seek(pos);
-				}
-			} else {
-				await _maybeRestoreResume();
-			}
-		}
+		await _maybeRestoreResume();
 		// Restore audio and subtitle track preferences
 		await _restoreTrackPreferences();
 		
@@ -1060,9 +946,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with TickerProvid
 
 	@override
 	void dispose() {
-		_playlistVersionListenable?.removeListener(_handleExternalPlaylistUpdate);
-		_playlistVersionListenable = null;
 
+		
 		// Save the current state before disposing
 		_saveResume();
 		_hideTimer?.cancel();
@@ -2145,7 +2030,6 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 		final isReady = _isReady;
 		final duration = _duration;
 		final pos = _position;
-		final bool isDebrifyTV = widget.requestMagicNext != null;
 		// final remaining = (duration - pos).clamp(Duration.zero, duration); // not used
 
 		return Scaffold(
@@ -2470,13 +2354,13 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 								onPanEnd: _onPanEnd,
 							),
 							// Controls overlay (shown only when ready)
-		if (isReady)
-			ValueListenableBuilder<bool>(
-				valueListenable: _controlsVisible,
-				builder: (context, visible, _) {
-					return AnimatedOpacity(
-						opacity: visible ? 1 : 0,
-						duration: const Duration(milliseconds: 150),
+							if (isReady)
+							ValueListenableBuilder<bool>(
+								valueListenable: _controlsVisible,
+								builder: (context, visible, _) {
+									return AnimatedOpacity(
+										opacity: visible ? 1 : 0,
+										duration: const Duration(milliseconds: 150),
 										child: IgnorePointer(
 											ignoring: !visible,
 											child: _Controls(
@@ -2495,7 +2379,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 												aspectMode: _aspectMode,
 												isLandscape: _landscapeLocked,
 												onRotate: _toggleOrientation,
-												hasPlaylist: !isDebrifyTV && widget.playlist != null && widget.playlist!.isNotEmpty,
+												hasPlaylist: widget.playlist != null && widget.playlist!.isNotEmpty,
 												onShowPlaylist: () => _showPlaylistSheet(context),
 												onShowTracks: () => _showTracksSheet(context),
 												onSeekBarChangedStart: () {
@@ -2505,7 +2389,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 													final newPos = duration * v;
 													_player.seek(newPos);
 												},
-										onSeekBarChangeEnd: () {
+												onSeekBarChangeEnd: () {
 													_isSeekingWithSlider = false;
 													_scheduleAutoHide();
 												},
@@ -2515,62 +2399,13 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 												hasPrevious: _hasPreviousEpisode(),
 												hideSeekbar: widget.hideSeekbar,
 												hideOptions: widget.hideOptions,
-										hideBackButton: widget.hideBackButton,
-										onRandom: isDebrifyTV ? null : _playRandom,
-										enableSkipCredits: widget.requestMagicNext == null,
-										onSkipCredits: _skipCredits,
+																hideBackButton: widget.hideBackButton,
+																onRandom: _playRandom,
 											),
 										),
 									);
 								},
 							),
-							// Skip Credits button (completely independent of other controls visibility)
-							if (isReady)
-								StreamBuilder<Duration>(
-									stream: _player.stream.position,
-									builder: (context, snapshot) {
-										final pos = snapshot.data ?? Duration.zero;
-										final Duration remaining = duration.inMilliseconds > 0 ? (duration - pos) : Duration.zero;
-										final bool canShowSkip = widget.requestMagicNext == null && duration.inMilliseconds > 0 && pos > Duration.zero && remaining.inSeconds <= 30;
-										
-										return Positioned(
-											bottom: 100,
-											right: 20,
-											child: AnimatedOpacity(
-												opacity: canShowSkip ? 1 : 0,
-												duration: const Duration(milliseconds: 300),
-												child: Container(
-													decoration: BoxDecoration(
-														gradient: const LinearGradient(
-															colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-															begin: Alignment.topLeft,
-															end: Alignment.bottomRight,
-														),
-														borderRadius: BorderRadius.circular(16),
-														boxShadow: [
-															BoxShadow(
-																color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
-																blurRadius: 12,
-																offset: const Offset(0, 6),
-															),
-														],
-														border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
-													),
-													child: TextButton.icon(
-														onPressed: _skipCredits,
-														icon: const Icon(Icons.skip_next_rounded, color: Colors.white),
-														label: const Text('Skip credits', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-														style: TextButton.styleFrom(
-															backgroundColor: Colors.transparent,
-															padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-															shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-														),
-													),
-												),
-											),
-										);
-									},
-								),
 						],
 					),
 				),
@@ -2653,9 +2488,7 @@ class _Controls extends StatelessWidget {
 	final bool hideSeekbar;
 	final bool hideOptions;
 	final bool hideBackButton;
-	final VoidCallback? onRandom;
-	final bool enableSkipCredits;
-	final VoidCallback onSkipCredits;
+	final VoidCallback onRandom;
 
 
 	const _Controls({
@@ -2687,9 +2520,7 @@ class _Controls extends StatelessWidget {
 		required this.hideSeekbar,
 		required this.hideOptions,
 		required this.hideBackButton,
-		this.onRandom,
-		required this.enableSkipCredits,
-		required this.onSkipCredits,
+		required this.onRandom,
 	});
 	
 	String _getAspectRatioName() {
@@ -2774,8 +2605,6 @@ class _Controls extends StatelessWidget {
 	Widget build(BuildContext context) {
 		final total = duration.inMilliseconds <= 0 ? const Duration(seconds: 1) : duration;
 		final progress = (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
-		final Duration remaining = duration.inMilliseconds > 0 ? (duration - position) : Duration.zero;
-		final bool canShowSkip = enableSkipCredits && duration.inMilliseconds > 0 && position > Duration.zero && remaining.inSeconds <= 30;
 
 		return Stack(
 			children: [
@@ -2851,13 +2680,16 @@ class _Controls extends StatelessWidget {
 									const SizedBox(width: 48),
 							],
 						),
-								// Netflix-style Bottom Bar with all controls (conditionally shown)
-								if (!hideOptions)
-									Container(
+
+
+
+						// Netflix-style Bottom Bar with all controls (conditionally shown)
+						if (!hideOptions)
+							Container(
 								padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
 							child: Column(
 								mainAxisSize: MainAxisSize.min,
-									children: [
+								children: [
 									// Progress bar with time indicators
 									Row(
 										children: [
@@ -2980,14 +2812,13 @@ class _Controls extends StatelessWidget {
 														isCompact: true,
 													),
 												
-												// Random button (optional)
-										if (onRandom != null)
-											_NetflixControlButton(
-												icon: Icons.shuffle_rounded,
-												label: 'Random',
-												onPressed: onRandom!,
-												isCompact: true,
-											),
+												// Orientation button
+										_NetflixControlButton(
+											icon: Icons.shuffle_rounded,
+																		label: 'Random',
+																		onPressed: onRandom,
+											isCompact: true,
+										),
 											],
 										),
 									),
@@ -3762,3 +3593,4 @@ class _NetflixControlButton extends StatelessWidget {
 		);
 	} 
 }
+
