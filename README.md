@@ -33,7 +33,7 @@ A modern torrent search and debrid management app built with Flutter.
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/varunsalian/debrify.git
 cd debrify
 ```
 
