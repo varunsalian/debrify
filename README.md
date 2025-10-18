@@ -27,7 +27,7 @@ A modern torrent search and debrid management app built with Flutter.
 
 #### Android
 
-- Download the latest `app-release.apk` from the GitHub Releases page and sideload it on your device.
+- Download the latest `debrify-<version>.apk` from the GitHub Releases page and sideload it on your device.
 
 #### macOS, Windows, Linux, and Web
 

@@ -44,10 +44,13 @@ jobs:
       
     - name: Build APK
       run: flutter build apk --release
-      
+
+    - name: Rename APK
+      run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/debrify-${{ github.ref_name }}.apk
+
     - name: Attach APK to GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: build/app/outputs/flutter-apk/app-release.apk
+        files: build/app/outputs/flutter-apk/debrify-${{ github.ref_name }}.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
