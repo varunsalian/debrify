@@ -61,12 +61,10 @@ flutter build apk --release
 
 This project uses GitHub Actions for automated builds and releases:
 
-- **Automatic Builds**: Every push to `main` branch triggers an automated build
-- **Artifacts**: Built APKs are automatically uploaded to GitHub Actions artifacts
 - **Releases**: Tagged releases (v1.0.0, v1.1.0, etc.) automatically create GitHub releases with downloadable APKs
 
 #### Workflow Files:
-- `.github/workflows/build.yml` - Simple build and upload to artifacts
+- `.github/workflows/build.yml` - Simple build and upload to releases
 - `.github/workflows/ci-cd.yml` - Comprehensive CI/CD with testing and releases
 - `.github/workflows/build-android.yml` - Android-specific build workflow
 
