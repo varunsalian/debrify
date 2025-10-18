@@ -9,7 +9,7 @@ A modern torrent search and debrid management app built with Flutter.
 - **Video Player**: Advanced video player with playlist support
 - **Episode Tracking**: Track finished episodes with visual indicators
 - **Modern UI**: Beautiful Material Design 3 interface with dark theme
-- **Cross-platform**: Works on Android, iOS, and other platforms
+- **Cross-platform**: Works on Android, Mac, Windows
 
 ## Getting Started
 
@@ -23,10 +23,7 @@ A modern torrent search and debrid management app built with Flutter.
 ### Installation
 
 1. Clone the repository:
-```bash
-git clone <repository-url>
-cd debrify
-```
+
 
 2. Install dependencies:
 ```bash
@@ -47,10 +44,6 @@ To build a release APK locally:
 flutter build apk --release
 ```
 
-To build an App Bundle for Google Play Store:
-```bash
-flutter build appbundle --release
-```
 
 ### Automated CI/CD
 
@@ -69,25 +62,6 @@ This project uses GitHub Actions for automated builds and releases:
 1. Create and push a tag: `git tag v1.0.0 && git push origin v1.0.0`
 2. GitHub Actions will automatically build and create a release
 3. Download the APK from the GitHub releases page
-
-### iOS
-
-To build for iOS:
-```bash
-flutter build ios --release
-```
-
-## Project Structure
-
-```
-lib/
-├── main.dart              # App entry point
-├── models/                # Data models
-├── screens/               # UI screens
-├── services/              # Business logic and API services
-├── utils/                 # Utility functions
-└── widgets/               # Reusable UI components
-```
 
 ## Dependencies
 
