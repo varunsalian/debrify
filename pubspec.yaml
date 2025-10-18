@@ -101,8 +101,7 @@ msix_config:
   publisher: CN=Debrify Developer
   msix_version: 1.0.0.0
   logo_path: assets/app_icon.png
-  capabilities:
-    - internetClient
+  capabilities: internetClient
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
