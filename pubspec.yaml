@@ -75,6 +75,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.1
+  msix: ^3.16.6
 
 flutter_launcher_icons:
   image_path: assets/app_icon.png
@@ -92,6 +93,16 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: assets/app_icon.png
+
+msix_config:
+  display_name: Debrify
+  publisher_display_name: Debrify
+  identity_name: com.debrify.app
+  publisher: CN=Debrify Developer
+  msix_version: 1.0.0.0
+  logo_path: assets/app_icon.png
+  capabilities:
+    - internetClient
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

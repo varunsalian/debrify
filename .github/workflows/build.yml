@@ -103,3 +103,43 @@ jobs:
         files: build/macos/Build/Products/Release/debrify-${{ github.event.release.tag_name }}.dmg
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.8'
+        channel: 'stable'
+
+    - name: Enable Windows desktop
+      run: flutter config --enable-windows-desktop
+
+    - name: Get dependencies
+      run: flutter pub get
+
+    - name: Create temporary signing certificate
+      shell: pwsh
+      run: |
+        $certPassword = 'DebrifyTempP@ss1'
+        $certPath = "$env:USERPROFILE\debrify_temp_signing_cert.pfx"
+        $securePassword = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
+        $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Debrify Developer' -KeyUsage DigitalSignature -FriendlyName 'Debrify Signing Cert' -CertStoreLocation 'Cert:\CurrentUser\My'
+        Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $securePassword -Force | Out-Null
+        "MSIX_CERT_PATH=$certPath" | Out-File -FilePath $Env:GITHUB_ENV -Append
+        "MSIX_CERT_PASSWORD=$certPassword" | Out-File -FilePath $Env:GITHUB_ENV -Append
+
+    - name: Build Windows MSIX installer
+      shell: pwsh
+      run: flutter pub run msix:create --output-path build/windows/msix --output-name debrify-${{ github.event.release.tag_name }}.msix --certificate-path $Env:MSIX_CERT_PATH --certificate-password $Env:MSIX_CERT_PASSWORD
+
+    - name: Upload MSIX to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/windows/msix/debrify-${{ github.event.release.tag_name }}.msix
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
