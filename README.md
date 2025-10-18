@@ -4,12 +4,15 @@ A modern torrent search and debrid management app built with Flutter.
 
 ## Features
 
-- **Torrent Search**: Search for torrents across multiple sources
-- **Debrid Downloads**: Manage your debrid downloads and transfers
-- **Video Player**: Advanced video player with playlist support
-- **Episode Tracking**: Track finished episodes with visual indicators
-- **Modern UI**: Beautiful Material Design 3 interface with dark theme
-- **Cross-platform**: Works on Android, Mac, Windows
+- **Multi-Source Torrent Search**: Toggle TorrentsCSV and Pirate Bay feeds, surface engine result counts, and sort by relevance, name, size, seeders, or freshness
+- **Real-Debrid Integration**: Validate API keys, control default file-selection/post-download behaviour, and view live account status from inside the app
+- **Smart Download Manager**: Persistent queued downloads with pause/resume, grouped torrent actions, bandwidth awareness, and crash-safe recovery
+- **Debrify TV Mode**: Lean-back autoplay based on keyword rules with aggressive prefetching, queue management, and remote-friendly controls
+- **Advanced Video Player**: Gesture seeking, aspect and speed toggles, audio/subtitle track switching, playlist auto-advance, and Debrify TV overlays
+- **Episode Intelligence**: Persist series progress, mark finished episodes per season, and enrich data using TVMaze with resume-last logic
+- **Personal Playlists**: Store unrestricted and RD torrents, recover single-file playback, and auto-order multi-episode collections
+- **Modern UI**: Material 3 design with animated navigation, dark theme, and orientation handling across phones and Android TV
+- **Cross-platform**: Runs on Android, iOS, macOS, Windows, Linux, and web targets
 
 ## Getting Started
 
@@ -22,15 +25,24 @@ A modern torrent search and debrid management app built with Flutter.
 
 ### Installation
 
-1. Clone the repository:
+#### Android
 
+- Download the latest `app-release.apk` from the GitHub Releases page and sideload it on your device.
+
+#### macOS, Windows, Linux, and Web
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd debrify
+```
 
 2. Install dependencies:
 ```bash
 flutter pub get
 ```
 
-3. Run the app:
+3. Run the app on your target device:
 ```bash
 flutter run
 ```

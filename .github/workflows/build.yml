@@ -1,10 +1,8 @@
 name: Build and Upload APK
 
 on:
-  push:
-    branches: [ main, master]
-  pull_request:
-    branches: [ main, master]
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -44,9 +42,9 @@ jobs:
     - name: Build APK
       run: flutter build apk --release
       
-    - name: Upload APK to artifacts
-      uses: actions/upload-artifact@v4
+    - name: Attach APK to GitHub Release
+      uses: softprops/action-gh-release@v1
       with:
-        name: debrify-release
-        path: build/app/outputs/flutter-apk/app-release.apk
-        retention-days: 2
+        files: build/app/outputs/flutter-apk/app-release.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
