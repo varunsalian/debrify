@@ -136,12 +136,7 @@ jobs:
 
     - name: Build Windows MSIX installer
       shell: pwsh
-      run: |
-        flutter pub run msix:create \
-          --output-path build/windows/msix \
-          --output-name debrify-${{ github.event.release.tag_name }} \
-          --certificate-path $Env:MSIX_CERT_PATH \
-          --certificate-password $Env:MSIX_CERT_PASSWORD
+      run: flutter pub run msix:create --output-path build/windows/msix --output-name debrify-${{ github.event.release.tag_name }} --certificate-path $Env:MSIX_CERT_PATH --certificate-password $Env:MSIX_CERT_PASSWORD
 
     - name: Normalize MSIX filename
       shell: pwsh
