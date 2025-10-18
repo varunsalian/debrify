@@ -132,6 +132,7 @@ jobs:
         Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $securePassword -Force | Out-Null
         "MSIX_CERT_PATH=$certPath" | Out-File -FilePath $Env:GITHUB_ENV -Append
         "MSIX_CERT_PASSWORD=$certPassword" | Out-File -FilePath $Env:GITHUB_ENV -Append
+        $null = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\LocalMachine\Root -Password $securePassword
 
     - name: Build Windows MSIX installer
       shell: pwsh
