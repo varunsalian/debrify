@@ -122,36 +122,21 @@ jobs:
     - name: Get dependencies
       run: flutter pub get
 
-    - name: Create temporary signing certificate
+    - name: Build Windows app
+      run: flutter build windows --release
+
+    - name: Install Inno Setup
+      run: choco install innosetup --no-progress --yes
+
+    - name: Build Windows installer
       shell: pwsh
       run: |
-        $certPassword = 'DebrifyTempP@ss1'
-        $certPath = "$env:USERPROFILE\debrify_temp_signing_cert.pfx"
-        $securePassword = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
-        $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Debrify Developer' -KeyUsage DigitalSignature -FriendlyName 'Debrify Signing Cert' -CertStoreLocation 'Cert:\CurrentUser\My'
-        Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $securePassword -Force | Out-Null
-        "MSIX_CERT_PATH=$certPath" | Out-File -FilePath $Env:GITHUB_ENV -Append
-        "MSIX_CERT_PASSWORD=$certPassword" | Out-File -FilePath $Env:GITHUB_ENV -Append
-        $null = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\LocalMachine\Root -Password $securePassword
+        $env:DEBRIFY_VERSION = '${{ github.event.release.tag_name }}'
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows\installer.iss
 
-    - name: Build Windows MSIX installer
-      shell: pwsh
-      run: flutter pub run msix:create --output-path build/windows/msix --output-name debrify-${{ github.event.release.tag_name }} --certificate-path $Env:MSIX_CERT_PATH --certificate-password $Env:MSIX_CERT_PASSWORD
-
-    - name: Normalize MSIX filename
-      shell: pwsh
-      run: |
-        $desired = "build/windows/msix/debrify-${{ github.event.release.tag_name }}.msix"
-        if (!(Test-Path $desired)) {
-          $doubleExt = "$desired.msix"
-          if (Test-Path $doubleExt) {
-            Rename-Item -Path $doubleExt -NewName (Split-Path $desired -Leaf)
-          }
-        }
-
-    - name: Upload MSIX to Release
+    - name: Upload Windows installer to Release
       uses: softprops/action-gh-release@v1
       with:
-        files: build/windows/msix/debrify-${{ github.event.release.tag_name }}.msix
+        files: build/windows/installer/debrify-${{ github.event.release.tag_name }}-setup.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
