@@ -136,7 +136,23 @@ jobs:
 
     - name: Build Windows MSIX installer
       shell: pwsh
-      run: flutter pub run msix:create --output-path build/windows/msix --output-name debrify-${{ github.event.release.tag_name }}.msix --certificate-path $Env:MSIX_CERT_PATH --certificate-password $Env:MSIX_CERT_PASSWORD
+      run: |
+        flutter pub run msix:create \
+          --output-path build/windows/msix \
+          --output-name debrify-${{ github.event.release.tag_name }} \
+          --certificate-path $Env:MSIX_CERT_PATH \
+          --certificate-password $Env:MSIX_CERT_PASSWORD
+
+    - name: Normalize MSIX filename
+      shell: pwsh
+      run: |
+        $desired = "build/windows/msix/debrify-${{ github.event.release.tag_name }}.msix"
+        if (!(Test-Path $desired)) {
+          $doubleExt = "$desired.msix"
+          if (Test-Path $doubleExt) {
+            Rename-Item -Path $doubleExt -NewName (Split-Path $desired -Leaf)
+          }
+        }
 
     - name: Upload MSIX to Release
       uses: softprops/action-gh-release@v1
