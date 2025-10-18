@@ -8,101 +8,101 @@ permissions:
   contents: write
 
 jobs:
-  android:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'zulu'
-        java-version: '17'
-        
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.32.8'
-        channel: 'stable'
-        
-    - name: Cache dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.pub-cache
-          .dart_tool
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-deps-${{ hashFiles('**/pubspec.lock', '**/*.gradle*') }}
-        restore-keys: |
-          ${{ runner.os }}-deps-
-          
-    - name: Get dependencies
-      run: flutter pub get
-      
-    - name: Build APK
-      run: flutter build apk --release
-
-    - name: Rename APK
-      run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/debrify-${{ github.event.release.tag_name }}.apk
-
-    - name: Attach APK to GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: build/app/outputs/flutter-apk/debrify-${{ github.event.release.tag_name }}.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  macos:
-    runs-on: macos-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.32.8'
-        channel: 'stable'
-
-    - name: Get dependencies
-      run: flutter pub get
-
-    - name: Build macOS app
-      run: flutter build macos --release
-
-    - name: Install create-dmg
-      run: HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
-
-    - name: Prepare DMG staging folder
-      run: |
-        cd build/macos/Build/Products/Release
-        rm -rf dmg-root
-        mkdir -p dmg-root
-        rm -f debrify-${{ github.event.release.tag_name }}.dmg
-        cp -R debrify.app dmg-root/Debrify.app
-
-    - name: Create DMG
-      run: |
-        cd build/macos/Build/Products/Release
-        create-dmg \
-          --volname "Debrify" \
-          --window-pos 200 120 \
-          --window-size 520 360 \
-          --icon-size 120 \
-          --icon "Debrify.app" 120 180 \
-          --app-drop-link 400 180 \
-          debrify-${{ github.event.release.tag_name }}.dmg \
-          dmg-root
-
-    - name: Upload DMG to Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: build/macos/Build/Products/Release/debrify-${{ github.event.release.tag_name }}.dmg
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#  android:
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#    - name: Checkout code
+#      uses: actions/checkout@v4
+#
+#    - name: Setup Java
+#      uses: actions/setup-java@v4
+#      with:
+#        distribution: 'zulu'
+#        java-version: '17'
+#
+#    - name: Setup Flutter
+#      uses: subosito/flutter-action@v2
+#      with:
+#        flutter-version: '3.32.8'
+#        channel: 'stable'
+#
+#    - name: Cache dependencies
+#      uses: actions/cache@v4
+#      with:
+#        path: |
+#          ~/.pub-cache
+#          .dart_tool
+#          ~/.gradle/caches
+#          ~/.gradle/wrapper
+#        key: ${{ runner.os }}-deps-${{ hashFiles('**/pubspec.lock', '**/*.gradle*') }}
+#        restore-keys: |
+#          ${{ runner.os }}-deps-
+#
+#    - name: Get dependencies
+#      run: flutter pub get
+#
+#    - name: Build APK
+#      run: flutter build apk --release
+#
+#    - name: Rename APK
+#      run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/debrify-${{ github.event.release.tag_name }}.apk
+#
+#    - name: Attach APK to GitHub Release
+#      uses: softprops/action-gh-release@v1
+#      with:
+#        files: build/app/outputs/flutter-apk/debrify-${{ github.event.release.tag_name }}.apk
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#
+#  macos:
+#    runs-on: macos-latest
+#    steps:
+#    - name: Checkout code
+#      uses: actions/checkout@v4
+#
+#    - name: Setup Flutter
+#      uses: subosito/flutter-action@v2
+#      with:
+#        flutter-version: '3.32.8'
+#        channel: 'stable'
+#
+#    - name: Get dependencies
+#      run: flutter pub get
+#
+#    - name: Build macOS app
+#      run: flutter build macos --release
+#
+#    - name: Install create-dmg
+#      run: HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
+#
+#    - name: Prepare DMG staging folder
+#      run: |
+#        cd build/macos/Build/Products/Release
+#        rm -rf dmg-root
+#        mkdir -p dmg-root
+#        rm -f debrify-${{ github.event.release.tag_name }}.dmg
+#        cp -R debrify.app dmg-root/Debrify.app
+#
+#    - name: Create DMG
+#      run: |
+#        cd build/macos/Build/Products/Release
+#        create-dmg \
+#          --volname "Debrify" \
+#          --window-pos 200 120 \
+#          --window-size 520 360 \
+#          --icon-size 120 \
+#          --icon "Debrify.app" 120 180 \
+#          --app-drop-link 400 180 \
+#          debrify-${{ github.event.release.tag_name }}.dmg \
+#          dmg-root
+#
+#    - name: Upload DMG to Release
+#      uses: softprops/action-gh-release@v1
+#      with:
+#        files: build/macos/Build/Products/Release/debrify-${{ github.event.release.tag_name }}.dmg
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows:
     runs-on: windows-latest
