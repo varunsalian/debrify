@@ -9,9 +9,7 @@
 A modern torrent search and Real-Debrid companion built with Flutter, featuring a powerful search UI, lean-back TV mode, advanced player, and persistent playlists.
 
 <p align="center">
-  <a href="https://github.com/varunsalian/debrify/releases/download/v0.1.0/debrify.mp4">
-    <img src="https://img.shields.io/badge/▶%20Watch%20Debrify%20Demo-blueviolet?style=for-the-badge" alt="Watch Debrify demo" />
-  </a>
+  <iframe width="560" height="315" src="https://www.youtube.com/embed/ja7kkv7WRc0?si=mqC4d_O9JL-d0xD_" title="Debrify preview" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 </p>
 
 ---
