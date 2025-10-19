@@ -69,9 +69,7 @@ This project uses GitHub Actions for automated builds and releases:
 
 #### Workflow Files:
 - `.github/workflows/build.yml` - Simple build and upload to releases
-- `.github/workflows/ci-cd.yml` - Comprehensive CI/CD with testing and releases
-- `.github/workflows/build-android.yml` - Android-specific build workflow
-
+  
 #### To create a release:
 1. Create and push a tag: `git tag v1.0.0 && git push origin v1.0.0`
 2. GitHub Actions will automatically build and create a release
