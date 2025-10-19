@@ -6,8 +6,8 @@ A modern torrent search and debrid management app built with Flutter.
 
 - **Multi-Source Torrent Search**: Toggle TorrentsCSV and Pirate Bay feeds, surface engine result counts, and sort by relevance, name, size, seeders, or freshness
 - **Real-Debrid Integration**: Validate API keys, control default file-selection/post-download behaviour, and view live account status from inside the app
-- **Smart Download Manager**: Persistent queued downloads with pause/resume, grouped torrent actions, bandwidth awareness, and crash-safe recovery
-- **Debrify TV Mode**: Lean-back autoplay based on keyword rules with aggressive prefetching, queue management, and remote-friendly controls
+- **Smart Download Manager (Not Stable)**: Persistent queued downloads with pause/resume, grouped torrent actions, bandwidth awareness, and crash-safe recovery
+- **Debrify TV Mode**: Lean-back autoplay based on keyword rules with aggressive prefetching, queue management.
 - **Advanced Video Player**: Gesture seeking, aspect and speed toggles, audio/subtitle track switching, playlist auto-advance, and Debrify TV overlays
 - **Episode Intelligence**: Persist series progress, mark finished episodes per season, and enrich data using TVMaze with resume-last logic
 - **Personal Playlists**: Store unrestricted and RD torrents, recover single-file playback, and auto-order multi-episode collections
