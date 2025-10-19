@@ -1447,11 +1447,18 @@ class DownloadService {
       // Public Downloads is not directly accessible; keep using app docs for any local-only ops
       return Directory((await getApplicationDocumentsDirectory()).path);
     }
-    if (Platform.isMacOS) {
+    if (Platform.isWindows || Platform.isMacOS) {
       // On macOS, use the user's actual Downloads folder
       try {
         final Directory? downloadsDir = await getDownloadsDirectory();
         if (downloadsDir != null) {
+          if (Platform.isWindows) {
+          final Directory appDownloadsDir = Directory('${downloadsDir.path}/Debrify');
+          if (!await appDownloadsDir.exists()) {
+            await appDownloadsDir.create(recursive: true);
+          }
+          return appDownloadsDir;
+        }
           return downloadsDir;
         }
       } catch (e) {
@@ -1462,7 +1469,7 @@ class DownloadService {
   }
 
   Future<String> _appDownloadsSubdir() async {
-    if (Platform.isMacOS) {
+    if (Platform.isWindows || Platform.isMacOS) {
       // On macOS, use the user's actual Downloads folder
       try {
         final Directory? downloadsDir = await getDownloadsDirectory();
