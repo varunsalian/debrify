@@ -22,14 +22,14 @@ import 'services/main_page_bridge.dart';
 import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
 
+final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (!kIsWeb && Platform.isWindows) {
     await windowManager.ensureInitialized();
-    windowManager.waitUntilReadyToShow().then((_) async {
-      await windowManager.setFullScreen(true);
-    });
+    windowManager.addListener(_windowsFullscreenListener);
   }
 
   // Set a sensible default orientation: phones stay portrait, Android TV uses landscape.
@@ -37,6 +37,13 @@ Future<void> main() async {
   // Clean up old playback state data
   await _cleanupPlaybackState();
   runApp(const DebrifyApp());
+
+  if (!kIsWeb && Platform.isWindows) {
+    windowManager.waitUntilReadyToShow().then((_) async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
 }
 
 Future<void> _initOrientation() async {
@@ -72,6 +79,25 @@ Future<void> _cleanupPlaybackState() async {
   try {
     await StorageService.cleanupOldPlaybackState();
   } catch (e) {}
+}
+
+class _WindowsFullscreenListener with WindowListener {
+  @override
+  Future<void> onWindowEvent(String eventName) async {
+    if (!Platform.isWindows) return;
+    if (eventName == WindowEvent.maximize.name) {
+      final isFull = await windowManager.isFullScreen();
+      if (!isFull) {
+        await windowManager.setFullScreen(true);
+      }
+    } else if (eventName == WindowEvent.unmaximize.name ||
+        eventName == WindowEvent.restore.name) {
+      final isFull = await windowManager.isFullScreen();
+      if (isFull) {
+        await windowManager.setFullScreen(false);
+      }
+    }
+  }
 }
 
 class DebrifyApp extends StatelessWidget {
