@@ -55,8 +55,6 @@ A modern torrent search and Real-Debrid companion built with Flutter, featuring 
 - **Prefer the easy route?** Grab the latest release artifacts (APK / DMG / Windows setup) from the [GitHub Releases page](https://github.com/varunsalian/debrify/releases).
 - **Want to tinker?** Clone the repo and run `flutter run` on your target device.
 
-> 🎥 Planning to add demo footage? Drop your GIF/MP4 into `docs/` and embed it below once ready.
-
 ---
 
 ## 📦 Installation Details
