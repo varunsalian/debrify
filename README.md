@@ -1,6 +1,8 @@
 # Debrify
 
-A modern torrent search and debrid management app built with Flutter.
+> Built as a personal “vibe coded” spare-time project—open-sourced so others can test-drive it or extend it further.
+
+A modern torrent search and debrid management app built with Flutter. The experience is primarily tuned for Android; other platforms work but may have minor quirks.
 
 ## Features
 
