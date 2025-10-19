@@ -85,13 +85,12 @@ class _WindowsFullscreenListener with WindowListener {
   @override
   Future<void> onWindowEvent(String eventName) async {
     if (!Platform.isWindows) return;
-    if (eventName == WindowEvent.maximize.name) {
+    if (eventName == 'maximize') {
       final isFull = await windowManager.isFullScreen();
       if (!isFull) {
         await windowManager.setFullScreen(true);
       }
-    } else if (eventName == WindowEvent.unmaximize.name ||
-        eventName == WindowEvent.restore.name) {
+    } else if (eventName == 'unmaximize' || eventName == 'restore') {
       final isFull = await windowManager.isFullScreen();
       if (isFull) {
         await windowManager.setFullScreen(false);
