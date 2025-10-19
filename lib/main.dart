@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/torrent_search_screen.dart';
@@ -17,13 +20,22 @@ import 'package:google_fonts/google_fonts.dart';
 import 'widgets/premium_top_nav.dart';
 import 'services/main_page_bridge.dart';
 import 'models/rd_torrent.dart';
+import 'package:window_manager/window_manager.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb && Platform.isWindows) {
+    await windowManager.ensureInitialized();
+    windowManager.waitUntilReadyToShow().then((_) async {
+      await windowManager.setFullScreen(true);
+    });
+  }
+
   // Set a sensible default orientation: phones stay portrait, Android TV uses landscape.
-  _initOrientation();
+  await _initOrientation();
   // Clean up old playback state data
-  _cleanupPlaybackState();
+  await _cleanupPlaybackState();
   runApp(const DebrifyApp());
 }
 
@@ -59,8 +71,7 @@ Future<void> _initOrientation() async {
 Future<void> _cleanupPlaybackState() async {
   try {
     await StorageService.cleanupOldPlaybackState();
-  } catch (e) {
-  }
+  } catch (e) {}
 }
 
 class DebrifyApp extends StatelessWidget {
