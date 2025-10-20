@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../services/account_service.dart';
 import '../services/download_service.dart';
+import '../services/torbox_account_service.dart';
 import 'settings/real_debrid_settings_page.dart';
+import 'settings/torbox_settings_page.dart';
 
 import 'settings/torrent_settings_page.dart';
 import '../widgets/shimmer.dart';
@@ -17,6 +19,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   String? _apiKeySummary;
+  String? _torboxSummary;
 
   @override
   void initState() {
@@ -25,21 +28,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSummaries() async {
-    final apiKey = await StorageService.getApiKey();
-    if (apiKey != null && apiKey.isNotEmpty) {
-      // Refresh user info to get current status
+    final rdKey = await StorageService.getApiKey();
+    String rdSummary = 'Not connected';
+    if (rdKey != null && rdKey.isNotEmpty) {
       await AccountService.refreshUserInfo();
       final user = AccountService.currentUser;
-      setState(() {
-        _apiKeySummary = user != null ? user.premiumStatusText : 'Connected';
-      });
-    } else {
-      setState(() {
-        _apiKeySummary = 'Not connected';
-      });
+      rdSummary = user != null ? user.premiumStatusText : 'Connected';
+    }
+
+    final torboxKey = await StorageService.getTorboxApiKey();
+    String torboxSummary = 'Not connected';
+    if (torboxKey != null && torboxKey.isNotEmpty) {
+      await TorboxAccountService.refreshUserInfo();
+      final torboxUser = TorboxAccountService.currentUser;
+      torboxSummary = torboxUser != null
+          ? torboxUser.subscriptionStatus
+          : 'Connected';
     }
 
     setState(() {
+      _apiKeySummary = rdSummary;
+      _torboxSummary = torboxSummary;
       _loading = false;
     });
   }
@@ -70,13 +79,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               clipBehavior: Clip.antiAlias,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: const [
-                    Shimmer(width: 36, height: 36, borderRadius: BorderRadius.all(Radius.circular(8))),
+                    Shimmer(
+                      width: 36,
+                      height: 36,
+                      borderRadius: BorderRadius.all(Radius.circular(8)),
+                    ),
                     SizedBox(width: 12),
                     Expanded(child: Shimmer(height: 16)),
                   ],
@@ -86,13 +101,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               clipBehavior: Clip.antiAlias,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: const [
-                    Shimmer(width: 36, height: 36, borderRadius: BorderRadius.all(Radius.circular(8))),
+                    Shimmer(
+                      width: 36,
+                      height: 36,
+                      borderRadius: BorderRadius.all(Radius.circular(8)),
+                    ),
                     SizedBox(width: 12),
                     Expanded(child: Shimmer(height: 16)),
                   ],
@@ -137,15 +158,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       Text(
                         'Settings',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Configure your app preferences',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer
+                              .withValues(alpha: 0.7),
                         ),
                       ),
                     ],
@@ -174,7 +197,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SectionTile(
             icon: Icons.storage_rounded,
             title: 'Clear Download Data',
-            subtitle: 'Remove queued/running history and pending download queue',
+            subtitle:
+                'Remove queued/running history and pending download queue',
             onTap: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
@@ -211,7 +235,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SectionTile(
             icon: Icons.cleaning_services_rounded,
             title: 'Clear Playback Data',
-            subtitle: 'Remove watched history, resume points, and track choices',
+            subtitle:
+                'Remove watched history, resume points, and track choices',
             onTap: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
@@ -253,13 +278,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: _apiKeySummary ?? 'Not connected',
             onTap: () async {
               await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const RealDebridSettingsPage()),
+                MaterialPageRoute(
+                  builder: (_) => const RealDebridSettingsPage(),
+                ),
               );
               await _loadSummaries();
               setState(() {});
             },
           ),
 
+          const SizedBox(height: 12),
+          _SectionTile(
+            icon: Icons.flash_on_rounded,
+            title: 'Torbox Settings',
+            subtitle: _torboxSummary ?? 'Not connected',
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TorboxSettingsPage()),
+              );
+              await _loadSummaries();
+              setState(() {});
+            },
+          ),
         ],
       ),
     );
@@ -286,7 +326,9 @@ class _SectionTile extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        focusColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+        focusColor: Theme.of(
+          context,
+        ).colorScheme.primary.withValues(alpha: 0.2),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -294,7 +336,9 @@ class _SectionTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: Theme.of(context).colorScheme.primary),
@@ -307,16 +351,15 @@ class _SectionTile extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -328,4 +371,4 @@ class _SectionTile extends StatelessWidget {
       ),
     );
   }
-} 
+}

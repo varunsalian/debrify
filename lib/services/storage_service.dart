@@ -6,19 +6,25 @@ import 'debrid_service.dart';
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
   static const String _fileSelectionKey = 'real_debrid_file_selection';
+  static const String _torboxApiKey = 'torbox_api_key';
   static const String _postTorrentActionKey = 'post_torrent_action';
-  static const String _batteryOptStatusKey = 'battery_opt_status_v1'; // granted|denied|never|unknown
+  static const String _batteryOptStatusKey =
+      'battery_opt_status_v1'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
-  static const String _defaultTorrentsCsvEnabledKey = 'default_torrents_csv_enabled';
-  static const String _defaultPirateBayEnabledKey = 'default_pirate_bay_enabled';
+  static const String _defaultTorrentsCsvEnabledKey =
+      'default_torrents_csv_enabled';
+  static const String _defaultPirateBayEnabledKey =
+      'default_pirate_bay_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
   static const String _debrifyTvShowWatermarkKey = 'debrify_tv_show_watermark';
-  static const String _debrifyTvShowVideoTitleKey = 'debrify_tv_show_video_title';
+  static const String _debrifyTvShowVideoTitleKey =
+      'debrify_tv_show_video_title';
   static const String _debrifyTvHideOptionsKey = 'debrify_tv_hide_options';
-  static const String _debrifyTvHideBackButtonKey = 'debrify_tv_hide_back_button';
+  static const String _debrifyTvHideBackButtonKey =
+      'debrify_tv_hide_back_button';
   static const String _playlistKey = 'user_playlist_v1';
 
   // Note: Plain text storage is fine for API key since they're stored locally on user's device
@@ -38,10 +44,27 @@ class StorageService {
     await prefs.remove(_apiKeyKey);
   }
 
+  // Torbox API key helpers
+  static Future<String?> getTorboxApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_torboxApiKey);
+  }
+
+  static Future<void> saveTorboxApiKey(String apiKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_torboxApiKey, apiKey);
+  }
+
+  static Future<void> deleteTorboxApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_torboxApiKey);
+  }
+
   // File Selection methods
   static Future<String> getFileSelection() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_fileSelectionKey) ?? 'smart'; // Default to smart selection
+    return prefs.getString(_fileSelectionKey) ??
+        'smart'; // Default to smart selection
   }
 
   static Future<void> saveFileSelection(String selection) async {
@@ -83,7 +106,8 @@ class StorageService {
   // Default search engine settings
   static Future<bool> getDefaultTorrentsCsvEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_defaultTorrentsCsvEnabledKey) ?? true; // Default to enabled
+    return prefs.getBool(_defaultTorrentsCsvEnabledKey) ??
+        true; // Default to enabled
   }
 
   static Future<void> setDefaultTorrentsCsvEnabled(bool enabled) async {
@@ -93,7 +117,8 @@ class StorageService {
 
   static Future<bool> getDefaultPirateBayEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_defaultPirateBayEnabledKey) ?? true; // Default to enabled
+    return prefs.getBool(_defaultPirateBayEnabledKey) ??
+        true; // Default to enabled
   }
 
   static Future<void> setDefaultPirateBayEnabled(bool enabled) async {
@@ -144,21 +169,18 @@ class StorageService {
     String aspect = 'contain',
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     if (!map.containsKey(key)) {
-      map[key] = {
-        'type': 'series',
-        'title': seriesTitle,
-        'seasons': {},
-      };
+      map[key] = {'type': 'series', 'title': seriesTitle, 'seasons': {}};
     }
-    
+
     final seriesData = map[key] as Map<String, dynamic>;
     if (!seriesData['seasons'].containsKey(season.toString())) {
       seriesData['seasons'][season.toString()] = {};
     }
-    
+
     seriesData['seasons'][season.toString()][episode.toString()] = {
       'positionMs': positionMs,
       'durationMs': durationMs,
@@ -166,7 +188,7 @@ class StorageService {
       'aspect': aspect,
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
     };
-    
+
     await _savePlaybackStateMap(map);
   }
 
@@ -177,8 +199,9 @@ class StorageService {
     required int episode,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     if (!map.containsKey(key)) {
       map[key] = {
         'type': 'series',
@@ -187,20 +210,20 @@ class StorageService {
         'finishedEpisodes': {},
       };
     }
-    
+
     final seriesData = map[key] as Map<String, dynamic>;
     if (!seriesData.containsKey('finishedEpisodes')) {
       seriesData['finishedEpisodes'] = {};
     }
-    
+
     if (!seriesData['finishedEpisodes'].containsKey(season.toString())) {
       seriesData['finishedEpisodes'][season.toString()] = {};
     }
-    
+
     seriesData['finishedEpisodes'][season.toString()][episode.toString()] = {
       'finishedAt': DateTime.now().millisecondsSinceEpoch,
     };
-    
+
     await _savePlaybackStateMap(map);
   }
 
@@ -211,17 +234,18 @@ class StorageService {
     required int episode,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     final seriesData = map[key];
     if (seriesData == null || seriesData['type'] != 'series') return false;
-    
+
     final finishedEpisodes = seriesData['finishedEpisodes'];
     if (finishedEpisodes == null) return false;
-    
+
     final seasonData = finishedEpisodes[season.toString()];
     if (seasonData == null) return false;
-    
+
     return seasonData.containsKey(episode.toString());
   }
 
@@ -230,22 +254,23 @@ class StorageService {
     required String seriesTitle,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     final seriesData = map[key];
     if (seriesData == null || seriesData['type'] != 'series') return {};
-    
+
     final finishedEpisodes = seriesData['finishedEpisodes'];
     if (finishedEpisodes == null) return {};
-    
+
     final result = <String, Set<int>>{};
-    
+
     for (final seasonEntry in finishedEpisodes.entries) {
       final season = seasonEntry.key;
       final episodes = seasonEntry.value as Map<String, dynamic>;
       result[season] = episodes.keys.map((e) => int.parse(e)).toSet();
     }
-    
+
     return result;
   }
 
@@ -254,20 +279,21 @@ class StorageService {
     required String seriesTitle,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     final seriesData = map[key];
     if (seriesData == null || seriesData['type'] != 'series') return {};
-    
+
     final seasons = seriesData['seasons'];
     if (seasons == null) return {};
-    
+
     final result = <String, Map<String, dynamic>>{};
-    
+
     for (final seasonEntry in seasons.entries) {
       final season = seasonEntry.key;
       final episodes = seasonEntry.value as Map<String, dynamic>;
-      
+
       for (final episodeEntry in episodes.entries) {
         final episode = episodeEntry.key;
         final episodeData = episodeEntry.value as Map<String, dynamic>;
@@ -275,7 +301,7 @@ class StorageService {
         result[episodeKey] = episodeData;
       }
     }
-    
+
     return result;
   }
 
@@ -295,17 +321,18 @@ class StorageService {
     required int episode,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     final seriesData = map[key];
     if (seriesData == null || seriesData['type'] != 'series') return null;
-    
+
     final seasonData = seriesData['seasons'][season.toString()];
     if (seasonData == null) return null;
-    
+
     final episodeData = seasonData[episode.toString()];
     if (episodeData == null) return null;
-    
+
     return episodeData as Map<String, dynamic>;
   }
 
@@ -319,8 +346,9 @@ class StorageService {
     String aspect = 'contain',
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     map[key] = {
       'type': 'video',
       'title': videoTitle,
@@ -331,7 +359,7 @@ class StorageService {
       'aspect': aspect,
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
     };
-    
+
     await _savePlaybackStateMap(map);
   }
 
@@ -340,11 +368,12 @@ class StorageService {
     required String videoTitle,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     final videoData = map[key];
     if (videoData == null || videoData['type'] != 'video') return null;
-    
+
     return videoData as Map<String, dynamic>;
   }
 
@@ -353,36 +382,33 @@ class StorageService {
     required String seriesTitle,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     final seriesData = map[key];
     if (seriesData == null || seriesData['type'] != 'series') return null;
-    
+
     // Find the most recently updated episode
     Map<String, dynamic>? lastEpisode;
     int lastUpdated = 0;
-    
+
     final seasons = seriesData['seasons'] as Map<String, dynamic>;
     for (final seasonEntry in seasons.entries) {
       final season = int.parse(seasonEntry.key);
       final episodes = seasonEntry.value as Map<String, dynamic>;
-      
+
       for (final episodeEntry in episodes.entries) {
         final episode = int.parse(episodeEntry.key);
         final episodeData = episodeEntry.value as Map<String, dynamic>;
         final updatedAt = episodeData['updatedAt'] as int;
-        
+
         if (updatedAt > lastUpdated) {
           lastUpdated = updatedAt;
-          lastEpisode = {
-            'season': season,
-            'episode': episode,
-            ...episodeData,
-          };
+          lastEpisode = {'season': season, 'episode': episode, ...episodeData};
         }
       }
     }
-    
+
     return lastEpisode;
   }
 
@@ -391,22 +417,22 @@ class StorageService {
     final map = await _getPlaybackStateMap();
     final now = DateTime.now().millisecondsSinceEpoch;
     final thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
-    
+
     final keysToRemove = <String>[];
-    
+
     for (final entry in map.entries) {
       final data = entry.value as Map<String, dynamic>;
       final updatedAt = data['updatedAt'] as int?;
-      
+
       if (updatedAt != null && updatedAt < thirtyDaysAgo) {
         keysToRemove.add(entry.key);
       }
     }
-    
+
     for (final key in keysToRemove) {
       map.remove(key);
     }
-    
+
     if (keysToRemove.isNotEmpty) {
       await _savePlaybackStateMap(map);
     }
@@ -450,7 +476,10 @@ class StorageService {
     return null;
   }
 
-  static Future<void> upsertVideoResume(String key, Map<String, dynamic> entry) async {
+  static Future<void> upsertVideoResume(
+    String key,
+    Map<String, dynamic> entry,
+  ) async {
     final map = await _getVideoResumeMap();
     map[key] = entry;
     await _saveVideoResumeMap(map);
@@ -463,8 +492,9 @@ class StorageService {
     required String subtitleTrackId,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     if (!map.containsKey(key)) {
       map[key] = {
         'type': 'series',
@@ -473,18 +503,18 @@ class StorageService {
         'trackPreferences': {},
       };
     }
-    
+
     final seriesData = map[key] as Map<String, dynamic>;
     if (!seriesData.containsKey('trackPreferences')) {
       seriesData['trackPreferences'] = {};
     }
-    
+
     seriesData['trackPreferences'] = {
       'audioTrackId': audioTrackId,
       'subtitleTrackId': subtitleTrackId,
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
     };
-    
+
     await _savePlaybackStateMap(map);
   }
 
@@ -493,14 +523,15 @@ class StorageService {
     required String seriesTitle,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     final seriesData = map[key];
     if (seriesData == null || seriesData['type'] != 'series') return null;
-    
+
     final trackPreferences = seriesData['trackPreferences'];
     if (trackPreferences == null) return null;
-    
+
     return trackPreferences as Map<String, dynamic>;
   }
 
@@ -511,27 +542,24 @@ class StorageService {
     required String subtitleTrackId,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     if (!map.containsKey(key)) {
-      map[key] = {
-        'type': 'video',
-        'title': videoTitle,
-        'trackPreferences': {},
-      };
+      map[key] = {'type': 'video', 'title': videoTitle, 'trackPreferences': {}};
     }
-    
+
     final videoData = map[key] as Map<String, dynamic>;
     if (!videoData.containsKey('trackPreferences')) {
       videoData['trackPreferences'] = {};
     }
-    
+
     videoData['trackPreferences'] = {
       'audioTrackId': audioTrackId,
       'subtitleTrackId': subtitleTrackId,
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
     };
-    
+
     await _savePlaybackStateMap(map);
   }
 
@@ -540,14 +568,15 @@ class StorageService {
     required String videoTitle,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    
+    final key =
+        'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
     final videoData = map[key];
     if (videoData == null || videoData['type'] != 'video') return null;
-    
+
     final trackPreferences = videoData['trackPreferences'];
     if (trackPreferences == null) return null;
-    
+
     return trackPreferences as Map<String, dynamic>;
   }
 
@@ -628,7 +657,9 @@ class StorageService {
     }
   }
 
-  static Future<void> savePlaylistItemsRaw(List<Map<String, dynamic>> items) async {
+  static Future<void> savePlaylistItemsRaw(
+    List<Map<String, dynamic>> items,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_playlistKey, jsonEncode(items));
   }
@@ -642,7 +673,10 @@ class StorageService {
     if (rdId != null && rdId.isNotEmpty) {
       return 'rd:${rdId}'.toLowerCase();
     }
-    final String source = (item['restrictedLink'] as String?)?.trim() ?? (item['url'] as String?)?.trim() ?? '';
+    final String source =
+        (item['restrictedLink'] as String?)?.trim() ??
+        (item['url'] as String?)?.trim() ??
+        '';
     final String title = (item['title'] as String?)?.trim() ?? '';
     return '${source}|${title}'.toLowerCase();
   }
@@ -655,45 +689,56 @@ class StorageService {
     final newKey = computePlaylistDedupeKey(item);
     final exists = items.any((e) => computePlaylistDedupeKey(e) == newKey);
     if (exists) return false;
-    
+
     final enriched = Map<String, dynamic>.from(item);
     enriched['addedAt'] = DateTime.now().millisecondsSinceEpoch;
-    
+
     // Fetch and add torrent hash if we have a torrent ID
     final String? rdTorrentId = item['rdTorrentId'] as String?;
     final String? apiKey = await getApiKey();
-    
-    if (rdTorrentId != null && rdTorrentId.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
+
+    if (rdTorrentId != null &&
+        rdTorrentId.isNotEmpty &&
+        apiKey != null &&
+        apiKey.isNotEmpty) {
       try {
         // Import DebridService here to avoid circular dependency
         final response = await http.get(
-          Uri.parse('https://api.real-debrid.com/rest/1.0/torrents/info/$rdTorrentId'),
-          headers: {
-            'Authorization': 'Bearer $apiKey',
-          },
+          Uri.parse(
+            'https://api.real-debrid.com/rest/1.0/torrents/info/$rdTorrentId',
+          ),
+          headers: {'Authorization': 'Bearer $apiKey'},
         );
-        
+
         if (response.statusCode == 200) {
           final torrentInfo = json.decode(response.body);
           final String? hash = torrentInfo['hash'] as String?;
           if (hash != null && hash.isNotEmpty) {
             enriched['torrent_hash'] = hash;
-            print('✅ Torrent hash fetched and stored: $hash for torrent ID: $rdTorrentId');
+            print(
+              '✅ Torrent hash fetched and stored: $hash for torrent ID: $rdTorrentId',
+            );
           } else {
-            print('⚠️ No hash found in torrent info for torrent ID: $rdTorrentId');
+            print(
+              '⚠️ No hash found in torrent info for torrent ID: $rdTorrentId',
+            );
           }
         } else {
-          print('❌ Failed to fetch torrent info. Status code: ${response.statusCode} for torrent ID: $rdTorrentId');
+          print(
+            '❌ Failed to fetch torrent info. Status code: ${response.statusCode} for torrent ID: $rdTorrentId',
+          );
         }
       } catch (e) {
-        print('❌ Error fetching torrent hash for torrent ID: $rdTorrentId - $e');
+        print(
+          '❌ Error fetching torrent hash for torrent ID: $rdTorrentId - $e',
+        );
         // Silently continue without hash if fetch fails
         // This ensures playlist addition doesn't fail due to hash fetch issues
       }
     } else {
       print('ℹ️ Skipping torrent hash fetch - missing rdTorrentId or API key');
     }
-    
+
     // Log what's being saved to database
     print('📝 Adding playlist item to database:');
     print('   Title: ${enriched['title']}');
@@ -701,11 +746,13 @@ class StorageService {
     print('   rdTorrentId: ${enriched['rdTorrentId']}');
     print('   torrent_hash: ${enriched['torrent_hash'] ?? 'null'}');
     print('   restrictedLink: ${enriched['restrictedLink'] ?? 'null'}');
-    print('   addedAt: ${DateTime.fromMillisecondsSinceEpoch(enriched['addedAt']).toIso8601String()}');
-    
+    print(
+      '   addedAt: ${DateTime.fromMillisecondsSinceEpoch(enriched['addedAt']).toIso8601String()}',
+    );
+
     items.add(enriched);
     await savePlaylistItemsRaw(items);
-    
+
     return true;
   }
 
@@ -722,13 +769,17 @@ class StorageService {
 
   /// Update an existing playlist item with poster URL
   /// Uses rdTorrentId to find and update the item
-  static Future<bool> updatePlaylistItemPoster(String rdTorrentId, String posterUrl) async {
+  static Future<bool> updatePlaylistItemPoster(
+    String rdTorrentId,
+    String posterUrl,
+  ) async {
     final items = await getPlaylistItemsRaw();
-    final itemIndex = items.indexWhere((item) => 
-      (item['rdTorrentId'] as String?) == rdTorrentId);
-    
+    final itemIndex = items.indexWhere(
+      (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
+    );
+
     if (itemIndex == -1) return false;
-    
+
     items[itemIndex]['posterUrl'] = posterUrl;
     await savePlaylistItemsRaw(items);
     return true;
@@ -740,10 +791,10 @@ class ApiKeyValidator {
     // Real Debrid API keys are typically 40 characters
     return apiKey.length == 40 && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(apiKey);
   }
-  
+
   static Future<bool> validateApiKey(String apiKey) async {
     if (!isValidFormat(apiKey)) return false;
-    
+
     try {
       await DebridService.getUserInfo(apiKey);
       return true; // If we get here, the API key is valid
@@ -751,4 +802,4 @@ class ApiKeyValidator {
       return false;
     }
   }
-} 
+}
