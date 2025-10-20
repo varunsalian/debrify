@@ -889,149 +889,191 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           builder: (ctx) {
             return Dialog(
               backgroundColor: Colors.transparent,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF374151)),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: const [
-                        Icon(Icons.bolt_rounded, color: Color(0xFF6366F1), size: 20),
-                        SizedBox(width: 8),
-                        Text('Choose an action', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _CompactActionButton(
-                            icon: Icons.play_arrow_rounded,
-                            title: 'Play',
-                            color: const Color(0xFF6366F1),
-                            onTap: () async {
-                              Navigator.of(ctx).pop();
-                              await _playFromResult(
-                                links: links,
-                                files: files,
-                                updatedInfo: updatedInfo,
-                                torrentName: torrentName,
-                                fileSelection: fileSelection,
-                                torrentId: result['torrentId']?.toString(),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  color: const Color(0xFF0F172A),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 42,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(Icons.cloud_download_rounded, color: Colors.white),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    torrentName,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    links.length == 1
+                                        ? 'Ready to unrestrict and stream/download.'
+                                        : '${links.length} files available in this torrent.',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.6),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              icon: const Icon(Icons.close_rounded, color: Colors.white54),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1, color: Color(0xFF1E293B)),
+                      _DebridActionTile(
+                        icon: Icons.play_circle_rounded,
+                        color: const Color(0xFF60A5FA),
+                        title: 'Play now',
+                        subtitle: hasAnyVideo
+                            ? 'Unrestrict and open instantly in the built-in player.'
+                            : 'Available for video torrents only.',
+                        enabled: hasAnyVideo,
+                        onTap: () async {
+                          Navigator.of(ctx).pop();
+                          await _playFromResult(
+                            links: links,
+                            files: files,
+                            updatedInfo: updatedInfo,
+                            torrentName: torrentName,
+                            fileSelection: fileSelection,
+                            torrentId: result['torrentId']?.toString(),
+                          );
+                        },
+                      ),
+                      _DebridActionTile(
+                        icon: Icons.download_rounded,
+                        color: const Color(0xFF4ADE80),
+                        title: 'Download to device',
+                        subtitle: 'Downloads the files to your device',
+                        enabled: true,
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          if (hasAnyVideo) {
+                            if (links.length == 1) {
+                              _downloadFile(downloadLink, torrentName);
+                            } else {
+                              final rdTorrent = RDTorrent(
+                                id: result['torrentId'].toString(),
+                                filename: torrentName,
+                                hash: '',
+                                bytes: 0,
+                                host: '',
+                                split: 0,
+                                progress: 0,
+                                status: '',
+                                added: DateTime.now().toIso8601String(),
+                                links: links.map((e) => e.toString()).toList(),
                               );
-                            },
-                            enabled: hasAnyVideo,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _CompactActionButton(
-                            icon: Icons.download_rounded,
-                            title: 'Download',
-                            color: const Color(0xFF10B981),
-                            onTap: () {
-                              Navigator.of(ctx).pop();
-                              if (hasAnyVideo) {
-                                // Check if single video file - download directly
-                                if (links.length == 1) {
-                                  _downloadFile(downloadLink, torrentName);
-                                } else {
-                                  // Multiple video files - show file selection
-                                  final rdTorrent = RDTorrent(
-                                    id: result['torrentId'].toString(),
-                                    filename: torrentName,
-                                    hash: '',
-                                    bytes: 0,
-                                    host: '',
-                                    split: 0,
-                                    progress: 0,
-                                    status: '',
-                                    added: DateTime.now().toIso8601String(),
-                                    links: links.map((e) => e.toString()).toList(),
-                                  );
-                                  MainPageBridge.openDebridOptions?.call(rdTorrent);
-                                }
-                              } else {
-                                if (links.length > 1) {
-                                  _showDownloadSelectionDialog(links, torrentName);
-                                } else {
-                                  _downloadFile(downloadLink, torrentName);
+                              MainPageBridge.openDebridOptions?.call(rdTorrent);
+                            }
+                          } else {
+                            if (links.length > 1) {
+                              _showDownloadSelectionDialog(links, torrentName);
+                            } else {
+                              _downloadFile(downloadLink, torrentName);
+                            }
+                          }
+                        },
+                      ),
+                      _DebridActionTile(
+                        icon: Icons.playlist_add_rounded,
+                        color: const Color(0xFFA855F7),
+                        title: 'Add to playlist',
+                        subtitle: hasAnyVideo
+                            ? 'Keep this torrent handy in your Debrify playlist.'
+                            : 'Available for video torrents only.',
+                        enabled: hasAnyVideo,
+                        onTap: () async {
+                          Navigator.of(ctx).pop();
+                          if (!hasAnyVideo) return;
+                          if (links.length == 1) {
+                            String finalTitle = torrentName;
+                            try {
+                              final torrentId = result['torrentId']?.toString();
+                              if (torrentId != null && torrentId.isNotEmpty) {
+                                final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
+                                final filename = torrentInfo['filename']?.toString();
+                                if (filename != null && filename.isNotEmpty) {
+                                  finalTitle = filename;
                                 }
                               }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _CompactActionButton(
-                            icon: Icons.playlist_add,
-                            title: 'Add to Playlist',
-                            color: const Color(0xFF8B5CF6),
-                            onTap: () async {
-                              Navigator.of(ctx).pop();
-                              if (!hasAnyVideo) return; // ignore non-video
-                              if (links.length == 1) {
-                                // Fetch actual torrent filename for resume key parity with Debrid screen
-                                String finalTitle = torrentName;
-                                try {
-                                  final torrentId = result['torrentId']?.toString();
-                                  if (torrentId != null && torrentId.isNotEmpty) {
-                                    final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
-                                    final filename = torrentInfo['filename']?.toString();
-                                    if (filename != null && filename.isNotEmpty) {
-                                      finalTitle = filename;
-                                    }
-                                  }
-                                } catch (_) {
-                                  // Fallback to torrentName if fetch fails
-                                }
-                                
-                                final added = await StorageService.addPlaylistItemRaw({
-                                  'title': finalTitle,
-                                  'url': '',
-                                  'restrictedLink': links[0],
-                                  'apiKey': apiKey,
-                                  'rdTorrentId': result['torrentId']?.toString(),
-                                  'kind': 'single',
-                                });
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(added ? 'Added to playlist' : 'Already in playlist')),
-                                );
-                              } else {
-                                // Multi-file/series torrent: add entire collection as one entry
-                                final torrentId = result['torrentId']?.toString() ?? '';
-                                if (torrentId.isEmpty) return;
-                                final added = await StorageService.addPlaylistItemRaw({
-                                  'title': torrentName,
-                                  'kind': 'collection',
-                                  'rdTorrentId': torrentId,
-                                  'apiKey': apiKey,
-                                  'count': links.length,
-                                });
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(added ? 'Added collection to playlist' : 'Already in playlist')),
-                                );
-                              }
-                            },
-                            enabled: hasAnyVideo,
-                          ),
-                        ),
-                        // Intentionally NO playlist button here (out of scope per request)
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                    ),
-                  ],
+                            } catch (_) {}
+
+                            final added = await StorageService.addPlaylistItemRaw({
+                              'title': finalTitle,
+                              'url': '',
+                              'restrictedLink': links[0],
+                              'apiKey': apiKey,
+                              'rdTorrentId': result['torrentId']?.toString(),
+                              'kind': 'single',
+                            });
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(added ? 'Added to playlist' : 'Already in playlist')),
+                            );
+                          } else {
+                            final torrentId = result['torrentId']?.toString() ?? '';
+                            if (torrentId.isEmpty) return;
+                            final added = await StorageService.addPlaylistItemRaw({
+                              'title': torrentName,
+                              'kind': 'collection',
+                              'rdTorrentId': torrentId,
+                              'apiKey': apiKey,
+                              'count': links.length,
+                            });
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(added ? 'Added collection to playlist' : 'Already in playlist')),
+                            );
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -1128,33 +1170,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   // Compact action button widget for the chooser dialog
-  Widget _CompactActionButton({
-    required IconData icon,
-    required String title,
-    required Color color,
-    required VoidCallback onTap,
-    bool enabled = true,
-  }) {
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.5,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: enabled ? color.withValues(alpha: 0.1) : const Color(0xFF374151),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: enabled ? color.withValues(alpha: 0.3) : const Color(0xFF4B5563)),
-          ),
-          child: Center(
-            child: Icon(icon, color: enabled ? color : Colors.grey, size: 20),
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _playFromResult({
     required List<dynamic> links,
     required List<dynamic>? files,
@@ -2797,38 +2812,44 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: 8,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                            spreadRadius: 0,
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.download_rounded,
-                            color: const Color(0xFF60A5FA),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Add to Debrid',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: const Color(0xFF60A5FA),
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.cloud_download_rounded, color: Colors.white, size: 16),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Real-Debrid',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: 2),
-                          Icon(
-                            Icons.more_horiz,
-                            color: const Color(0xFF60A5FA),
-                            size: 10,
-                          ),
+                          SizedBox(width: 4),
+                          Icon(Icons.expand_more_rounded, color: Colors.white70, size: 18),
                         ],
                       ),
                     ),
@@ -2842,3 +2863,90 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 } 
+
+class _DebridActionTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  const _DebridActionTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    required this.enabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.45,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111827),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1F2937)),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.14),
+                blurRadius: 16,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [color, color.withValues(alpha: 0.6)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        height: 1.22,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
