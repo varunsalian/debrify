@@ -1499,10 +1499,11 @@ class _TorrentGroupList extends StatelessWidget {
       itemBuilder: (context, index) {
         final group = groups[index];
         final bool isBusy = busyGroupIds.contains(group.id);
+        final bool isIOS = Platform.isIOS;
 
-        final bool canPause = !isFinishedTab && !isBusy && onPauseAll != null &&
+        final bool canPause = !isIOS && !isFinishedTab && !isBusy && onPauseAll != null &&
             (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
-        final bool canResume = !isFinishedTab && !isBusy && onResumeAll != null &&
+        final bool canResume = !isIOS && !isFinishedTab && !isBusy && onResumeAll != null &&
             group.pausedFiles > 0;
         final bool canCancel = !isBusy && onCancelAll != null &&
             (group.hasActive || group.failedFiles > 0 || group.notFoundFiles > 0);
@@ -2161,7 +2162,7 @@ class _DownloadTile extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                if (record.task is DownloadTask && record.status == TaskStatus.running)
+                if (record.task is DownloadTask && record.status == TaskStatus.running && !Platform.isIOS)
                   OutlinedButton.icon(
                     onPressed: () async {
                       await DownloadService.instance.pause(record.task);
@@ -2170,7 +2171,7 @@ class _DownloadTile extends StatelessWidget {
                     icon: const Icon(Icons.pause),
                     label: const Text('Pause'),
                   ),
-                if (record.task is DownloadTask && record.status == TaskStatus.paused)
+                if (record.task is DownloadTask && record.status == TaskStatus.paused && !Platform.isIOS)
                   FilledButton.tonalIcon(
                     onPressed: () async {
                       await DownloadService.instance.resume(record.task);
@@ -2179,9 +2180,10 @@ class _DownloadTile extends StatelessWidget {
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Resume'),
                   ),
-                if (record.status == TaskStatus.enqueued ||
+                if ((record.status == TaskStatus.enqueued ||
                     record.status == TaskStatus.running ||
-                    record.status == TaskStatus.paused)
+                    record.status == TaskStatus.paused) &&
+                    !(Platform.isIOS && record.status == TaskStatus.running))
                   TextButton.icon(
                     onPressed: () async {
                       await DownloadService.instance.cancel(record.task);
@@ -2491,17 +2493,18 @@ class _TorrentDownloadDetailScreenState extends State<TorrentDownloadDetailScree
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           if (index == 0) {
+            final isIOS = Platform.isIOS;
             return _TorrentGroupCard(
               group: group,
               isBusy: _busy,
               isFinished: group.isFinished,
-              onPauseAll: (!group.isFinished &&
+              onPauseAll: (!isIOS && !group.isFinished &&
                       (group.runningFiles > 0 ||
                           group.queuedFiles > 0 ||
                           group.waitingFiles > 0))
                   ? () => _runAction(_pauseAll)
                   : null,
-              onResumeAll: (!group.isFinished && group.pausedFiles > 0)
+              onResumeAll: (!isIOS && !group.isFinished && group.pausedFiles > 0)
                   ? () => _runAction(_resumeAll)
                   : null,
               onCancelAll: (!group.isFinished &&
