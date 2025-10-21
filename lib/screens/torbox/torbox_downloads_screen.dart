@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../../models/torbox_torrent.dart';
+import '../../services/download_service.dart';
 import '../../services/torbox_service.dart';
 import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
@@ -43,12 +46,122 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     TorboxTorrent torrent,
   ) async {
     switch (action) {
+      case 'Download':
+        await _showDownloadOptions(torrent);
+        break;
       case 'Delete':
         await _confirmDeleteTorrent(torrent);
         break;
       default:
         _showComingSoon(action);
     }
+  }
+
+  Future<void> _showDownloadOptions(TorboxTorrent torrent) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      _showComingSoon('Add Torbox API key');
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        bool isLoadingZip = false;
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.archive_outlined),
+                      title: const Text('Download whole torrent as ZIP'),
+                      subtitle: const Text(
+                        'Create a single archive for offline use',
+                      ),
+                      trailing: isLoadingZip
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : null,
+                      enabled: !isLoadingZip,
+                      onTap: isLoadingZip
+                          ? null
+                          : () async {
+                              setSheetState(() => isLoadingZip = true);
+                              try {
+                                final link =
+                                    await TorboxService.requestZipDownload(
+                                      key,
+                                      torrent.id,
+                                    );
+
+                                final suggestedName =
+                                    torrent.name.trim().isEmpty
+                                    ? 'torbox_${torrent.id}.zip'
+                                    : torrent.name.trim().endsWith('.zip')
+                                    ? torrent.name.trim()
+                                    : '${torrent.name.trim()}.zip';
+
+                                await DownloadService.instance.enqueueDownload(
+                                  url: link,
+                                  fileName: suggestedName,
+                                  context: this.context,
+                                  torrentName: torrent.name,
+                                  meta: jsonEncode({
+                                    'source': 'torbox',
+                                    'torrent_id': torrent.id,
+                                    'zip': true,
+                                  }),
+                                );
+
+                                if (!mounted) return;
+                                Navigator.of(sheetContext).pop();
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Added "${torrent.name}" to downloads',
+                                    ),
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                setSheetState(() => isLoadingZip = false);
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Download failed: $e'),
+                                  ),
+                                );
+                              }
+                            },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.list_alt),
+                      title: const Text('Select files to download'),
+                      subtitle: const Text('Coming soon'),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        _showComingSoon('Select files');
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _confirmDeleteAll() async {
@@ -603,13 +716,12 @@ class _TorboxTorrentCard extends StatelessWidget {
                   label: isSingleFile ? 'Copy link' : 'Show files',
                   onTap: () => onAction('File options'),
                 ),
-                if (isSingleFile)
-                  _ActionIcon(
-                    icon: Icons.download_rounded,
-                    color: const Color(0xFF10B981),
-                    label: 'Download',
-                    onTap: () => onAction('Download'),
-                  ),
+                _ActionIcon(
+                  icon: Icons.download_rounded,
+                  color: const Color(0xFF10B981),
+                  label: 'Download',
+                  onTap: () => onAction('Download'),
+                ),
                 _ActionIcon(
                   icon: Icons.delete_outline,
                   color: const Color(0xFFEF4444),

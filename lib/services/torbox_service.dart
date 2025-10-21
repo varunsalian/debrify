@@ -116,6 +116,55 @@ class TorboxService {
     }
   }
 
+  static Future<String> requestZipDownload(String apiKey, int torrentId) async {
+    final normalizedKey = apiKey.trim();
+    final uri = Uri.parse('$_baseUrl/torrents/requestdl').replace(
+      queryParameters: {
+        'torrent_id': '$torrentId',
+        'zip_link': 'true',
+        'redirect': 'false',
+        'token': normalizedKey,
+      },
+    );
+
+    try {
+      debugPrint(
+        'TorboxService: Requesting ZIP download for torrent $torrentId',
+      );
+      final headers = {
+        'Authorization': _formatAuthHeader(apiKey),
+        'Content-Type': 'application/json',
+      };
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode != 200) {
+        debugPrint(
+          'TorboxService: ZIP request failed with ${response.statusCode}. Body: ${response.body}',
+        );
+        throw Exception('Failed to request download: ${response.statusCode}');
+      }
+
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      final bool success = payload['success'] as bool? ?? false;
+      if (!success) {
+        final dynamic error = payload['error'];
+        throw Exception(error?.toString() ?? 'Torbox API returned an error');
+      }
+
+      final data = payload['data'];
+      if (data is String && data.isNotEmpty) {
+        return data;
+      }
+
+      throw Exception('Torbox did not return a download link');
+    } catch (e) {
+      debugPrint('TorboxService: ZIP request exception: $e');
+      throw Exception('Torbox download request failed: $e');
+    }
+  }
+
   static String _formatAuthHeader(String apiKey) {
     final trimmed = apiKey.trim();
     if (trimmed.toLowerCase().startsWith('bearer ')) {
