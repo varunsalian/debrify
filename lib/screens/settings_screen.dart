@@ -46,6 +46,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : 'Connected';
     }
 
+    if (!mounted) return;
+
     setState(() {
       _apiKeySummary = rdSummary;
       _torboxSummary = torboxSummary;

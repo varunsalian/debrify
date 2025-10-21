@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/torrent_search_screen.dart';
 import 'screens/debrid_downloads_screen.dart';
+import 'screens/torbox/torbox_downloads_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/magic_tv_screen.dart';
@@ -145,40 +146,71 @@ class DebrifyApp extends StatelessWidget {
           inversePrimary: Color(0xFF818CF8), // Indigo 400
           surfaceTint: Color(0xFF6366F1), // Indigo 500
         ),
-        textTheme: GoogleFonts.interTextTheme(const TextTheme(
-          displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -0.5),
-          displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.25),
-          displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-          headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-          headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-          titleSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
-          bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
-          bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-          labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0.1),
-          labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, letterSpacing: 0.5),
-          labelSmall: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: 0.5),
-        )),
+        textTheme: GoogleFonts.interTextTheme(
+          const TextTheme(
+            displayLarge: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+            displayMedium: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.25,
+            ),
+            displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+            headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+            headlineMedium: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+            headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            titleSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
+            bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
+            bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+            labelLarge: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.1,
+            ),
+            labelMedium: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.5,
+            ),
+            labelSmall: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
         cardTheme: CardThemeData(
           elevation: 8,
           shadowColor: Colors.black.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           color: const Color(0xFF1E293B),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             elevation: 4,
             shadowColor: Colors.black.withValues(alpha: 0.3),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             side: const BorderSide(color: Color(0xFF475569)),
           ),
@@ -202,20 +234,29 @@ class DebrifyApp extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
         ),
         appBarTheme: const AppBarTheme(
           elevation: 0,
           backgroundColor: Color(0xFF0F172A),
           foregroundColor: Colors.white,
           centerTitle: true,
-          titleTextStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+          titleTextStyle: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF1E293B)),
         snackBarTheme: SnackBarThemeData(
           backgroundColor: const Color(0xFF1E293B),
           contentTextStyle: const TextStyle(color: Colors.white),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           behavior: SnackBarBehavior.floating,
           elevation: 8,
         ),
@@ -244,6 +285,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const DownloadsScreen(),
     const DebrifyTVScreen(),
     const DebridDownloadsScreen(),
+    const TorboxDownloadsScreen(),
     const SettingsScreen(),
   ];
 
@@ -253,6 +295,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Downloads',
     'Debrify TV',
     'Real Debrid',
+    'Torbox',
     'Settings',
   ];
 
@@ -262,6 +305,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.download_for_offline_rounded,
     Icons.auto_awesome_rounded,
     Icons.cloud_download_rounded,
+    Icons.flash_on_rounded,
     Icons.settings_rounded,
   ];
 
@@ -292,15 +336,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
     _animationController.forward();
-    
+
     // Validate API key on app launch
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _validateApiKeyOnLaunch();
@@ -323,22 +363,23 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   Future<void> _validateApiKeyOnLaunch() async {
     if (_isValidatingApi) return;
-    
+
     setState(() {
       _isValidatingApi = true;
     });
 
     try {
       final isValid = await AccountService.isApiKeyValid();
-      
+
       if (!isValid && mounted) {
         // Show API key validation dialog
         final result = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const ApiKeyValidationDialog(isInitialSetup: true),
+          builder: (context) =>
+              const ApiKeyValidationDialog(isInitialSetup: true),
         );
-        
+
         if (result == true && mounted) {
           setState(() {}); // Refresh UI to show account status
         }
@@ -354,8 +395,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return AnimatedPremiumBackground(
@@ -366,7 +405,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             currentIndex: _selectedIndex,
             items: buildDefaultNavItems(_icons, _titles),
             onTap: _onItemTapped,
-            badges: const [0, 0, 0, 0, 0, 0],
+            badges: const [0, 0, 0, 0, 0, 0, 0],
             haptics: true,
           ),
           automaticallyImplyLeading: false,
@@ -376,10 +415,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 350),
             transitionBuilder: (child, animation) {
-              final offsetAnimation = Tween<Offset>(
-                begin: const Offset(0.02, 0.02),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+              final offsetAnimation =
+                  Tween<Offset>(
+                    begin: const Offset(0.02, 0.02),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  );
               return FadeTransition(
                 opacity: animation,
                 child: SlideTransition(position: offsetAnimation, child: child),
