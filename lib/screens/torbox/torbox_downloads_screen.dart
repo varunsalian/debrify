@@ -99,21 +99,21 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                           : () async {
                               setSheetState(() => isLoadingZip = true);
                               try {
-                                final link =
-                                    await TorboxService.requestZipDownload(
+                                final permalink =
+                                    TorboxService.createZipPermalink(
                                       key,
                                       torrent.id,
                                     );
 
-                                final suggestedName =
-                                    torrent.name.trim().isEmpty
-                                    ? 'torbox_${torrent.id}.zip'
-                                    : torrent.name.trim().endsWith('.zip')
-                                    ? torrent.name.trim()
-                                    : '${torrent.name.trim()}.zip';
+                                final baseName = torrent.name.trim().isEmpty
+                                    ? 'torbox_${torrent.id}'
+                                    : torrent.name.trim();
+                                final suggestedName = baseName.endsWith('.zip')
+                                    ? baseName
+                                    : '$baseName.zip';
 
                                 await DownloadService.instance.enqueueDownload(
-                                  url: link,
+                                  url: permalink,
                                   fileName: suggestedName,
                                   context: this.context,
                                   torrentName: torrent.name,
