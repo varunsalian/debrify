@@ -2435,7 +2435,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                    child: IconButton(
                      onPressed: () => _handleFileOptions(torrent),
                      icon: torrent.links.length > 1
-                         ? const Icon(Icons.more_horiz, size: 18)
+                         ? const Icon(Icons.download_rounded, size: 18)
                          : const Icon(Icons.copy, size: 18),
                      style: IconButton.styleFrom(
                        foregroundColor: const Color(0xFF6366F1),
