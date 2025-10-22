@@ -1077,9 +1077,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     icon: Icons.playlist_add_rounded,
                     color: const Color(0xFFA855F7),
                     title: 'Add to playlist',
-                    subtitle: 'Coming soon for Torbox downloads.',
-                    enabled: false,
-                    onTap: () {},
+                    subtitle: hasVideo
+                        ? 'Keep this torrent handy in your Debrify playlist.'
+                        : 'Available for video torrents only.',
+                    enabled: hasVideo,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _addTorboxTorrentToPlaylist(torrent);
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextButton(
@@ -1095,6 +1100,48 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         );
       },
+    );
+  }
+
+  Future<void> _addTorboxTorrentToPlaylist(TorboxTorrent torrent) async {
+    final videoFiles = torrent.files.where(_torboxFileLooksLikeVideo).toList();
+    if (videoFiles.isEmpty) {
+      _showTorboxSnack('No playable Torbox video files found.', isError: true);
+      return;
+    }
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      final displayName = _torboxDisplayName(file);
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'torbox',
+        'title': displayName.isNotEmpty ? displayName : torrent.name,
+        'kind': 'single',
+        'torboxTorrentId': torrent.id,
+        'torboxFileId': file.id,
+        'torrent_hash': torrent.hash,
+        'sizeBytes': file.size,
+      });
+      _showTorboxSnack(
+        added ? 'Added to playlist' : 'Already in playlist',
+        isError: !added,
+      );
+      return;
+    }
+
+    final fileIds = videoFiles.map((file) => file.id).toList();
+    final added = await StorageService.addPlaylistItemRaw({
+      'provider': 'torbox',
+      'title': torrent.name,
+      'kind': 'collection',
+      'torboxTorrentId': torrent.id,
+      'torboxFileIds': fileIds,
+      'torrent_hash': torrent.hash,
+      'count': videoFiles.length,
+    });
+    _showTorboxSnack(
+      added ? 'Added collection to playlist' : 'Already in playlist',
+      isError: !added,
     );
   }
 
