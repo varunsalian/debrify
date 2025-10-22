@@ -8,6 +8,8 @@ class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
   static const String _fileSelectionKey = 'real_debrid_file_selection';
   static const String _torboxApiKey = 'torbox_api_key';
+  static const String _torboxCacheCheckPref =
+      'torbox_check_cache_before_search';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _batteryOptStatusKey =
       'battery_opt_status_v1'; // granted|denied|never|unknown
@@ -59,6 +61,16 @@ class StorageService {
   static Future<void> deleteTorboxApiKey() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_torboxApiKey);
+  }
+
+  static Future<bool> getTorboxCacheCheckEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_torboxCacheCheckPref) ?? false;
+  }
+
+  static Future<void> setTorboxCacheCheckEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_torboxCacheCheckPref, enabled);
   }
 
   // File Selection methods
@@ -229,7 +241,9 @@ class StorageService {
       'finishedAt': DateTime.now().millisecondsSinceEpoch,
     };
 
-    debugPrint('StorageService: markEpisodeAsFinished title="$seriesTitle" S${season}E$episode');
+    debugPrint(
+      'StorageService: markEpisodeAsFinished title="$seriesTitle" S${season}E$episode',
+    );
 
     await _savePlaybackStateMap(map);
   }
@@ -421,7 +435,9 @@ class StorageService {
         'StorageService: getLastPlayedEpisode found S${lastEpisode['season']}E${lastEpisode['episode']} for "$seriesTitle"',
       );
     } else {
-      debugPrint('StorageService: getLastPlayedEpisode no episodes for "$seriesTitle"');
+      debugPrint(
+        'StorageService: getLastPlayedEpisode no episodes for "$seriesTitle"',
+      );
     }
 
     return lastEpisode;
@@ -690,7 +706,8 @@ class StorageService {
       final String torboxId = torboxIdRaw.toString();
       final dynamic singleFileId = item['torboxFileId'];
       if (singleFileId != null) {
-        return 'torbox:${torboxId}:file:${singleFileId.toString()}'.toLowerCase();
+        return 'torbox:${torboxId}:file:${singleFileId.toString()}'
+            .toLowerCase();
       }
       final dynamic multiFileIds = item['torboxFileIds'];
       if (multiFileIds is List && multiFileIds.isNotEmpty) {
@@ -722,10 +739,9 @@ class StorageService {
 
     final enriched = Map<String, dynamic>.from(item);
     enriched['addedAt'] = DateTime.now().millisecondsSinceEpoch;
-    enriched['provider'] =
-        ((item['provider'] as String?)?.isNotEmpty ?? false)
-            ? item['provider']
-            : 'realdebrid';
+    enriched['provider'] = ((item['provider'] as String?)?.isNotEmpty ?? false)
+        ? item['provider']
+        : 'realdebrid';
 
     final bool isTorbox =
         (enriched['provider'] as String?)?.toLowerCase() == 'torbox';

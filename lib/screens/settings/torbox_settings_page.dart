@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
@@ -19,6 +18,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   bool _obscure = true;
   bool _loading = true;
   bool _saving = false;
+  bool _checkCacheBeforeSearch = false;
 
   @override
   void initState() {
@@ -28,8 +28,10 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
 
   Future<void> _load() async {
     final apiKey = await StorageService.getTorboxApiKey();
+    final cachePref = await StorageService.getTorboxCacheCheckEnabled();
     setState(() {
       _savedApiKey = apiKey;
+      _checkCacheBeforeSearch = cachePref;
       _loading = false;
     });
 
@@ -98,6 +100,11 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
       _isEditing = false;
     });
     _snack('Torbox API key removed');
+  }
+
+  Future<void> _updateCacheCheck(bool value) async {
+    setState(() => _checkCacheBeforeSearch = value);
+    await StorageService.setTorboxCacheCheckEnabled(value);
   }
 
   @override
@@ -281,6 +288,38 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                   ],
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile.adaptive(
+                  value: _checkCacheBeforeSearch,
+                  onChanged: _updateCacheCheck,
+                  title: const Text('Check Torbox cache during searches'),
+                  subtitle: const Text(
+                    'Verify Torbox has a cached copy before enabling quick actions in torrent search results. Non-cached torrents keep the Torbox button disabled.',
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    'Requires a Torbox API key. Debrify issues a fast cache check after each search; if anything fails, Torbox buttons remain enabled so your search flow continues.',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),

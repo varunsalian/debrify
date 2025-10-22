@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/torbox_torrent.dart';
@@ -119,6 +120,89 @@ class TorboxService {
     }
   }
 
+  static Future<Set<String>> checkCachedTorrents({
+    required String apiKey,
+    required List<String> infoHashes,
+    bool listFiles = false,
+  }) async {
+    if (infoHashes.isEmpty) return const <String>{};
+
+    final headers = {
+      'Authorization': _formatAuthHeader(apiKey),
+      'Content-Type': 'application/json',
+    };
+
+    final sanitized = infoHashes
+        .map((hash) => hash.trim().toLowerCase())
+        .where((hash) => hash.isNotEmpty)
+        .toSet()
+        .toList();
+
+    const int chunkSize = 90;
+    final Set<String> cached = <String>{};
+
+    for (int start = 0; start < sanitized.length; start += chunkSize) {
+      final chunk = sanitized.sublist(
+        start,
+        math.min(start + chunkSize, sanitized.length),
+      );
+
+      final querySegments = <String>[
+        'format=list',
+        'list_files=${listFiles ? 'true' : 'false'}',
+        ...chunk.map((hash) => 'hash=${Uri.encodeQueryComponent(hash)}'),
+      ];
+      final uri = Uri.parse(
+        '$_baseUrl/torrents/checkcached?${querySegments.join('&')}',
+      );
+
+      try {
+        debugPrint(
+          'TorboxService: Checking cache for ${chunk.length} torrents (chunk start=$start)',
+        );
+        final response = await http
+            .get(uri, headers: headers)
+            .timeout(const Duration(seconds: 15));
+
+        if (response.statusCode != 200) {
+          debugPrint(
+            'TorboxService: checkcached status ${response.statusCode}. Body: ${response.body}',
+          );
+          throw Exception(
+            'Failed to check Torbox cache: ${response.statusCode}',
+          );
+        }
+
+        final Map<String, dynamic> payload =
+            json.decode(response.body) as Map<String, dynamic>;
+        final bool success = payload['success'] as bool? ?? false;
+        if (!success) {
+          final dynamic error = payload['error'];
+          debugPrint('TorboxService: checkcached error: ${error ?? 'unknown'}');
+          throw Exception(error?.toString() ?? 'Torbox cache check failed');
+        }
+
+        final data = payload['data'];
+        if (data is List) {
+          for (final entry in data) {
+            if (entry is Map<String, dynamic>) {
+              final hash = (entry['hash'] as String?)?.trim().toLowerCase();
+              if (hash != null && hash.isNotEmpty) {
+                cached.add(hash);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('TorboxService: checkcached chunk failed: $e');
+        rethrow;
+      }
+    }
+
+    debugPrint('TorboxService: Cached hashes found ${cached.length}');
+    return cached;
+  }
+
   static String createZipPermalink(String apiKey, int torrentId) {
     final token = apiKey.trim();
     final uri = Uri.parse('$_baseUrl/torrents/requestdl').replace(
@@ -140,9 +224,7 @@ class TorboxService {
     bool addOnlyIfCached = true,
   }) async {
     final uri = Uri.parse('$_baseUrl/torrents/createtorrent');
-    final headers = {
-      'Authorization': _formatAuthHeader(apiKey),
-    };
+    final headers = {'Authorization': _formatAuthHeader(apiKey)};
 
     final request = http.MultipartRequest('POST', uri)
       ..headers.addAll(headers)
@@ -155,7 +237,9 @@ class TorboxService {
       debugPrint(
         'TorboxService: createtorrent magnet hash=${magnet.length >= 80 ? magnet.substring(0, 80) : magnet}',
       );
-      final response = await request.send().timeout(const Duration(seconds: 20));
+      final response = await request.send().timeout(
+        const Duration(seconds: 20),
+      );
       final body = await response.stream.bytesToString();
       debugPrint(
         'TorboxService: createtorrent status=${response.statusCode} body=$body',

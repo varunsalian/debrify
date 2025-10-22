@@ -36,6 +36,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String _errorMessage = '';
   bool _hasSearched = false;
   String? _apiKey;
+  bool _torboxCacheCheckEnabled = false;
+  Map<String, bool>? _torboxCacheStatus;
 
   // Search engine toggles
   bool _useTorrentsCsv = true;
@@ -68,6 +70,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     StorageService.getApiKey().then((k) {
       setState(() {
         _apiKey = k;
+      });
+    });
+    StorageService.getTorboxCacheCheckEnabled().then((enabled) {
+      if (!mounted) return;
+      setState(() {
+        _torboxCacheCheckEnabled = enabled;
       });
     });
   }
@@ -105,10 +113,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _isLoading = true;
       _errorMessage = '';
       _hasSearched = true;
+      _torboxCacheStatus = null;
     });
 
     // Hide keyboard
     _searchFocusNode.unfocus();
+
+    final bool cacheCheckPreference =
+        await StorageService.getTorboxCacheCheckEnabled();
+    final String? torboxKey = await StorageService.getTorboxApiKey();
+    if (mounted) {
+      setState(() {
+        _torboxCacheCheckEnabled = cacheCheckPreference;
+      });
+    }
 
     try {
       final result = await TorrentService.searchAllEngines(
@@ -116,9 +134,44 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         useTorrentsCsv: _useTorrentsCsv,
         usePirateBay: _usePirateBay,
       );
+      final fetchedTorrents = (result['torrents'] as List<Torrent>).toList(
+        growable: false,
+      );
+      Map<String, bool>? torboxCacheMap;
+
+      final String? torboxKeyValue = torboxKey;
+      if (cacheCheckPreference &&
+          torboxKeyValue != null &&
+          torboxKeyValue.isNotEmpty &&
+          fetchedTorrents.isNotEmpty) {
+        final uniqueHashes = fetchedTorrents
+            .map((torrent) => torrent.infohash.trim().toLowerCase())
+            .where((hash) => hash.isNotEmpty)
+            .toSet()
+            .toList();
+
+        if (uniqueHashes.isNotEmpty) {
+          try {
+            final cachedHashes = await TorboxService.checkCachedTorrents(
+              apiKey: torboxKeyValue,
+              infoHashes: uniqueHashes,
+              listFiles: false,
+            );
+            torboxCacheMap = {
+              for (final hash in uniqueHashes)
+                hash: cachedHashes.contains(hash),
+            };
+          } catch (e) {
+            debugPrint('TorrentSearchScreen: Torbox cache check failed: $e');
+            torboxCacheMap = null;
+          }
+        }
+      }
+
       setState(() {
-        _torrents = result['torrents'] as List<Torrent>;
+        _torrents = fetchedTorrents;
         _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
+        _torboxCacheStatus = torboxCacheMap;
         _isLoading = false;
       });
 
@@ -1510,6 +1563,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         : FileUtils.getFileName(file.name);
     return FileUtils.isVideoFile(name) ||
         (file.mimetype?.toLowerCase().startsWith('video/') ?? false);
+  }
+
+  bool _torboxResultIsCached(String infohash) {
+    if (!_torboxCacheCheckEnabled) return true;
+    final status = _torboxCacheStatus;
+    if (status == null) return true;
+    final sanitized = infohash.trim().toLowerCase();
+    if (sanitized.isEmpty) return true;
+    return status[sanitized] ?? false;
   }
 
   String _formatTorboxError(Object error) {
@@ -3485,7 +3547,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}',
+                                    _torboxCacheStatus != null &&
+                                            _torboxCacheCheckEnabled
+                                        ? '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()} • Torbox cache check'
+                                        : '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}',
                                     style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -3775,61 +3840,78 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 final isCompactLayout = constraints.maxWidth < 360;
 
                 Widget buildTorboxButton() {
-                  return GestureDetector(
-                    onTap: () => _addToTorbox(torrent.infohash, torrent.name),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
+                  final bool isCached = _torboxResultIsCached(torrent.infohash);
+                  final gradientColors = isCached
+                      ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
+                      : const [Color(0xFF475569), Color(0xFF1F2937)];
+                  final shadowColor = isCached
+                      ? const Color(0xFF7C3AED).withValues(alpha: 0.35)
+                      : const Color(0xFF1F2937).withValues(alpha: 0.25);
+                  final textColor = isCached ? Colors.white : Colors.white70;
+
+                  final button = Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      gradient: LinearGradient(
+                        colors: gradientColors,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF7C3AED), Color(0xFFDB2777)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+                      boxShadow: [
+                        BoxShadow(
+                          color: shadowColor,
+                          spreadRadius: 0,
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF7C3AED,
-                            ).withValues(alpha: 0.35),
-                            spreadRadius: 0,
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            Icons.flash_on_rounded,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Torbox',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.2,
-                                color: Colors.white,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.flash_on_rounded,
+                          color: textColor,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Torbox',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
+                              color: textColor,
                             ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
-                          SizedBox(width: 4),
-                          Icon(
-                            Icons.expand_more_rounded,
-                            color: Colors.white70,
-                            size: 18,
-                          ),
-                        ],
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.expand_more_rounded,
+                          color: textColor.withValues(alpha: 0.7),
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  );
+
+                  return IgnorePointer(
+                    ignoring: !isCached,
+                    child: Opacity(
+                      opacity: isCached ? 1.0 : 0.55,
+                      child: GestureDetector(
+                        onTap: isCached
+                            ? () => _addToTorbox(torrent.infohash, torrent.name)
+                            : null,
+                        child: button,
                       ),
                     ),
                   );
