@@ -22,6 +22,22 @@ class DebridDownloadsScreen extends StatefulWidget {
   State<DebridDownloadsScreen> createState() => _DebridDownloadsScreenState();
 }
 
+class _TorrentMoreOption {
+  const _TorrentMoreOption({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.destructive = false,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final Future<void> Function()? onTap;
+  final bool destructive;
+  final bool enabled;
+}
+
 class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with TickerProviderStateMixin {
   late TabController _tabController;
   int _selectedIndex = 0;
@@ -1365,6 +1381,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                       onPlay: () => _playFileOnDemand(torrent, index, setLocal, unrestrictingFiles),
                                       onAddToPlaylist: () => _addFileToPlaylist(torrent, index, setLocal),
                                       onDownload: () => _downloadFileOnDemand(torrent, index, fileName, setLocal, added, unrestrictingFiles),
+                                      onCopy: () => _copyFileLinkOnDemand(torrent, index, setLocal, unrestrictingFiles),
                                       onSelect: () {
                                         setLocal(() {
                                           if (isSelected) {
@@ -2191,14 +2208,35 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   }
 
   Widget _buildTorrentCard(RDTorrent torrent) {
+    final bool showProblematicVideo =
+        torrent.links.length == 1 && FileUtils.isProblematicVideo(torrent.filename);
+    const playColor = Color(0xFFB91C1C); // dimmed red
+    const downloadColor = Color(0xFF047857); // dimmed green
+    const problematicColor = Color(0xFFD97706);
+    final borderColor = Colors.white.withValues(alpha: 0.08);
+    final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFF475569).withValues(alpha: 0.3),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
         ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 12),
+          ),
+          BoxShadow(
+            color: glowColor,
+            blurRadius: 26,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2282,236 +2320,49 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               ],
             ),
           ),
-          
-                     // Action buttons
-           Container(
-             decoration: BoxDecoration(
-               color: const Color(0xFF0F172A),
-               borderRadius: const BorderRadius.only(
-                 bottomLeft: Radius.circular(12),
-                 bottomRight: Radius.circular(12),
-               ),
-             ),
-             child: Row(
-               mainAxisAlignment: MainAxisAlignment.center,
-               children: [
-                // Play button
-                if (torrent.links.length == 1) ...[
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color: const Color(0xFF475569).withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ),
-                    child: IconButton(
-                      onPressed: () => _handlePlayVideo(torrent),
-                      icon: Icon(
-                        FileUtils.isProblematicVideo(torrent.filename)
-                          ? Icons.warning
-                          : Icons.play_arrow,
-                        size: 18,
-                      ),
-                      style: IconButton.styleFrom(
-                        foregroundColor: FileUtils.isProblematicVideo(torrent.filename)
-                          ? const Color(0xFFF59E0B)
-                          : const Color(0xFFE50914),
-                        padding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                  ),
-                  // Playlist add for single-file
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color: const Color(0xFF475569).withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ),
-                    child: IconButton(
-                      onPressed: () async {
-                        if (_apiKey == null) return;
-                        
-                        try {
-                          // Check if it's a video file before adding to playlist
-                          final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
-                          final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
-                          
-                          // Check if it's actually a video using MIME type
-                          if (FileUtils.isVideoMimeType(mimeType)) {
-                            final ok = await StorageService.addPlaylistItemRaw({
-                              'title': torrent.filename,
-                              'url': '',
-                              'restrictedLink': torrent.links[0],
-                              'apiKey': _apiKey,
-                              'rdTorrentId': torrent.id,
-                              'kind': 'single',
-                            });
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
-                            );
-                          } else {
-                            if (mounted) {
-                              _showError('This file is not a video (MIME type: $mimeType)');
-                            }
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            _showError('Failed to validate file: ${e.toString()}');
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.playlist_add, size: 18),
-                      style: IconButton.styleFrom(
-                        foregroundColor: const Color(0xFF8B5CF6),
-                        padding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color: const Color(0xFF475569).withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ),
-                    child: IconButton(
-                      onPressed: () => _handlePlayMultiFileTorrent(torrent),
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      style: IconButton.styleFrom(
-                        foregroundColor: const Color(0xFFE50914),
-                        padding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                  ),
-                  // Multi-file: add entire torrent collection as a single playlist item
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color: const Color(0xFF475569).withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ),
-                    child: IconButton(
-                      onPressed: () async {
-                        if (_apiKey == null) return;
-                        final ok = await StorageService.addPlaylistItemRaw({
-                          'title': torrent.filename,
-                          'kind': 'collection',
-                          'rdTorrentId': torrent.id,
-                          'apiKey': _apiKey,
-                          // optional hint for UI
-                          'count': torrent.links.length,
-                        });
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(ok ? 'Added collection to playlist' : 'Already in playlist')),
-                        );
-                      },
-                      icon: const Icon(Icons.playlist_add, size: 18),
-                      style: IconButton.styleFrom(
-                        foregroundColor: const Color(0xFF8B5CF6),
-                        padding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                  ),
-                ],
-                 
-                 // File options button
-                 Container(
-                   decoration: BoxDecoration(
-                     border: Border(
-                       left: BorderSide(
-                         color: const Color(0xFF475569).withValues(alpha: 0.3),
-                       ),
-                     ),
+          // Action buttons
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF131E33), Color(0xFF0B1224)],
+              ),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(18),
+                bottomRight: Radius.circular(18),
+              ),
+              border: Border(
+                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                   _buildPrimaryTorrentActionButton(
+                     icon: showProblematicVideo ? Icons.warning : Icons.play_arrow,
+                     label: 'Play',
+                     backgroundColor: showProblematicVideo ? problematicColor : playColor,
+                     onPressed: () {
+                       if (torrent.links.length == 1) {
+                         _handlePlayVideo(torrent);
+                       } else {
+                         _handlePlayMultiFileTorrent(torrent);
+                       }
+                     },
                    ),
-                   child: IconButton(
-                     onPressed: () => _handleFileOptions(torrent),
-                     icon: torrent.links.length > 1
-                         ? const Icon(Icons.download_rounded, size: 18)
-                         : const Icon(Icons.copy, size: 18),
-                     style: IconButton.styleFrom(
-                       foregroundColor: const Color(0xFF6366F1),
-                       padding: const EdgeInsets.all(12),
-                     ),
+                   const SizedBox(width: 12),
+                   _buildPrimaryTorrentActionButton(
+                     icon: Icons.download_rounded,
+                     label: 'Download',
+                     backgroundColor: downloadColor,
+                     onPressed: () => _handleDownloadTorrent(torrent),
                    ),
-                 ),
-                 
-                 // Download button (only for single-file torrents)
-                 if (torrent.links.length == 1) ...[
-                   Container(
-                     decoration: BoxDecoration(
-                       border: Border(
-                         left: BorderSide(
-                           color: const Color(0xFF475569).withValues(alpha: 0.3),
-                         ),
-                       ),
-                     ),
-                     child: IconButton(
-                       onPressed: () async {
-                         if (_apiKey == null) return;
-                         try {
-                           final meta = jsonEncode({
-                             'restrictedLink': torrent.links.first,
-                             'apiKey': _apiKey ?? '',
-                             'torrentHash': (torrent.id ?? '').toString(),
-                             'fileIndex': 0,
-                           });
-                           await DownloadService.instance.enqueueDownload(
-                             url: torrent.links.first, // Use restricted link directly
-                             fileName: torrent.filename,
-                             context: context,
-                             torrentName: torrent.filename,
-                             meta: meta,
-                           );
-                           if (mounted) {
-                             ScaffoldMessenger.of(context).showSnackBar(
-                               const SnackBar(content: Text('Added to downloads')),
-                             );
-                           }
-                         } catch (e) {
-                           if (mounted) {
-                             ScaffoldMessenger.of(context).showSnackBar(
-                               SnackBar(content: Text('Failed to start download: $e')),
-                             );
-                           }
-                         }
-                       },
-                       icon: const Icon(Icons.download_rounded, size: 18),
-                       style: IconButton.styleFrom(
-                         foregroundColor: const Color(0xFF10B981),
-                         padding: const EdgeInsets.all(12),
-                       ),
-                     ),
-                   ),
+                   const SizedBox(width: 12),
+                   _buildMoreOptionsButton(torrent),
                  ],
-                 
-                 // Delete button
-                 Container(
-                   decoration: BoxDecoration(
-                     border: Border(
-                       left: BorderSide(
-                         color: const Color(0xFF475569).withValues(alpha: 0.3),
-                       ),
-                     ),
-                   ),
-                   child: IconButton(
-                     onPressed: () => _handleDeleteTorrent(torrent),
-                     icon: const Icon(Icons.delete_outline, size: 18),
-                     style: IconButton.styleFrom(
-                       foregroundColor: const Color(0xFFEF4444),
-                       padding: const EdgeInsets.all(12),
-                     ),
-                   ),
-                 ),
-               ],
+               ),
              ),
            ),
         ],
@@ -2519,17 +2370,299 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
+  Widget _buildPrimaryTorrentActionButton({
+    required IconData icon,
+    required String label,
+    required Color backgroundColor,
+    required VoidCallback onPressed,
+  }) {
+    return Expanded(
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+        label: Text(label),
+        style: FilledButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreOptionsButton(RDTorrent torrent) {
+    return IconButton(
+      onPressed: () => _showTorrentMoreOptions(torrent),
+      icon: const Icon(Icons.more_vert, size: 20),
+      tooltip: 'More options',
+      style: IconButton.styleFrom(
+        backgroundColor: const Color(0xFF111C32),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: const Color(0xFF475569).withValues(alpha: 0.3)),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleDownloadTorrent(RDTorrent torrent) async {
+    if (_apiKey == null) return;
+
+    if (torrent.links.length == 1) {
+      try {
+        final meta = jsonEncode({
+          'restrictedLink': torrent.links.first,
+          'apiKey': _apiKey ?? '',
+          'torrentHash': (torrent.id ?? '').toString(),
+          'fileIndex': 0,
+        });
+        await DownloadService.instance.enqueueDownload(
+          url: torrent.links.first,
+          fileName: torrent.filename,
+          context: context,
+          torrentName: torrent.filename,
+          meta: meta,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Added to downloads')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to start download: $e')),
+          );
+        }
+      }
+    } else {
+      if (mounted) {
+        _showMultipleLinksDialog(torrent, showPlayButtons: false);
+      }
+    }
+  }
+
+  Future<void> _handleAddTorrentToPlaylist(RDTorrent torrent) async {
+    if (_apiKey == null) return;
+
+    if (torrent.links.length == 1) {
+      try {
+        final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
+        final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
+
+        if (FileUtils.isVideoMimeType(mimeType)) {
+          final ok = await StorageService.addPlaylistItemRaw({
+            'title': torrent.filename,
+            'url': '',
+            'restrictedLink': torrent.links[0],
+            'apiKey': _apiKey,
+            'rdTorrentId': torrent.id,
+            'kind': 'single',
+          });
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+          );
+        } else {
+          if (mounted) {
+            _showError('This file is not a video (MIME type: $mimeType)');
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          _showError('Failed to validate file: ${e.toString()}');
+        }
+      }
+    } else {
+      final ok = await StorageService.addPlaylistItemRaw({
+        'title': torrent.filename,
+        'kind': 'collection',
+        'rdTorrentId': torrent.id,
+        'apiKey': _apiKey,
+        'count': torrent.links.length,
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+      );
+    }
+  }
+
+  void _showTorrentMoreOptions(RDTorrent torrent) {
+    final isMultiFile = torrent.links.length > 1;
+    final options = <_TorrentMoreOption>[
+      _TorrentMoreOption(
+        icon: Icons.playlist_add,
+        label: 'Add to Playlist',
+        onTap: () => _handleAddTorrentToPlaylist(torrent),
+      ),
+      _TorrentMoreOption(
+        icon: Icons.copy,
+        label: 'Copy Link',
+        onTap: isMultiFile ? null : () => _handleFileOptions(torrent),
+        enabled: !isMultiFile,
+      ),
+      _TorrentMoreOption(
+        icon: Icons.delete_outline,
+        label: 'Delete Torrent',
+        onTap: () => _handleDeleteTorrent(torrent),
+        destructive: true,
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF0F172A).withValues(alpha: 0.98),
+                  const Color(0xFF1E293B).withValues(alpha: 0.98),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              border: Border.all(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  blurRadius: 28,
+                  offset: const Offset(0, 16),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    for (final option in options) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: InkWell(
+                          onTap: option.enabled
+                              ? () async {
+                                  Navigator.of(sheetContext).pop();
+                                  await option.onTap?.call();
+                                }
+                              : null,
+                          borderRadius: BorderRadius.circular(16),
+                          splashColor: option.enabled
+                              ? const Color(0xFF6366F1).withValues(alpha: 0.2)
+                              : Colors.transparent,
+                          highlightColor: option.enabled
+                              ? Colors.white.withValues(alpha: 0.06)
+                              : Colors.transparent,
+                          child: Opacity(
+                            opacity: option.enabled ? 1.0 : 0.45,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF111C32),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFF475569).withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    option.icon,
+                                    size: 20,
+                                    color: option.destructive
+                                        ? const Color(0xFFEF4444)
+                                        : Colors.white,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      option.label,
+                                      style: TextStyle(
+                                        color: option.destructive
+                                            ? const Color(0xFFEF4444)
+                                            : Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    size: 20,
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
 
   Widget _buildDownloadCard(DebridDownload download) {
+    final borderColor = Colors.white.withValues(alpha: 0.08);
+    final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFF475569).withValues(alpha: 0.3),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF202C46), Color(0xFF121A2E)],
         ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: glowColor,
+            blurRadius: 24,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3695,6 +3828,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
+  Future<void> _copyFileLinkOnDemand(RDTorrent torrent, int index, StateSetter setLocal, Map<int, bool> unrestrictingFiles) async {
+    if (_apiKey == null) return;
+
+    try {
+      setLocal(() {
+        unrestrictingFiles[index] = true;
+      });
+
+      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
+      final downloadLink = unrestrictResult['download']?.toString() ?? '';
+
+      if (downloadLink.isNotEmpty) {
+        if (mounted) {
+          _copyToClipboard(downloadLink);
+        }
+      } else {
+        if (mounted) {
+          _showError('Failed to get download link');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Failed to get download link: ${e.toString()}');
+      }
+    } finally {
+      setLocal(() {
+        unrestrictingFiles[index] = false;
+      });
+    }
+  }
+
   Widget _buildModernFileCard({
     required String fileName,
     required int fileSize,
@@ -3706,6 +3870,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     required VoidCallback onPlay,
     required VoidCallback onAddToPlaylist,
     required VoidCallback onDownload,
+    required VoidCallback onCopy,
     required VoidCallback onSelect,
     required int index,
     String? episodeInfo,
@@ -3938,6 +4103,36 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                               ),
                               const SizedBox(width: 8),
                             ],
+                            OutlinedButton.icon(
+                              onPressed: isUnrestricting ? null : onCopy,
+                              icon: isUnrestricting
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.copy_rounded, size: 16, color: Colors.white),
+                              label: Text(
+                                isUnrestricting ? 'Working…' : 'Copy',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
                             Container(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -4358,6 +4553,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             onPlay: () => _playFileOnDemand(torrent, fileIndex, setLocal, unrestrictingFiles),
             onAddToPlaylist: () => _addFileToPlaylist(torrent, fileIndex, setLocal),
             onDownload: () => _downloadFileOnDemand(torrent, fileIndex, fileName, setLocal, added, unrestrictingFiles),
+            onCopy: () => _copyFileLinkOnDemand(torrent, fileIndex, setLocal, unrestrictingFiles),
             onSelect: () {
               setLocal(() {
                 if (isSelected) {
