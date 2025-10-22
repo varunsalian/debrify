@@ -33,6 +33,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
   late final TabController _tabController;
   final ScrollController _scrollController = ScrollController();
   final List<TorboxTorrent> _torrents = [];
+  final TextEditingController _magnetController = TextEditingController();
 
   bool _isLoading = false;
   bool _isLoadingMore = false;
@@ -719,6 +720,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
   void dispose() {
     _tabController.dispose();
     _scrollController.dispose();
+    _magnetController.dispose();
     super.dispose();
   }
 
@@ -2143,6 +2145,166 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     );
   }
 
+  Future<void> _showAddMagnetDialog() async {
+    if (_apiKey == null || _apiKey!.isEmpty) {
+      _showComingSoon('Add Torbox API key');
+      return;
+    }
+
+    await _autoPasteMagnetLink();
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Add Magnet Link'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _magnetController,
+                maxLines: 3,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Paste magnet link here…',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => _handleAddMagnet(dialogContext),
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _autoPasteMagnetLink() async {
+    if (_magnetController.text.trim().isNotEmpty) return;
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = clipboardData?.text?.trim();
+    if (text != null && text.startsWith('magnet:?')) {
+      _magnetController.text = text;
+    }
+  }
+
+  void _handleAddMagnet(BuildContext dialogContext) {
+    final magnetLink = _magnetController.text.trim();
+    if (magnetLink.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a magnet link.')),
+      );
+      return;
+    }
+
+    if (!_isValidMagnetLink(magnetLink)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid magnet link.')),
+      );
+      return;
+    }
+
+    Navigator.of(dialogContext).pop();
+    _addMagnetToTorbox(magnetLink);
+  }
+
+  bool _isValidMagnetLink(String link) {
+    final trimmed = link.trim();
+    if (!trimmed.startsWith('magnet:?')) return false;
+    if (!trimmed.toLowerCase().contains('xt=urn:btih:')) return false;
+    return trimmed.length >= 50;
+  }
+
+  Future<void> _addMagnetToTorbox(String magnetLink) async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) {
+      _showComingSoon('Add Torbox API key');
+      return;
+    }
+
+    final navigator = Navigator.of(context, rootNavigator: true);
+    var dialogClosed = false;
+
+    void closeDialogIfOpen() {
+      if (!dialogClosed && navigator.canPop()) {
+        navigator.pop();
+        dialogClosed = true;
+      }
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return const AlertDialog(
+          title: Text('Adding torrent'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Submitting magnet to Torbox…'),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      final response = await TorboxService.createTorrent(
+        apiKey: apiKey,
+        magnet: magnetLink,
+        seed: true,
+        allowZip: true,
+        addOnlyIfCached: true,
+      );
+
+      if (!mounted) return;
+
+      closeDialogIfOpen();
+
+      final success = response['success'] as bool? ?? false;
+      if (!success) {
+        final errorMessage = (response['error'] ?? 'Failed to add magnet')
+            .toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: const Color(0xFFB91C1C),
+          ),
+        );
+        return;
+      }
+
+      _magnetController.clear();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Magnet added to Torbox.')));
+
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      closeDialogIfOpen();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to add magnet: ${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+          backgroundColor: const Color(0xFFB91C1C),
+        ),
+      );
+    }
+  }
+
   void _openSettings() {
     MainPageBridge.switchTab?.call(6);
   }
@@ -2197,7 +2359,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showComingSoon('Add torrent'),
+        onPressed: _showAddMagnetDialog,
+        tooltip: 'Add magnet link',
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
@@ -2320,10 +2483,6 @@ class _TorboxTorrentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final statusColor = torrent.downloadState.toLowerCase() == 'cached'
-        ? const Color(0xFF10B981)
-        : theme.colorScheme.primary;
     final cachedAt = torrent.cachedAt ?? torrent.createdAt;
     final safeProgress = torrent.progress.clamp(0, 1);
     final progressPercent = (safeProgress * 100).round();
@@ -2377,39 +2536,6 @@ class _TorboxTorrentCard extends StatelessWidget {
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.download_done,
-                            size: 14,
-                            color: statusColor,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            torrent.downloadState.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: statusColor,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                     const SizedBox(width: 8),
