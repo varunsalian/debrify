@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/torbox_file.dart';
 import '../../models/torbox_torrent.dart';
 import '../../services/torbox_service.dart';
@@ -64,28 +65,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
       _pendingInitialAction = widget.initialAction;
       _initialActionHandled = false;
       _maybeTriggerInitialAction();
-    }
-  }
-
-  Future<void> _handleTorrentAction(
-    String action,
-    TorboxTorrent torrent,
-  ) async {
-    switch (action) {
-      case 'Play':
-        await _handlePlayTorrent(torrent);
-        break;
-      case 'Download':
-        await _showDownloadOptions(torrent);
-        break;
-      case 'Add to playlist':
-        await _handleAddToPlaylist(torrent);
-        break;
-      case 'Delete':
-        await _confirmDeleteTorrent(torrent);
-        break;
-      default:
-        _showComingSoon(action);
     }
   }
 
@@ -205,6 +184,214 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
         ),
         backgroundColor: added ? null : const Color(0xFFEF4444),
       ),
+    );
+  }
+
+  Future<void> _copyTorrentLink(TorboxTorrent torrent) async {
+    if (torrent.files.isEmpty) {
+      _showComingSoon('No files available');
+      return;
+    }
+
+    final file = torrent.files.firstWhere(
+      (file) => !file.zipped,
+      orElse: () => torrent.files.first,
+    );
+
+    await _copyTorboxFileLink(torrent, file);
+  }
+
+  Future<void> _copyTorboxFileLink(TorboxTorrent torrent, TorboxFile file) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      _showComingSoon('Add Torbox API key');
+      return;
+    }
+
+    try {
+      final link = await TorboxService.requestFileDownloadLink(
+        apiKey: key,
+        torrentId: torrent.id,
+        fileId: file.id,
+      );
+      if (!mounted) return;
+      await Clipboard.setData(ClipboardData(text: link));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Download link copied to clipboard.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to copy link: ${_formatTorboxError(e)}'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+    }
+  }
+
+  Future<void> _copyTorrentZipLink(TorboxTorrent torrent) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      _showComingSoon('Add Torbox API key');
+      return;
+    }
+
+    try {
+      final zipUrl = TorboxService.createZipPermalink(key, torrent.id);
+      await Clipboard.setData(ClipboardData(text: zipUrl));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ZIP download link copied to clipboard.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to copy ZIP link: ${_formatTorboxError(e)}'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+    }
+  }
+
+  void _showTorboxTorrentMoreOptions(TorboxTorrent torrent) {
+    final isMultiFile = torrent.files.length > 1;
+    final options = <_TorboxMoreOption>[
+      _TorboxMoreOption(
+        icon: Icons.playlist_add,
+        label: 'Add to Playlist',
+        onTap: () => _handleAddToPlaylist(torrent),
+      ),
+      _TorboxMoreOption(
+        icon: Icons.copy,
+        label: 'Copy Link',
+        onTap: isMultiFile
+            ? () => _copyTorrentZipLink(torrent)
+            : () => _copyTorrentLink(torrent),
+      ),
+      _TorboxMoreOption(
+        icon: Icons.delete_outline,
+        label: 'Delete Torrent',
+        onTap: () => _confirmDeleteTorrent(torrent),
+        destructive: true,
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF0F172A),
+                  Color(0xFF1E293B),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              border: Border.all(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  blurRadius: 28,
+                  offset: const Offset(0, 16),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    for (final option in options) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: InkWell(
+                          onTap: option.enabled
+                              ? () async {
+                                  Navigator.of(sheetContext).pop();
+                                  await option.onTap();
+                                }
+                              : null,
+                          borderRadius: BorderRadius.circular(16),
+                          splashColor: option.enabled
+                              ? const Color(0xFF6366F1).withValues(alpha: 0.2)
+                              : Colors.transparent,
+                          highlightColor: option.enabled
+                              ? Colors.white.withValues(alpha: 0.06)
+                              : Colors.transparent,
+                          child: Opacity(
+                            opacity: option.enabled ? 1.0 : 0.45,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF111C32),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFF475569).withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    option.icon,
+                                    size: 20,
+                                    color: option.destructive
+                                        ? const Color(0xFFEF4444)
+                                        : Colors.white,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      option.label,
+                                      style: TextStyle(
+                                        color: option.destructive
+                                            ? const Color(0xFFEF4444)
+                                            : Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    size: 20,
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -874,6 +1061,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                       }
                     });
                   },
+                  onCopy: (entry) => _copyTorboxFileLink(torrent, entry.file),
                 );
               } else if (isSeries) {
                 content = _buildTorboxSeriesView(
@@ -908,6 +1096,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                       }
                     });
                   },
+                  onCopy: (entry) => _copyTorboxFileLink(torrent, entry.file),
                 );
               } else if (isMovieCollection) {
                 content = _buildTorboxMovieView(
@@ -922,6 +1111,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                       }
                     });
                   },
+                  onCopy: (entry) => _copyTorboxFileLink(torrent, entry.file),
                 );
               } else {
                 content = _buildTorboxGenericList(
@@ -936,6 +1126,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                       }
                     });
                   },
+                  onCopy: (entry) => _copyTorboxFileLink(torrent, entry.file),
                 );
               }
 
@@ -990,39 +1181,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                       Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 24,
-                          vertical: 16,
+                          vertical: 12,
                         ),
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[600],
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              torrent.name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${entries.length} file${entries.length == 1 ? '' : 's'} • ${Formatters.formatFileSize(torrent.size)}',
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[600],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
                       Container(
@@ -1270,6 +1437,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     required List<_TorboxFileEntry> entries,
     required Set<int> selectedIndices,
     required ValueChanged<int> onToggle,
+    Future<void> Function(_TorboxFileEntry entry)? onCopy,
   }) {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -1288,6 +1456,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
             onToggle: () => onToggle(entry.index),
             animationIndex: listIndex,
             subtitle: subtitle,
+            onCopy: onCopy == null ? null : () => onCopy(entry),
           ),
         );
       },
@@ -1298,6 +1467,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     required List<_TorboxFileEntry> entries,
     required Set<int> selectedIndices,
     required ValueChanged<int> onToggle,
+    Future<void> Function(_TorboxFileEntry entry)? onCopy,
   }) {
     if (entries.isEmpty) {
       return _buildEmptyFilesState();
@@ -1319,6 +1489,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
               subtitle: entries[i].file.name != entries[i].file.shortName
                   ? entries[i].file.name
                   : entries[i].file.absolutePath,
+              onCopy: onCopy == null ? null : () => onCopy(entries[i]),
             ),
           ),
       ],
@@ -1329,6 +1500,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     required List<_TorboxFileEntry> entries,
     required Set<int> selectedIndices,
     required ValueChanged<int> onToggle,
+    Future<void> Function(_TorboxFileEntry entry)? onCopy,
   }) {
     final mainEntries = <_TorboxFileEntry>[];
     final sampleEntries = <_TorboxFileEntry>[];
@@ -1376,6 +1548,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                         sectionEntries[i].file.shortName
                     ? sectionEntries[i].file.name
                     : null,
+                onCopy:
+                    onCopy == null ? null : () => onCopy(sectionEntries[i]),
               ),
             ),
           const SizedBox(height: 16),
@@ -1400,6 +1574,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     required ValueChanged<int?> onSeasonChange,
     required ValueChanged<int> onToggleFile,
     required void Function(int season, List<int> indices) onToggleSeason,
+    Future<void> Function(_TorboxFileEntry entry)? onCopy,
   }) {
     final seasonMap = <int, List<_TorboxFileEntry>>{};
     final otherEntries = <_TorboxFileEntry>[];
@@ -1580,6 +1755,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                   animationIndex: i,
                   subtitle: otherEntries[i].file.name,
                   badge: 'Extra',
+                  onCopy:
+                      onCopy == null ? null : () => onCopy(otherEntries[i]),
                 ),
               ),
           ],
@@ -1639,6 +1816,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                   onToggle: () => onToggleFile(entry.index),
                   animationIndex: index,
                   badge: badge,
+                  onCopy: onCopy == null ? null : () => onCopy(entry),
                 ),
               );
             },
@@ -1655,6 +1833,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     required int animationIndex,
     String? badge,
     String? subtitle,
+    Future<void> Function()? onCopy,
   }) {
     final file = entry.file;
     final fileName = file.shortName.isNotEmpty
@@ -1851,6 +2030,40 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                       ),
                     ],
                   ),
+                  if (onCopy != null) ...[
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          if (onCopy != null) {
+                            await onCopy();
+                          }
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text(
+                          'Copy',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.25),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2047,7 +2260,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
         final torrent = _torrents[index];
         return _TorboxTorrentCard(
           torrent: torrent,
-          onAction: (action) => _handleTorrentAction(action, torrent),
+          onPlay: () => _handlePlayTorrent(torrent),
+          onDownload: () => _showDownloadOptions(torrent),
+          onMoreOptions: () => _showTorboxTorrentMoreOptions(torrent),
         );
       },
     );
@@ -2077,10 +2292,17 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
 }
 
 class _TorboxTorrentCard extends StatelessWidget {
-  final TorboxTorrent torrent;
-  final void Function(String action) onAction;
+  const _TorboxTorrentCard({
+    required this.torrent,
+    required this.onPlay,
+    required this.onDownload,
+    required this.onMoreOptions,
+  });
 
-  const _TorboxTorrentCard({required this.torrent, required this.onAction});
+  final TorboxTorrent torrent;
+  final VoidCallback onPlay;
+  final VoidCallback onDownload;
+  final VoidCallback onMoreOptions;
 
   @override
   Widget build(BuildContext context) {
@@ -2091,16 +2313,34 @@ class _TorboxTorrentCard extends StatelessWidget {
     final cachedAt = torrent.cachedAt ?? torrent.createdAt;
     final safeProgress = torrent.progress.clamp(0, 1);
     final progressPercent = (safeProgress * 100).round();
-    final isSingleFile = torrent.files.length <= 1;
+    final borderColor = Colors.white.withValues(alpha: 0.08);
+    final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
+
+    const playColor = Color(0xFFB91C1C);
+    const downloadColor = Color(0xFF047857);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFF475569).withValues(alpha: 0.3),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
         ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 12),
+          ),
+          BoxShadow(
+            color: glowColor,
+            blurRadius: 26,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2209,50 +2449,88 @@ class _TorboxTorrentCard extends StatelessWidget {
             ),
           ),
           Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF0F172A),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF131E33), Color(0xFF0B1224)],
+              ),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(18),
+                bottomRight: Radius.circular(18),
+              ),
+              border: Border(
+                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _ActionIcon(
-                  icon: Icons.play_arrow,
-                  color: const Color(0xFFE50914),
-                  label: isSingleFile ? 'Play' : 'Play (multi)',
-                  onTap: () => onAction('Play'),
-                ),
-                _ActionIcon(
-                  icon: Icons.playlist_add,
-                  color: const Color(0xFF8B5CF6),
-                  label: isSingleFile ? 'Add to playlist' : 'Add collection',
-                  onTap: () => onAction('Add to playlist'),
-                ),
-                _ActionIcon(
-                  icon: isSingleFile ? Icons.copy : Icons.more_horiz,
-                  color: const Color(0xFF6366F1),
-                  label: isSingleFile ? 'Copy link' : 'Show files',
-                  onTap: () => onAction('File options'),
-                ),
-                _ActionIcon(
-                  icon: Icons.download_rounded,
-                  color: const Color(0xFF10B981),
-                  label: 'Download',
-                  onTap: () => onAction('Download'),
-                ),
-                _ActionIcon(
-                  icon: Icons.delete_outline,
-                  color: const Color(0xFFEF4444),
-                  label: 'Delete',
-                  onTap: () => onAction('Delete'),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  _buildPrimaryButton(
+                    icon: Icons.play_arrow,
+                    label: 'Play',
+                    backgroundColor: playColor,
+                    onPressed: onPlay,
+                  ),
+                  const SizedBox(width: 12),
+                  _buildPrimaryButton(
+                    icon: Icons.download_rounded,
+                    label: 'Download',
+                    backgroundColor: downloadColor,
+                    onPressed: onDownload,
+                  ),
+                  const SizedBox(width: 12),
+                  _buildMoreOptionsButton(onMoreOptions),
+                ],
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPrimaryButton({
+    required IconData icon,
+    required String label,
+    required Color backgroundColor,
+    required VoidCallback onPressed,
+  }) {
+    return Expanded(
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+        label: Text(label),
+        style: FilledButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreOptionsButton(VoidCallback onPressed) {
+    return IconButton(
+      onPressed: onPressed,
+      icon: const Icon(Icons.more_vert, size: 20),
+      tooltip: 'More options',
+      style: IconButton.styleFrom(
+        backgroundColor: const Color(0xFF111C32),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: const Color(0xFF475569).withValues(alpha: 0.3)),
+        ),
       ),
     );
   }
@@ -2284,40 +2562,18 @@ class _TorboxEpisodeCandidate {
   int get size => file.size;
 }
 
-class _ActionIcon extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final VoidCallback onTap;
-
-  const _ActionIcon({
+class _TorboxMoreOption {
+  const _TorboxMoreOption({
     required this.icon,
-    required this.color,
     required this.label,
     required this.onTap,
+    this.destructive = false,
+    this.enabled = true,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: const Color(0xFF475569).withValues(alpha: 0.3),
-          ),
-        ),
-      ),
-      child: Tooltip(
-        message: label,
-        child: IconButton(
-          onPressed: onTap,
-          icon: Icon(icon, size: 18),
-          style: IconButton.styleFrom(
-            foregroundColor: color,
-            padding: const EdgeInsets.all(12),
-          ),
-        ),
-      ),
-    );
-  }
+  final IconData icon;
+  final String label;
+  final Future<void> Function() onTap;
+  final bool destructive;
+  final bool enabled;
 }
