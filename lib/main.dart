@@ -332,6 +332,23 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         }
       });
     };
+    MainPageBridge.openTorboxAction = (torboxTorrent, action) {
+      if (!mounted) return;
+      setState(() {
+        _pages[5] = TorboxDownloadsScreen(
+          initialTorrentForAction: torboxTorrent,
+          initialAction: action,
+        );
+      });
+      _onItemTapped(5);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _pages[5] = const TorboxDownloadsScreen();
+          });
+        }
+      });
+    };
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,

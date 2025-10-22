@@ -1,10 +1,8 @@
-import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../../models/torbox_file.dart';
 import '../../models/torbox_torrent.dart';
-import '../../services/download_service.dart';
 import '../../services/torbox_service.dart';
 import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
@@ -13,9 +11,17 @@ import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/series_parser.dart';
 import '../../widgets/stat_chip.dart';
+import '../video_player_screen.dart';
 
 class TorboxDownloadsScreen extends StatefulWidget {
-  const TorboxDownloadsScreen({super.key});
+  const TorboxDownloadsScreen({
+    super.key,
+    this.initialTorrentForAction,
+    this.initialAction,
+  });
+
+  final TorboxTorrent? initialTorrentForAction;
+  final TorboxQuickAction? initialAction;
 
   @override
   State<TorboxDownloadsScreen> createState() => _TorboxDownloadsScreenState();
@@ -34,6 +40,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
   int _offset = 0;
   String _errorMessage = '';
   String? _apiKey;
+  TorboxTorrent? _pendingInitialTorrent;
+  TorboxQuickAction? _pendingInitialAction;
+  bool _initialActionHandled = false;
 
   static const int _limit = 50;
 
@@ -42,7 +51,20 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     super.initState();
     _tabController = TabController(length: 1, vsync: this);
     _scrollController.addListener(_onScroll);
+    _pendingInitialTorrent = widget.initialTorrentForAction;
+    _pendingInitialAction = widget.initialAction;
     _loadApiKeyAndTorrents();
+  }
+
+  @override
+  void didUpdateWidget(TorboxDownloadsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTorrentForAction != null && widget.initialAction != null) {
+      _pendingInitialTorrent = widget.initialTorrentForAction;
+      _pendingInitialAction = widget.initialAction;
+      _initialActionHandled = false;
+      _maybeTriggerInitialAction();
+    }
   }
 
   Future<void> _handleTorrentAction(
@@ -50,6 +72,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     TorboxTorrent torrent,
   ) async {
     switch (action) {
+      case 'Play':
+        await _handlePlayTorrent(torrent);
+        break;
       case 'Download':
         await _showDownloadOptions(torrent);
         break;
@@ -100,52 +125,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                       enabled: !isLoadingZip,
                       onTap: isLoadingZip
                           ? null
-                          : () async {
-                              setSheetState(() => isLoadingZip = true);
-                              try {
-                                final permalink =
-                                    TorboxService.createZipPermalink(
-                                      key,
-                                      torrent.id,
-                                    );
-
-                                final baseName = torrent.name.trim().isEmpty
-                                    ? 'torbox_${torrent.id}'
-                                    : torrent.name.trim();
-                                final suggestedName = baseName.endsWith('.zip')
-                                    ? baseName
-                                    : '$baseName.zip';
-
-                                await DownloadService.instance.enqueueDownload(
-                                  url: permalink,
-                                  fileName: suggestedName,
-                                  context: this.context,
-                                  torrentName: torrent.name,
-                                  meta: jsonEncode({
-                                    'source': 'torbox',
-                                    'torrent_id': torrent.id,
-                                    'zip': true,
-                                  }),
-                                );
-
-                                if (!mounted) return;
-                                Navigator.of(sheetContext).pop();
-                                ScaffoldMessenger.of(this.context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Added "${torrent.name}" to downloads',
-                                    ),
-                                  ),
-                                );
-                              } catch (e) {
-                                if (!mounted) return;
-                                setSheetState(() => isLoadingZip = false);
-                                ScaffoldMessenger.of(this.context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Download failed: $e'),
-                                  ),
-                                );
-                              }
+                          : () {
+                              Navigator.of(sheetContext).pop();
+                              _showComingSoon('Torbox ZIP download');
                             },
                     ),
                     ListTile(
@@ -165,6 +147,196 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
           },
         );
       },
+    );
+  }
+
+  Future<void> _handlePlayTorrent(TorboxTorrent torrent) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      _showComingSoon('Add Torbox API key');
+      return;
+    }
+
+    final videoFiles = torrent.files.where((file) {
+      if (file.zipped) return false;
+      return _torboxFileLooksLikeVideo(file);
+    }).toList();
+
+    debugPrint(
+      'TorboxPlay: torrentId=${torrent.id} files=${videoFiles.length} name="${torrent.name}"',
+    );
+
+    if (videoFiles.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No playable video files found in this torrent.'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      try {
+        final streamUrl = await _requestTorboxStreamUrl(
+          apiKey: key,
+          torrent: torrent,
+          file: file,
+        );
+        if (!mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => VideoPlayerScreen(
+              videoUrl: streamUrl,
+              title: torrent.name,
+              subtitle: Formatters.formatFileSize(file.size),
+            ),
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to play file: ${_formatTorboxError(e)}'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+      return;
+    }
+
+    final candidates = videoFiles.map((file) {
+      final displayName = _torboxDisplayName(file);
+      final info = SeriesParser.parseFilename(displayName);
+      return _TorboxEpisodeCandidate(
+        file: file,
+        displayName: displayName,
+        info: info,
+      );
+    }).toList();
+
+    final filenames = candidates.map((entry) => entry.displayName).toList();
+    final bool isSeriesCollection =
+        candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+    final sortedCandidates = [...candidates];
+    sortedCandidates.sort((a, b) {
+      final aInfo = a.info;
+      final bInfo = b.info;
+
+      final aIsSeries = aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
+      final bIsSeries = bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
+
+      if (aIsSeries && bIsSeries) {
+        final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+        if (seasonCompare != 0) return seasonCompare;
+
+        final episodeCompare = (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+        if (episodeCompare != 0) return episodeCompare;
+      } else if (aIsSeries != bIsSeries) {
+        return aIsSeries ? -1 : 1;
+      }
+
+      final aName = a.displayName.toLowerCase();
+      final bName = b.displayName.toLowerCase();
+      return aName.compareTo(bName);
+    });
+
+    int startIndex = 0;
+    if (isSeriesCollection) {
+      startIndex = sortedCandidates.indexWhere(
+        (candidate) => candidate.info.isSeries &&
+            candidate.info.season != null &&
+            candidate.info.episode != null,
+      );
+      if (startIndex == -1) {
+        startIndex = 0;
+      }
+    }
+
+    final seriesInfos =
+        sortedCandidates.map((candidate) => candidate.info).toList();
+
+    debugPrint(
+      'TorboxPlay: isSeries=$isSeriesCollection startIndex=$startIndex (season=${startIndex < seriesInfos.length ? seriesInfos[startIndex].season : 'n/a'} episode=${startIndex < seriesInfos.length ? seriesInfos[startIndex].episode : 'n/a'})',
+    );
+
+    String initialUrl = '';
+    try {
+      initialUrl = await _requestTorboxStreamUrl(
+        apiKey: key,
+        torrent: torrent,
+        file: sortedCandidates[startIndex].file,
+      );
+    } catch (e) {
+      debugPrint(
+        'TorboxDownloadsScreen: failed to prefetch initial stream for torrent=${torrent.id} fileIndex=$startIndex error=$e',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to prepare stream: ${_formatTorboxError(e)}'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sortedCandidates.length; i++) {
+      final candidate = sortedCandidates[i];
+      final info = candidate.info;
+      final displayName = candidate.displayName;
+      final episodeLabel = _formatTorboxPlaylistTitle(
+        info: info,
+        fallback: displayName,
+        isSeriesCollection: isSeriesCollection,
+      );
+      final combinedTitle = _composeTorboxEntryTitle(
+        seriesTitle: info.title,
+        episodeLabel: episodeLabel,
+        isSeriesCollection: isSeriesCollection,
+        fallback: displayName,
+      );
+      playlistEntries.add(
+        PlaylistEntry(
+          url: i == startIndex ? initialUrl : '',
+          title: combinedTitle,
+          provider: 'torbox',
+          torboxTorrentId: torrent.id,
+          torboxFileId: candidate.file.id,
+          sizeBytes: candidate.file.size,
+          torrentHash: torrent.hash.isNotEmpty ? torrent.hash : null,
+        ),
+      );
+
+      debugPrint(
+        'TorboxPlay: entry[$i] title="$combinedTitle" season=${info.season} episode=${info.episode}',
+      );
+    }
+
+    final totalBytes =
+        sortedCandidates.fold<int>(0, (sum, entry) => sum + entry.file.size);
+    final subtitle =
+        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+    debugPrint(
+      'TorboxDownloadsScreen: Play torrent ${torrent.id} (${playlistEntries.length} entries, startIndex=$startIndex, isSeries=$isSeriesCollection)',
+    );
+
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => VideoPlayerScreen(
+          videoUrl: initialUrl,
+          title: torrent.name,
+          subtitle: subtitle,
+          playlist: playlistEntries,
+          startIndex: startIndex,
+        ),
+      ),
     );
   }
 
@@ -366,6 +538,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
         }
       });
 
+      _maybeTriggerInitialAction();
+
       if (shouldFetchMore) {
         await _fetchTorrents();
       }
@@ -395,6 +569,152 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
         : FileUtils.getFileName(file.name);
     return FileUtils.isVideoFile(name) ||
         (file.mimetype?.toLowerCase().startsWith('video/') ?? false);
+  }
+
+  String _torboxDisplayName(TorboxFile file) {
+    if (file.shortName.isNotEmpty) {
+      return file.shortName;
+    }
+    if (file.name.isNotEmpty) {
+      return FileUtils.getFileName(file.name);
+    }
+    return 'File ${file.id}';
+  }
+
+  int _findFirstEpisodeIndex(List<SeriesInfo> infos) {
+    int startIndex = 0;
+    int? bestSeason;
+    int? bestEpisode;
+
+    for (int i = 0; i < infos.length; i++) {
+      final info = infos[i];
+      final season = info.season;
+      final episode = info.episode;
+      if (!info.isSeries || season == null || episode == null) {
+        continue;
+      }
+
+      final bool isBetterSeason = bestSeason == null || season < bestSeason;
+      final bool isBetterEpisode = bestSeason != null && season == bestSeason &&
+          (bestEpisode == null || episode < bestEpisode);
+
+      if (isBetterSeason || isBetterEpisode) {
+        bestSeason = season;
+        bestEpisode = episode;
+        startIndex = i;
+      }
+    }
+
+    return startIndex;
+  }
+
+  void _maybeTriggerInitialAction() {
+    if (_initialActionHandled) {
+      return;
+    }
+    final pendingTorrent = _pendingInitialTorrent;
+    final pendingAction = _pendingInitialAction;
+    if (pendingTorrent == null || pendingAction == null) {
+      return;
+    }
+
+    TorboxTorrent? target;
+    for (final torrent in _torrents) {
+      if (torrent.id == pendingTorrent.id) {
+        target = torrent;
+        break;
+      }
+    }
+
+    if (target == null) {
+      return;
+    }
+
+    _initialActionHandled = true;
+    _pendingInitialTorrent = null;
+    _pendingInitialAction = null;
+
+    final selected = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      switch (pendingAction) {
+        case TorboxQuickAction.play:
+          _handlePlayTorrent(selected);
+          break;
+        case TorboxQuickAction.download:
+          _showDownloadOptions(selected);
+          break;
+        case TorboxQuickAction.files:
+          _showTorboxFileSelectionSheet(selected);
+          break;
+      }
+    });
+  }
+
+  Future<String> _requestTorboxStreamUrl({
+    required String apiKey,
+    required TorboxTorrent torrent,
+    required TorboxFile file,
+  }) async {
+    final url = await TorboxService.requestFileDownloadLink(
+      apiKey: apiKey,
+      torrentId: torrent.id,
+      fileId: file.id,
+    );
+    if (url.isEmpty) {
+      throw Exception('Torbox returned an empty stream URL');
+    }
+    return url;
+  }
+
+  String _formatTorboxPlaylistTitle({
+    required SeriesInfo info,
+    required String fallback,
+    required bool isSeriesCollection,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final season = info.season;
+    final episode = info.episode;
+    if (info.isSeries && season != null && episode != null) {
+      final seasonLabel = season.toString().padLeft(2, '0');
+      final episodeLabel = episode.toString().padLeft(2, '0');
+      final description = info.episodeTitle?.trim().isNotEmpty == true
+          ? info.episodeTitle!.trim()
+          : info.title?.trim().isNotEmpty == true
+              ? info.title!.trim()
+              : fallback;
+      return 'S${seasonLabel}E$episodeLabel · $description';
+    }
+
+    return fallback;
+  }
+
+  String _composeTorboxEntryTitle({
+    required String? seriesTitle,
+    required String episodeLabel,
+    required bool isSeriesCollection,
+    required String fallback,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final cleanSeries = seriesTitle
+        ?.replaceAll(RegExp(r'[._\-]+$'), '')
+        .trim();
+    if (cleanSeries != null && cleanSeries.isNotEmpty) {
+      return '$cleanSeries $episodeLabel';
+    }
+
+    return fallback;
+  }
+
+  String _formatTorboxError(Object error) {
+    final raw = error.toString();
+    return raw.replaceFirst('Exception: ', '').trim();
   }
 
   bool _isLikelySeries(List<_TorboxFileEntry> entries) {
@@ -456,6 +776,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
 
     bool showRaw = false;
     int? currentSeason;
+    bool isProcessing = false;
     final bool isSeries = _isLikelySeries(entries);
     final bool hasVideo = entries.any(
       (entry) => _torboxFileLooksLikeVideo(entry.file),
@@ -471,10 +792,14 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
           filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
           child: StatefulBuilder(
             builder: (context, setSheetState) {
-              final selectedBytes = selectedIndices.fold<int>(
+              final selectedEntries =
+                  entries
+                      .where((entry) => selectedIndices.contains(entry.index))
+                      .toList()
+                    ..sort((a, b) => a.index.compareTo(b.index));
+              final selectedBytes = selectedEntries.fold<int>(
                 0,
-                (previousValue, index) =>
-                    previousValue + entries[index].file.size.toInt(),
+                (previousValue, entry) => previousValue + entry.file.size,
               );
 
               Widget content;
@@ -556,11 +881,16 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                 );
               }
 
-              final selectedCount = selectedIndices.length;
+              final selectedCount = selectedEntries.length;
               final totalCount = entries.length;
-              final selectionSummary = selectedCount == totalCount
+              final selectionSummary = totalCount == 0
+                  ? 'No files available'
+                  : selectedCount == totalCount
                   ? 'All $totalCount files selected'
                   : '$selectedCount of $totalCount files selected';
+              final selectedSizeText = selectedCount == 0
+                  ? '0 B'
+                  : Formatters.formatFileSize(selectedBytes);
 
               return SafeArea(
                 top: false,
@@ -665,7 +995,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Selected size: ${Formatters.formatFileSize(selectedBytes)}',
+                                    'Selected size: $selectedSizeText',
                                     style: TextStyle(
                                       color: Colors.grey[400],
                                       fontSize: 12,
@@ -724,12 +1054,30 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                               children: [
                                 Expanded(
                                   child: FilledButton.icon(
-                                    onPressed: () {
-                                      Navigator.of(sheetContext).pop();
-                                      _showComingSoon('Download all');
-                                    },
+                                    onPressed: isProcessing
+                                        ? null
+                                        : () async {
+                                            setSheetState(
+                                              () => isProcessing = true,
+                                            );
+                                            final closed =
+                                                await _enqueueTorboxDownloads(
+                                                  torrent: torrent,
+                                                  entriesToDownload: entries,
+                                                  sheetContext: sheetContext,
+                                                );
+                                            if (!closed) {
+                                              setSheetState(
+                                                () => isProcessing = false,
+                                              );
+                                            }
+                                          },
                                     icon: const Icon(Icons.download_rounded),
-                                    label: const Text('Download All'),
+                                    label: Text(
+                                      isProcessing
+                                          ? 'Preparing…'
+                                          : 'Download All',
+                                    ),
                                     style: FilledButton.styleFrom(
                                       backgroundColor: const Color(
                                         0xFF10B981,
@@ -745,16 +1093,35 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                                     ),
                                   ),
                                 ),
-                                if (selectedIndices.isNotEmpty) ...[
+                                if (selectedEntries.isNotEmpty) ...[
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: FilledButton.icon(
-                                      onPressed: () {
-                                        Navigator.of(sheetContext).pop();
-                                        _showComingSoon('Download selected');
-                                      },
+                                      onPressed: isProcessing
+                                          ? null
+                                          : () async {
+                                              setSheetState(
+                                                () => isProcessing = true,
+                                              );
+                                              final closed =
+                                                  await _enqueueTorboxDownloads(
+                                                    torrent: torrent,
+                                                    entriesToDownload:
+                                                        selectedEntries,
+                                                    sheetContext: sheetContext,
+                                                  );
+                                              if (!closed) {
+                                                setSheetState(
+                                                  () => isProcessing = false,
+                                                );
+                                              }
+                                            },
                                       icon: const Icon(Icons.checklist_rounded),
-                                      label: const Text('Download Selected'),
+                                      label: Text(
+                                        isProcessing
+                                            ? 'Preparing…'
+                                            : 'Download Selected',
+                                      ),
                                       style: FilledButton.styleFrom(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 20,
@@ -806,6 +1173,39 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
         );
       },
     );
+  }
+
+  Future<bool> _enqueueTorboxDownloads({
+    required TorboxTorrent torrent,
+    required List<_TorboxFileEntry> entriesToDownload,
+    required BuildContext sheetContext,
+  }) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      Navigator.of(sheetContext).pop();
+      if (mounted) {
+        _showComingSoon('Add Torbox API key');
+      }
+      return true;
+    }
+
+    Navigator.of(sheetContext).pop();
+
+    if (!mounted) {
+      return true;
+    }
+
+    final count = entriesToDownload.length;
+    debugPrint(
+      'TorboxDownloadsScreen: download placeholder triggered for torrent ${torrent.id} ($count item(s)).',
+    );
+    if (count == 0) {
+      _showComingSoon('No files selected');
+      return true;
+    }
+
+    _showComingSoon('Torbox downloads');
+    return true;
   }
 
   Widget _buildTorboxRawList({
@@ -1810,6 +2210,20 @@ class _TorboxFileEntry {
     required this.index,
     required this.seriesInfo,
   });
+}
+
+class _TorboxEpisodeCandidate {
+  final TorboxFile file;
+  final SeriesInfo info;
+  final String displayName;
+
+  _TorboxEpisodeCandidate({
+    required this.file,
+    required this.info,
+    required this.displayName,
+  });
+
+  int get size => file.size;
 }
 
 class _ActionIcon extends StatelessWidget {

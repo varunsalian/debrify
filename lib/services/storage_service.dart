@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
 
@@ -189,6 +190,10 @@ class StorageService {
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
     };
 
+    debugPrint(
+      'StorageService: saveSeriesPlaybackState title="$seriesTitle" S${season}E$episode position=${positionMs}ms duration=${durationMs}ms',
+    );
+
     await _savePlaybackStateMap(map);
   }
 
@@ -223,6 +228,8 @@ class StorageService {
     seriesData['finishedEpisodes'][season.toString()][episode.toString()] = {
       'finishedAt': DateTime.now().millisecondsSinceEpoch,
     };
+
+    debugPrint('StorageService: markEpisodeAsFinished title="$seriesTitle" S${season}E$episode');
 
     await _savePlaybackStateMap(map);
   }
@@ -409,6 +416,14 @@ class StorageService {
       }
     }
 
+    if (lastEpisode != null) {
+      debugPrint(
+        'StorageService: getLastPlayedEpisode found S${lastEpisode['season']}E${lastEpisode['episode']} for "$seriesTitle"',
+      );
+    } else {
+      debugPrint('StorageService: getLastPlayedEpisode no episodes for "$seriesTitle"');
+    }
+
     return lastEpisode;
   }
 
@@ -443,6 +458,7 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_playbackStateKey);
     await prefs.remove(_videoResumeKey);
+    debugPrint('StorageService: cleared playback state and video resume data');
   }
 
   // Internal helper for services needing shared prefs quickly

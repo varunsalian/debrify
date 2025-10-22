@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -18,7 +19,9 @@ class TorboxService {
       debugPrint(
         'TorboxService: Using Authorization header="${headers['Authorization']?.split(' ').first}"',
       );
-      final response = await http.get(uri, headers: headers);
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
         debugPrint(
@@ -127,6 +130,119 @@ class TorboxService {
       },
     );
     return uri.toString();
+  }
+
+  static Future<Map<String, dynamic>> createTorrent({
+    required String apiKey,
+    required String magnet,
+    bool seed = true,
+    bool allowZip = true,
+    bool addOnlyIfCached = true,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/torrents/createtorrent');
+    final headers = {
+      'Authorization': _formatAuthHeader(apiKey),
+    };
+
+    final request = http.MultipartRequest('POST', uri)
+      ..headers.addAll(headers)
+      ..fields['magnet'] = magnet
+      ..fields['seed'] = seed ? '1' : '0'
+      ..fields['allow_zip'] = allowZip ? 'true' : 'false'
+      ..fields['add_only_if_cached'] = addOnlyIfCached ? 'true' : 'false';
+
+    try {
+      debugPrint(
+        'TorboxService: createtorrent magnet hash=${magnet.length >= 80 ? magnet.substring(0, 80) : magnet}',
+      );
+      final response = await request.send().timeout(const Duration(seconds: 20));
+      final body = await response.stream.bytesToString();
+      debugPrint(
+        'TorboxService: createtorrent status=${response.statusCode} body=$body',
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Torbox createtorrent failed (${response.statusCode}): $body',
+        );
+      }
+
+      final Map<String, dynamic> payload =
+          json.decode(body) as Map<String, dynamic>;
+      final bool success = payload['success'] as bool? ?? false;
+      if (!success) {
+        return payload;
+      }
+
+      return payload;
+    } catch (e) {
+      debugPrint('TorboxService: createTorrent failed: $e');
+      rethrow;
+    }
+  }
+
+  static Future<String> requestFileDownloadLink({
+    required String apiKey,
+    required int torrentId,
+    required int fileId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/torrents/requestdl').replace(
+      queryParameters: {
+        'token': apiKey.trim(),
+        'torrent_id': '$torrentId',
+        'file_id': '$fileId',
+        'zip_link': 'false',
+        'redirect': 'false',
+      },
+    );
+
+    final headers = {
+      'Authorization': _formatAuthHeader(apiKey),
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      debugPrint(
+        'TorboxService: requestdl torrent=$torrentId file=$fileId url=${uri.toString()}',
+      );
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
+      debugPrint(
+        'TorboxService: requestdl status=${response.statusCode} body=${response.body}',
+      );
+      if (response.isRedirect || response.statusCode == 302) {
+        final redirectUrl = response.headers['location'];
+        if (redirectUrl != null && redirectUrl.isNotEmpty) {
+          debugPrint('TorboxService: requestdl returned redirect $redirectUrl');
+          return redirectUrl;
+        }
+      }
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Torbox requestdl failed (${response.statusCode}): ${response.body}',
+        );
+      }
+
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      final bool success = payload['success'] as bool? ?? false;
+      if (!success) {
+        final dynamic error = payload['error'];
+        throw Exception(error?.toString() ?? 'Torbox API reported an error');
+      }
+
+      final dynamic data = payload['data'];
+      if (data is String && data.isNotEmpty) {
+        return data;
+      }
+
+      throw Exception('Torbox API returned an unexpected payload: $payload');
+    } catch (e) {
+      debugPrint('TorboxService: requestFileDownloadLink failed: $e');
+      rethrow;
+    }
   }
 
   static String _formatAuthHeader(String apiKey) {
