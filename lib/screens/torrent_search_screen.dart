@@ -3425,10 +3425,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             const SizedBox(height: 12),
             
             // Action Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompactLayout = constraints.maxWidth < 360;
+
+                Widget buildCopyMagnetButton() {
+                  return GestureDetector(
                     onTap: () => _copyMagnetLink(torrent.infohash),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -3444,6 +3446,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.copy_rounded,
@@ -3451,22 +3454,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             size: 14,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            'Copy Magnet',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: const Color(0xFF60A5FA),
+                          Flexible(
+                            child: Text(
+                              'Copy Magnet',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF60A5FA),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
+                  );
+                }
+
+                Widget buildTorboxButton() {
+                  return GestureDetector(
                     onTap: () => _addToTorbox(torrent.infohash, torrent.name),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -3505,16 +3512,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 color: Colors.white,
                               ),
                               overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
+                  );
+                }
+
+                Widget buildRealDebridButton() {
+                  return GestureDetector(
                     onTap: () => _addToRealDebrid(torrent.infohash, torrent.name, index),
                     onLongPress: () {
                       _showFileSelectionDialog(torrent.infohash, torrent.name, index);
@@ -3556,6 +3564,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 color: Colors.white,
                               ),
                               overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                           SizedBox(width: 4),
@@ -3563,9 +3572,36 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ],
                       ),
                     ),
-                  ),
-                ),
-              ],
+                  );
+                }
+
+                final copyMagnetButton = buildCopyMagnetButton();
+                final torboxButton = buildTorboxButton();
+                final realDebridButton = buildRealDebridButton();
+
+                if (isCompactLayout) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      copyMagnetButton,
+                      const SizedBox(height: 8),
+                      torboxButton,
+                      const SizedBox(height: 8),
+                      realDebridButton,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: copyMagnetButton),
+                    const SizedBox(width: 8),
+                    Expanded(child: torboxButton),
+                    const SizedBox(width: 8),
+                    Expanded(child: realDebridButton),
+                  ],
+                );
+              },
             ),
           ],
         ),
