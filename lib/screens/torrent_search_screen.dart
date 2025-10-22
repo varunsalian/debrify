@@ -36,15 +36,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String _errorMessage = '';
   bool _hasSearched = false;
   String? _apiKey;
-  
+
   // Search engine toggles
   bool _useTorrentsCsv = true;
   bool _usePirateBay = true;
-  
+
   // Sorting options
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
   bool _sortAscending = false;
-  
+
   late AnimationController _listAnimationController;
   late Animation<double> _listAnimation;
 
@@ -55,29 +55,33 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    
-    _listAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _listAnimationController,
-      curve: Curves.easeInOut,
-    ));
-    
+
+    _listAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _listAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
     _listAnimationController.forward();
     _loadDefaultSettings();
-    StorageService.getApiKey().then((k) { setState(() { _apiKey = k; }); });
+    StorageService.getApiKey().then((k) {
+      setState(() {
+        _apiKey = k;
+      });
+    });
   }
 
   Future<void> _loadDefaultSettings() async {
-    final defaultTorrentsCsv = await StorageService.getDefaultTorrentsCsvEnabled();
+    final defaultTorrentsCsv =
+        await StorageService.getDefaultTorrentsCsvEnabled();
     final defaultPirateBay = await StorageService.getDefaultPirateBayEnabled();
-    
+
     setState(() {
       _useTorrentsCsv = defaultTorrentsCsv;
       _usePirateBay = defaultPirateBay;
     });
-    
+
     // Focus the search field after a short delay to ensure UI is ready
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
@@ -117,7 +121,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
         _isLoading = false;
       });
-      
+
       // Apply sorting to the results
       _sortTorrents();
       _listAnimationController.forward();
@@ -132,7 +136,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void _copyMagnetLink(String infohash) {
     final magnetLink = 'magnet:?xt=urn:btih:$infohash';
     Clipboard.setData(ClipboardData(text: magnetLink));
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -169,9 +173,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   void _sortTorrents() {
     if (_torrents.isEmpty) return;
-    
+
     List<Torrent> sortedTorrents = List.from(_torrents);
-    
+
     switch (_sortBy) {
       case 'name':
         sortedTorrents.sort((a, b) {
@@ -202,15 +206,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // Keep original order (relevance is maintained by search engines)
         break;
     }
-    
+
     setState(() {
       _torrents = sortedTorrents;
     });
   }
 
-
-
-  Future<void> _addToRealDebrid(String infohash, String torrentName, int index) async {
+  Future<void> _addToRealDebrid(
+    String infohash,
+    String torrentName,
+    int index,
+  ) async {
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -224,11 +230,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -241,7 +243,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 3),
         ),
@@ -257,14 +261,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       pageBuilder: (_, __, ___) => const SizedBox.shrink(),
       transitionDuration: const Duration(milliseconds: 220),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
         return FadeTransition(
           opacity: curved,
           child: ScaleTransition(
             scale: Tween(begin: 0.95, end: 1.0).animate(curved),
             child: Dialog(
               backgroundColor: Theme.of(context).colorScheme.surface,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -273,7 +282,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -302,7 +313,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                     const SizedBox(height: 20),
                     CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -316,16 +329,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     try {
       final magnetLink = 'magnet:?xt=urn:btih:$infohash';
       final result = await DebridService.addTorrentToDebrid(apiKey, magnetLink);
-      
+
       // Close loading dialog
       Navigator.of(context).pop();
-      
+
       // Handle post-torrent action
       await _handlePostTorrentAction(result, torrentName, apiKey, index);
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
-      
+
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -337,11 +350,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -354,7 +363,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 4),
         ),
@@ -362,7 +373,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _showFileSelectionDialog(String infohash, String torrentName, int index) async {
+  Future<void> _showFileSelectionDialog(
+    String infohash,
+    String torrentName,
+    int index,
+  ) async {
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -376,11 +391,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -393,15 +404,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 3),
         ),
       );
       return;
     }
-
-
 
     showDialog(
       context: context,
@@ -416,10 +427,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1E293B),
-                  Color(0xFF334155),
-                ],
+                colors: [Color(0xFF1E293B), Color(0xFF334155)],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
@@ -443,10 +451,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     gradient: const LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF6366F1),
-                        Color(0xFF8B5CF6),
-                      ],
+                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                     ),
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(20),
@@ -483,7 +488,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
@@ -503,7 +511,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ],
                   ),
                 ),
-                
+
                 // Content (scrollable to avoid overflow)
                 Flexible(
                   child: SingleChildScrollView(
@@ -511,70 +519,90 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         children: [
-                      // File selection options with beautiful cards
-                      _buildOptionCard(
-                        context: context,
-                        title: 'Smart (recommended)',
-                        subtitle: 'Detect media vs non-media automatically',
-                        icon: Icons.auto_awesome_rounded,
-                        value: 'smart',
-                        selectedOption: null,
-                        onChanged: (value) {
-                          Navigator.of(context).pop();
-                          _addToRealDebridWithSelection(infohash, torrentName, value!, index);
-                        },
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildOptionCard(
-                        context: context,
-                        title: 'All video files',
-                        subtitle: 'Ideal for web series and stuff',
-                        icon: Icons.video_library_rounded,
-                        value: 'video',
-                        selectedOption: null,
-                        onChanged: (value) {
-                          Navigator.of(context).pop();
-                          _addToRealDebridWithSelection(infohash, torrentName, value!, index);
-                        },
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF10B981), Color(0xFF059669)],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildOptionCard(
-                        context: context,
-                        title: 'File with highest size',
-                        subtitle: 'Ideal for movies',
-                        icon: Icons.movie_rounded,
-                        value: 'largest',
-                        selectedOption: null,
-                        onChanged: (value) {
-                          Navigator.of(context).pop();
-                          _addToRealDebridWithSelection(infohash, torrentName, value!, index);
-                        },
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildOptionCard(
-                        context: context,
-                        title: 'All files',
-                        subtitle: 'Ideal for apps, games, archives etc',
-                        icon: Icons.folder_rounded,
-                        value: 'all',
-                        selectedOption: null,
-                        onChanged: (value) {
-                          Navigator.of(context).pop();
-                          _addToRealDebridWithSelection(infohash, torrentName, value!, index);
-                        },
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-                        ),
-                      ),
+                          // File selection options with beautiful cards
+                          _buildOptionCard(
+                            context: context,
+                            title: 'Smart (recommended)',
+                            subtitle: 'Detect media vs non-media automatically',
+                            icon: Icons.auto_awesome_rounded,
+                            value: 'smart',
+                            selectedOption: null,
+                            onChanged: (value) {
+                              Navigator.of(context).pop();
+                              _addToRealDebridWithSelection(
+                                infohash,
+                                torrentName,
+                                value!,
+                                index,
+                              );
+                            },
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildOptionCard(
+                            context: context,
+                            title: 'All video files',
+                            subtitle: 'Ideal for web series and stuff',
+                            icon: Icons.video_library_rounded,
+                            value: 'video',
+                            selectedOption: null,
+                            onChanged: (value) {
+                              Navigator.of(context).pop();
+                              _addToRealDebridWithSelection(
+                                infohash,
+                                torrentName,
+                                value!,
+                                index,
+                              );
+                            },
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF10B981), Color(0xFF059669)],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildOptionCard(
+                            context: context,
+                            title: 'File with highest size',
+                            subtitle: 'Ideal for movies',
+                            icon: Icons.movie_rounded,
+                            value: 'largest',
+                            selectedOption: null,
+                            onChanged: (value) {
+                              Navigator.of(context).pop();
+                              _addToRealDebridWithSelection(
+                                infohash,
+                                torrentName,
+                                value!,
+                                index,
+                              );
+                            },
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildOptionCard(
+                            context: context,
+                            title: 'All files',
+                            subtitle: 'Ideal for apps, games, archives etc',
+                            icon: Icons.folder_rounded,
+                            value: 'all',
+                            selectedOption: null,
+                            onChanged: (value) {
+                              Navigator.of(context).pop();
+                              _addToRealDebridWithSelection(
+                                infohash,
+                                torrentName,
+                                value!,
+                                index,
+                              );
+                            },
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -588,7 +616,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  Future<void> _addToRealDebridWithSelection(String infohash, String torrentName, String fileSelection, int index) async {
+  Future<void> _addToRealDebridWithSelection(
+    String infohash,
+    String torrentName,
+    String fileSelection,
+    int index,
+  ) async {
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -602,11 +635,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -619,7 +648,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 3),
         ),
@@ -634,7 +665,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -685,17 +718,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     try {
       final magnetLink = 'magnet:?xt=urn:btih:$infohash';
-      final result = await DebridService.addTorrentToDebrid(apiKey, magnetLink, tempFileSelection: fileSelection);
-      
+      final result = await DebridService.addTorrentToDebrid(
+        apiKey,
+        magnetLink,
+        tempFileSelection: fileSelection,
+      );
+
       // Close loading dialog
       Navigator.of(context).pop();
-      
+
       // Handle post-torrent action
-              await _handlePostTorrentAction(result, torrentName, apiKey, index);
+      await _handlePostTorrentAction(result, torrentName, apiKey, index);
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
-      
+
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -707,11 +744,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -724,7 +757,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 4),
         ),
@@ -775,7 +810,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final data = response['data'];
       final torrentId = _asIntMapValue(data, 'torrent_id');
       if (torrentId == null) {
-        _showTorboxSnack('Torrent added but missing torrent id in response.', isError: true);
+        _showTorboxSnack(
+          'Torrent added but missing torrent id in response.',
+          isError: true,
+        );
         return;
       }
 
@@ -793,7 +831,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-      _showTorboxSnack('Failed to add torrent: ${_formatTorboxError(e)}', isError: true);
+      _showTorboxSnack(
+        'Failed to add torrent: ${_formatTorboxError(e)}',
+        isError: true,
+      );
     }
   }
 
@@ -809,11 +850,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 color: const Color(0xFFEF4444),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
-                Icons.error,
-                color: Colors.white,
-                size: 16,
-              ),
+              child: const Icon(Icons.error, color: Colors.white, size: 16),
             ),
             const SizedBox(width: 12),
             const Expanded(
@@ -840,7 +877,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       builder: (context) {
         return Dialog(
           backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -890,7 +929,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  Future<TorboxTorrent?> _fetchTorboxTorrentById(String apiKey, int torrentId) async {
+  Future<TorboxTorrent?> _fetchTorboxTorrentById(
+    String apiKey,
+    int torrentId,
+  ) async {
     const limit = 50;
     int attempt = 0;
     while (attempt < 5) {
@@ -928,7 +970,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       builder: (ctx) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
             child: Container(
@@ -960,7 +1005,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ),
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Icon(Icons.flash_on_rounded, color: Colors.white),
+                          child: const Icon(
+                            Icons.flash_on_rounded,
+                            color: Colors.white,
+                          ),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -992,7 +1040,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                         IconButton(
                           onPressed: () => Navigator.of(ctx).pop(),
-                          icon: const Icon(Icons.close_rounded, color: Colors.white54),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white54,
+                          ),
                         ),
                       ],
                     ),
@@ -1033,7 +1084,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(color: Colors.white54),
+                    ),
                   ),
                 ],
               ),
@@ -1071,7 +1125,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ListTile(
                       leading: const Icon(Icons.archive_outlined),
                       title: const Text('Download whole torrent as ZIP'),
-                      subtitle: const Text('Create a single archive for offline use'),
+                      subtitle: const Text(
+                        'Create a single archive for offline use',
+                      ),
                       trailing: isLoadingZip
                           ? const SizedBox(
                               height: 20,
@@ -1139,7 +1195,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       final bool isBetterSeason = bestSeason == null || season < bestSeason;
-      final bool isBetterEpisode = bestSeason != null && season == bestSeason &&
+      final bool isBetterEpisode =
+          bestSeason != null &&
+          season == bestSeason &&
           (bestEpisode == null || episode < bestEpisode);
 
       if (isBetterSeason || isBetterEpisode) {
@@ -1179,8 +1237,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final description = info.episodeTitle?.trim().isNotEmpty == true
           ? info.episodeTitle!.trim()
           : info.title?.trim().isNotEmpty == true
-              ? info.title!.trim()
-              : fallback;
+          ? info.title!.trim()
+          : fallback;
       return 'S${seasonLabel}E$episodeLabel · $description';
     }
 
@@ -1220,7 +1278,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }).toList();
 
     if (videoFiles.isEmpty) {
-      _showTorboxSnack('No playable video files found in this torrent.', isError: true);
+      _showTorboxSnack(
+        'No playable video files found in this torrent.',
+        isError: true,
+      );
       return;
     }
 
@@ -1243,26 +1304,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         );
       } catch (e) {
-        _showTorboxSnack('Failed to play file: ${_formatTorboxError(e)}', isError: true);
+        _showTorboxSnack(
+          'Failed to play file: ${_formatTorboxError(e)}',
+          isError: true,
+        );
       }
       return;
     }
 
-    final entries = List<_TorboxPlaylistItem>.generate(
-      videoFiles.length,
-      (index) {
-        final displayName = _torboxDisplayName(videoFiles[index]);
-        final info = SeriesParser.parseFilename(displayName);
-        return _TorboxPlaylistItem(
-          file: videoFiles[index],
-          originalIndex: index,
-          seriesInfo: info,
-          displayName: displayName,
-        );
-      },
-    );
+    final entries = List<_TorboxPlaylistItem>.generate(videoFiles.length, (
+      index,
+    ) {
+      final displayName = _torboxDisplayName(videoFiles[index]);
+      final info = SeriesParser.parseFilename(displayName);
+      return _TorboxPlaylistItem(
+        file: videoFiles[index],
+        originalIndex: index,
+        seriesInfo: info,
+        displayName: displayName,
+      );
+    });
 
-    final filenames = entries.map((entry) => _torboxDisplayName(entry.file)).toList();
+    final filenames = entries
+        .map((entry) => _torboxDisplayName(entry.file))
+        .toList();
     final bool isSeriesCollection =
         entries.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
 
@@ -1273,18 +1338,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final bInfo = b.seriesInfo;
         final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
         if (seasonCompare != 0) return seasonCompare;
-        final episodeCompare = (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+        final episodeCompare = (aInfo.episode ?? 0).compareTo(
+          bInfo.episode ?? 0,
+        );
         if (episodeCompare != 0) return episodeCompare;
-        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+        return a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        );
       });
     } else {
-      sortedEntries.sort((a, b) =>
-          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+      sortedEntries.sort(
+        (a, b) =>
+            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      );
     }
 
     final seriesInfos = sortedEntries.map((entry) => entry.seriesInfo).toList();
-    int startIndex =
-        isSeriesCollection ? _findFirstEpisodeIndex(seriesInfos) : 0;
+    int startIndex = isSeriesCollection
+        ? _findFirstEpisodeIndex(seriesInfos)
+        : 0;
     if (startIndex < 0 || startIndex >= sortedEntries.length) {
       startIndex = 0;
     }
@@ -1297,7 +1369,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         file: sortedEntries[startIndex].file,
       );
     } catch (e) {
-      _showTorboxSnack('Failed to prepare stream: ${_formatTorboxError(e)}', isError: true);
+      _showTorboxSnack(
+        'Failed to prepare stream: ${_formatTorboxError(e)}',
+        isError: true,
+      );
       return;
     }
 
@@ -1330,8 +1405,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       );
     }
 
-    final totalBytes =
-        sortedEntries.fold<int>(0, (sum, entry) => sum + entry.file.size);
+    final totalBytes = sortedEntries.fold<int>(
+      0,
+      (sum, entry) => sum + entry.file.size,
+    );
     final subtitle =
         '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
 
@@ -1369,7 +1446,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? const Color(0xFFEF4444) : const Color(0xFF1E293B),
+        backgroundColor: isError
+            ? const Color(0xFFEF4444)
+            : const Color(0xFF1E293B),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -1412,29 +1491,33 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     required LinearGradient gradient,
   }) {
     final isSelected = selectedOption == value;
-    
+
     return Container(
       decoration: BoxDecoration(
-        gradient: isSelected ? gradient : LinearGradient(
-          colors: [
-            Colors.grey.withValues(alpha: 0.1),
-            Colors.grey.withValues(alpha: 0.05),
-          ],
-        ),
+        gradient: isSelected
+            ? gradient
+            : LinearGradient(
+                colors: [
+                  Colors.grey.withValues(alpha: 0.1),
+                  Colors.grey.withValues(alpha: 0.05),
+                ],
+              ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isSelected 
+          color: isSelected
               ? Colors.white.withValues(alpha: 0.3)
               : Colors.grey.withValues(alpha: 0.2),
           width: isSelected ? 2 : 1,
         ),
-        boxShadow: isSelected ? [
-          BoxShadow(
-            color: gradient.colors.first.withValues(alpha: 0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ] : null,
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: gradient.colors.first.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Material(
         color: Colors.transparent,
@@ -1449,12 +1532,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isSelected 
+                    color: isSelected
                         ? Colors.white.withValues(alpha: 0.2)
                         : Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSelected 
+                      color: isSelected
                           ? Colors.white.withValues(alpha: 0.3)
                           : Colors.grey.withValues(alpha: 0.2),
                       width: 1,
@@ -1467,7 +1550,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                 ),
                 const SizedBox(width: 16),
-                
+
                 // Text content
                 Expanded(
                   child: Column(
@@ -1485,7 +1568,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       Text(
                         subtitle,
                         style: TextStyle(
-                          color: isSelected 
+                          color: isSelected
                               ? Colors.white.withValues(alpha: 0.8)
                               : Colors.grey[400],
                           fontSize: 12,
@@ -1495,7 +1578,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ],
                   ),
                 ),
-                
+
                 // Selection indicator
                 Container(
                   width: 24,
@@ -1503,14 +1586,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: isSelected 
+                      color: isSelected
                           ? Colors.white
                           : Colors.grey.withValues(alpha: 0.4),
                       width: 2,
                     ),
-                    color: isSelected 
-                        ? Colors.white
-                        : Colors.transparent,
+                    color: isSelected ? Colors.white : Colors.transparent,
                   ),
                   child: isSelected
                       ? Icon(
@@ -1528,7 +1609,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  Future<void> _handlePostTorrentAction(Map<String, dynamic> result, String torrentName, String apiKey, int index) async {
+  Future<void> _handlePostTorrentAction(
+    Map<String, dynamic> result,
+    String torrentName,
+    String apiKey,
+    int index,
+  ) async {
     final postAction = await StorageService.getPostTorrentAction();
     final downloadLink = result['downloadLink'] as String;
     final fileSelection = result['fileSelection'] as String;
@@ -1538,15 +1624,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Special case: if user prefers auto-download and torrent is media-only, download all immediately
     final hasAnyVideo = (files ?? []).any((f) {
-      final name = (f['name'] as String?) ?? (f['filename'] as String?) ?? (f['path'] as String?) ?? '';
+      final name =
+          (f['name'] as String?) ??
+          (f['filename'] as String?) ??
+          (f['path'] as String?) ??
+          '';
       final base = name.startsWith('/') ? name.split('/').last : name;
       return base.isNotEmpty && FileUtils.isVideoFile(base);
     });
-    final isMediaOnly = (files != null && files.isNotEmpty) && files.every((f) {
-      final name = (f['name'] as String?) ?? (f['filename'] as String?) ?? (f['path'] as String?) ?? '';
-      final base = name.startsWith('/') ? name.split('/').last : name;
-      return base.isNotEmpty && FileUtils.isVideoFile(base);
-    });
+    final isMediaOnly =
+        (files != null && files.isNotEmpty) &&
+        files.every((f) {
+          final name =
+              (f['name'] as String?) ??
+              (f['filename'] as String?) ??
+              (f['path'] as String?) ??
+              '';
+          final base = name.startsWith('/') ? name.split('/').last : name;
+          return base.isNotEmpty && FileUtils.isVideoFile(base);
+        });
 
     if (postAction == 'download' && isMediaOnly) {
       // Auto-download all videos without dialog
@@ -1561,7 +1657,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           builder: (ctx) {
             return Dialog(
               backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 24,
+              ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24),
                 child: Container(
@@ -1587,13 +1686,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                                  colors: [
+                                    Color(0xFF6366F1),
+                                    Color(0xFF8B5CF6),
+                                  ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: const Icon(Icons.cloud_download_rounded, color: Colors.white),
+                              child: const Icon(
+                                Icons.cloud_download_rounded,
+                                color: Colors.white,
+                              ),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -1616,7 +1721,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         ? 'Ready to unrestrict and stream/download.'
                                         : '${links.length} files available in this torrent.',
                                     style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.6),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.6,
+                                      ),
                                       fontSize: 12,
                                     ),
                                   ),
@@ -1625,7 +1732,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ),
                             IconButton(
                               onPressed: () => Navigator.of(ctx).pop(),
-                              icon: const Icon(Icons.close_rounded, color: Colors.white54),
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white54,
+                              ),
                             ),
                           ],
                         ),
@@ -1702,39 +1812,60 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             try {
                               final torrentId = result['torrentId']?.toString();
                               if (torrentId != null && torrentId.isNotEmpty) {
-                                final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
-                                final filename = torrentInfo['filename']?.toString();
+                                final torrentInfo =
+                                    await DebridService.getTorrentInfo(
+                                      apiKey,
+                                      torrentId,
+                                    );
+                                final filename = torrentInfo['filename']
+                                    ?.toString();
                                 if (filename != null && filename.isNotEmpty) {
                                   finalTitle = filename;
                                 }
                               }
                             } catch (_) {}
 
-                            final added = await StorageService.addPlaylistItemRaw({
-                              'title': finalTitle,
-                              'url': '',
-                              'restrictedLink': links[0],
-                              'apiKey': apiKey,
-                              'rdTorrentId': result['torrentId']?.toString(),
-                              'kind': 'single',
-                            });
+                            final added =
+                                await StorageService.addPlaylistItemRaw({
+                                  'title': finalTitle,
+                                  'url': '',
+                                  'restrictedLink': links[0],
+                                  'apiKey': apiKey,
+                                  'rdTorrentId': result['torrentId']
+                                      ?.toString(),
+                                  'kind': 'single',
+                                });
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(added ? 'Added to playlist' : 'Already in playlist')),
+                              SnackBar(
+                                content: Text(
+                                  added
+                                      ? 'Added to playlist'
+                                      : 'Already in playlist',
+                                ),
+                              ),
                             );
                           } else {
-                            final torrentId = result['torrentId']?.toString() ?? '';
+                            final torrentId =
+                                result['torrentId']?.toString() ?? '';
                             if (torrentId.isEmpty) return;
-                            final added = await StorageService.addPlaylistItemRaw({
-                              'title': torrentName,
-                              'kind': 'collection',
-                              'rdTorrentId': torrentId,
-                              'apiKey': apiKey,
-                              'count': links.length,
-                            });
+                            final added =
+                                await StorageService.addPlaylistItemRaw({
+                                  'title': torrentName,
+                                  'kind': 'collection',
+                                  'rdTorrentId': torrentId,
+                                  'apiKey': apiKey,
+                                  'count': links.length,
+                                });
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(added ? 'Added collection to playlist' : 'Already in playlist')),
+                              SnackBar(
+                                content: Text(
+                                  added
+                                      ? 'Added collection to playlist'
+                                      : 'Already in playlist',
+                                ),
+                              ),
                             );
                           }
                         },
@@ -1742,7 +1873,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       const SizedBox(height: 12),
                       TextButton(
                         onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white54),
+                        ),
                       ),
                     ],
                   ),
@@ -1775,11 +1909,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     color: const Color(0xFF10B981),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 16,
-                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 16),
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
@@ -1792,7 +1922,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             backgroundColor: const Color(0xFF1E293B),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
             duration: const Duration(seconds: 4),
           ),
@@ -1844,21 +1976,35 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (apiKey == null || apiKey.isEmpty) return;
     // If multiple RD links exist, treat as multi-file playlist (series pack, multi-episode, etc.)
     if (links.length > 1) {
-      await _handlePlayMultiFileTorrentWithInfo(links, files, updatedInfo, torrentName, apiKey, 0, torrentId);
+      await _handlePlayMultiFileTorrentWithInfo(
+        links,
+        files,
+        updatedInfo,
+        torrentName,
+        apiKey,
+        0,
+        torrentId,
+      );
       return;
     }
     try {
-      final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[0]);
+      final unrestrictResult = await DebridService.unrestrictLink(
+        apiKey,
+        links[0],
+      );
       final videoUrl = unrestrictResult['download'];
       final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
       if (FileUtils.isVideoMimeType(mimeType)) {
         if (!mounted) return;
-        
+
         // Fetch actual torrent filename for resume key parity with Debrid screen
         String finalTitle = torrentName;
         try {
           if (torrentId != null && torrentId.isNotEmpty) {
-            final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
+            final torrentInfo = await DebridService.getTorrentInfo(
+              apiKey,
+              torrentId,
+            );
             final filename = torrentInfo['filename']?.toString();
             if (filename != null && filename.isNotEmpty) {
               finalTitle = filename;
@@ -1867,13 +2013,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         } catch (_) {
           // Fallback to torrentName if fetch fails
         }
-        
+
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => VideoPlayerScreen(
-              videoUrl: videoUrl,
-              title: finalTitle,
-            ),
+            builder: (context) =>
+                VideoPlayerScreen(videoUrl: videoUrl, title: finalTitle),
           ),
         );
       } else {
@@ -1887,11 +2031,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     color: const Color(0xFF10B981),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
-                    size: 16,
-                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 16),
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
@@ -1904,7 +2044,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             backgroundColor: const Color(0xFF1E293B),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
             duration: const Duration(seconds: 4),
           ),
@@ -1921,11 +2063,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1938,7 +2076,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 4),
         ),
@@ -1946,7 +2086,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _handlePlayMultiFileTorrentWithInfo(List<dynamic> links, List<dynamic>? files, Map<String, dynamic>? updatedInfo, String torrentName, String apiKey, int index, String? torrentId) async {
+  Future<void> _handlePlayMultiFileTorrentWithInfo(
+    List<dynamic> links,
+    List<dynamic>? files,
+    Map<String, dynamic>? updatedInfo,
+    String torrentName,
+    String apiKey,
+    int index,
+    String? torrentId,
+  ) async {
     try {
       // Show loading dialog
       showDialog(
@@ -1998,7 +2146,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ),
               backgroundColor: const Color(0xFF1E293B),
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               margin: const EdgeInsets.all(16),
               duration: const Duration(seconds: 4),
             ),
@@ -2008,25 +2158,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       // Get selected files from the torrent info
-      final selectedFiles = files.where((file) => file['selected'] == 1).toList();
-      
+      final selectedFiles = files
+          .where((file) => file['selected'] == 1)
+          .toList();
+
       // If no selected files, use all files (they might all be selected by default)
       final allFilesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
-      
+
       // Filter to only video files
       final filesToUse = allFilesToUse.where((file) {
-        String? filename = file['name']?.toString() ?? 
-                          file['filename']?.toString() ?? 
-                          file['path']?.toString();
-        
+        String? filename =
+            file['name']?.toString() ??
+            file['filename']?.toString() ??
+            file['path']?.toString();
+
         // If we got a path, extract just the filename
         if (filename != null && filename.startsWith('/')) {
           filename = filename.split('/').last;
         }
-        
+
         return filename != null && FileUtils.isVideoFile(filename);
       }).toList();
-      
+
       // Check if this is an archive (multiple files, single link)
       bool isArchive = false;
       if (filesToUse.length > 1 && links.length == 1) {
@@ -2063,7 +2216,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ),
               backgroundColor: const Color(0xFF1E293B),
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               margin: const EdgeInsets.all(16),
               duration: const Duration(seconds: 4),
             ),
@@ -2074,164 +2229,190 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Multiple individual files - create playlist with true lazy loading
       final List<PlaylistEntry> entries = [];
-      
+
       // Get filenames from files with null safety
       final filenames = filesToUse.map((file) {
-        String? name = file['name']?.toString() ?? 
-                      file['filename']?.toString() ?? 
-                      file['path']?.toString();
-        
+        String? name =
+            file['name']?.toString() ??
+            file['filename']?.toString() ??
+            file['path']?.toString();
+
         // If we got a path, extract just the filename
         if (name != null && name.startsWith('/')) {
           name = name.split('/').last;
         }
-        
+
         return name ?? 'Unknown File';
       }).toList();
-      
+
       // Check if this is a series
       final isSeries = SeriesParser.isSeriesPlaylist(filenames);
-      
+
       if (isSeries) {
         // For series: find the first episode and unrestrict only that one
         final seriesInfos = SeriesParser.parsePlaylist(filenames);
-        
+
         // Find the first episode (lowest season, lowest episode)
         int firstEpisodeIndex = 0;
         int lowestSeason = 999;
         int lowestEpisode = 999;
-        
+
         for (int i = 0; i < seriesInfos.length; i++) {
           final info = seriesInfos[i];
           if (info.isSeries && info.season != null && info.episode != null) {
-            if (info.season! < lowestSeason || 
-                (info.season! == lowestSeason && info.episode! < lowestEpisode)) {
+            if (info.season! < lowestSeason ||
+                (info.season! == lowestSeason &&
+                    info.episode! < lowestEpisode)) {
               lowestSeason = info.season!;
               lowestEpisode = info.episode!;
               firstEpisodeIndex = i;
             }
           }
         }
-        
+
         // Create playlist entries with true lazy loading
         for (int i = 0; i < filesToUse.length; i++) {
           final file = filesToUse[i];
-          String? filename = file['name']?.toString() ?? 
-                            file['filename']?.toString() ?? 
-                            file['path']?.toString();
-          
+          String? filename =
+              file['name']?.toString() ??
+              file['filename']?.toString() ??
+              file['path']?.toString();
+
           // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
             filename = filename.split('/').last;
           }
-          
+
           final finalFilename = filename ?? 'Unknown File';
           final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
-          
+
           // Check if we have a corresponding link
           if (i >= links.length) {
             // Skip if no corresponding link
             continue;
           }
-          
+
           if (i == firstEpisodeIndex) {
             // First episode: try to unrestrict for immediate playback
             try {
-              final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
+              final unrestrictResult = await DebridService.unrestrictLink(
+                apiKey,
+                links[i],
+              );
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
-                entries.add(PlaylistEntry(
-                  url: url,
-                  title: finalFilename,
-                  sizeBytes: sizeBytes,
-                ));
+                entries.add(
+                  PlaylistEntry(
+                    url: url,
+                    title: finalFilename,
+                    sizeBytes: sizeBytes,
+                  ),
+                );
               } else {
                 // If unrestriction failed or returned empty URL, add as restricted link
-                entries.add(PlaylistEntry(
+                entries.add(
+                  PlaylistEntry(
+                    url: '', // Empty URL - will be filled when unrestricted
+                    title: finalFilename,
+                    restrictedLink: links[i],
+                    sizeBytes: sizeBytes,
+                  ),
+                );
+              }
+            } catch (e) {
+              // If unrestriction fails, add as restricted link for lazy loading
+              entries.add(
+                PlaylistEntry(
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: links[i],
                   sizeBytes: sizeBytes,
-                ));
-              }
-            } catch (e) {
-              // If unrestriction fails, add as restricted link for lazy loading
-              entries.add(PlaylistEntry(
+                ),
+              );
+            }
+          } else {
+            // Other episodes: keep restricted links for lazy loading
+            entries.add(
+              PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: links[i],
                 sizeBytes: sizeBytes,
-              ));
-            }
-          } else {
-            // Other episodes: keep restricted links for lazy loading
-            entries.add(PlaylistEntry(
-              url: '', // Empty URL - will be filled when unrestricted
-              title: finalFilename,
-              restrictedLink: links[i],
-              sizeBytes: sizeBytes,
-            ));
+              ),
+            );
           }
         }
       } else {
         // For movies: unrestrict only the first video
         for (int i = 0; i < filesToUse.length; i++) {
           final file = filesToUse[i];
-          String? filename = file['name']?.toString() ?? 
-                            file['filename']?.toString() ?? 
-                            file['path']?.toString();
-          
+          String? filename =
+              file['name']?.toString() ??
+              file['filename']?.toString() ??
+              file['path']?.toString();
+
           // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
             filename = filename.split('/').last;
           }
-          
+
           final finalFilename = filename ?? 'Unknown File';
           final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
-          
+
           // Check if we have a corresponding link
           if (i >= links.length) {
             // Skip if no corresponding link
             continue;
           }
-          
+
           if (i == 0) {
             // First video: try to unrestrict for immediate playback
             try {
-              final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
+              final unrestrictResult = await DebridService.unrestrictLink(
+                apiKey,
+                links[i],
+              );
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
-                entries.add(PlaylistEntry(
-                  url: url,
-                  title: finalFilename,
-                  sizeBytes: sizeBytes,
-                ));
+                entries.add(
+                  PlaylistEntry(
+                    url: url,
+                    title: finalFilename,
+                    sizeBytes: sizeBytes,
+                  ),
+                );
               } else {
                 // If unrestriction failed or returned empty URL, add as restricted link
-                entries.add(PlaylistEntry(
+                entries.add(
+                  PlaylistEntry(
+                    url: '', // Empty URL - will be filled when unrestricted
+                    title: finalFilename,
+                    restrictedLink: links[i],
+                    sizeBytes: sizeBytes,
+                  ),
+                );
+              }
+            } catch (e) {
+              // If unrestriction fails, add as restricted link for lazy loading
+              entries.add(
+                PlaylistEntry(
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: links[i],
                   sizeBytes: sizeBytes,
-                ));
-              }
-            } catch (e) {
-              // If unrestriction fails, add as restricted link for lazy loading
-              entries.add(PlaylistEntry(
+                ),
+              );
+            }
+          } else {
+            // Other videos: keep restricted links for lazy loading
+            entries.add(
+              PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: links[i],
                 sizeBytes: sizeBytes,
-              ));
-            }
-          } else {
-            // Other videos: keep restricted links for lazy loading
-            entries.add(PlaylistEntry(
-              url: '', // Empty URL - will be filled when unrestricted
-              title: finalFilename,
-              restrictedLink: links[i],
-              sizeBytes: sizeBytes,
-            ));
+              ),
+            );
           }
         }
       }
@@ -2267,7 +2448,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ),
               backgroundColor: const Color(0xFF1E293B),
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               margin: const EdgeInsets.all(16),
               duration: const Duration(seconds: 4),
             ),
@@ -2277,18 +2460,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       if (!mounted) return;
-      
+
       // Determine the initial video URL - use the first unrestricted URL or empty string
       String initialVideoUrl = '';
       if (entries.isNotEmpty && entries.first.url.isNotEmpty) {
         initialVideoUrl = entries.first.url;
       }
-      
+
       // Fetch actual torrent filename for resume key parity with Debrid screen
       String finalTitle = torrentName;
       try {
         if (torrentId != null && torrentId.isNotEmpty) {
-          final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
+          final torrentInfo = await DebridService.getTorrentInfo(
+            apiKey,
+            torrentId,
+          );
           final filename = torrentInfo['filename']?.toString();
           if (filename != null && filename.isNotEmpty) {
             finalTitle = filename;
@@ -2297,18 +2483,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       } catch (_) {
         // Fallback to torrentName if fetch fails
       }
-      
-      			Navigator.of(context).push(
-				MaterialPageRoute(
-					builder: (context) => VideoPlayerScreen(
-						videoUrl: initialVideoUrl,
-						title: finalTitle,
-						subtitle: '${entries.length} files',
-						playlist: entries.isNotEmpty ? entries : null,
-						startIndex: 0,
-					),
-				),
-			);
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerScreen(
+            videoUrl: initialVideoUrl,
+            title: finalTitle,
+            subtitle: '${entries.length} files',
+            playlist: entries.isNotEmpty ? entries : null,
+            startIndex: 0,
+          ),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         if (Navigator.of(context).canPop()) {
@@ -2324,11 +2510,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     color: const Color(0xFFEF4444),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    Icons.error,
-                    color: Colors.white,
-                    size: 16,
-                  ),
+                  child: const Icon(Icons.error, color: Colors.white, size: 16),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -2341,7 +2523,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             backgroundColor: const Color(0xFF1E293B),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
             duration: const Duration(seconds: 4),
           ),
@@ -2350,7 +2534,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _showDownloadSelectionDialog(List<dynamic> links, String torrentName) async {
+  Future<void> _showDownloadSelectionDialog(
+    List<dynamic> links,
+    String torrentName,
+  ) async {
     // Show file selection dialog immediately (no upfront unrestriction)
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null) return;
@@ -2369,7 +2556,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       } catch (_) {
         // Use default filename
       }
-      
+
       fileList.add({
         'restrictedLink': link,
         'filename': fileName,
@@ -2378,143 +2565,148 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     if (fileList.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.error, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'No downloadable video files found in this torrent.',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show the download selection dialog with unrestricted links
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.error,
+                  const Text(
+                    'Select Video to Download',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      size: 16,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'No downloadable video files found in this torrent.',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                  const SizedBox(height: 16),
+                  // Download All option
+                  ListTile(
+                    leading: const Icon(
+                      Icons.download_for_offline,
+                      color: Color(0xFF10B981),
+                    ),
+                    title: const Text(
+                      'Download All',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Download all ${fileList.length} files',
+                      style: TextStyle(color: Colors.grey[400]),
+                    ),
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                      await _downloadAllFiles(fileList, torrentName);
+                    },
+                  ),
+                  const Divider(color: Colors.grey),
+                  // Individual video options - scrollable
+                  Expanded(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: fileList.length,
+                      itemBuilder: (context, index) {
+                        final file = fileList[index];
+                        final fileName = file['filename'] as String;
+                        return ListTile(
+                          leading: const Icon(
+                            Icons.video_file,
+                            color: Colors.grey,
+                          ),
+                          title: Text(
+                            fileName,
+                            style: const TextStyle(color: Colors.white),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            'Tap to download',
+                            style: TextStyle(color: Colors.grey[400]),
+                          ),
+                          onTap: () async {
+                            Navigator.of(context).pop();
+                            await _downloadFile(
+                              file['restrictedLink'],
+                              fileName,
+                              torrentName: torrentName,
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
                     ),
                   ),
                 ],
               ),
-              backgroundColor: const Color(0xFF1E293B),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              margin: const EdgeInsets.all(16),
-              duration: const Duration(seconds: 4),
             ),
-          );
-        }
-        return;
-      }
-
-      // Show the download selection dialog with unrestricted links
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return Dialog(
-            backgroundColor: const Color(0xFF1E293B),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Select Video to Download',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Download All option
-                    ListTile(
-                      leading: const Icon(
-                        Icons.download_for_offline,
-                        color: Color(0xFF10B981),
-                      ),
-                      title: const Text(
-                        'Download All',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: Text(
-                        'Download all ${fileList.length} files',
-                        style: TextStyle(color: Colors.grey[400]),
-                      ),
-                      onTap: () async {
-                        Navigator.of(context).pop();
-                        await _downloadAllFiles(fileList, torrentName);
-                      },
-                    ),
-                    const Divider(color: Colors.grey),
-                    // Individual video options - scrollable
-                    Expanded(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: fileList.length,
-                        itemBuilder: (context, index) {
-                          final file = fileList[index];
-                          final fileName = file['filename'] as String;
-                          return ListTile(
-                            leading: const Icon(
-                              Icons.video_file,
-                              color: Colors.grey,
-                            ),
-                            title: Text(
-                              fileName,
-                              style: const TextStyle(color: Colors.white),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              'Tap to download',
-                              style: TextStyle(color: Colors.grey[400]),
-                            ),
-                            onTap: () async {
-                              Navigator.of(context).pop();
-                              await _downloadFile(file['restrictedLink'], fileName, torrentName: torrentName);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      );
+          ),
+        );
+      },
+    );
   }
 
-
-
-  Future<void> _downloadAllFiles(List<Map<String, dynamic>> files, String torrentName) async {
+  Future<void> _downloadAllFiles(
+    List<Map<String, dynamic>> files,
+    String torrentName,
+  ) async {
     try {
       // Start downloads for all files
       for (final file in files) {
@@ -2535,7 +2727,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           meta: meta,
         );
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -2563,7 +2755,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 4),
         ),
@@ -2579,11 +2773,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2596,7 +2786,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 4),
         ),
@@ -2604,7 +2796,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _downloadFile(String downloadLink, String fileName, {String? torrentName}) async {
+  Future<void> _downloadFile(
+    String downloadLink,
+    String fileName, {
+    String? torrentName,
+  }) async {
     try {
       final meta = jsonEncode({
         'restrictedLink': downloadLink,
@@ -2616,10 +2812,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         url: downloadLink, // Use restricted link directly
         fileName: fileName,
         context: context,
-        torrentName: torrentName ?? fileName, // Use provided torrent name or fileName as fallback
+        torrentName:
+            torrentName ??
+            fileName, // Use provided torrent name or fileName as fallback
         meta: meta,
       );
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -2647,7 +2845,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 4),
         ),
@@ -2663,11 +2863,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2680,7 +2876,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
           backgroundColor: const Color(0xFF1E293B),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 4),
         ),
@@ -2694,36 +2892,34 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final List<String> selectedEngines = [];
       if (_useTorrentsCsv) selectedEngines.add('Torrents CSV');
       if (_usePirateBay) selectedEngines.add('The Pirate Bay');
-      
+
       if (selectedEngines.isEmpty) {
         return 'No search engines selected';
       }
-      
+
       return 'From ${selectedEngines.join(' and ')}';
     }
-    
+
     final List<String> breakdowns = [];
-    
+
     // Add Torrents CSV count
     final csvCount = _engineCounts['torrents_csv'] ?? 0;
     if (csvCount > 0) {
       breakdowns.add('Torrents CSV: $csvCount');
     }
-    
+
     // Add Pirate Bay count
     final pbCount = _engineCounts['pirate_bay'] ?? 0;
     if (pbCount > 0) {
       breakdowns.add('The Pirate Bay: $pbCount');
     }
-    
+
     if (breakdowns.isEmpty) {
       return 'No results found';
     }
-    
+
     return breakdowns.join(' • ');
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -2794,17 +2990,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           color: Color(0xFF6366F1),
                         ),
                         suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(
-                                Icons.clear_rounded,
-                                color: Color(0xFFEF4444),
-                              ),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() {});
-                              },
-                            )
-                          : null,
+                            ? IconButton(
+                                icon: const Icon(
+                                  Icons.clear_rounded,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -2819,11 +3015,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       onChanged: (value) => setState(() {}),
                     ),
                   ),
-                  
+
                   // Search Engine Toggles
                   const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E293B).withValues(alpha: 0.8),
                       borderRadius: BorderRadius.circular(8),
@@ -2850,7 +3049,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     _useTorrentsCsv = value;
                                   });
                                   // Auto-refresh if we have results
-                                  if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+                                  if (_hasSearched &&
+                                      _searchController.text
+                                          .trim()
+                                          .isNotEmpty) {
                                     _searchTorrents(_searchController.text);
                                   }
                                 },
@@ -2859,9 +3061,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               Expanded(
                                 child: Text(
                                   'Torrents CSV',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -2871,7 +3076,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         Container(
                           width: 1,
                           height: 24,
-                          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.3),
                         ),
                         Expanded(
                           child: Row(
@@ -2883,7 +3090,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     _usePirateBay = value;
                                   });
                                   // Auto-refresh if we have results
-                                  if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+                                  if (_hasSearched &&
+                                      _searchController.text
+                                          .trim()
+                                          .isNotEmpty) {
                                     _searchTorrents(_searchController.text);
                                   }
                                 },
@@ -2892,9 +3102,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               Expanded(
                                 child: Text(
                                   'Pirate Bay',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -2907,21 +3120,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 ],
               ),
             ),
-            
+
             // Content Section
             Expanded(
               child: Builder(
                 builder: (context) {
                   if (_isLoading) {
                     return ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 16, left: 12, right: 12, top: 12),
+                      padding: const EdgeInsets.only(
+                        bottom: 16,
+                        left: 12,
+                        right: 12,
+                        top: 12,
+                      ),
                       itemCount: 6,
                       itemBuilder: (context, i) {
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+                            color: const Color(
+                              0xFF1E293B,
+                            ).withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Column(
@@ -2954,15 +3174,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             gradient: const LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF7F1D1D),
-                                Color(0xFF991B1B),
-                              ],
+                              colors: [Color(0xFF7F1D1D), Color(0xFF991B1B)],
                             ),
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                                color: const Color(
+                                  0xFFEF4444,
+                                ).withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 offset: const Offset(0, 10),
                               ),
@@ -3003,7 +3222,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               ),
                               const SizedBox(height: 12),
                               ElevatedButton.icon(
-                                onPressed: () => _searchTorrents(_searchController.text),
+                                onPressed: () =>
+                                    _searchTorrents(_searchController.text),
                                 icon: const Icon(Icons.refresh_rounded),
                                 label: const Text('Try Again'),
                                 style: ElevatedButton.styleFrom(
@@ -3032,10 +3252,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             gradient: const LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF1E293B),
-                                Color(0xFF334155),
-                              ],
+                              colors: [Color(0xFF1E293B), Color(0xFF334155)],
                             ),
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
@@ -3052,7 +3269,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                  color: const Color(
+                                    0xFF6366F1,
+                                  ).withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Icon(
@@ -3101,7 +3320,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       child: Text(
                                         'Try: movies, games, software',
                                         style: TextStyle(
-                                          color: Colors.white.withValues(alpha: 0.8),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.8,
+                                          ),
                                           fontSize: 10,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -3128,10 +3349,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             gradient: const LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF1E293B),
-                                Color(0xFF334155),
-                              ],
+                              colors: [Color(0xFF1E293B), Color(0xFF334155)],
                             ),
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
@@ -3178,21 +3396,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         return FadeTransition(
                           opacity: _listAnimation,
                           child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFF1E40AF),
-                                  Color(0xFF1E3A8A),
-                                ],
+                                colors: [Color(0xFF1E40AF), Color(0xFF1E3A8A)],
                               ),
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                                  color: const Color(
+                                    0xFF1E40AF,
+                                  ).withValues(alpha: 0.4),
                                   blurRadius: 8,
                                   offset: const Offset(0, 3),
                                 ),
@@ -3230,17 +3453,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       }
                       if (index == 1) {
                         return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+                            color: const Color(
+                              0xFF1E293B,
+                            ).withValues(alpha: 0.8),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                              color: const Color(
+                                0xFF3B82F6,
+                              ).withValues(alpha: 0.2),
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
+                                color: const Color(
+                                  0xFF1E40AF,
+                                ).withValues(alpha: 0.1),
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
                               ),
@@ -3250,7 +3485,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             children: [
                               Icon(
                                 Icons.sort_rounded,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                                 size: 16,
                               ),
                               const SizedBox(width: 8),
@@ -3259,7 +3496,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -3275,20 +3514,54 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     }
                                   },
                                   items: const [
-                                    DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 12))),
-                                    DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 12))),
-                                    DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 12))),
-                                    DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 12))),
-                                    DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 12))),
+                                    DropdownMenuItem(
+                                      value: 'relevance',
+                                      child: Text(
+                                        'Relevance',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'name',
+                                      child: Text(
+                                        'Name',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'size',
+                                      child: Text(
+                                        'Size',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'seeders',
+                                      child: Text(
+                                        'Seeders',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'date',
+                                      child: Text(
+                                        'Date',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
                                   ],
                                   style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                     fontSize: 12,
                                   ),
                                   underline: Container(),
                                   icon: Icon(
                                     Icons.arrow_drop_down,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                     size: 16,
                                   ),
                                 ),
@@ -3302,12 +3575,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   _sortTorrents();
                                 },
                                 icon: Icon(
-                                  _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  _sortAscending
+                                      ? Icons.arrow_upward
+                                      : Icons.arrow_downward,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                   size: 16,
                                 ),
                                 padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                constraints: const BoxConstraints(
+                                  minWidth: 24,
+                                  minHeight: 24,
+                                ),
                               ),
                             ],
                           ),
@@ -3358,6 +3638,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           children: [
             // Title Row
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
@@ -3371,10 +3652,27 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => _copyMagnetLink(torrent.infohash),
+                  tooltip: 'Copy magnet link',
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D2A3F),
+                    foregroundColor: const Color(0xFF60A5FA),
+                    padding: const EdgeInsets.all(10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            
+
             // Stats Grid
             Wrap(
               spacing: 6,
@@ -3403,7 +3701,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
             ),
             const SizedBox(height: 10),
-            
+
             // Date
             Row(
               children: [
@@ -3423,54 +3721,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
             ),
             const SizedBox(height: 12),
-            
+
             // Action Buttons
             LayoutBuilder(
               builder: (context, constraints) {
                 final isCompactLayout = constraints.maxWidth < 360;
-
-                Widget buildCopyMagnetButton() {
-                  return GestureDetector(
-                    onTap: () => _copyMagnetLink(torrent.infohash),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.copy_rounded,
-                            color: const Color(0xFF60A5FA),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Copy Magnet',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF60A5FA),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
 
                 Widget buildTorboxButton() {
                   return GestureDetector(
@@ -3489,7 +3744,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF7C3AED).withValues(alpha: 0.35),
+                            color: const Color(
+                              0xFF7C3AED,
+                            ).withValues(alpha: 0.35),
                             spreadRadius: 0,
                             blurRadius: 12,
                             offset: const Offset(0, 6),
@@ -3500,7 +3757,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: const [
-                          Icon(Icons.flash_on_rounded, color: Colors.white, size: 16),
+                          Icon(
+                            Icons.flash_on_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                           SizedBox(width: 6),
                           Flexible(
                             child: Text(
@@ -3515,6 +3776,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               maxLines: 1,
                             ),
                           ),
+                          SizedBox(width: 4),
+                          Icon(
+                            Icons.expand_more_rounded,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
                         ],
                       ),
                     ),
@@ -3523,9 +3790,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
                 Widget buildRealDebridButton() {
                   return GestureDetector(
-                    onTap: () => _addToRealDebrid(torrent.infohash, torrent.name, index),
+                    onTap: () =>
+                        _addToRealDebrid(torrent.infohash, torrent.name, index),
                     onLongPress: () {
-                      _showFileSelectionDialog(torrent.infohash, torrent.name, index);
+                      _showFileSelectionDialog(
+                        torrent.infohash,
+                        torrent.name,
+                        index,
+                      );
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -3541,7 +3813,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                            color: const Color(
+                              0xFF1E40AF,
+                            ).withValues(alpha: 0.4),
                             spreadRadius: 0,
                             blurRadius: 12,
                             offset: const Offset(0, 6),
@@ -3552,7 +3826,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: const [
-                          Icon(Icons.cloud_download_rounded, color: Colors.white, size: 16),
+                          Icon(
+                            Icons.cloud_download_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                           SizedBox(width: 6),
                           Flexible(
                             child: Text(
@@ -3568,14 +3846,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ),
                           ),
                           SizedBox(width: 4),
-                          Icon(Icons.expand_more_rounded, color: Colors.white70, size: 18),
+                          Icon(
+                            Icons.expand_more_rounded,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
                         ],
                       ),
                     ),
                   );
                 }
 
-                final copyMagnetButton = buildCopyMagnetButton();
                 final torboxButton = buildTorboxButton();
                 final realDebridButton = buildRealDebridButton();
 
@@ -3583,8 +3864,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      copyMagnetButton,
-                      const SizedBox(height: 8),
                       torboxButton,
                       const SizedBox(height: 8),
                       realDebridButton,
@@ -3594,8 +3873,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
                 return Row(
                   children: [
-                    Expanded(child: copyMagnetButton),
-                    const SizedBox(width: 8),
                     Expanded(child: torboxButton),
                     const SizedBox(width: 8),
                     Expanded(child: realDebridButton),

@@ -60,7 +60,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
   @override
   void didUpdateWidget(TorboxDownloadsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialTorrentForAction != null && widget.initialAction != null) {
+    if (widget.initialTorrentForAction != null &&
+        widget.initialAction != null) {
       _pendingInitialTorrent = widget.initialTorrentForAction;
       _pendingInitialAction = widget.initialAction;
       _initialActionHandled = false;
@@ -201,7 +202,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     await _copyTorboxFileLink(torrent, file);
   }
 
-  Future<void> _copyTorboxFileLink(TorboxTorrent torrent, TorboxFile file) async {
+  Future<void> _copyTorboxFileLink(
+    TorboxTorrent torrent,
+    TorboxFile file,
+  ) async {
     final key = _apiKey;
     if (key == null || key.isEmpty) {
       _showComingSoon('Add Torbox API key');
@@ -290,12 +294,11 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
               gradient: const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF0F172A),
-                  Color(0xFF1E293B),
-                ],
+                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
               border: Border.all(
                 color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                 width: 1,
@@ -344,12 +347,17 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                           child: Opacity(
                             opacity: option.enabled ? 1.0 : 0.45,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF111C32),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: const Color(0xFF475569).withValues(alpha: 0.35),
+                                  color: const Color(
+                                    0xFF475569,
+                                  ).withValues(alpha: 0.35),
                                 ),
                               ),
                               child: Row(
@@ -471,14 +479,18 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
       final aInfo = a.info;
       final bInfo = b.info;
 
-      final aIsSeries = aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
-      final bIsSeries = bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
+      final aIsSeries =
+          aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
+      final bIsSeries =
+          bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
 
       if (aIsSeries && bIsSeries) {
         final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
         if (seasonCompare != 0) return seasonCompare;
 
-        final episodeCompare = (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+        final episodeCompare = (aInfo.episode ?? 0).compareTo(
+          bInfo.episode ?? 0,
+        );
         if (episodeCompare != 0) return episodeCompare;
       } else if (aIsSeries != bIsSeries) {
         return aIsSeries ? -1 : 1;
@@ -492,7 +504,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     int startIndex = 0;
     if (isSeriesCollection) {
       startIndex = sortedCandidates.indexWhere(
-        (candidate) => candidate.info.isSeries &&
+        (candidate) =>
+            candidate.info.isSeries &&
             candidate.info.season != null &&
             candidate.info.episode != null,
       );
@@ -501,8 +514,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
       }
     }
 
-    final seriesInfos =
-        sortedCandidates.map((candidate) => candidate.info).toList();
+    final seriesInfos = sortedCandidates
+        .map((candidate) => candidate.info)
+        .toList();
 
     debugPrint(
       'TorboxPlay: isSeries=$isSeriesCollection startIndex=$startIndex (season=${startIndex < seriesInfos.length ? seriesInfos[startIndex].season : 'n/a'} episode=${startIndex < seriesInfos.length ? seriesInfos[startIndex].episode : 'n/a'})',
@@ -562,8 +576,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
       );
     }
 
-    final totalBytes =
-        sortedCandidates.fold<int>(0, (sum, entry) => sum + entry.file.size);
+    final totalBytes = sortedCandidates.fold<int>(
+      0,
+      (sum, entry) => sum + entry.file.size,
+    );
     final subtitle =
         '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
 
@@ -840,7 +856,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
       }
 
       final bool isBetterSeason = bestSeason == null || season < bestSeason;
-      final bool isBetterEpisode = bestSeason != null && season == bestSeason &&
+      final bool isBetterEpisode =
+          bestSeason != null &&
+          season == bestSeason &&
           (bestEpisode == null || episode < bestEpisode);
 
       if (isBetterSeason || isBetterEpisode) {
@@ -929,8 +947,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
       final description = info.episodeTitle?.trim().isNotEmpty == true
           ? info.episodeTitle!.trim()
           : info.title?.trim().isNotEmpty == true
-              ? info.title!.trim()
-              : fallback;
+          ? info.title!.trim()
+          : fallback;
       return 'S${seasonLabel}E$episodeLabel · $description';
     }
 
@@ -947,9 +965,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
       return fallback;
     }
 
-    final cleanSeries = seriesTitle
-        ?.replaceAll(RegExp(r'[._\-]+$'), '')
-        .trim();
+    final cleanSeries = seriesTitle?.replaceAll(RegExp(r'[._\-]+$'), '').trim();
     if (cleanSeries != null && cleanSeries.isNotEmpty) {
       return '$cleanSeries $episodeLabel';
     }
@@ -1548,8 +1564,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                         sectionEntries[i].file.shortName
                     ? sectionEntries[i].file.name
                     : null,
-                onCopy:
-                    onCopy == null ? null : () => onCopy(sectionEntries[i]),
+                onCopy: onCopy == null ? null : () => onCopy(sectionEntries[i]),
               ),
             ),
           const SizedBox(height: 16),
@@ -1755,8 +1770,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
                   animationIndex: i,
                   subtitle: otherEntries[i].file.name,
                   badge: 'Extra',
-                  onCopy:
-                      onCopy == null ? null : () => onCopy(otherEntries[i]),
+                  onCopy: onCopy == null ? null : () => onCopy(otherEntries[i]),
                 ),
               ),
           ],
@@ -2351,6 +2365,7 @@ class _TorboxTorrentCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
@@ -2364,6 +2379,7 @@ class _TorboxTorrentCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -2396,6 +2412,8 @@ class _TorboxTorrentCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    _buildMoreOptionsButton(onMoreOptions),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -2465,24 +2483,41 @@ class _TorboxTorrentCard extends StatelessWidget {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  _buildPrimaryButton(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 380;
+                  final playButton = _buildPrimaryButton(
                     icon: Icons.play_arrow,
                     label: 'Play',
                     backgroundColor: playColor,
                     onPressed: onPlay,
-                  ),
-                  const SizedBox(width: 12),
-                  _buildPrimaryButton(
+                  );
+                  final downloadButton = _buildPrimaryButton(
                     icon: Icons.download_rounded,
                     label: 'Download',
                     backgroundColor: downloadColor,
                     onPressed: onDownload,
-                  ),
-                  const SizedBox(width: 12),
-                  _buildMoreOptionsButton(onMoreOptions),
-                ],
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(width: double.infinity, child: playButton),
+                        const SizedBox(height: 8),
+                        SizedBox(width: double.infinity, child: downloadButton),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: playButton),
+                      const SizedBox(width: 12),
+                      Expanded(child: downloadButton),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -2497,23 +2532,16 @@ class _TorboxTorrentCard extends StatelessWidget {
     required Color backgroundColor,
     required VoidCallback onPressed,
   }) {
-    return Expanded(
-      child: FilledButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 20),
-        label: Text(label),
-        style: FilledButton.styleFrom(
-          backgroundColor: backgroundColor,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20),
+      label: Text(label),
+      style: FilledButton.styleFrom(
+        backgroundColor: backgroundColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -2529,7 +2557,9 @@ class _TorboxTorrentCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: const Color(0xFF475569).withValues(alpha: 0.3)),
+          side: BorderSide(
+            color: const Color(0xFF475569).withValues(alpha: 0.3),
+          ),
         ),
       ),
     );

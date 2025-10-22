@@ -38,10 +38,11 @@ class _TorrentMoreOption {
   final bool enabled;
 }
 
-class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with TickerProviderStateMixin {
+class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
+    with TickerProviderStateMixin {
   late TabController _tabController;
   int _selectedIndex = 0;
-  
+
   // Torrent Downloads data
   final List<RDTorrent> _torrents = [];
   final ScrollController _torrentScrollController = ScrollController();
@@ -50,7 +51,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   String _torrentErrorMessage = '';
   int _torrentPage = 1;
   bool _hasMoreTorrents = true;
-  
+
   // Downloads data
   final List<DebridDownload> _downloads = [];
   final ScrollController _downloadScrollController = ScrollController();
@@ -59,17 +60,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   String _downloadErrorMessage = '';
   int _downloadPage = 1;
   bool _hasMoreDownloads = true;
-  
+
   String? _apiKey;
   static const int _limit = 50;
-  
+
   // File browser navigation state
   int? _currentSeason;
-  
+
   // Magnet input
   final TextEditingController _magnetController = TextEditingController();
   bool _isAddingMagnet = false;
-  
+
   // Link input
   final TextEditingController _linkController = TextEditingController();
   bool _isAddingLink = false;
@@ -97,7 +98,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           attempts++;
         }
         if (mounted && _apiKey != null) {
-          _showMultipleLinksDialog(widget.initialTorrentForOptions!, showPlayButtons: false);
+          _showMultipleLinksDialog(
+            widget.initialTorrentForOptions!,
+            showPlayButtons: false,
+          );
         }
       }
     });
@@ -114,7 +118,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   }
 
   void _onTorrentScroll() {
-    if (_torrentScrollController.position.pixels >= _torrentScrollController.position.maxScrollExtent - 200) {
+    if (_torrentScrollController.position.pixels >=
+        _torrentScrollController.position.maxScrollExtent - 200) {
       if (!_isLoadingMoreTorrents && _hasMoreTorrents) {
         _loadMoreTorrents();
       }
@@ -122,7 +127,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   }
 
   void _onDownloadScroll() {
-    if (_downloadScrollController.position.pixels >= _downloadScrollController.position.maxScrollExtent - 200) {
+    if (_downloadScrollController.position.pixels >=
+        _downloadScrollController.position.maxScrollExtent - 200) {
       if (!_isLoadingMoreDownloads && _hasMoreDownloads) {
         _loadMoreDownloads();
       }
@@ -131,7 +137,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
   Future<void> _loadApiKeyAndData() async {
     final apiKey = await StorageService.getApiKey();
-    
+
     if (mounted) {
       setState(() {
         _apiKey = apiKey;
@@ -144,8 +150,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     } else {
       if (mounted) {
         setState(() {
-          _torrentErrorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
-          _downloadErrorMessage = 'No API key configured. Please add your Real Debrid API key in Settings.';
+          _torrentErrorMessage =
+              'No API key configured. Please add your Real Debrid API key in Settings.';
+          _downloadErrorMessage =
+              'No API key configured. Please add your Real Debrid API key in Settings.';
         });
       }
     }
@@ -186,7 +194,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             _torrents.clear();
           }
           // Filter to show only downloaded torrents
-          final downloadedTorrents = newTorrents.where((torrent) => torrent.isDownloaded).toList();
+          final downloadedTorrents = newTorrents
+              .where((torrent) => torrent.isDownloaded)
+              .toList();
           _torrents.addAll(downloadedTorrents);
           _hasMoreTorrents = hasMore;
           _torrentPage++;
@@ -226,7 +236,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       if (mounted) {
         setState(() {
           // Filter to show only downloaded torrents
-          final downloadedTorrents = newTorrents.where((torrent) => torrent.isDownloaded).toList();
+          final downloadedTorrents = newTorrents
+              .where((torrent) => torrent.isDownloaded)
+              .toList();
           _torrents.addAll(downloadedTorrents);
           _hasMoreTorrents = hasMore;
           _torrentPage++;
@@ -294,7 +306,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   }
 
   Future<void> _loadMoreDownloads() async {
-    if (_apiKey == null || _isLoadingMoreDownloads || !_hasMoreDownloads) return;
+    if (_apiKey == null || _isLoadingMoreDownloads || !_hasMoreDownloads)
+      return;
 
     if (mounted) {
       setState(() {
@@ -336,7 +349,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     if (torrent.links.length == 1) {
       // Single link - unrestrict and copy directly
       try {
-        final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
+        final unrestrictResult = await DebridService.unrestrictLink(
+          _apiKey!,
+          torrent.links[0],
+        );
         final downloadLink = unrestrictResult['download'];
         if (mounted) {
           _copyToClipboard(downloadLink);
@@ -360,10 +376,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     if (torrent.links.length == 1) {
       // Single file - check MIME type after unrestricting
       try {
-        final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
+        final unrestrictResult = await DebridService.unrestrictLink(
+          _apiKey!,
+          torrent.links[0],
+        );
         final downloadLink = unrestrictResult['download'];
         final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
-        
+
         // Check if it's actually a video using MIME type
         if (FileUtils.isVideoMimeType(mimeType)) {
           if (mounted) {
@@ -421,7 +440,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       }
     } else {
       if (mounted) {
-        _showError('This file is not a video (MIME type: ${download.mimeType})');
+        _showError(
+          'This file is not a video (MIME type: ${download.mimeType})',
+        );
       }
     }
   }
@@ -446,16 +467,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],
@@ -485,17 +501,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
         // Delete the torrent
         await DebridService.deleteTorrent(_apiKey!, torrent.id);
-        
+
         // Check if widget is still mounted before updating UI
         if (mounted) {
           // Close loading dialog
           Navigator.of(context).pop();
-          
+
           // Remove the torrent from the local list
           setState(() {
             _torrents.removeWhere((t) => t.id == torrent.id);
           });
-          
+
           // Show success message
           _showSuccess('Torrent deleted successfully!');
         }
@@ -504,7 +520,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         if (mounted) {
           // Close loading dialog
           Navigator.of(context).pop();
-          
+
           // Show error message
           _showError('Failed to delete torrent: ${e.toString()}');
         }
@@ -532,16 +548,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete All'),
           ),
         ],
@@ -569,10 +580,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           setDialogState = dialogStateSetter;
           return AlertDialog(
             backgroundColor: const Color(0xFF1E293B),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: const Text(
               'Deleting All Torrents',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -585,7 +601,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 LinearProgressIndicator(
                   value: total > 0 ? completed / total : 0,
                   backgroundColor: Colors.grey.withValues(alpha: 0.3),
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFFEF4444),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 if (failedDeletes.isNotEmpty)
@@ -616,22 +634,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     try {
       for (int i = 0; i < _torrents.length && !isCancelled; i++) {
         final torrent = _torrents[i];
-        
+
         try {
           await DebridService.deleteTorrent(_apiKey!, torrent.id);
           completed++;
-          
+
           // Update dialog state only if not cancelled
           if (!isCancelled && setDialogState != null) {
             setDialogState!(() {});
           }
-          
+
           // Small delay to prevent overwhelming the API
           await Future.delayed(const Duration(milliseconds: 200));
         } catch (e) {
           failedDeletes.add(torrent.filename);
           completed++;
-          
+
           // Update dialog state only if not cancelled
           if (!isCancelled && setDialogState != null) {
             setDialogState!(() {});
@@ -661,7 +679,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         if (failedDeletes.isEmpty) {
           _showSuccess('All torrents deleted successfully!');
         } else {
-          _showError('Deleted ${completed - failedDeletes.length} torrents. ${failedDeletes.length} failed to delete.');
+          _showError(
+            'Deleted ${completed - failedDeletes.length} torrents. ${failedDeletes.length} failed to delete.',
+          );
         }
       } else {
         // Operation was cancelled, refresh the list to show current state
@@ -698,16 +718,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete All'),
           ),
         ],
@@ -735,10 +750,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           setDialogState = dialogStateSetter;
           return AlertDialog(
             backgroundColor: const Color(0xFF1E293B),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: const Text(
               'Deleting All Downloads',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -751,7 +771,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 LinearProgressIndicator(
                   value: total > 0 ? completed / total : 0,
                   backgroundColor: Colors.grey.withValues(alpha: 0.3),
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFFEF4444),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 if (failedDeletes.isNotEmpty)
@@ -782,22 +804,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     try {
       for (int i = 0; i < _downloads.length && !isCancelled; i++) {
         final download = _downloads[i];
-        
+
         try {
           await DebridService.deleteDownload(_apiKey!, download.id);
           completed++;
-          
+
           // Update dialog state only if not cancelled
           if (!isCancelled && setDialogState != null) {
             setDialogState!(() {});
           }
-          
+
           // Small delay to prevent overwhelming the API
           await Future.delayed(const Duration(milliseconds: 200));
         } catch (e) {
           failedDeletes.add(download.filename);
           completed++;
-          
+
           // Update dialog state only if not cancelled
           if (!isCancelled && setDialogState != null) {
             setDialogState!(() {});
@@ -827,7 +849,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         if (failedDeletes.isEmpty) {
           _showSuccess('All downloads deleted successfully!');
         } else {
-          _showError('Deleted ${completed - failedDeletes.length} downloads. ${failedDeletes.length} failed to delete.');
+          _showError(
+            'Deleted ${completed - failedDeletes.length} downloads. ${failedDeletes.length} failed to delete.',
+          );
         }
       } else {
         // Operation was cancelled, refresh the list to show current state
@@ -864,16 +888,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],
@@ -903,17 +922,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
         // Delete the download
         await DebridService.deleteDownload(_apiKey!, download.id);
-        
+
         // Check if widget is still mounted before updating UI
         if (mounted) {
           // Close loading dialog
           Navigator.of(context).pop();
-          
+
           // Remove the download from the local list
           setState(() {
             _downloads.removeWhere((d) => d.id == download.id);
           });
-          
+
           // Show success message
           _showSuccess('Download deleted successfully!');
         }
@@ -922,7 +941,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         if (mounted) {
           // Close loading dialog
           Navigator.of(context).pop();
-          
+
           // Show error message
           _showError('Failed to delete download: ${e.toString()}');
         }
@@ -930,7 +949,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
-  Future<void> _showMultipleLinksDialog(RDTorrent torrent, {bool showPlayButtons = false}) async {
+  Future<void> _showMultipleLinksDialog(
+    RDTorrent torrent, {
+    bool showPlayButtons = false,
+  }) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -948,7 +970,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   const Color(0xFF1E293B).withValues(alpha: 0.98),
                 ],
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
               border: Border.all(
                 color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                 width: 1,
@@ -994,14 +1018,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                color: const Color(
+                                  0xFF6366F1,
+                                ).withValues(alpha: 0.3),
                                 blurRadius: 15,
                                 offset: const Offset(0, 8),
                               ),
                             ],
                           ),
                           child: const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                             strokeWidth: 3,
                           ),
                         ),
@@ -1051,7 +1079,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                                color: const Color(
+                                  0xFFEF4444,
+                                ).withValues(alpha: 0.3),
                                 blurRadius: 15,
                                 offset: const Offset(0, 8),
                               ),
@@ -1109,13 +1139,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
                 final torrentInfo = snapshot.data!;
                 final allFiles = torrentInfo['files'] as List<dynamic>? ?? [];
-                
+
                 // Get selected files from the torrent info
-                final selectedFilesFromTorrent = allFiles.where((file) => file['selected'] == 1).toList();
-                
+                final selectedFilesFromTorrent = allFiles
+                    .where((file) => file['selected'] == 1)
+                    .toList();
+
                 // Only show files that are selected (selected: 1)
                 final files = selectedFilesFromTorrent;
-                
+
                 // Detect if this is a series and group files by season
                 final filenames = files.map((file) {
                   String fileName = file['path']?.toString() ?? 'Unknown file';
@@ -1124,10 +1156,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   }
                   return fileName;
                 }).toList();
-                
+
                 final isSeries = SeriesParser.isSeriesPlaylist(filenames);
                 final seriesInfos = SeriesParser.parsePlaylist(filenames);
-                
+
                 // If no files are selected, show empty state
                 if (files.isEmpty) {
                   return Container(
@@ -1167,7 +1199,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                             ],
                           ),
                         ),
-                        
+
                         // Empty state message
                         Expanded(
                           child: Center(
@@ -1178,12 +1210,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                   padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
                                     gradient: const LinearGradient(
-                                      colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                                      colors: [
+                                        Color(0xFFF59E0B),
+                                        Color(0xFFD97706),
+                                      ],
                                     ),
                                     borderRadius: BorderRadius.circular(20),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                                        color: const Color(
+                                          0xFFF59E0B,
+                                        ).withValues(alpha: 0.3),
                                         blurRadius: 15,
                                         offset: const Offset(0, 8),
                                       ),
@@ -1217,7 +1254,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                             ),
                           ),
                         ),
-                        
+
                         // Close button
                         Container(
                           padding: const EdgeInsets.all(20),
@@ -1227,7 +1264,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                               onPressed: () => Navigator.of(context).pop(),
                               style: TextButton.styleFrom(
                                 backgroundColor: const Color(0xFF475569),
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -1246,15 +1285,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     ),
                   );
                 }
-                
+
                 // NOTE: Real-Debrid returns links[] in the same order as the selected files list
                 // We therefore use the index within the filtered `files` list directly to index links[]
-                
+
                 bool downloadingAll = false;
                 int addCount = 0;
                 final Set<int> added = {};
                 final Set<int> selectedFiles = {}; // Track selected files
-                final Map<int, bool> unrestrictingFiles = {}; // Track which files are being unrestricted
+                final Map<int, bool> unrestrictingFiles =
+                    {}; // Track which files are being unrestricted
                 return StatefulBuilder(
                   builder: (context, setLocal) {
                     return Container(
@@ -1297,7 +1337,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
                           if (downloadingAll) ...[
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
                               child: Column(
                                 children: [
                                   Row(
@@ -1330,9 +1373,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                     borderRadius: BorderRadius.circular(8),
                                     child: LinearProgressIndicator(
                                       minHeight: 8,
-                                      value: files.isEmpty ? null : (addCount / files.length).clamp(0.0, 1.0),
+                                      value: files.isEmpty
+                                          ? null
+                                          : (addCount / files.length).clamp(
+                                              0.0,
+                                              1.0,
+                                            ),
                                       backgroundColor: Colors.grey[800],
-                                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                            Color(0xFF10B981),
+                                          ),
                                     ),
                                   ),
                                 ],
@@ -1342,66 +1393,104 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
                           // File List - conditional rendering for series vs regular files
                           Flexible(
-                            child: isSeries 
-                              ? _buildSeriesFileBrowser(
-                                  files: files,
-                                  seriesInfos: seriesInfos,
-                                  selectedFiles: selectedFiles,
-                                  added: added,
-                                  unrestrictingFiles: unrestrictingFiles,
-                                  showPlayButtons: showPlayButtons,
-                                  torrent: torrent,
-                                  setLocal: setLocal,
-                                )
-                              : ListView.separated(
-                                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-                                  shrinkWrap: true,
-                                  itemCount: files.length,
-                                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                                  itemBuilder: (context, index) {
-                                    final file = files[index];
-                                    String fileName = file['path']?.toString() ?? 'Unknown file';
-                                    if (fileName.startsWith('/')) {
-                                      fileName = fileName.split('/').last;
-                                    }
-                                    final fileSize = (file['bytes'] ?? 0) as int;
-                                    final isVideo = FileUtils.isVideoFile(fileName);
-                                    final isAdded = added.contains(index);
-                                    final isSelected = selectedFiles.contains(index);
-                                    final isUnrestricting = unrestrictingFiles[index] ?? false;
+                            child: isSeries
+                                ? _buildSeriesFileBrowser(
+                                    files: files,
+                                    seriesInfos: seriesInfos,
+                                    selectedFiles: selectedFiles,
+                                    added: added,
+                                    unrestrictingFiles: unrestrictingFiles,
+                                    showPlayButtons: showPlayButtons,
+                                    torrent: torrent,
+                                    setLocal: setLocal,
+                                  )
+                                : ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      24,
+                                      8,
+                                      24,
+                                      16,
+                                    ),
+                                    shrinkWrap: true,
+                                    itemCount: files.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 12),
+                                    itemBuilder: (context, index) {
+                                      final file = files[index];
+                                      String fileName =
+                                          file['path']?.toString() ??
+                                          'Unknown file';
+                                      if (fileName.startsWith('/')) {
+                                        fileName = fileName.split('/').last;
+                                      }
+                                      final fileSize =
+                                          (file['bytes'] ?? 0) as int;
+                                      final isVideo = FileUtils.isVideoFile(
+                                        fileName,
+                                      );
+                                      final isAdded = added.contains(index);
+                                      final isSelected = selectedFiles.contains(
+                                        index,
+                                      );
+                                      final isUnrestricting =
+                                          unrestrictingFiles[index] ?? false;
 
-                                    return _buildModernFileCard(
-                                      fileName: fileName,
-                                      fileSize: fileSize,
-                                      isVideo: isVideo,
-                                      isAdded: isAdded,
-                                      isSelected: isSelected,
-                                      isUnrestricting: isUnrestricting,
-                                      showPlayButtons: showPlayButtons,
-                                      onPlay: () => _playFileOnDemand(torrent, index, setLocal, unrestrictingFiles),
-                                      onAddToPlaylist: () => _addFileToPlaylist(torrent, index, setLocal),
-                                      onDownload: () => _downloadFileOnDemand(torrent, index, fileName, setLocal, added, unrestrictingFiles),
-                                      onCopy: () => _copyFileLinkOnDemand(torrent, index, setLocal, unrestrictingFiles),
-                                      onSelect: () {
-                                        setLocal(() {
-                                          if (isSelected) {
-                                            selectedFiles.remove(index);
-                                          } else {
-                                            selectedFiles.add(index);
-                                          }
-                                        });
-                                      },
-                                      index: index,
-                                    );
-                                  },
-                                ),
+                                      return _buildModernFileCard(
+                                        fileName: fileName,
+                                        fileSize: fileSize,
+                                        isVideo: isVideo,
+                                        isAdded: isAdded,
+                                        isSelected: isSelected,
+                                        isUnrestricting: isUnrestricting,
+                                        showPlayButtons: showPlayButtons,
+                                        onPlay: () => _playFileOnDemand(
+                                          torrent,
+                                          index,
+                                          setLocal,
+                                          unrestrictingFiles,
+                                        ),
+                                        onAddToPlaylist: () =>
+                                            _addFileToPlaylist(
+                                              torrent,
+                                              index,
+                                              setLocal,
+                                            ),
+                                        onDownload: () => _downloadFileOnDemand(
+                                          torrent,
+                                          index,
+                                          fileName,
+                                          setLocal,
+                                          added,
+                                          unrestrictingFiles,
+                                        ),
+                                        onCopy: () => _copyFileLinkOnDemand(
+                                          torrent,
+                                          index,
+                                          setLocal,
+                                          unrestrictingFiles,
+                                        ),
+                                        onSelect: () {
+                                          setLocal(() {
+                                            if (isSelected) {
+                                              selectedFiles.remove(index);
+                                            } else {
+                                              selectedFiles.add(index);
+                                            }
+                                          });
+                                        },
+                                        index: index,
+                                      );
+                                    },
+                                  ),
                           ),
 
                           // Compact footer with Download All, Download Selected, and Close buttons
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A).withValues(alpha: 0.5),
+                              color: const Color(
+                                0xFF0F172A,
+                              ).withValues(alpha: 0.5),
                               borderRadius: const BorderRadius.only(
                                 bottomLeft: Radius.circular(28),
                                 bottomRight: Radius.circular(28),
@@ -1415,12 +1504,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                     width: double.infinity,
                                     decoration: BoxDecoration(
                                       gradient: const LinearGradient(
-                                        colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                                        colors: [
+                                          Color(0xFF8B5CF6),
+                                          Color(0xFF7C3AED),
+                                        ],
                                       ),
                                       borderRadius: BorderRadius.circular(16),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                                          color: const Color(
+                                            0xFF8B5CF6,
+                                          ).withValues(alpha: 0.3),
                                           blurRadius: 12,
                                           offset: const Offset(0, 6),
                                         ),
@@ -1434,30 +1528,46 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                 downloadingAll = true;
                                                 addCount = 0;
                                               });
-                                              final selectedIndices = selectedFiles.toList();
-                                              for (var i = 0; i < selectedIndices.length; i++) {
-                                                final index = selectedIndices[i];
+                                              final selectedIndices =
+                                                  selectedFiles.toList();
+                                              for (
+                                                var i = 0;
+                                                i < selectedIndices.length;
+                                                i++
+                                              ) {
+                                                final index =
+                                                    selectedIndices[i];
                                                 final file = files[index];
-                                                String fileName = file['path']?.toString() ?? 'file';
+                                                String fileName =
+                                                    file['path']?.toString() ??
+                                                    'file';
                                                 if (fileName.startsWith('/')) {
-                                                  fileName = fileName.split('/').last;
+                                                  fileName = fileName
+                                                      .split('/')
+                                                      .last;
                                                 }
-                                                
+
                                                 // Queue download with restricted link (unrestriction happens on-demand)
                                                 try {
                                                   final meta = jsonEncode({
-                                                    'restrictedLink': torrent.links[index],
+                                                    'restrictedLink':
+                                                        torrent.links[index],
                                                     'apiKey': _apiKey ?? '',
-                                                    'torrentHash': (torrent.id ?? '').toString(),
+                                                    'torrentHash':
+                                                        (torrent.id ?? '')
+                                                            .toString(),
                                                     'fileIndex': index,
                                                   });
-                                                  await DownloadService.instance.enqueueDownload(
-                                                    url: torrent.links[index], // Use restricted link directly
-                                                    fileName: fileName,
-                                                    context: context,
-                                                    torrentName: torrent.filename,
-                                                    meta: meta,
-                                                  );
+                                                  await DownloadService.instance
+                                                      .enqueueDownload(
+                                                        url: torrent
+                                                            .links[index], // Use restricted link directly
+                                                        fileName: fileName,
+                                                        context: context,
+                                                        torrentName:
+                                                            torrent.filename,
+                                                        meta: meta,
+                                                      );
                                                   setLocal(() {
                                                     added.add(index);
                                                     addCount = i + 1;
@@ -1468,18 +1578,29 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                               }
                                               setLocal(() {
                                                 downloadingAll = false;
-                                                selectedFiles.clear(); // Clear selection after download
+                                                selectedFiles
+                                                    .clear(); // Clear selection after download
                                               });
                                               if (mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
                                                   SnackBar(
                                                     content: Row(
                                                       children: [
                                                         Container(
-                                                          padding: const EdgeInsets.all(8),
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                8,
+                                                              ),
                                                           decoration: BoxDecoration(
-                                                            color: const Color(0xFF8B5CF6),
-                                                            borderRadius: BorderRadius.circular(8),
+                                                            color: const Color(
+                                                              0xFF8B5CF6,
+                                                            ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  8,
+                                                                ),
                                                           ),
                                                           child: const Icon(
                                                             Icons.check,
@@ -1487,19 +1608,36 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                             size: 16,
                                                           ),
                                                         ),
-                                                        const SizedBox(width: 12),
+                                                        const SizedBox(
+                                                          width: 12,
+                                                        ),
                                                         Expanded(
                                                           child: Text(
                                                             'Added ${selectedIndices.length} selected downloads',
-                                                            style: const TextStyle(fontWeight: FontWeight.w500),
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w500,
+                                                                ),
                                                           ),
                                                         ),
                                                       ],
                                                     ),
-                                                    backgroundColor: const Color(0xFF1E293B),
-                                                    behavior: SnackBarBehavior.floating,
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                                    margin: const EdgeInsets.all(16),
+                                                    backgroundColor:
+                                                        const Color(0xFF1E293B),
+                                                    behavior: SnackBarBehavior
+                                                        .floating,
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                    ),
+                                                    margin:
+                                                        const EdgeInsets.all(
+                                                          16,
+                                                        ),
                                                   ),
                                                 );
                                               }
@@ -1508,12 +1646,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                           ? const SizedBox(
                                               width: 16,
                                               height: 16,
-                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
                                             )
-                                          : const Icon(Icons.download_rounded, color: Colors.white),
+                                          : const Icon(
+                                              Icons.download_rounded,
+                                              color: Colors.white,
+                                            ),
                                       label: Text(
-                                        downloadingAll 
-                                            ? 'Adding $addCount/${selectedFiles.length}…' 
+                                        downloadingAll
+                                            ? 'Adding $addCount/${selectedFiles.length}…'
                                             : 'Download Selected (${selectedFiles.length})',
                                         style: const TextStyle(
                                           color: Colors.white,
@@ -1522,9 +1666,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                       ),
                                       style: FilledButton.styleFrom(
                                         backgroundColor: Colors.transparent,
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 20,
+                                          vertical: 12,
+                                        ),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1539,12 +1688,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                       child: Container(
                                         decoration: BoxDecoration(
                                           gradient: const LinearGradient(
-                                            colors: [Color(0xFF10B981), Color(0xFF059669)],
+                                            colors: [
+                                              Color(0xFF10B981),
+                                              Color(0xFF059669),
+                                            ],
                                           ),
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                              color: const Color(
+                                                0xFF10B981,
+                                              ).withValues(alpha: 0.3),
                                               blurRadius: 12,
                                               offset: const Offset(0, 6),
                                             ),
@@ -1558,28 +1714,46 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                     downloadingAll = true;
                                                     addCount = 0;
                                                   });
-                                                  for (var i = 0; i < files.length; i++) {
+                                                  for (
+                                                    var i = 0;
+                                                    i < files.length;
+                                                    i++
+                                                  ) {
                                                     final file = files[i];
-                                                    String fileName = file['path']?.toString() ?? 'file';
-                                                    if (fileName.startsWith('/')) {
-                                                      fileName = fileName.split('/').last;
+                                                    String fileName =
+                                                        file['path']
+                                                            ?.toString() ??
+                                                        'file';
+                                                    if (fileName.startsWith(
+                                                      '/',
+                                                    )) {
+                                                      fileName = fileName
+                                                          .split('/')
+                                                          .last;
                                                     }
-                                                    
+
                                                     // Queue download with restricted link (unrestriction happens on-demand)
                                                     try {
                                                       final meta = jsonEncode({
-                                                        'restrictedLink': torrent.links[i],
+                                                        'restrictedLink':
+                                                            torrent.links[i],
                                                         'apiKey': _apiKey ?? '',
-                                                        'torrentHash': (torrent.id ?? '').toString(),
+                                                        'torrentHash':
+                                                            (torrent.id ?? '')
+                                                                .toString(),
                                                         'fileIndex': i,
                                                       });
-                                                      await DownloadService.instance.enqueueDownload(
-                                                        url: torrent.links[i], // Use restricted link directly
-                                                        fileName: fileName,
-                                                        context: context,
-                                                        torrentName: torrent.filename,
-                                                        meta: meta,
-                                                      );
+                                                      await DownloadService
+                                                          .instance
+                                                          .enqueueDownload(
+                                                            url: torrent
+                                                                .links[i], // Use restricted link directly
+                                                            fileName: fileName,
+                                                            context: context,
+                                                            torrentName: torrent
+                                                                .filename,
+                                                            meta: meta,
+                                                          );
                                                       setLocal(() {
                                                         added.add(i);
                                                         addCount = i + 1;
@@ -1588,37 +1762,71 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                                       // Handle error silently for batch operations
                                                     }
                                                   }
-                                                  setLocal(() => downloadingAll = false);
+                                                  setLocal(
+                                                    () =>
+                                                        downloadingAll = false,
+                                                  );
                                                   if (mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
                                                       SnackBar(
                                                         content: Row(
                                                           children: [
                                                             Container(
-                                                              padding: const EdgeInsets.all(8),
+                                                              padding:
+                                                                  const EdgeInsets.all(
+                                                                    8,
+                                                                  ),
                                                               decoration: BoxDecoration(
-                                                                color: const Color(0xFF10B981),
-                                                                borderRadius: BorderRadius.circular(8),
+                                                                color:
+                                                                    const Color(
+                                                                      0xFF10B981,
+                                                                    ),
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      8,
+                                                                    ),
                                                               ),
                                                               child: const Icon(
                                                                 Icons.check,
-                                                                color: Colors.white,
+                                                                color: Colors
+                                                                    .white,
                                                                 size: 16,
                                                               ),
                                                             ),
-                                                            const SizedBox(width: 12),
+                                                            const SizedBox(
+                                                              width: 12,
+                                                            ),
                                                             Expanded(
                                                               child: Text(
                                                                 'Added ${files.length} downloads',
-                                                                style: const TextStyle(fontWeight: FontWeight.w500),
+                                                                style: const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w500,
+                                                                ),
                                                               ),
                                                             ),
                                                           ],
                                                         ),
-                                                        backgroundColor: const Color(0xFF1E293B),
-                                                        behavior: SnackBarBehavior.floating,
-                                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                                        margin: const EdgeInsets.all(16),
+                                                        backgroundColor:
+                                                            const Color(
+                                                              0xFF1E293B,
+                                                            ),
+                                                        behavior:
+                                                            SnackBarBehavior
+                                                                .floating,
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                12,
+                                                              ),
+                                                        ),
+                                                        margin:
+                                                            const EdgeInsets.all(
+                                                              16,
+                                                            ),
                                                       ),
                                                     );
                                                   }
@@ -1627,11 +1835,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                               ? const SizedBox(
                                                   width: 16,
                                                   height: 16,
-                                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white,
+                                                      ),
                                                 )
-                                              : const Icon(Icons.download_rounded, color: Colors.white),
+                                              : const Icon(
+                                                  Icons.download_rounded,
+                                                  color: Colors.white,
+                                                ),
                                           label: Text(
-                                            downloadingAll ? 'Adding $addCount/${files.length}…' : 'Download All',
+                                            downloadingAll
+                                                ? 'Adding $addCount/${files.length}…'
+                                                : 'Download All',
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w600,
@@ -1639,9 +1856,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                           ),
                                           style: FilledButton.styleFrom(
                                             backgroundColor: Colors.transparent,
-                                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 20,
+                                              vertical: 12,
+                                            ),
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(16),
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
                                             ),
                                           ),
                                         ),
@@ -1652,11 +1873,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                     SizedBox(
                                       width: 100,
                                       child: TextButton(
-                                        onPressed: () => Navigator.of(context).pop(),
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(),
                                         style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
                                           ),
                                         ),
                                         child: const Text(
@@ -1687,8 +1913,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
-
-
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
     _showSuccess('Download link(s) copied to clipboard!');
@@ -1705,11 +1929,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 color: const Color(0xFF10B981),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
-                Icons.check,
-                color: Colors.white,
-                size: 16,
-              ),
+              child: const Icon(Icons.check, color: Colors.white, size: 16),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1729,18 +1949,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
-
-
   String _getUserFriendlyErrorMessage(dynamic error) {
     final errorString = error.toString().toLowerCase();
-    
+
     if (errorString.contains('file is not readily available in real debrid')) {
       return 'This torrent is not available on Real Debrid servers. Try a different torrent.';
-    } else if (errorString.contains('invalid api key') || errorString.contains('401')) {
+    } else if (errorString.contains('invalid api key') ||
+        errorString.contains('401')) {
       return 'Invalid API key. Please check your Real Debrid settings.';
-    } else if (errorString.contains('account locked') || errorString.contains('403')) {
+    } else if (errorString.contains('account locked') ||
+        errorString.contains('403')) {
       return 'Your Real Debrid account is locked. Please check your account status.';
-    } else if (errorString.contains('network error') || errorString.contains('connection')) {
+    } else if (errorString.contains('network error') ||
+        errorString.contains('connection')) {
       return 'Network connection error. Please check your internet connection.';
     } else if (errorString.contains('timeout')) {
       return 'Request timed out. Please try again.';
@@ -1752,7 +1973,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       return 'Data format error. Please refresh and try again.';
     } else if (errorString.contains('json')) {
       return 'Invalid response format. Please try again.';
-    } else if (errorString.contains('failed to load torrents') || errorString.contains('failed to load downloads')) {
+    } else if (errorString.contains('failed to load torrents') ||
+        errorString.contains('failed to load downloads')) {
       return 'Unable to load downloads. Please check your connection and try again.';
     } else {
       return 'Failed to add torrent. Please try again.';
@@ -1761,7 +1983,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
   String _getLinkUnrestrictErrorMessage(String errorMessage) {
     final errorString = errorMessage.toLowerCase();
-    
+
     // Handle specific Real Debrid error codes and messages
     if (errorString.contains('infringing_file')) {
       return 'This file contains copyrighted content and cannot be unrestricted.';
@@ -1775,11 +1997,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       return 'File size exceeds Real Debrid limits.';
     } else if (errorString.contains('quota_exceeded')) {
       return 'Real Debrid quota exceeded. Please try again later.';
-    } else if (errorString.contains('invalid api key') || errorString.contains('401')) {
+    } else if (errorString.contains('invalid api key') ||
+        errorString.contains('401')) {
       return 'Invalid API key. Please check your Real Debrid settings.';
-    } else if (errorString.contains('account_locked') || errorString.contains('403')) {
+    } else if (errorString.contains('account_locked') ||
+        errorString.contains('403')) {
       return 'Your Real Debrid account is locked. Please check your account status.';
-    } else if (errorString.contains('network error') || errorString.contains('connection')) {
+    } else if (errorString.contains('network error') ||
+        errorString.contains('connection')) {
       return 'Network connection error. Please check your internet connection.';
     } else if (errorString.contains('timeout')) {
       return 'Request timed out. Please try again.';
@@ -1807,11 +2032,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 color: const Color(0xFFEF4444),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
-                Icons.error,
-                color: Colors.white,
-                size: 16,
-              ),
+              child: const Icon(Icons.error, color: Colors.white, size: 16),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1856,28 +2077,29 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 borderRadius: BorderRadius.circular(10),
               ),
               labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
-              unselectedLabelColor: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+              unselectedLabelColor: Theme.of(
+                context,
+              ).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
               tabs: const [
                 Tab(text: 'Torrent Downloads'),
                 Tab(text: 'Downloads'),
               ],
             ),
           ),
-          
+
           // Content
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildTorrentContent(),
-                _buildDownloadContent(),
-              ],
+              children: [_buildTorrentContent(), _buildDownloadContent()],
             ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _selectedIndex == 0 ? _showAddMagnetDialog : _showAddLinkDialog,
+        onPressed: _selectedIndex == 0
+            ? _showAddMagnetDialog
+            : _showAddLinkDialog,
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
@@ -1915,11 +2137,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 ),
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 48,
-                    ),
+                    Icon(Icons.error_outline, color: Colors.red, size: 48),
                     const SizedBox(height: 12),
                     Text(
                       'Error Loading Torrent Downloads',
@@ -1933,10 +2151,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     Text(
                       _torrentErrorMessage,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.red[600],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.red[600], fontSize: 14),
                     ),
                   ],
                 ),
@@ -1957,11 +2172,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.download_done,
-              size: 64,
-              color: Colors.grey,
-            ),
+            Icon(Icons.download_done, size: 64, color: Colors.grey),
             SizedBox(height: 16),
             Text(
               'No torrent downloads yet',
@@ -1974,9 +2185,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             SizedBox(height: 8),
             Text(
               'Your downloaded torrents will appear here',
-              style: TextStyle(
-                color: Colors.grey,
-              ),
+              style: TextStyle(color: Colors.grey),
             ),
           ],
         ),
@@ -1999,7 +2208,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFEF4444),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2009,7 +2221,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               ],
             ),
           ),
-        
+
         // Torrents list
         Expanded(
           child: RefreshIndicator(
@@ -2030,9 +2242,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   // Loading more indicator
                   return const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    child: Center(child: CircularProgressIndicator()),
                   );
                 }
 
@@ -2076,11 +2286,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 ),
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 48,
-                    ),
+                    Icon(Icons.error_outline, color: Colors.red, size: 48),
                     const SizedBox(height: 12),
                     Text(
                       'Error Loading Downloads',
@@ -2094,10 +2300,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     Text(
                       _downloadErrorMessage,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.red[600],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.red[600], fontSize: 14),
                     ),
                   ],
                 ),
@@ -2118,11 +2321,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.download_done,
-              size: 64,
-              color: Colors.grey,
-            ),
+            Icon(Icons.download_done, size: 64, color: Colors.grey),
             SizedBox(height: 16),
             Text(
               'No downloads yet',
@@ -2135,9 +2334,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             SizedBox(height: 8),
             Text(
               'Your downloads will appear here',
-              style: TextStyle(
-                color: Colors.grey,
-              ),
+              style: TextStyle(color: Colors.grey),
             ),
           ],
         ),
@@ -2160,7 +2357,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFEF4444),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2170,7 +2370,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               ],
             ),
           ),
-        
+
         // Downloads list
         Expanded(
           child: RefreshIndicator(
@@ -2191,9 +2391,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   // Loading more indicator
                   return const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    child: Center(child: CircularProgressIndicator()),
                   );
                 }
 
@@ -2209,7 +2407,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
   Widget _buildTorrentCard(RDTorrent torrent) {
     final bool showProblematicVideo =
-        torrent.links.length == 1 && FileUtils.isProblematicVideo(torrent.filename);
+        torrent.links.length == 1 &&
+        FileUtils.isProblematicVideo(torrent.filename);
     const playColor = Color(0xFFB91C1C); // dimmed red
     const downloadColor = Color(0xFF047857); // dimmed green
     const problematicColor = Color(0xFFD97706);
@@ -2248,6 +2447,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               children: [
                 // Title and status
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
@@ -2261,60 +2461,53 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    _buildMoreOptionsButton(torrent),
                   ],
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // Stats row
                 Row(
                   children: [
-                                                              StatChip(
-                       icon: Icons.storage,
-                       text: Formatters.formatFileSize(torrent.bytes),
-                       color: const Color(0xFF6366F1),
-                     ),
-                     const SizedBox(width: 8),
-                     StatChip(
-                       icon: Icons.link,
-                       text: '${torrent.links.length} file${torrent.links.length > 1 ? 's' : ''}',
-                       color: const Color(0xFFF59E0B),
-                     ),
-                     const SizedBox(width: 8),
-                     StatChip(
-                       icon: Icons.download_done,
-                       text: '100%',
-                       color: const Color(0xFF10B981),
-                     ),
+                    StatChip(
+                      icon: Icons.storage,
+                      text: Formatters.formatFileSize(torrent.bytes),
+                      color: const Color(0xFF6366F1),
+                    ),
+                    const SizedBox(width: 8),
+                    StatChip(
+                      icon: Icons.link,
+                      text:
+                          '${torrent.links.length} file${torrent.links.length > 1 ? 's' : ''}',
+                      color: const Color(0xFFF59E0B),
+                    ),
+                    const SizedBox(width: 8),
+                    StatChip(
+                      icon: Icons.download_done,
+                      text: '100%',
+                      color: const Color(0xFF10B981),
+                    ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // Host info
                 Row(
                   children: [
-                    Icon(
-                      Icons.computer,
-                      size: 16,
-                      color: Colors.grey[400],
-                    ),
+                    Icon(Icons.computer, size: 16, color: Colors.grey[400]),
                     const SizedBox(width: 4),
                     Text(
                       torrent.host,
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
                     ),
                     const Spacer(),
-                                         Text(
-                       'Added ${Formatters.formatDateString(torrent.added)}',
-                       style: TextStyle(
-                         color: Colors.grey[400],
-                         fontSize: 12,
-                       ),
-                     ),
+                    Text(
+                      'Added ${Formatters.formatDateString(torrent.added)}',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
                   ],
                 ),
               ],
@@ -2338,33 +2531,54 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                   _buildPrimaryTorrentActionButton(
-                     icon: showProblematicVideo ? Icons.warning : Icons.play_arrow,
-                     label: 'Play',
-                     backgroundColor: showProblematicVideo ? problematicColor : playColor,
-                     onPressed: () {
-                       if (torrent.links.length == 1) {
-                         _handlePlayVideo(torrent);
-                       } else {
-                         _handlePlayMultiFileTorrent(torrent);
-                       }
-                     },
-                   ),
-                   const SizedBox(width: 12),
-                   _buildPrimaryTorrentActionButton(
-                     icon: Icons.download_rounded,
-                     label: 'Download',
-                     backgroundColor: downloadColor,
-                     onPressed: () => _handleDownloadTorrent(torrent),
-                   ),
-                   const SizedBox(width: 12),
-                   _buildMoreOptionsButton(torrent),
-                 ],
-               ),
-             ),
-           ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 380;
+                  final playButton = _buildPrimaryTorrentActionButton(
+                    icon: showProblematicVideo
+                        ? Icons.warning
+                        : Icons.play_arrow,
+                    label: 'Play',
+                    backgroundColor: showProblematicVideo
+                        ? problematicColor
+                        : playColor,
+                    onPressed: () {
+                      if (torrent.links.length == 1) {
+                        _handlePlayVideo(torrent);
+                      } else {
+                        _handlePlayMultiFileTorrent(torrent);
+                      }
+                    },
+                  );
+                  final downloadButton = _buildPrimaryTorrentActionButton(
+                    icon: Icons.download_rounded,
+                    label: 'Download',
+                    backgroundColor: downloadColor,
+                    onPressed: () => _handleDownloadTorrent(torrent),
+                  );
+
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(width: double.infinity, child: playButton),
+                        const SizedBox(height: 8),
+                        SizedBox(width: double.infinity, child: downloadButton),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: playButton),
+                      const SizedBox(width: 12),
+                      Expanded(child: downloadButton),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -2376,23 +2590,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     required Color backgroundColor,
     required VoidCallback onPressed,
   }) {
-    return Expanded(
-      child: FilledButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 20),
-        label: Text(label),
-        style: FilledButton.styleFrom(
-          backgroundColor: backgroundColor,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20),
+      label: Text(label),
+      style: FilledButton.styleFrom(
+        backgroundColor: backgroundColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -2408,7 +2615,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         padding: const EdgeInsets.all(12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: const Color(0xFF475569).withValues(alpha: 0.3)),
+          side: BorderSide(
+            color: const Color(0xFF475569).withValues(alpha: 0.3),
+          ),
         ),
       ),
     );
@@ -2433,9 +2642,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           meta: meta,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Added to downloads')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Added to downloads')));
         }
       } catch (e) {
         if (mounted) {
@@ -2456,7 +2665,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
     if (torrent.links.length == 1) {
       try {
-        final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[0]);
+        final unrestrictResult = await DebridService.unrestrictLink(
+          _apiKey!,
+          torrent.links[0],
+        );
         final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
 
         if (FileUtils.isVideoMimeType(mimeType)) {
@@ -2470,7 +2682,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
           });
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+            SnackBar(
+              content: Text(ok ? 'Added to playlist' : 'Already in playlist'),
+            ),
           );
         } else {
           if (mounted) {
@@ -2492,7 +2706,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+        SnackBar(
+          content: Text(ok ? 'Added to playlist' : 'Already in playlist'),
+        ),
       );
     }
   }
@@ -2536,7 +2752,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   const Color(0xFF1E293B).withValues(alpha: 0.98),
                 ],
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
               border: Border.all(
                 color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                 width: 1,
@@ -2585,12 +2803,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                           child: Opacity(
                             opacity: option.enabled ? 1.0 : 0.45,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF111C32),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: const Color(0xFF475569).withValues(alpha: 0.35),
+                                  color: const Color(
+                                    0xFF475569,
+                                  ).withValues(alpha: 0.35),
                                 ),
                               ),
                               child: Row(
@@ -2635,8 +2858,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       },
     );
   }
-
-
 
   Widget _buildDownloadCard(DebridDownload download) {
     final borderColor = Colors.white.withValues(alpha: 0.08);
@@ -2689,9 +2910,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // Stats row
                 Row(
                   children: [
@@ -2708,45 +2929,41 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     ),
                     const SizedBox(width: 8),
                     StatChip(
-                      icon: download.streamable == 1 ? Icons.play_arrow : Icons.download,
-                      text: download.streamable == 1 ? 'Streamable' : 'Download',
-                      color: download.streamable == 1 ? const Color(0xFFE50914) : const Color(0xFF10B981),
+                      icon: download.streamable == 1
+                          ? Icons.play_arrow
+                          : Icons.download,
+                      text: download.streamable == 1
+                          ? 'Streamable'
+                          : 'Download',
+                      color: download.streamable == 1
+                          ? const Color(0xFFE50914)
+                          : const Color(0xFF10B981),
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // Host info
                 Row(
                   children: [
-                    Icon(
-                      Icons.computer,
-                      size: 16,
-                      color: Colors.grey[400],
-                    ),
+                    Icon(Icons.computer, size: 16, color: Colors.grey[400]),
                     const SizedBox(width: 4),
                     Text(
                       download.host,
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
                     ),
                     const Spacer(),
                     Text(
                       'Generated ${Formatters.formatDateString(download.generated)}',
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          
+
           // Action buttons
           Container(
             decoration: BoxDecoration(
@@ -2773,20 +2990,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                       onPressed: () => _handlePlayDownload(download),
                       icon: Icon(
                         FileUtils.isProblematicVideo(download.filename)
-                          ? Icons.warning
-                          : Icons.play_arrow,
+                            ? Icons.warning
+                            : Icons.play_arrow,
                         size: 18,
                       ),
                       style: IconButton.styleFrom(
-                        foregroundColor: FileUtils.isProblematicVideo(download.filename)
-                          ? const Color(0xFFF59E0B)
-                          : const Color(0xFFE50914),
+                        foregroundColor:
+                            FileUtils.isProblematicVideo(download.filename)
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFFE50914),
                         padding: const EdgeInsets.all(12),
                       ),
                     ),
                   ),
                 ],
-                
+
                 // Download button
                 Container(
                   decoration: BoxDecoration(
@@ -2822,7 +3040,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Failed to start download: $e')),
+                            SnackBar(
+                              content: Text('Failed to start download: $e'),
+                            ),
                           );
                         }
                       }
@@ -2834,7 +3054,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     ),
                   ),
                 ),
-                
+
                 // Copy link button
                 Container(
                   decoration: BoxDecoration(
@@ -2853,7 +3073,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     ),
                   ),
                 ),
-                
+
                 // Delete button
                 Container(
                   decoration: BoxDecoration(
@@ -2903,9 +3123,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       );
 
       // Get torrent info to access file names
-      final torrentInfo = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
+      final torrentInfo = await DebridService.getTorrentInfo(
+        _apiKey!,
+        torrent.id,
+      );
       final files = torrentInfo['files'] as List<dynamic>?;
-      
+
       if (files == null || files.isEmpty) {
         if (mounted) Navigator.of(context).pop(); // close loading
         if (mounted) {
@@ -2915,11 +3138,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       }
 
       // Get selected files from the torrent info
-      final selectedFiles = files.where((file) => file['selected'] == 1).toList();
-      
+      final selectedFiles = files
+          .where((file) => file['selected'] == 1)
+          .toList();
+
       // If no selected files, use all files (they might all be selected by default)
       final filesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
-      
+
       // Check if this is an archive (multiple files, single link)
       bool isArchive = false;
       if (filesToUse.length > 1 && torrent.links.length == 1) {
@@ -2936,165 +3161,191 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
       // Multiple individual files - create playlist with true lazy loading
       final List<PlaylistEntry> entries = [];
-      
+
       // Get filenames from files with null safety - try different possible field names
       final filenames = filesToUse.map((file) {
         // Try different possible field names for filename
-        String? name = file['name']?.toString() ?? 
-                      file['filename']?.toString() ?? 
-                      file['path']?.toString();
-        
+        String? name =
+            file['name']?.toString() ??
+            file['filename']?.toString() ??
+            file['path']?.toString();
+
         // If we got a path, extract just the filename
         if (name != null && name.startsWith('/')) {
           name = name.split('/').last;
         }
-        
+
         return name ?? 'Unknown File';
       }).toList();
-      
+
       // Check if this is a series
       final isSeries = SeriesParser.isSeriesPlaylist(filenames);
-      
+
       if (isSeries) {
         // For series: find the first episode and unrestrict only that one
         final seriesInfos = SeriesParser.parsePlaylist(filenames);
-        
+
         // Find the first episode (lowest season, lowest episode)
         int firstEpisodeIndex = 0;
         int lowestSeason = 999;
         int lowestEpisode = 999;
-        
+
         for (int i = 0; i < seriesInfos.length; i++) {
           final info = seriesInfos[i];
           if (info.isSeries && info.season != null && info.episode != null) {
-            if (info.season! < lowestSeason || 
-                (info.season! == lowestSeason && info.episode! < lowestEpisode)) {
+            if (info.season! < lowestSeason ||
+                (info.season! == lowestSeason &&
+                    info.episode! < lowestEpisode)) {
               lowestSeason = info.season!;
               lowestEpisode = info.episode!;
               firstEpisodeIndex = i;
             }
           }
         }
-        
-                // Create playlist entries with true lazy loading
+
+        // Create playlist entries with true lazy loading
         for (int i = 0; i < filesToUse.length; i++) {
           final file = filesToUse[i];
-          String? filename = file['name']?.toString() ?? 
-                            file['filename']?.toString() ?? 
-                            file['path']?.toString();
-          
+          String? filename =
+              file['name']?.toString() ??
+              file['filename']?.toString() ??
+              file['path']?.toString();
+
           // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
             filename = filename.split('/').last;
           }
-          
+
           final finalFilename = filename ?? 'Unknown File';
           final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
-          
+
           // Check if we have a corresponding link
           if (i >= torrent.links.length) {
             // Skip if no corresponding link
             continue;
           }
-          
+
           if (i == firstEpisodeIndex) {
             // First episode: try to unrestrict for immediate playback
             try {
-              final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[i]);
+              final unrestrictResult = await DebridService.unrestrictLink(
+                _apiKey!,
+                torrent.links[i],
+              );
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
-                entries.add(PlaylistEntry(
-                  url: url,
-                  title: finalFilename,
-                  sizeBytes: sizeBytes,
-                ));
+                entries.add(
+                  PlaylistEntry(
+                    url: url,
+                    title: finalFilename,
+                    sizeBytes: sizeBytes,
+                  ),
+                );
               } else {
                 // If unrestriction failed or returned empty URL, add as restricted link
-                entries.add(PlaylistEntry(
+                entries.add(
+                  PlaylistEntry(
+                    url: '', // Empty URL - will be filled when unrestricted
+                    title: finalFilename,
+                    restrictedLink: torrent.links[i],
+                    sizeBytes: sizeBytes,
+                  ),
+                );
+              }
+            } catch (e) {
+              // If unrestriction fails, add as restricted link for lazy loading
+              entries.add(
+                PlaylistEntry(
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: torrent.links[i],
                   sizeBytes: sizeBytes,
-                ));
-              }
-            } catch (e) {
-              // If unrestriction fails, add as restricted link for lazy loading
-              entries.add(PlaylistEntry(
+                ),
+              );
+            }
+          } else {
+            // Other episodes: keep restricted links for lazy loading
+            entries.add(
+              PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: torrent.links[i],
                 sizeBytes: sizeBytes,
-              ));
-            }
-          } else {
-            // Other episodes: keep restricted links for lazy loading
-            entries.add(PlaylistEntry(
-              url: '', // Empty URL - will be filled when unrestricted
-              title: finalFilename,
-              restrictedLink: torrent.links[i],
-              sizeBytes: sizeBytes,
-            ));
+              ),
+            );
           }
         }
       } else {
         // For movies: unrestrict only the first video
         for (int i = 0; i < filesToUse.length; i++) {
           final file = filesToUse[i];
-          String? filename = file['name']?.toString() ?? 
-                            file['filename']?.toString() ?? 
-                            file['path']?.toString();
-          
+          String? filename =
+              file['name']?.toString() ??
+              file['filename']?.toString() ??
+              file['path']?.toString();
+
           // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
             filename = filename.split('/').last;
           }
-          
+
           final finalFilename = filename ?? 'Unknown File';
           final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
-          
+
           // Check if we have a corresponding link
           if (i >= torrent.links.length) {
             // Skip if no corresponding link
             continue;
           }
-          
+
           if (i == 0) {
             // First video: try to unrestrict for immediate playback
             try {
-              final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[i]);
+              final unrestrictResult = await DebridService.unrestrictLink(
+                _apiKey!,
+                torrent.links[i],
+              );
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
-                entries.add(PlaylistEntry(
-                  url: url,
-                  title: finalFilename,
-                  sizeBytes: sizeBytes,
-                ));
+                entries.add(
+                  PlaylistEntry(
+                    url: url,
+                    title: finalFilename,
+                    sizeBytes: sizeBytes,
+                  ),
+                );
               } else {
                 // If unrestriction failed or returned empty URL, add as restricted link
-                entries.add(PlaylistEntry(
+                entries.add(
+                  PlaylistEntry(
+                    url: '', // Empty URL - will be filled when unrestricted
+                    title: finalFilename,
+                    restrictedLink: torrent.links[i],
+                    sizeBytes: sizeBytes,
+                  ),
+                );
+              }
+            } catch (e) {
+              // If unrestriction fails, add as restricted link for lazy loading
+              entries.add(
+                PlaylistEntry(
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
                   restrictedLink: torrent.links[i],
                   sizeBytes: sizeBytes,
-                ));
-              }
-            } catch (e) {
-              // If unrestriction fails, add as restricted link for lazy loading
-              entries.add(PlaylistEntry(
+                ),
+              );
+            }
+          } else {
+            // Other videos: keep restricted links for lazy loading
+            entries.add(
+              PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
                 restrictedLink: torrent.links[i],
                 sizeBytes: sizeBytes,
-              ));
-            }
-          } else {
-            // Other videos: keep restricted links for lazy loading
-            entries.add(PlaylistEntry(
-              url: '', // Empty URL - will be filled when unrestricted
-              title: finalFilename,
-              restrictedLink: torrent.links[i],
-              sizeBytes: sizeBytes,
-            ));
+              ),
+            );
           }
         }
       }
@@ -3109,13 +3360,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       }
 
       if (!mounted) return;
-      
+
       // Determine the initial video URL - use the first unrestricted URL or empty string
       String initialVideoUrl = '';
       if (entries.isNotEmpty && entries.first.url.isNotEmpty) {
         initialVideoUrl = entries.first.url;
       }
-      
+
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => VideoPlayerScreen(
@@ -3140,7 +3391,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   void _showAddMagnetDialog() {
     // Auto-paste if clipboard has magnet link
     _autoPasteMagnetLink();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -3194,7 +3445,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _isAddingMagnet ? null : _addMagnetWithDefaultSelection,
+                    onPressed: _isAddingMagnet
+                        ? null
+                        : _addMagnetWithDefaultSelection,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       backgroundColor: const Color(0xFF6366F1),
@@ -3234,23 +3487,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     if (!trimmedLink.startsWith('magnet:?')) {
       return false;
     }
-    
+
     // Check for required magnet link components
     if (!trimmedLink.contains('xt=urn:btih:')) {
       return false;
     }
-    
+
     // Basic length check (magnet links are typically longer than 50 characters)
     if (trimmedLink.length < 50) {
       return false;
     }
-    
+
     return true;
   }
-
-
-
-
 
   Future<void> _addMagnetWithDefaultSelection() async {
     final magnetLink = _magnetController.text.trim();
@@ -3281,10 +3530,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             const SizedBox(height: 8),
             Text(
               'This may take a few moments',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
             ),
           ],
         ),
@@ -3300,7 +3546,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     try {
       // Get the default file selection preference
       final fileSelection = await StorageService.getFileSelection();
-      
+
       // Add the magnet using the same logic as the torrent search screen
       await DebridService.addTorrentToDebrid(
         _apiKey!,
@@ -3328,13 +3574,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
       // Refresh the torrent list
       await _fetchTorrents(_apiKey!, reset: true);
-
     } catch (e) {
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
-      
+
       if (mounted) {
         _showError(_getUserFriendlyErrorMessage(e.toString()));
       }
@@ -3373,7 +3618,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'smart'),
+            onPressed: _isAddingMagnet
+                ? null
+                : () => _addMagnetWithSelection(magnetLink, 'smart'),
             child: _isAddingMagnet
                 ? const SizedBox(
                     width: 16,
@@ -3383,7 +3630,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 : const Text('Smart (recommended)'),
           ),
           TextButton(
-            onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'largest'),
+            onPressed: _isAddingMagnet
+                ? null
+                : () => _addMagnetWithSelection(magnetLink, 'largest'),
             child: _isAddingMagnet
                 ? const SizedBox(
                     width: 16,
@@ -3393,7 +3642,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 : const Text('Largest File'),
           ),
           TextButton(
-            onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'video'),
+            onPressed: _isAddingMagnet
+                ? null
+                : () => _addMagnetWithSelection(magnetLink, 'video'),
             child: _isAddingMagnet
                 ? const SizedBox(
                     width: 16,
@@ -3403,7 +3654,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 : const Text('Video Files'),
           ),
           TextButton(
-            onPressed: _isAddingMagnet ? null : () => _addMagnetWithSelection(magnetLink, 'all'),
+            onPressed: _isAddingMagnet
+                ? null
+                : () => _addMagnetWithSelection(magnetLink, 'all'),
             child: _isAddingMagnet
                 ? const SizedBox(
                     width: 16,
@@ -3417,7 +3670,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     );
   }
 
-  Future<void> _addMagnetWithSelection(String magnetLink, String fileSelection) async {
+  Future<void> _addMagnetWithSelection(
+    String magnetLink,
+    String fileSelection,
+  ) async {
     Navigator.of(context).pop(); // Close the dialog
 
     // Show loading dialog
@@ -3435,10 +3691,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             const SizedBox(height: 8),
             Text(
               'This may take a few moments',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
             ),
           ],
         ),
@@ -3477,13 +3730,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
       // Refresh the torrent list
       await _fetchTorrents(_apiKey!, reset: true);
-
     } catch (e) {
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
-      
+
       if (mounted) {
         _showError(_getUserFriendlyErrorMessage(e.toString()));
       }
@@ -3500,7 +3752,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   Future<void> _showAddLinkDialog() async {
     // Auto-paste link from clipboard if available
     await _autoPasteLink();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -3537,7 +3789,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   borderRadius: BorderRadius.circular(8),
                   borderSide: const BorderSide(color: Color(0xFF6366F1)),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
               maxLines: 3,
               minLines: 1,
@@ -3545,10 +3800,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             const SizedBox(height: 8),
             Text(
               'Supported: Direct download links, file hosting services, etc.',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
             ),
           ],
         ),
@@ -3605,7 +3857,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
   bool _isValidLink(String link) {
     final trimmedLink = link.trim();
-    return trimmedLink.startsWith('http://') || trimmedLink.startsWith('https://');
+    return trimmedLink.startsWith('http://') ||
+        trimmedLink.startsWith('https://');
   }
 
   Future<void> _addLink() async {
@@ -3616,7 +3869,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
 
     if (!_isValidLink(link)) {
-      _showError('Please enter a valid URL (must start with http:// or https://)');
+      _showError(
+        'Please enter a valid URL (must start with http:// or https://)',
+      );
       return;
     }
 
@@ -3645,10 +3900,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             const SizedBox(height: 8),
             Text(
               'This may take a few moments',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
             ),
           ],
         ),
@@ -3685,13 +3937,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
 
       // Refresh the downloads list
       await _fetchDownloads(_apiKey!, reset: true);
-
     } catch (e) {
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
-      
+
       if (mounted) {
         // Show the actual Real Debrid error message with user-friendly formatting
         final errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -3708,18 +3959,26 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
   }
 
   // New on-demand action handlers
-  Future<void> _playFileOnDemand(RDTorrent torrent, int index, StateSetter setLocal, Map<int, bool> unrestrictingFiles) async {
+  Future<void> _playFileOnDemand(
+    RDTorrent torrent,
+    int index,
+    StateSetter setLocal,
+    Map<int, bool> unrestrictingFiles,
+  ) async {
     if (_apiKey == null) return;
-    
+
     try {
       setLocal(() {
         unrestrictingFiles[index] = true;
       });
-      
-      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
+
+      final unrestrictResult = await DebridService.unrestrictLink(
+        _apiKey!,
+        torrent.links[index],
+      );
       final downloadLink = unrestrictResult['download']?.toString() ?? '';
       final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
-      
+
       if (downloadLink.isNotEmpty) {
         // Check if it's actually a video using MIME type
         if (FileUtils.isVideoMimeType(mimeType)) {
@@ -3755,14 +4014,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
-  Future<void> _addFileToPlaylist(RDTorrent torrent, int index, StateSetter setLocal) async {
+  Future<void> _addFileToPlaylist(
+    RDTorrent torrent,
+    int index,
+    StateSetter setLocal,
+  ) async {
     if (_apiKey == null) return;
-    
+
     try {
       // Check if it's a video file before adding to playlist
-      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
+      final unrestrictResult = await DebridService.unrestrictLink(
+        _apiKey!,
+        torrent.links[index],
+      );
       final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
-      
+
       // Check if it's actually a video using MIME type
       if (FileUtils.isVideoMimeType(mimeType)) {
         final item = {
@@ -3776,7 +4042,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         final ok = await StorageService.addPlaylistItemRaw(item);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ok ? 'Added to playlist' : 'Already in playlist')),
+          SnackBar(
+            content: Text(ok ? 'Added to playlist' : 'Already in playlist'),
+          ),
         );
       } else {
         if (mounted) {
@@ -3790,17 +4058,27 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
-  Future<void> _downloadFileOnDemand(RDTorrent torrent, int index, String fileName, StateSetter setLocal, Set<int> added, Map<int, bool> unrestrictingFiles) async {
+  Future<void> _downloadFileOnDemand(
+    RDTorrent torrent,
+    int index,
+    String fileName,
+    StateSetter setLocal,
+    Set<int> added,
+    Map<int, bool> unrestrictingFiles,
+  ) async {
     if (_apiKey == null) return;
-    
+
     try {
       setLocal(() {
         unrestrictingFiles[index] = true;
       });
-      
-      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
+
+      final unrestrictResult = await DebridService.unrestrictLink(
+        _apiKey!,
+        torrent.links[index],
+      );
       final downloadLink = unrestrictResult['download']?.toString() ?? '';
-      
+
       if (downloadLink.isNotEmpty) {
         await DownloadService.instance.enqueueDownload(
           url: downloadLink,
@@ -3828,7 +4106,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     }
   }
 
-  Future<void> _copyFileLinkOnDemand(RDTorrent torrent, int index, StateSetter setLocal, Map<int, bool> unrestrictingFiles) async {
+  Future<void> _copyFileLinkOnDemand(
+    RDTorrent torrent,
+    int index,
+    StateSetter setLocal,
+    Map<int, bool> unrestrictingFiles,
+  ) async {
     if (_apiKey == null) return;
 
     try {
@@ -3836,7 +4119,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         unrestrictingFiles[index] = true;
       });
 
-      final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, torrent.links[index]);
+      final unrestrictResult = await DebridService.unrestrictLink(
+        _apiKey!,
+        torrent.links[index],
+      );
       final downloadLink = unrestrictResult['download']?.toString() ?? '';
 
       if (downloadLink.isNotEmpty) {
@@ -3895,14 +4181,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 ),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isSelected 
+                  color: isSelected
                       ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
                       : const Color(0xFF475569).withValues(alpha: 0.3),
                   width: isSelected ? 2 : 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: isSelected 
+                    color: isSelected
                         ? const Color(0xFF8B5CF6).withValues(alpha: 0.2)
                         : Colors.black.withValues(alpha: 0.2),
                     blurRadius: 10,
@@ -3928,27 +4214,39 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: isVideo 
-                                      ? [const Color(0xFFE50914), const Color(0xFFDC2626)]
-                                      : [const Color(0xFFF59E0B), const Color(0xFFD97706)],
+                                  colors: isVideo
+                                      ? [
+                                          const Color(0xFFE50914),
+                                          const Color(0xFFDC2626),
+                                        ]
+                                      : [
+                                          const Color(0xFFF59E0B),
+                                          const Color(0xFFD97706),
+                                        ],
                                 ),
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: (isVideo ? const Color(0xFFE50914) : const Color(0xFFF59E0B)).withValues(alpha: 0.3),
+                                    color:
+                                        (isVideo
+                                                ? const Color(0xFFE50914)
+                                                : const Color(0xFFF59E0B))
+                                            .withValues(alpha: 0.3),
                                     blurRadius: 12,
                                     offset: const Offset(0, 6),
                                   ),
                                 ],
                               ),
                               child: Icon(
-                                isVideo ? Icons.play_arrow_rounded : Icons.insert_drive_file_rounded,
+                                isVideo
+                                    ? Icons.play_arrow_rounded
+                                    : Icons.insert_drive_file_rounded,
                                 color: Colors.white,
                                 size: 24,
                               ),
                             ),
                             const SizedBox(width: 16),
-                            
+
                             // File details
                             Expanded(
                               child: Column(
@@ -3958,12 +4256,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                     children: [
                                       if (episodeInfo != null) ...[
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(4),
+                                            color: const Color(
+                                              0xFF6366F1,
+                                            ).withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                             border: Border.all(
-                                              color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                              color: const Color(
+                                                0xFF6366F1,
+                                              ).withValues(alpha: 0.3),
                                               width: 1,
                                             ),
                                           ),
@@ -3995,12 +4302,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                   ),
                                   const SizedBox(height: 6),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF475569).withValues(alpha: 0.3),
+                                      color: const Color(
+                                        0xFF475569,
+                                      ).withValues(alpha: 0.3),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
-                                        color: const Color(0xFF64748B).withValues(alpha: 0.3),
+                                        color: const Color(
+                                          0xFF64748B,
+                                        ).withValues(alpha: 0.3),
                                         width: 1,
                                       ),
                                     ),
@@ -4016,29 +4330,33 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                 ],
                               ),
                             ),
-                            
+
                             // Selection checkbox
                             Container(
                               width: 24,
                               height: 24,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: isSelected 
+                                color: isSelected
                                     ? const Color(0xFF8B5CF6)
                                     : Colors.transparent,
                                 border: Border.all(
-                                  color: isSelected 
+                                  color: isSelected
                                       ? const Color(0xFF8B5CF6)
                                       : Colors.grey[600]!,
                                   width: 2,
                                 ),
-                                boxShadow: isSelected ? [
-                                  BoxShadow(
-                                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ] : null,
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF8B5CF6,
+                                          ).withValues(alpha: 0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
                               ),
                               child: isSelected
                                   ? const Icon(
@@ -4050,9 +4368,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Bottom section with action buttons
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
@@ -4061,12 +4379,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                               Container(
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
-                                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                                    colors: [
+                                      Color(0xFF6366F1),
+                                      Color(0xFF8B5CF6),
+                                    ],
                                   ),
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                      color: const Color(
+                                        0xFF6366F1,
+                                      ).withValues(alpha: 0.3),
                                       blurRadius: 8,
                                       offset: const Offset(0, 4),
                                     ),
@@ -4080,10 +4403,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                           height: 16,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
                                           ),
                                         )
-                                      : const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                                      : const Icon(
+                                          Icons.play_arrow_rounded,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
                                   label: Text(
                                     isUnrestricting ? 'Loading...' : 'Play',
                                     style: const TextStyle(
@@ -4094,7 +4424,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                   ),
                                   style: FilledButton.styleFrom(
                                     backgroundColor: Colors.transparent,
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
@@ -4111,10 +4444,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                       height: 16,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
                                       ),
                                     )
-                                  : const Icon(Icons.copy_rounded, size: 16, color: Colors.white),
+                                  : const Icon(
+                                      Icons.copy_rounded,
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
                               label: Text(
                                 isUnrestricting ? 'Working…' : 'Copy',
                                 style: const TextStyle(
@@ -4124,9 +4464,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                ),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -4136,52 +4481,82 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                             Container(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: isAdded 
-                                      ? [const Color(0xFF10B981), const Color(0xFF059669)]
-                                      : [const Color(0xFF1E293B), const Color(0xFF334155)],
+                                  colors: isAdded
+                                      ? [
+                                          const Color(0xFF10B981),
+                                          const Color(0xFF059669),
+                                        ]
+                                      : [
+                                          const Color(0xFF1E293B),
+                                          const Color(0xFF334155),
+                                        ],
                                 ),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: isAdded 
-                                      ? const Color(0xFF10B981).withValues(alpha: 0.5)
-                                      : const Color(0xFF475569).withValues(alpha: 0.5),
+                                  color: isAdded
+                                      ? const Color(
+                                          0xFF10B981,
+                                        ).withValues(alpha: 0.5)
+                                      : const Color(
+                                          0xFF475569,
+                                        ).withValues(alpha: 0.5),
                                   width: 1,
                                 ),
-                                boxShadow: isAdded ? [
-                                  BoxShadow(
-                                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ] : null,
+                                boxShadow: isAdded
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF10B981,
+                                          ).withValues(alpha: 0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ]
+                                    : null,
                               ),
                               child: FilledButton.icon(
-                                onPressed: (isAdded || isUnrestricting) ? null : onDownload,
+                                onPressed: (isAdded || isUnrestricting)
+                                    ? null
+                                    : onDownload,
                                 icon: isUnrestricting
                                     ? const SizedBox(
                                         width: 16,
                                         height: 16,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Colors.grey,
+                                              ),
                                         ),
                                       )
                                     : Icon(
-                                        isAdded ? Icons.check_circle_rounded : Icons.download_rounded,
-                                        color: isAdded ? Colors.white : Colors.grey[300],
+                                        isAdded
+                                            ? Icons.check_circle_rounded
+                                            : Icons.download_rounded,
+                                        color: isAdded
+                                            ? Colors.white
+                                            : Colors.grey[300],
                                         size: 18,
                                       ),
                                 label: Text(
-                                  isUnrestricting ? 'Getting Link...' : (isAdded ? 'Added' : 'Download'),
+                                  isUnrestricting
+                                      ? 'Getting Link...'
+                                      : (isAdded ? 'Added' : 'Download'),
                                   style: TextStyle(
-                                    color: isAdded ? Colors.white : Colors.grey[300],
+                                    color: isAdded
+                                        ? Colors.white
+                                        : Colors.grey[300],
                                     fontWeight: FontWeight.w600,
                                     fontSize: 13,
                                   ),
                                 ),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: Colors.transparent,
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -4243,15 +4618,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
     // Group files by season
     final seasonMap = <int, List<Map<String, dynamic>>>{};
     String? seriesTitle;
-    
+
     for (int i = 0; i < files.length; i++) {
       final file = files[i];
       final seriesInfo = seriesInfos[i];
-      
+
       if (seriesInfo.isSeries && seriesInfo.season != null) {
         final seasonNumber = seriesInfo.season!;
         seriesTitle ??= seriesInfo.title;
-        
+
         seasonMap.putIfAbsent(seasonNumber, () => []);
         seasonMap[seasonNumber]!.add({
           'file': file,
@@ -4260,10 +4635,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         });
       }
     }
-    
+
     // Sort seasons
     final sortedSeasons = seasonMap.keys.toList()..sort();
-    
+
     return Column(
       children: [
         // Breadcrumb navigation
@@ -4288,7 +4663,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                     });
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
@@ -4332,7 +4710,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                 // Selection counter
                 if (selectedFiles.isNotEmpty)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF10B981),
                       borderRadius: BorderRadius.circular(12),
@@ -4350,7 +4731,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             ),
           ),
         ],
-        
+
         // Content area
         Expanded(
           child: _currentSeason == null
@@ -4397,19 +4778,25 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
       itemBuilder: (context, seasonIndex) {
         final seasonNumber = sortedSeasons[seasonIndex];
         final seasonFiles = seasonMap[seasonNumber]!;
-        
+
         // Sort episodes within season
         seasonFiles.sort((a, b) {
           final aEpisode = a['seriesInfo'].episode ?? 0;
           final bEpisode = b['seriesInfo'].episode ?? 0;
           return aEpisode.compareTo(bEpisode);
         });
-        
+
         // Check if all episodes in this season are selected
-        final seasonFileIndices = seasonFiles.map((f) => f['index'] as int).toList();
-        final allSelected = seasonFileIndices.every((index) => selectedFiles.contains(index));
-        final someSelected = seasonFileIndices.any((index) => selectedFiles.contains(index));
-        
+        final seasonFileIndices = seasonFiles
+            .map((f) => f['index'] as int)
+            .toList();
+        final allSelected = seasonFileIndices.every(
+          (index) => selectedFiles.contains(index),
+        );
+        final someSelected = seasonFileIndices.any(
+          (index) => selectedFiles.contains(index),
+        );
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -4434,7 +4821,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   GestureDetector(
                     onTap: () {
                       setLocal(() {
-                        final seasonFileIndices = seasonFiles.map((f) => f['index'] as int).toList();
+                        final seasonFileIndices = seasonFiles
+                            .map((f) => f['index'] as int)
+                            .toList();
                         if (allSelected) {
                           // Deselect all episodes in this season
                           selectedFiles.removeAll(seasonFileIndices);
@@ -4448,23 +4837,31 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                       width: 24,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: allSelected 
-                          ? const Color(0xFF10B981)
-                          : someSelected 
+                        color: allSelected
+                            ? const Color(0xFF10B981)
+                            : someSelected
                             ? const Color(0xFF10B981).withValues(alpha: 0.3)
                             : Colors.transparent,
                         border: Border.all(
-                          color: allSelected || someSelected 
-                            ? const Color(0xFF10B981)
-                            : Colors.grey[600]!,
+                          color: allSelected || someSelected
+                              ? const Color(0xFF10B981)
+                              : Colors.grey[600]!,
                           width: 2,
                         ),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: allSelected 
-                        ? const Icon(Icons.check, color: Colors.white, size: 16)
-                        : someSelected 
-                          ? const Icon(Icons.remove, color: Colors.white, size: 16)
+                      child: allSelected
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 16,
+                            )
+                          : someSelected
+                          ? const Icon(
+                              Icons.remove,
+                              color: Colors.white,
+                              size: 16,
+                            )
                           : null,
                     ),
                   ),
@@ -4490,10 +4887,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
                   // Episode count
                   Text(
                     '${seasonFiles.length} episodes',
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
                   ),
                   const SizedBox(width: 8),
                   // Navigation arrow
@@ -4529,7 +4923,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         final file = seasonFile['file'] as Map<String, dynamic>;
         final seriesInfo = seasonFile['seriesInfo'] as SeriesInfo;
         final fileIndex = seasonFile['index'] as int;
-        
+
         String fileName = file['path']?.toString() ?? 'Unknown file';
         if (fileName.startsWith('/')) {
           fileName = fileName.split('/').last;
@@ -4539,7 +4933,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
         final isAdded = added.contains(fileIndex);
         final isSelected = selectedFiles.contains(fileIndex);
         final isUnrestricting = unrestrictingFiles[fileIndex] ?? false;
-        
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           child: _buildModernFileCard(
@@ -4550,10 +4944,28 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
             isSelected: isSelected,
             isUnrestricting: isUnrestricting,
             showPlayButtons: showPlayButtons,
-            onPlay: () => _playFileOnDemand(torrent, fileIndex, setLocal, unrestrictingFiles),
-            onAddToPlaylist: () => _addFileToPlaylist(torrent, fileIndex, setLocal),
-            onDownload: () => _downloadFileOnDemand(torrent, fileIndex, fileName, setLocal, added, unrestrictingFiles),
-            onCopy: () => _copyFileLinkOnDemand(torrent, fileIndex, setLocal, unrestrictingFiles),
+            onPlay: () => _playFileOnDemand(
+              torrent,
+              fileIndex,
+              setLocal,
+              unrestrictingFiles,
+            ),
+            onAddToPlaylist: () =>
+                _addFileToPlaylist(torrent, fileIndex, setLocal),
+            onDownload: () => _downloadFileOnDemand(
+              torrent,
+              fileIndex,
+              fileName,
+              setLocal,
+              added,
+              unrestrictingFiles,
+            ),
+            onCopy: () => _copyFileLinkOnDemand(
+              torrent,
+              fileIndex,
+              setLocal,
+              unrestrictingFiles,
+            ),
             onSelect: () {
               setLocal(() {
                 if (isSelected) {
@@ -4564,11 +4976,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> with Tick
               });
             },
             index: index,
-            episodeInfo: seriesInfo.episode != null ? 'E${seriesInfo.episode.toString().padLeft(2, '0')}' : null,
+            episodeInfo: seriesInfo.episode != null
+                ? 'E${seriesInfo.episode.toString().padLeft(2, '0')}'
+                : null,
           ),
         );
       },
     );
   }
-
 }
