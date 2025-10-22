@@ -245,6 +245,39 @@ class TorboxService {
     }
   }
 
+  static Future<TorboxTorrent?> getTorrentById(
+    String apiKey,
+    int torrentId, {
+    int attempts = 5,
+    int pageSize = 50,
+    Duration delayBetweenAttempts = const Duration(milliseconds: 300),
+  }) async {
+    for (int attempt = 0; attempt < attempts; attempt++) {
+      int offset = 0;
+      bool hasMore = true;
+      while (hasMore) {
+        final result = await getTorrents(
+          apiKey,
+          offset: offset,
+          limit: pageSize,
+        );
+        final torrents = (result['torrents'] as List).cast<TorboxTorrent>();
+        for (final torrent in torrents) {
+          if (torrent.id == torrentId) {
+            return torrent;
+          }
+        }
+        hasMore = result['hasMore'] as bool? ?? false;
+        if (!hasMore) break;
+        offset += pageSize;
+      }
+      if (attempt < attempts - 1) {
+        await Future.delayed(delayBetweenAttempts);
+      }
+    }
+    return null;
+  }
+
   static String _formatAuthHeader(String apiKey) {
     final trimmed = apiKey.trim();
     if (trimmed.toLowerCase().startsWith('bearer ')) {

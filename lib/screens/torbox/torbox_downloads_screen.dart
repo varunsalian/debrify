@@ -78,6 +78,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
       case 'Download':
         await _showDownloadOptions(torrent);
         break;
+      case 'Add to playlist':
+        await _handleAddToPlaylist(torrent);
+        break;
       case 'Delete':
         await _confirmDeleteTorrent(torrent);
         break;
@@ -147,6 +150,61 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
           },
         );
       },
+    );
+  }
+
+  Future<void> _handleAddToPlaylist(TorboxTorrent torrent) async {
+    final videoFiles = torrent.files.where(_torboxFileLooksLikeVideo).toList();
+    if (videoFiles.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No playable Torbox video files found.')),
+      );
+      return;
+    }
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      final displayName = file.shortName.isNotEmpty
+          ? file.shortName
+          : FileUtils.getFileName(file.name);
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'torbox',
+        'title': displayName.isNotEmpty ? displayName : torrent.name,
+        'kind': 'single',
+        'torboxTorrentId': torrent.id,
+        'torboxFileId': file.id,
+        'torrent_hash': torrent.hash,
+        'sizeBytes': file.size,
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(added ? 'Added to playlist' : 'Already in playlist'),
+          backgroundColor: added ? null : const Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    final ids = videoFiles.map((file) => file.id).toList();
+    final added = await StorageService.addPlaylistItemRaw({
+      'provider': 'torbox',
+      'title': torrent.name,
+      'kind': 'collection',
+      'torboxTorrentId': torrent.id,
+      'torboxFileIds': ids,
+      'torrent_hash': torrent.hash,
+      'count': videoFiles.length,
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          added ? 'Added collection to playlist' : 'Already in playlist',
+        ),
+        backgroundColor: added ? null : const Color(0xFFEF4444),
+      ),
     );
   }
 

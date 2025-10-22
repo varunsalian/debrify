@@ -48,12 +48,13 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
     final futures = <Future<void>>[];
     for (int i = 0; i < widget.playlist.length; i++) {
       final entry = widget.playlist[i];
-      final key = _filenameHash(entry.title);
-      futures.add(StorageService.getVideoPlaybackState(videoTitle: key).then((state) {
+      futures.add(() async {
+        final key = _resumeIdForEntry(entry);
+        final state = await StorageService.getVideoPlaybackState(videoTitle: key);
         if (state != null) {
           _progressByIndex[i] = state;
         }
-      }));
+      }());
     }
     await Future.wait(futures);
     if (mounted) setState(() {});
@@ -295,6 +296,16 @@ String _filenameHash(String filename) {
   return nameWithoutExt.hashCode.toString();
 }
 
+String _resumeIdForEntry(PlaylistEntry entry) {
+  final provider = entry.provider?.toLowerCase();
+  if (provider == 'torbox' &&
+      entry.torboxTorrentId != null &&
+      entry.torboxFileId != null) {
+    return 'torbox_${entry.torboxTorrentId}_${entry.torboxFileId}';
+  }
+  return _filenameHash(entry.title);
+}
+
 int? _extractYear(String title) {
   final match = RegExp(r'\b(19|20)\d{2}\b').firstMatch(title);
   if (match != null) {
@@ -302,5 +313,3 @@ int? _extractYear(String title) {
   }
   return null;
 }
-
-

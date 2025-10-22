@@ -685,6 +685,20 @@ class StorageService {
     if (torrentHash != null && torrentHash.isNotEmpty) {
       return 'hash:${torrentHash}'.toLowerCase();
     }
+    final dynamic torboxIdRaw = item['torboxTorrentId'];
+    if (torboxIdRaw != null) {
+      final String torboxId = torboxIdRaw.toString();
+      final dynamic singleFileId = item['torboxFileId'];
+      if (singleFileId != null) {
+        return 'torbox:${torboxId}:file:${singleFileId.toString()}'.toLowerCase();
+      }
+      final dynamic multiFileIds = item['torboxFileIds'];
+      if (multiFileIds is List && multiFileIds.isNotEmpty) {
+        final joined = multiFileIds.map((e) => e.toString()).join(',');
+        return 'torbox:${torboxId}:files:$joined'.toLowerCase();
+      }
+      return 'torbox:$torboxId'.toLowerCase();
+    }
     final String? rdId = (item['rdTorrentId'] as String?);
     if (rdId != null && rdId.isNotEmpty) {
       return 'rd:${rdId}'.toLowerCase();
@@ -708,12 +722,20 @@ class StorageService {
 
     final enriched = Map<String, dynamic>.from(item);
     enriched['addedAt'] = DateTime.now().millisecondsSinceEpoch;
+    enriched['provider'] =
+        ((item['provider'] as String?)?.isNotEmpty ?? false)
+            ? item['provider']
+            : 'realdebrid';
+
+    final bool isTorbox =
+        (enriched['provider'] as String?)?.toLowerCase() == 'torbox';
 
     // Fetch and add torrent hash if we have a torrent ID
     final String? rdTorrentId = item['rdTorrentId'] as String?;
     final String? apiKey = await getApiKey();
 
-    if (rdTorrentId != null &&
+    if (!isTorbox &&
+        rdTorrentId != null &&
         rdTorrentId.isNotEmpty &&
         apiKey != null &&
         apiKey.isNotEmpty) {

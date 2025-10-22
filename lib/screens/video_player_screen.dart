@@ -258,47 +258,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       } else {
         // For non-series playlists, try to restore the last played video
-        if (widget.playlist != null && widget.playlist!.isNotEmpty) {
-          // Try to find the last played video by checking each playlist entry
-          int lastPlayedIndex = -1;
-          Map<String, dynamic>? lastPlayedState;
+		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+			// Try to find the last played video by checking each playlist entry
+			int lastPlayedIndex = -1;
+			Map<String, dynamic>? lastPlayedState;
 
-          for (int i = 0; i < widget.playlist!.length; i++) {
-            final entry = widget.playlist![i];
-            String videoFilename = entry.title;
+			for (int i = 0; i < widget.playlist!.length; i++) {
+				final entry = widget.playlist![i];
+				final resumeId = _resumeIdForEntry(entry);
+				debugPrint('Resume: checking entry[$i] title="${entry.title}" resumeId=$resumeId');
+				final state = await StorageService.getVideoPlaybackState(
+					videoTitle: resumeId,
+				);
+				if (state != null) {
+					debugPrint('Resume: found state for entry[$i] resumeId=$resumeId updatedAt=${state['updatedAt']}');
+					final updatedAt = state['updatedAt'] as int? ?? 0;
+					if (lastPlayedState == null ||
+						updatedAt > (lastPlayedState['updatedAt'] as int? ?? 0)) {
+						lastPlayedState = state;
+						lastPlayedIndex = i;
+					}
+				}
+			}
 
-            if (videoFilename.isNotEmpty) {
-              // Generate stable hash from filename
-              final filenameHash = _generateFilenameHash(videoFilename);
-
-              final state = await StorageService.getVideoPlaybackState(
-                videoTitle: filenameHash,
-              );
-              if (state != null) {
-                final updatedAt = state['updatedAt'] as int? ?? 0;
-                if (lastPlayedState == null ||
-                    updatedAt > (lastPlayedState['updatedAt'] as int? ?? 0)) {
-                  lastPlayedState = state;
-                  lastPlayedIndex = i;
-                }
-              }
-            }
-          }
-
-          if (lastPlayedIndex != -1) {
-            initialIndex = lastPlayedIndex;
-          } else {
-            // Pick the first item from Main group (by year asc then size desc)
-            final indices = _getMainGroupIndices(widget.playlist!);
-            initialIndex = indices.isNotEmpty
-                ? indices.first
-                : (widget.startIndex ?? 0);
-          }
-        } else {
-          // Not a series or no series playlist, use the provided startIndex
-          initialIndex = widget.startIndex ?? 0;
-        }
-      }
+			if (lastPlayedIndex != -1) {
+				debugPrint('Resume: restoring playlist index $lastPlayedIndex');
+				initialIndex = lastPlayedIndex;
+			} else {
+				debugPrint('Resume: no prior playback state found, using default ordering');
+				// Pick the first item from Main group (by year asc then size desc)
+				final indices = _getMainGroupIndices(widget.playlist!);
+				initialIndex = indices.isNotEmpty
+					? indices.first
+					: (widget.startIndex ?? 0);
+			}
+		} else {
+			// Not a series or no series playlist, use the provided startIndex
+			initialIndex = widget.startIndex ?? 0;
+		}
+	}
     } else {}
 
     // Get the initial URL from the determined index
@@ -1134,24 +1132,56 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Timer? _autosaveTimer;
 
-  String get _resumeKey {
-    // Use a canonical key stripping volatile query parts
-    final url =
-        (widget.playlist != null &&
-            widget.playlist!.isNotEmpty &&
-            _currentIndex >= 0 &&
-            _currentIndex < widget.playlist!.length)
-        ? widget.playlist![_currentIndex].url
-        : widget.videoUrl;
+	String get _resumeKey {
+		if (widget.playlist != null &&
+			widget.playlist!.isNotEmpty &&
+			_currentIndex >= 0 &&
+			_currentIndex < widget.playlist!.length) {
+			final entry = widget.playlist![_currentIndex];
+			final torboxKey = _torboxResumeKeyForEntry(entry);
+			if (torboxKey != null) {
+				debugPrint('ResumeKey: using torbox key $torboxKey for index $_currentIndex');
+				return torboxKey;
+			}
+		}
 
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      return widget.videoUrl;
-    }
-    final base = uri.replace(queryParameters: {});
-    final resumeKey = base.toString();
-    return resumeKey;
-  }
+		// Use playlist-specific resume ID for non-Torbox items
+		if (widget.playlist != null &&
+			widget.playlist!.isNotEmpty &&
+			_currentIndex >= 0 &&
+			_currentIndex < widget.playlist!.length) {
+			final id = _resumeIdForEntry(widget.playlist![_currentIndex]);
+			debugPrint('ResumeKey: using playlist entry id $id for index $_currentIndex');
+			return id;
+		}
+
+		// Fallback to videoUrl for single items
+		debugPrint('ResumeKey: playlist empty; using widget.videoUrl');
+		return widget.videoUrl;
+	}
+
+	String? _torboxResumeKeyForEntry(PlaylistEntry entry) {
+		final provider = entry.provider?.toLowerCase();
+		if (provider == 'torbox') {
+			final torrentId = entry.torboxTorrentId;
+			final fileId = entry.torboxFileId;
+			if (torrentId != null && fileId != null) {
+				debugPrint('ResumeKey: torbox entry detected torrent=$torrentId file=$fileId');
+				return 'torbox_${torrentId}_$fileId';
+			}
+			debugPrint('ResumeKey: torbox entry missing IDs torrent=$torrentId file=$fileId');
+		}
+		return null;
+	}
+
+	String _resumeIdForEntry(PlaylistEntry entry) {
+		final torboxKey = _torboxResumeKeyForEntry(entry);
+		if (torboxKey != null) {
+			return torboxKey;
+		}
+		final name = entry.title.isNotEmpty ? entry.title : widget.title;
+		return _generateFilenameHash(name);
+	}
 
   Future<void> _maybeRestoreResume() async {
     // If this is auto-advancing, don't restore position
@@ -1309,29 +1339,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       } else {
         // For non-series content, check if we have a playlist
-        if (widget.playlist != null && widget.playlist!.isNotEmpty) {
-          // Get the current video filename for state checking
-          String currentVideoFilename = '';
-          if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
-            final entry = widget.playlist![_currentIndex];
-            currentVideoFilename = entry.title;
-          }
+		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+			PlaylistEntry? currentEntry;
+			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+				currentEntry = widget.playlist![_currentIndex];
+			}
 
-          if (currentVideoFilename.isNotEmpty) {
-            // Generate stable hash from filename
-            final filenameHash = _generateFilenameHash(currentVideoFilename);
-
-            // Try to get playback state for this specific video filename hash
-            final videoState = await StorageService.getVideoPlaybackState(
-              videoTitle:
-                  filenameHash, // Use filename hash as the key for specific video tracking
-            );
-
-            if (videoState != null) {
-              return videoState;
-            }
-          }
-        }
+			if (currentEntry != null) {
+				final resumeId = _resumeIdForEntry(currentEntry);
+				debugPrint('Resume Load: fetching state for resumeId=$resumeId');
+				final videoState = await StorageService.getVideoPlaybackState(
+					videoTitle: resumeId,
+				);
+				if (videoState != null) {
+					debugPrint('Resume Load: found state for resumeId=$resumeId updatedAt=${videoState['updatedAt']}');
+					return videoState;
+				}
+			}
+		}
 
         // Fallback to collection-based state (legacy behavior)
         final videoTitle = widget.title.isNotEmpty
@@ -1416,42 +1441,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       } else {
         // For non-series content
-        if (widget.playlist != null && widget.playlist!.isNotEmpty) {
-          // Get the current video filename and entry for state saving
-          String currentVideoFilename = '';
-          PlaylistEntry? currentEntry;
-          if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
-            currentEntry = widget.playlist![_currentIndex];
-            currentVideoFilename = currentEntry.title;
-          }
+		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+			PlaylistEntry? currentEntry;
+			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+				currentEntry = widget.playlist![_currentIndex];
+			}
 
-          if (currentVideoFilename.isNotEmpty && currentEntry != null) {
-            // Generate stable hash from filename
-            final filenameHash = _generateFilenameHash(currentVideoFilename);
+			if (currentEntry != null) {
+				final resumeId = _resumeIdForEntry(currentEntry);
+				debugPrint('Resume Save: storing state resumeId=$resumeId pos=${pos.inMilliseconds} dur=${dur.inMilliseconds}');
+				String currentVideoUrl = '';
+				if (_currentStreamUrl != null && _currentStreamUrl!.isNotEmpty) {
+					currentVideoUrl = _currentStreamUrl!;
+				} else if (currentEntry.url.isNotEmpty) {
+					currentVideoUrl = currentEntry.url;
+				} else if (widget.videoUrl.isNotEmpty) {
+					currentVideoUrl = widget.videoUrl;
+				}
 
-            // Get the current video URL for the videoUrl field (still needed for some functionality)
-            String currentVideoUrl = '';
-            if (_currentStreamUrl != null && _currentStreamUrl!.isNotEmpty) {
-              currentVideoUrl = _currentStreamUrl!;
-            } else if (currentEntry.url.isNotEmpty) {
-              currentVideoUrl = currentEntry.url;
-            } else if (widget.videoUrl.isNotEmpty) {
-              currentVideoUrl = widget.videoUrl;
-            }
-
-            // Save state for this specific video filename hash
-            await StorageService.saveVideoPlaybackState(
-              videoTitle:
-                  filenameHash, // Use filename hash as the key for specific video tracking
-              videoUrl: currentVideoUrl,
-              positionMs: pos.inMilliseconds,
-              durationMs: dur.inMilliseconds,
-              speed: _playbackSpeed,
-              aspect: aspectStr,
-            );
-          }
-        } else {
-          // Single video file (no playlist)
+				await StorageService.saveVideoPlaybackState(
+					videoTitle: resumeId,
+					videoUrl: currentVideoUrl,
+					positionMs: pos.inMilliseconds,
+					durationMs: dur.inMilliseconds,
+					speed: _playbackSpeed,
+					aspect: aspectStr,
+				);
+			}
+		} else {
+			// Single video file (no playlist)
           final currentUrl = widget.videoUrl;
           final videoTitle = widget.title.isNotEmpty
               ? widget.title
