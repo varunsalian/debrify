@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/storage_service.dart';
 import '../../services/account_service.dart';
 import '../../widgets/account_status_widget.dart';
+import '../../services/main_page_bridge.dart';
 
 class RealDebridSettingsPage extends StatefulWidget {
   const RealDebridSettingsPage({super.key});
@@ -75,6 +76,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       _apiKeyController.clear();
     });
     _snack('API key saved and validated');
+    MainPageBridge.notifyIntegrationChanged();
   }
 
   Future<void> _deleteKey() async {
@@ -86,6 +88,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       _apiKeyController.clear();
     });
     _snack('API key deleted');
+    MainPageBridge.notifyIntegrationChanged();
   }
 
   Future<void> _saveSelection(String v) async {

@@ -12,8 +12,7 @@ import 'screens/magic_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
-import 'services/account_service.dart';
-import 'widgets/api_key_validation_dialog.dart';
+import 'widgets/initial_setup_flow.dart';
 
 import 'widgets/animated_background.dart';
 import 'widgets/premium_nav_bar.dart';
@@ -277,7 +276,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   int _selectedIndex = 0;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  bool _isValidatingApi = false;
+  bool _hasRealDebridKey = false;
+  bool _hasTorboxKey = false;
+  bool _initialSetupHandled = false;
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
@@ -315,10 +316,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // Expose tab switcher for deep-link flows
     MainPageBridge.switchTab = (int index) {
       if (!mounted) return;
+      final visibleIndices = _computeVisibleNavIndices();
+      if (!visibleIndices.contains(index)) {
+        if (index == 4) {
+          _showMissingApiKeySnack('Real Debrid');
+        } else if (index == 5) {
+          _showMissingApiKeySnack('Torbox');
+        } else {
+          _showIntegrationRequiredSnack();
+        }
+        return;
+      }
       _onItemTapped(index);
     };
     MainPageBridge.openDebridOptions = (RDTorrent torrent) {
       if (!mounted) return;
+      if (!_hasRealDebridKey) {
+        _showMissingApiKeySnack('Real Debrid');
+        return;
+      }
       setState(() {
         _pages[4] = DebridDownloadsScreen(initialTorrentForOptions: torrent);
       });
@@ -334,6 +350,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     };
     MainPageBridge.openTorboxAction = (torboxTorrent, action) {
       if (!mounted) return;
+      if (!_hasTorboxKey) {
+        _showMissingApiKeySnack('Torbox');
+        return;
+      }
       setState(() {
         _pages[5] = TorboxDownloadsScreen(
           initialTorrentForAction: torboxTorrent,
@@ -349,6 +369,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         }
       });
     };
+    MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
+    _loadIntegrationState();
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -358,19 +380,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     );
     _animationController.forward();
 
-    // Validate API key on app launch
+    // Trigger onboarding experience after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _validateApiKeyOnLaunch();
+      _handleInitialExperience();
     });
   }
 
   @override
   void dispose() {
+    MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
+    MainPageBridge.switchTab = null;
+    MainPageBridge.openDebridOptions = null;
+    MainPageBridge.openTorboxAction = null;
     _animationController.dispose();
     super.dispose();
   }
 
   void _onItemTapped(int index) {
+    final visible = _computeVisibleNavIndices();
+    if (!visible.contains(index)) {
+      return;
+    }
     setState(() {
       _selectedIndex = index;
     });
@@ -378,51 +408,123 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     _animationController.forward();
   }
 
-  Future<void> _validateApiKeyOnLaunch() async {
-    if (_isValidatingApi) return;
+  Future<void> _handleInitialExperience() async {
+    if (_initialSetupHandled) return;
+    _initialSetupHandled = true;
+
+    final hasCompleted = await StorageService.isInitialSetupComplete();
+    if (hasCompleted || !mounted) return;
+
+    final configured = await InitialSetupFlow.show(context);
+    if (!mounted) return;
+
+    await StorageService.setInitialSetupComplete(true);
+
+    if (configured) {
+      MainPageBridge.notifyIntegrationChanged();
+    }
+
+    _loadIntegrationState();
+  }
+
+  void _handleIntegrationChanged() {
+    _loadIntegrationState();
+  }
+
+  Future<void> _loadIntegrationState() async {
+    final rdKey = await StorageService.getApiKey();
+    final torboxKey = await StorageService.getTorboxApiKey();
+
+    if (!mounted) return;
+
+    _applyIntegrationState(
+      hasRealDebrid: rdKey != null && rdKey.isNotEmpty,
+      hasTorbox: torboxKey != null && torboxKey.isNotEmpty,
+    );
+  }
+
+  void _applyIntegrationState({
+    required bool hasRealDebrid,
+    required bool hasTorbox,
+  }) {
+    final newVisible = _computeVisibleNavIndices(
+      hasRealDebrid: hasRealDebrid,
+      hasTorbox: hasTorbox,
+    );
+
+    int nextIndex = _selectedIndex;
+    if (!newVisible.contains(nextIndex)) {
+      nextIndex = newVisible.first;
+    }
+
+    if (_hasRealDebridKey == hasRealDebrid &&
+        _hasTorboxKey == hasTorbox &&
+        nextIndex == _selectedIndex) {
+      return;
+    }
 
     setState(() {
-      _isValidatingApi = true;
+      _hasRealDebridKey = hasRealDebrid;
+      _hasTorboxKey = hasTorbox;
+      _selectedIndex = nextIndex;
     });
+  }
 
-    try {
-      final isValid = await AccountService.isApiKeyValid();
-
-      if (!isValid && mounted) {
-        // Show API key validation dialog
-        final result = await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) =>
-              const ApiKeyValidationDialog(isInitialSetup: true),
-        );
-
-        if (result == true && mounted) {
-          setState(() {}); // Refresh UI to show account status
-        }
-      }
-    } catch (e) {
-      // Handle any errors silently
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isValidatingApi = false;
-        });
-      }
+  List<int> _computeVisibleNavIndices({
+    bool? hasRealDebrid,
+    bool? hasTorbox,
+  }) {
+    final rd = hasRealDebrid ?? _hasRealDebridKey;
+    final tb = hasTorbox ?? _hasTorboxKey;
+    if (!rd && !tb) {
+      return const [0, 6];
     }
+
+    final indices = <int>[0, 1, 2, 3];
+    if (rd) indices.add(4);
+    if (tb) indices.add(5);
+    indices.add(6);
+    return indices;
+  }
+
+  void _showMissingApiKeySnack(String provider) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Please add your $provider API key in Settings first!'),
+      ),
+    );
+  }
+
+  void _showIntegrationRequiredSnack() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Connect Real Debrid or Torbox in Settings to unlock more tabs.'),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final visibleIndices = _computeVisibleNavIndices();
+    final navItems = [
+      for (final index in visibleIndices) NavItem(_icons[index], _titles[index]),
+    ];
+    final navBadges = List<int>.filled(navItems.length, 0);
+    final selectedNavIndex = visibleIndices.indexOf(_selectedIndex);
+    final currentNavIndex = selectedNavIndex == -1 ? 0 : selectedNavIndex;
+
     return AnimatedPremiumBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: PremiumTopNav(
-            currentIndex: _selectedIndex,
-            items: buildDefaultNavItems(_icons, _titles),
-            onTap: _onItemTapped,
-            badges: const [0, 0, 0, 0, 0, 0, 0],
+            currentIndex: currentNavIndex,
+            items: navItems,
+            onTap: (relativeIndex) {
+              final actualIndex = visibleIndices[relativeIndex];
+              _onItemTapped(actualIndex);
+            },
+            badges: navBadges,
             haptics: true,
           ),
           automaticallyImplyLeading: false,

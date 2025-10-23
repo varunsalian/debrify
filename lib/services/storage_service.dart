@@ -29,6 +29,8 @@ class StorageService {
   static const String _debrifyTvHideBackButtonKey =
       'debrify_tv_hide_back_button';
   static const String _playlistKey = 'user_playlist_v1';
+  static const String _onboardingCompleteKey =
+      'initial_setup_complete_v1';
 
   // Note: Plain text storage is fine for API key since they're stored locally on user's device
   // and can be easily regenerated if compromised
@@ -71,6 +73,16 @@ class StorageService {
   static Future<void> setTorboxCacheCheckEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_torboxCacheCheckPref, enabled);
+  }
+
+  static Future<bool> isInitialSetupComplete() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_onboardingCompleteKey) ?? false;
+  }
+
+  static Future<void> setInitialSetupComplete(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingCompleteKey, value);
   }
 
   // File Selection methods

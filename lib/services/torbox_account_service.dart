@@ -6,20 +6,33 @@ import '../services/torbox_service.dart';
 class TorboxAccountService {
   static TorboxUser? _currentUser;
   static bool _isValidating = false;
+  static int _validationToken = 0;
 
   static TorboxUser? get currentUser => _currentUser;
 
   static bool get isValidating => _isValidating;
 
-  static Future<bool> validateAndGetUserInfo(String apiKey) async {
+  static Future<bool> validateAndGetUserInfo(
+    String apiKey, {
+    bool persist = true,
+  }) async {
     if (_isValidating) return false;
 
     _isValidating = true;
+    final int token = ++_validationToken;
     try {
       debugPrint('TorboxAccountService: Validating API key…');
       final user = await TorboxService.getUserInfo(apiKey);
+      if (_validationToken != token) {
+        debugPrint(
+          'TorboxAccountService: Validation result discarded (token mismatch).',
+        );
+        return false;
+      }
       _currentUser = user;
-      await StorageService.saveTorboxApiKey(apiKey);
+      if (persist) {
+        await StorageService.saveTorboxApiKey(apiKey);
+      }
       debugPrint(
         'TorboxAccountService: Validation successful for ${user.email}.',
       );
@@ -39,12 +52,13 @@ class TorboxAccountService {
       return false;
     }
 
-    return validateAndGetUserInfo(apiKey);
+    return validateAndGetUserInfo(apiKey, persist: false);
   }
 
   static void clearUserInfo() {
     debugPrint('TorboxAccountService: Clearing cached user info.');
     _currentUser = null;
+    _validationToken++;
   }
 
   static Future<bool> refreshUserInfo() async {
@@ -54,6 +68,6 @@ class TorboxAccountService {
       return false;
     }
 
-    return validateAndGetUserInfo(apiKey);
+    return validateAndGetUserInfo(apiKey, persist: false);
   }
 }

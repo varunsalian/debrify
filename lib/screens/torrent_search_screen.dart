@@ -36,6 +36,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String _errorMessage = '';
   bool _hasSearched = false;
   String? _apiKey;
+  String? _torboxApiKey;
   bool _torboxCacheCheckEnabled = false;
   Map<String, bool>? _torboxCacheStatus;
 
@@ -67,11 +68,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     _listAnimationController.forward();
     _loadDefaultSettings();
-    StorageService.getApiKey().then((k) {
-      setState(() {
-        _apiKey = k;
-      });
-    });
+    MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
+    _loadApiKeys();
     StorageService.getTorboxCacheCheckEnabled().then((enabled) {
       if (!mounted) return;
       setState(() {
@@ -98,10 +96,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
+  void _handleIntegrationChanged() {
+    _loadApiKeys();
+  }
+
+  Future<void> _loadApiKeys() async {
+    final rdKey = await StorageService.getApiKey();
+    final torboxKey = await StorageService.getTorboxApiKey();
+    if (!mounted) return;
+    setState(() {
+      _apiKey = rdKey;
+      _torboxApiKey = torboxKey;
+    });
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     _listAnimationController.dispose();
     super.dispose();
   }
@@ -125,6 +138,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (mounted) {
       setState(() {
         _torboxCacheCheckEnabled = cacheCheckPreference;
+        _torboxApiKey = torboxKey;
       });
     }
 
@@ -3986,27 +4000,43 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   );
                 }
 
-                final torboxButton = buildTorboxButton();
-                final realDebridButton = buildRealDebridButton();
+                final Widget? torboxButton =
+                    (_torboxApiKey != null && _torboxApiKey!.isNotEmpty)
+                        ? buildTorboxButton()
+                        : null;
+                final Widget? realDebridButton =
+                    (_apiKey != null && _apiKey!.isNotEmpty)
+                        ? buildRealDebridButton()
+                        : null;
+
+                if (torboxButton == null && realDebridButton == null) {
+                  return const SizedBox.shrink();
+                }
 
                 if (isCompactLayout) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      torboxButton,
-                      const SizedBox(height: 8),
-                      realDebridButton,
+                      if (torboxButton != null) torboxButton,
+                      if (torboxButton != null && realDebridButton != null)
+                        const SizedBox(height: 8),
+                      if (realDebridButton != null) realDebridButton,
                     ],
                   );
                 }
 
-                return Row(
-                  children: [
-                    Expanded(child: torboxButton),
-                    const SizedBox(width: 8),
-                    Expanded(child: realDebridButton),
-                  ],
-                );
+                if (torboxButton != null && realDebridButton != null) {
+                  return Row(
+                    children: [
+                      Expanded(child: torboxButton),
+                      const SizedBox(width: 8),
+                      Expanded(child: realDebridButton),
+                    ],
+                  );
+                }
+
+                final Widget singleButton = torboxButton ?? realDebridButton!;
+                return SizedBox(width: double.infinity, child: singleButton);
               },
             ),
           ],

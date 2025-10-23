@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../widgets/torbox_account_status_widget.dart';
+import '../../services/main_page_bridge.dart';
 
 class TorboxSettingsPage extends StatefulWidget {
   const TorboxSettingsPage({super.key});
@@ -89,6 +90,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     });
     debugPrint('TorboxSettingsPage: API key saved successfully.');
     _snack('Torbox connected successfully');
+    MainPageBridge.notifyIntegrationChanged();
   }
 
   Future<void> _deleteKey() async {
@@ -100,6 +102,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
       _isEditing = false;
     });
     _snack('Torbox API key removed');
+    MainPageBridge.notifyIntegrationChanged();
   }
 
   Future<void> _updateCacheCheck(bool value) async {
