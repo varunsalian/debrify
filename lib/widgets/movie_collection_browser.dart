@@ -83,7 +83,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
       final s = entries[i].sizeBytes ?? -1;
       if (s > maxSize) maxSize = s;
     }
-    final double threshold = maxSize > 0 ? maxSize * 0.70 : -1;
+    final double threshold = maxSize > 0 ? maxSize * 0.40 : -1;
     for (int i = 0; i < entries.length; i++) {
       final e = entries[i];
       final isSmall = threshold > 0 && (e.sizeBytes != null && e.sizeBytes! < threshold);

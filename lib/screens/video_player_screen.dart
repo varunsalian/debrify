@@ -670,7 +670,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final s = e.sizeBytes ?? -1;
       if (s > maxSize) maxSize = s;
     }
-    final double threshold = maxSize > 0 ? maxSize * 0.70 : -1;
+    final double threshold = maxSize > 0 ? maxSize * 0.40 : -1;
     final main = <int>[];
     for (int i = 0; i < entries.length; i++) {
       final e = entries[i];
