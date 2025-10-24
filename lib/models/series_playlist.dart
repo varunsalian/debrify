@@ -169,7 +169,7 @@ class SeriesPlaylist {
     final isSeries = SeriesParser.isSeriesPlaylist(filenames);
 
     if (!isSeries) {
-      // Return as a single "season" for movies
+      // Treat as movie collection: single season with all entries
       final episodes = entries.asMap().entries.map((entry) {
         final index = entry.key;
         final entryData = entry.value;
@@ -217,6 +217,63 @@ class SeriesPlaylist {
           originalIndex: i,
         ));
       }
+    }
+
+    if (seasonMap.isEmpty) {
+      // Detected as series but no season numbers were parsed; fallback to a single implicit season.
+      final fallbackEpisodes = entries.asMap().entries.map((entry) {
+        final index = entry.key;
+        final entryData = entry.value;
+        final info = seriesInfos[index];
+
+        // Preserve parsed episode numbers when available; otherwise derive from order (1-based).
+        final fallbackInfo = info.isSeries
+            ? info
+            : SeriesInfo(
+                title: info.title,
+                season: 1,
+                episode: index + 1,
+                episodeTitle: info.episodeTitle,
+                year: info.year,
+                quality: info.quality,
+                audioCodec: info.audioCodec,
+                videoCodec: info.videoCodec,
+                group: info.group,
+                isSeries: true,
+              );
+
+        return SeriesEpisode(
+          url: entryData.url,
+          title: entryData.title,
+          filename: entryData.title,
+          seriesInfo: SeriesInfo(
+            title: fallbackInfo.title,
+            season: fallbackInfo.season ?? 1,
+            episode: fallbackInfo.episode ?? (index + 1),
+            episodeTitle: fallbackInfo.episodeTitle,
+            year: fallbackInfo.year,
+            quality: fallbackInfo.quality,
+            audioCodec: fallbackInfo.audioCodec,
+            videoCodec: fallbackInfo.videoCodec,
+            group: fallbackInfo.group,
+            isSeries: true,
+          ),
+          originalIndex: index,
+        );
+      }).toList();
+
+      return SeriesPlaylist(
+        seriesTitle: seriesInfos.firstOrNull?.title,
+        seasons: [
+          SeriesSeason(
+            seasonNumber: 1,
+            episodes: fallbackEpisodes,
+            seriesTitle: seriesInfos.firstOrNull?.title,
+          ),
+        ],
+        allEpisodes: fallbackEpisodes,
+        isSeries: true,
+      );
     }
 
     // Sort episodes within each season
