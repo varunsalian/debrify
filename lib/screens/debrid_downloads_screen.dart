@@ -38,10 +38,10 @@ class _TorrentMoreOption {
   final bool enabled;
 }
 
-class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
-    with TickerProviderStateMixin {
-  late TabController _tabController;
-  int _selectedIndex = 0;
+enum _DebridDownloadsView { torrents, ddl }
+
+class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
+  _DebridDownloadsView _selectedView = _DebridDownloadsView.torrents;
 
   // Torrent Downloads data
   final List<RDTorrent> _torrents = [];
@@ -78,12 +78,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
-      setState(() {
-        _selectedIndex = _tabController.index;
-      });
-    });
     _loadApiKeyAndData();
     _torrentScrollController.addListener(_onTorrentScroll);
     _downloadScrollController.addListener(_onDownloadScroll);
@@ -109,7 +103,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
 
   @override
   void dispose() {
-    _tabController.dispose();
     _torrentScrollController.dispose();
     _downloadScrollController.dispose();
     _magnetController.dispose();
@@ -2054,62 +2047,143 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final Widget content = _selectedView == _DebridDownloadsView.torrents
+        ? _buildTorrentContent()
+        : _buildDownloadContent();
+
     return Scaffold(
       body: Column(
         children: [
-          // Tabs
-          Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
+          const SizedBox(height: 8),
+          Expanded(child: content),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildViewSelector() {
+    final theme = Theme.of(context);
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.1),
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<_DebridDownloadsView>(
+          value: _selectedView,
+          dropdownColor: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          iconEnabledColor: theme.colorScheme.onPrimaryContainer,
+          style: TextStyle(
+            color: theme.colorScheme.onPrimaryContainer,
+            fontWeight: FontWeight.w600,
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: _DebridDownloadsView.torrents,
+              child: Text('Torrent Downloads'),
             ),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: false,
-              dividerColor: Colors.transparent,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicatorPadding: const EdgeInsets.all(6),
-              labelPadding: const EdgeInsets.symmetric(vertical: 10),
-              overlayColor: MaterialStateProperty.all(Colors.transparent),
-              indicator: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
-              unselectedLabelColor: Theme.of(
-                context,
-              ).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
-              tabs: const [
-                Tab(text: 'Torrent Downloads'),
-                Tab(text: 'Downloads'),
-              ],
+            DropdownMenuItem(
+              value: _DebridDownloadsView.ddl,
+              child: Text('DDL Downloads'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null && value != _selectedView) {
+              setState(() => _selectedView = value);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTorrentToolbar() {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF1F2937)),
+      ),
+      child: Row(
+        children: [
+          _buildViewSelector(),
+          const Spacer(),
+          Tooltip(
+            message: 'Add magnet link',
+            child: IconButton(
+              onPressed: _showAddMagnetDialog,
+              icon: const Icon(Icons.add_circle_outline),
+              color: theme.colorScheme.primary,
+              visualDensity: VisualDensity.compact,
             ),
           ),
-
-          // Content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [_buildTorrentContent(), _buildDownloadContent()],
+          const SizedBox(width: 8),
+          Tooltip(
+            message: 'Delete all torrents',
+            child: IconButton(
+              onPressed: _torrents.isEmpty ? null : _handleDeleteAllTorrents,
+              icon: const Icon(Icons.delete_sweep),
+              color: const Color(0xFFEF4444),
+              visualDensity: VisualDensity.compact,
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _selectedIndex == 0
-            ? _showAddMagnetDialog
-            : _showAddLinkDialog,
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        child: const Icon(Icons.add),
+    );
+  }
+
+  Widget _buildDownloadToolbar() {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF1F2937)),
+      ),
+      child: Row(
+        children: [
+          _buildViewSelector(),
+          const Spacer(),
+          Tooltip(
+            message: 'Add file link',
+            child: IconButton(
+              onPressed: _showAddLinkDialog,
+              icon: const Icon(Icons.note_add_outlined),
+              color: theme.colorScheme.primary,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: 'Delete all DDL downloads',
+            child: IconButton(
+              onPressed: _downloads.isEmpty ? null : _handleDeleteAllDownloads,
+              icon: const Icon(Icons.delete_sweep),
+              color: const Color(0xFFEF4444),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildTorrentContent() {
+    Widget body;
+
     if (_isLoadingTorrents && _torrents.isEmpty) {
-      return const Center(
+      body = const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -2119,10 +2193,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
           ],
         ),
       );
-    }
-
-    if (_torrentErrorMessage.isNotEmpty && _torrents.isEmpty) {
-      return Center(
+    } else if (_torrentErrorMessage.isNotEmpty && _torrents.isEmpty) {
+      body = Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -2165,10 +2237,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
           ),
         ),
       );
-    }
-
-    if (_torrents.isEmpty) {
-      return const Center(
+    } else if (_torrents.isEmpty) {
+      body = const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -2190,88 +2260,60 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
           ],
         ),
       );
+    } else {
+      body = RefreshIndicator(
+        onRefresh: () async {
+          if (_apiKey != null) {
+            await _fetchTorrents(_apiKey!, reset: true);
+          }
+        },
+        color: Colors.white,
+        backgroundColor: const Color(0xFF1E293B),
+        strokeWidth: 3,
+        child: ListView.builder(
+          controller: _torrentScrollController,
+          padding: const EdgeInsets.all(16),
+          itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index == _torrents.length) {
+              // Loading more indicator
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            final torrent = _torrents[index];
+            return _buildTorrentCard(torrent);
+          },
+        ),
+      );
     }
 
     return Column(
       children: [
-        // Delete All button
-        if (_torrents.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _handleDeleteAllTorrents,
-                    icon: const Icon(Icons.delete_sweep, size: 18),
-                    label: Text('Delete ${_torrents.length} Torrents'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEF4444),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        // Torrents list
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () async {
-              if (_apiKey != null) {
-                await _fetchTorrents(_apiKey!, reset: true);
-              }
-            },
-            color: Colors.white,
-            backgroundColor: const Color(0xFF1E293B),
-            strokeWidth: 3,
-            child: ListView.builder(
-              controller: _torrentScrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _torrents.length) {
-                  // Loading more indicator
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                final torrent = _torrents[index];
-                return _buildTorrentCard(torrent);
-              },
-            ),
-          ),
-        ),
+        _buildTorrentToolbar(),
+        Expanded(child: body),
       ],
     );
   }
 
   Widget _buildDownloadContent() {
+    Widget body;
+
     if (_isLoadingDownloads && _downloads.isEmpty) {
-      return const Center(
+      body = const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Loading your downloads...'),
+            Text('Loading your DDL downloads...'),
           ],
         ),
       );
-    }
-
-    if (_downloadErrorMessage.isNotEmpty && _downloads.isEmpty) {
-      return Center(
+    } else if (_downloadErrorMessage.isNotEmpty && _downloads.isEmpty) {
+      body = Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -2289,7 +2331,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
                     Icon(Icons.error_outline, color: Colors.red, size: 48),
                     const SizedBox(height: 12),
                     Text(
-                      'Error Loading Downloads',
+                      'Error Loading DDL Downloads',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: Colors.red[700],
@@ -2314,17 +2356,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
           ),
         ),
       );
-    }
-
-    if (_downloads.isEmpty) {
-      return const Center(
+    } else if (_downloads.isEmpty) {
+      body = const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.download_done, size: 64, color: Colors.grey),
             SizedBox(height: 16),
             Text(
-              'No downloads yet',
+              'No DDL downloads yet',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -2333,74 +2373,46 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
             ),
             SizedBox(height: 8),
             Text(
-              'Your downloads will appear here',
+              'Your DDL downloads will appear here',
               style: TextStyle(color: Colors.grey),
             ),
           ],
+        ),
+      );
+    } else {
+      body = RefreshIndicator(
+        onRefresh: () async {
+          if (_apiKey != null) {
+            await _fetchDownloads(_apiKey!, reset: true);
+          }
+        },
+        color: Colors.white,
+        backgroundColor: const Color(0xFF1E293B),
+        strokeWidth: 3,
+        child: ListView.builder(
+          controller: _downloadScrollController,
+          padding: const EdgeInsets.all(16),
+          itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index == _downloads.length) {
+              // Loading more indicator
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            final download = _downloads[index];
+            return _buildDownloadCard(download);
+          },
         ),
       );
     }
 
     return Column(
       children: [
-        // Delete All button
-        if (_downloads.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _handleDeleteAllDownloads,
-                    icon: const Icon(Icons.delete_sweep, size: 18),
-                    label: Text('Delete ${_downloads.length} Downloads'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEF4444),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        // Downloads list
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () async {
-              if (_apiKey != null) {
-                await _fetchDownloads(_apiKey!, reset: true);
-              }
-            },
-            color: Colors.white,
-            backgroundColor: const Color(0xFF1E293B),
-            strokeWidth: 3,
-            child: ListView.builder(
-              controller: _downloadScrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _downloads.length) {
-                  // Loading more indicator
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                final download = _downloads[index];
-                return _buildDownloadCard(download);
-              },
-            ),
-          ),
-        ),
+        _buildDownloadToolbar(),
+        Expanded(child: body),
       ],
     );
   }
@@ -2409,8 +2421,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen>
     final bool showProblematicVideo =
         torrent.links.length == 1 &&
         FileUtils.isProblematicVideo(torrent.filename);
-    const playColor = Color(0xFFB91C1C); // dimmed red
-    const downloadColor = Color(0xFF047857); // dimmed green
+    const playColor = Color(0xFF7F1D1D); // softened red
+    const downloadColor = Color(0xFF065F46); // softened green
     const problematicColor = Color(0xFFD97706);
     final borderColor = Colors.white.withValues(alpha: 0.08);
     final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);

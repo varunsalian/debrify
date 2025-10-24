@@ -28,9 +28,7 @@ class TorboxDownloadsScreen extends StatefulWidget {
   State<TorboxDownloadsScreen> createState() => _TorboxDownloadsScreenState();
 }
 
-class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
-    with TickerProviderStateMixin {
-  late final TabController _tabController;
+class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<TorboxTorrent> _torrents = [];
   final TextEditingController _magnetController = TextEditingController();
@@ -51,7 +49,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 1, vsync: this);
     _scrollController.addListener(_onScroll);
     _pendingInitialTorrent = widget.initialTorrentForAction;
     _pendingInitialAction = widget.initialAction;
@@ -718,7 +715,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
 
   @override
   void dispose() {
-    _tabController.dispose();
     _scrollController.dispose();
     _magnetController.dispose();
     super.dispose();
@@ -2314,56 +2310,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     return Scaffold(
       body: Column(
         children: [
-          Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              tabs: const [Tab(text: 'Torrents')],
-              indicatorSize: TabBarIndicatorSize.tab,
-              dividerColor: Colors.transparent,
-              labelPadding: const EdgeInsets.symmetric(vertical: 10),
-              indicatorPadding: const EdgeInsets.all(6),
-              overlayColor: MaterialStateProperty.all(Colors.transparent),
-              indicator: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
-              unselectedLabelColor: Theme.of(
-                context,
-              ).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
-            ),
-          ),
+          const SizedBox(height: 8),
+          _buildToolbar(),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                Column(
-                  children: [
-                    _buildToolbar(),
-                    Expanded(
-                      child: RefreshIndicator(
-                        onRefresh: _refresh,
-                        child: _buildTorrentList(),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: _buildTorrentList(),
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddMagnetDialog,
-        tooltip: 'Add magnet link',
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        child: const Icon(Icons.add),
       ),
     );
   }
@@ -2445,21 +2400,68 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen>
     );
   }
 
-  Widget _buildToolbar() {
+  Widget _buildViewSelector() {
+    final theme = Theme.of(context);
     return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.1),
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: 'Torrents',
+          dropdownColor: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          iconEnabledColor: theme.colorScheme.onPrimaryContainer,
+          style: TextStyle(
+            color: theme.colorScheme.onPrimaryContainer,
+            fontWeight: FontWeight.w600,
+          ),
+          items: const [
+            DropdownMenuItem(value: 'Torrents', child: Text('Torrents')),
+          ],
+          onChanged: (_) {},
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolbar() {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFF1F2937), width: 1)),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF1F2937)),
       ),
       child: Row(
         children: [
+          _buildViewSelector(),
           const Spacer(),
-          TextButton.icon(
-            onPressed: _torrents.isEmpty ? null : _confirmDeleteAll,
-            icon: const Icon(Icons.delete_sweep),
-            label: const Text('Delete All'),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFEF4444),
+          Tooltip(
+            message: 'Add magnet link',
+            child: IconButton(
+              onPressed: _showAddMagnetDialog,
+              icon: const Icon(Icons.add_circle_outline),
+              color: theme.colorScheme.primary,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: 'Delete all torrents',
+            child: IconButton(
+              onPressed: _torrents.isEmpty ? null : _confirmDeleteAll,
+              icon: const Icon(Icons.delete_sweep),
+              color: const Color(0xFFEF4444),
+              visualDensity: VisualDensity.compact,
             ),
           ),
         ],
@@ -2489,8 +2491,8 @@ class _TorboxTorrentCard extends StatelessWidget {
     final borderColor = Colors.white.withValues(alpha: 0.08);
     final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
 
-    const playColor = Color(0xFFB91C1C);
-    const downloadColor = Color(0xFF047857);
+    const playColor = Color(0xFF7F1D1D);
+    const downloadColor = Color(0xFF065F46);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 10),
