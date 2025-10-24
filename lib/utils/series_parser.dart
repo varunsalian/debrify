@@ -71,6 +71,15 @@ class SeriesParser {
     for (final pattern in _seasonEpisodePatterns) {
       final match = pattern.firstMatch(nameWithoutExt);
       if (match != null) {
+        if (match.groupCount >= 2 &&
+            _looksLikeResolutionMatch(
+              nameWithoutExt,
+              match,
+              seasonGroupIndex: 1,
+              episodeGroupIndex: 2,
+            )) {
+          continue;
+        }
         if (match.groupCount >= 2) {
           season = int.tryParse(match.group(1) ?? '');
           episode = int.tryParse(match.group(2) ?? '');
@@ -95,6 +104,15 @@ class SeriesParser {
     for (final pattern in _titlePatterns) {
       final match = pattern.firstMatch(nameWithoutExt);
       if (match != null) {
+        if (match.groupCount >= 3 &&
+            _looksLikeResolutionMatch(
+              nameWithoutExt,
+              match,
+              seasonGroupIndex: 2,
+              episodeGroupIndex: 3,
+            )) {
+          continue;
+        }
         title = match.group(1)?.trim();
         break;
       }
@@ -102,7 +120,9 @@ class SeriesParser {
 
     // If no title found and it's a series, try to extract from the beginning
     if (title == null && isSeries) {
-      final parts = nameWithoutExt.split(RegExp(r'[Ss]\d{1,2}[Ee]\d{1,2}|\d{1,2}[xX]\d{1,2}|\d{1,2}\.\d{1,2}'));
+      final parts = nameWithoutExt.split(
+        RegExp(r'[Ss]\d{1,2}[Ee]\d{1,2}|\d{1,2}[xX]\d{1,2}|\d{1,2}\.\d{1,2}'),
+      );
       if (parts.isNotEmpty) {
         title = parts.first.trim();
       }
@@ -192,8 +212,40 @@ class SeriesParser {
       final info = parseFilename(filename);
       return info.isSeries;
     }).length;
-    
+
     // Consider it a series if more than 50% of files are series episodes
     return seriesCount > filenames.length / 2;
   }
-} 
+
+  static bool _looksLikeResolutionMatch(
+    String source,
+    RegExpMatch match, {
+    required int seasonGroupIndex,
+    required int episodeGroupIndex,
+  }) {
+    final text = match.group(0) ?? '';
+    if (!text.contains(RegExp(r'[xX\.]'))) {
+      return false;
+    }
+
+    bool isDigitAt(int index) {
+      if (index < 0 || index >= source.length) return false;
+      final codeUnit = source.codeUnitAt(index);
+      return codeUnit >= 48 && codeUnit <= 57; // '0'..'9'
+    }
+
+    if (isDigitAt(match.start - 1) || isDigitAt(match.end)) {
+      return true;
+    }
+
+    final seasonValue = int.tryParse(match.group(seasonGroupIndex) ?? '');
+    final episodeValue = int.tryParse(match.group(episodeGroupIndex) ?? '');
+    if (seasonValue != null && episodeValue != null) {
+      if (seasonValue >= 60 || episodeValue >= 200) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+}
