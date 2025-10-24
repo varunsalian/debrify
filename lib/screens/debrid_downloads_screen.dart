@@ -22,8 +22,8 @@ class DebridDownloadsScreen extends StatefulWidget {
   State<DebridDownloadsScreen> createState() => _DebridDownloadsScreenState();
 }
 
-class _TorrentMoreOption {
-  const _TorrentMoreOption({
+class _ActionSheetOption {
+  const _ActionSheetOption({
     required this.icon,
     required this.label,
     this.onTap,
@@ -99,6 +99,33 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         }
       }
     });
+  }
+
+  void _showDownloadMoreOptions(DebridDownload download) {
+    final canStream = download.streamable == 1;
+    final options = <_ActionSheetOption>[
+      if (canStream)
+        _ActionSheetOption(
+          icon: Icons.play_arrow,
+          label: 'Play',
+          onTap: () => _handlePlayDownload(download),
+        ),
+      _ActionSheetOption(
+        icon: Icons.copy,
+        label: 'Copy Link',
+        onTap: () async {
+          await _handleDownloadAction(download);
+        },
+      ),
+      _ActionSheetOption(
+        icon: Icons.delete_outline,
+        label: 'Delete Download',
+        destructive: true,
+        onTap: () => _handleDeleteDownload(download),
+      ),
+    ];
+
+    _showOptionsSheet(options);
   }
 
   @override
@@ -437,6 +464,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           'This file is not a video (MIME type: ${download.mimeType})',
         );
       }
+    }
+  }
+
+  Future<void> _handleQueueDownload(DebridDownload download) async {
+    if (_apiKey == null) return;
+
+    try {
+      final meta = jsonEncode({
+        'restrictedLink': download.link,
+        'apiKey': _apiKey ?? '',
+        'torrentHash': '',
+        'fileIndex': '',
+      });
+      await DownloadService.instance.enqueueDownload(
+        url: download.link,
+        fileName: download.filename,
+        context: context,
+        torrentName: download.filename,
+        meta: meta,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Added to downloads')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to start download: $e'),
+        ),
+      );
     }
   }
 
@@ -2546,7 +2604,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final isCompact = constraints.maxWidth < 380;
-                  final playButton = _buildPrimaryTorrentActionButton(
+                  final playButton = _buildPrimaryActionButton(
                     icon: showProblematicVideo
                         ? Icons.warning
                         : Icons.play_arrow,
@@ -2562,7 +2620,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                       }
                     },
                   );
-                  final downloadButton = _buildPrimaryTorrentActionButton(
+                  final downloadButton = _buildPrimaryActionButton(
                     icon: Icons.download_rounded,
                     label: 'Download',
                     backgroundColor: downloadColor,
@@ -2596,7 +2654,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
-  Widget _buildPrimaryTorrentActionButton({
+  Widget _buildPrimaryActionButton({
     required IconData icon,
     required String label,
     required Color backgroundColor,
@@ -2619,6 +2677,25 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildMoreOptionsButton(RDTorrent torrent) {
     return IconButton(
       onPressed: () => _showTorrentMoreOptions(torrent),
+      icon: const Icon(Icons.more_vert, size: 20),
+      tooltip: 'More options',
+      style: IconButton.styleFrom(
+        backgroundColor: const Color(0xFF111C32),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: const Color(0xFF475569).withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDownloadMoreOptionsButton(DebridDownload download) {
+    return IconButton(
+      onPressed: () => _showDownloadMoreOptions(download),
       icon: const Icon(Icons.more_vert, size: 20),
       tooltip: 'More options',
       style: IconButton.styleFrom(
@@ -2727,19 +2804,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   void _showTorrentMoreOptions(RDTorrent torrent) {
     final isMultiFile = torrent.links.length > 1;
-    final options = <_TorrentMoreOption>[
-      _TorrentMoreOption(
+    final options = <_ActionSheetOption>[
+      _ActionSheetOption(
         icon: Icons.playlist_add,
         label: 'Add to Playlist',
         onTap: () => _handleAddTorrentToPlaylist(torrent),
       ),
-      _TorrentMoreOption(
+      _ActionSheetOption(
         icon: Icons.copy,
         label: 'Copy Link',
         onTap: isMultiFile ? null : () => _handleFileOptions(torrent),
         enabled: !isMultiFile,
       ),
-      _TorrentMoreOption(
+      _ActionSheetOption(
         icon: Icons.delete_outline,
         label: 'Delete Torrent',
         onTap: () => _handleDeleteTorrent(torrent),
@@ -2747,6 +2824,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       ),
     ];
 
+    _showOptionsSheet(options);
+  }
+
+  void _showOptionsSheet(List<_ActionSheetOption> options) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2874,26 +2955,32 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildDownloadCard(DebridDownload download) {
     final borderColor = Colors.white.withValues(alpha: 0.08);
     final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
+    final canStream = download.streamable == 1;
+    final showProblematicVideo =
+        canStream && FileUtils.isProblematicVideo(download.filename);
+    const playColor = Color(0xFF7F1D1D);
+    const downloadColor = Color(0xFF065F46);
+    const problematicColor = Color(0xFFD97706);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF202C46), Color(0xFF121A2E)],
+          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
         ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: borderColor, width: 1.2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
+            blurRadius: 20,
+            offset: const Offset(0, 12),
           ),
           BoxShadow(
             color: glowColor,
-            blurRadius: 24,
-            offset: const Offset(0, 5),
+            blurRadius: 26,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -2905,8 +2992,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title and status
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
@@ -2920,12 +3007,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    _buildDownloadMoreOptionsButton(download),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
-                // Stats row
                 Row(
                   children: [
                     StatChip(
@@ -2936,36 +3022,35 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     const SizedBox(width: 8),
                     StatChip(
                       icon: Icons.link,
-                      text: '${download.chunks} chunks',
+                      text:
+                          '${download.chunks} chunk${download.chunks == 1 ? '' : 's'}',
                       color: const Color(0xFFF59E0B),
                     ),
                     const SizedBox(width: 8),
                     StatChip(
-                      icon: download.streamable == 1
-                          ? Icons.play_arrow
-                          : Icons.download,
-                      text: download.streamable == 1
-                          ? 'Streamable'
-                          : 'Download',
-                      color: download.streamable == 1
+                      icon: canStream ? Icons.play_arrow : Icons.download,
+                      text: canStream ? 'Streamable' : 'Download only',
+                      color: canStream
                           ? const Color(0xFFE50914)
                           : const Color(0xFF10B981),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
-                // Host info
                 Row(
                   children: [
                     Icon(Icons.computer, size: 16, color: Colors.grey[400]),
                     const SizedBox(width: 4),
-                    Text(
-                      download.host,
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    Expanded(
+                      child: Text(
+                        download.host,
+                        style:
+                            TextStyle(color: Colors.grey[400], fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 12),
                     Text(
                       'Generated ${Formatters.formatDateString(download.generated)}',
                       style: TextStyle(color: Colors.grey[400], fontSize: 12),
@@ -2975,136 +3060,69 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               ],
             ),
           ),
-
-          // Action buttons
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF131E33), Color(0xFF0B1224)],
+              ),
               borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
+                bottomLeft: Radius.circular(18),
+                bottomRight: Radius.circular(18),
+              ),
+              border: Border(
+                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Play button (if streamable)
-                if (download.streamable == 1) ...[
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color: const Color(0xFF475569).withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ),
-                    child: IconButton(
-                      onPressed: () => _handlePlayDownload(download),
-                      icon: Icon(
-                        FileUtils.isProblematicVideo(download.filename)
-                            ? Icons.warning
-                            : Icons.play_arrow,
-                        size: 18,
-                      ),
-                      style: IconButton.styleFrom(
-                        foregroundColor:
-                            FileUtils.isProblematicVideo(download.filename)
-                            ? const Color(0xFFF59E0B)
-                            : const Color(0xFFE50914),
-                        padding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                  ),
-                ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 380;
+                  final Widget downloadButton = _buildPrimaryActionButton(
+                    icon: Icons.download_rounded,
+                    label: 'Download',
+                    backgroundColor: downloadColor,
+                    onPressed: () => _handleQueueDownload(download),
+                  );
 
-                // Download button
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: const Color(0xFF475569).withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ),
-                  child: IconButton(
-                    onPressed: () async {
-                      if (_apiKey == null) return;
-                      try {
-                        final meta = jsonEncode({
-                          'restrictedLink': download.link,
-                          'apiKey': _apiKey ?? '',
-                          // Best-effort placeholders; DebridDownload doesn't expose torrentId/fileIndex
-                          'torrentHash': '',
-                          'fileIndex': '',
-                        });
-                        await DownloadService.instance.enqueueDownload(
-                          url: download.link, // Use restricted link directly
-                          fileName: download.filename,
-                          context: context,
-                          torrentName: download.filename,
-                          meta: meta,
-                        );
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Added to downloads')),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to start download: $e'),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    style: IconButton.styleFrom(
-                      foregroundColor: const Color(0xFF10B981),
-                      padding: const EdgeInsets.all(12),
-                    ),
-                  ),
-                ),
+                  if (!canStream) {
+                    return SizedBox(
+                      width: double.infinity,
+                      child: downloadButton,
+                    );
+                  }
 
-                // Copy link button
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: const Color(0xFF475569).withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ),
-                  child: IconButton(
-                    onPressed: () => _handleDownloadAction(download),
-                    icon: const Icon(Icons.copy, size: 18),
-                    style: IconButton.styleFrom(
-                      foregroundColor: const Color(0xFF6366F1),
-                      padding: const EdgeInsets.all(12),
-                    ),
-                  ),
-                ),
+                  final Widget playButton = _buildPrimaryActionButton(
+                    icon:
+                        showProblematicVideo ? Icons.warning : Icons.play_arrow,
+                    label: 'Play',
+                    backgroundColor:
+                        showProblematicVideo ? problematicColor : playColor,
+                    onPressed: () => _handlePlayDownload(download),
+                  );
 
-                // Delete button
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: const Color(0xFF475569).withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ),
-                  child: IconButton(
-                    onPressed: () => _handleDeleteDownload(download),
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    style: IconButton.styleFrom(
-                      foregroundColor: const Color(0xFFEF4444),
-                      padding: const EdgeInsets.all(12),
-                    ),
-                  ),
-                ),
-              ],
+                  if (isCompact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        playButton,
+                        const SizedBox(height: 8),
+                        downloadButton,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: playButton),
+                      const SizedBox(width: 12),
+                      Expanded(child: downloadButton),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ],
