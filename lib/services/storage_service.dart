@@ -10,6 +10,10 @@ class StorageService {
   static const String _torboxApiKey = 'torbox_api_key';
   static const String _torboxCacheCheckPref =
       'torbox_check_cache_before_search';
+  static const String _realDebridIntegrationEnabledKey =
+      'real_debrid_integration_enabled';
+  static const String _torboxIntegrationEnabledKey =
+      'torbox_integration_enabled';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _batteryOptStatusKey =
       'battery_opt_status_v1'; // granted|denied|never|unknown
@@ -73,6 +77,26 @@ class StorageService {
   static Future<void> setTorboxCacheCheckEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_torboxCacheCheckPref, enabled);
+  }
+
+  static Future<bool> getRealDebridIntegrationEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_realDebridIntegrationEnabledKey) ?? true;
+  }
+
+  static Future<void> setRealDebridIntegrationEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_realDebridIntegrationEnabledKey, enabled);
+  }
+
+  static Future<bool> getTorboxIntegrationEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_torboxIntegrationEnabledKey) ?? true;
+  }
+
+  static Future<void> setTorboxIntegrationEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_torboxIntegrationEnabledKey, enabled);
   }
 
   static Future<bool> isInitialSetupComplete() async {

@@ -39,6 +39,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String? _torboxApiKey;
   bool _torboxCacheCheckEnabled = false;
   Map<String, bool>? _torboxCacheStatus;
+  bool _realDebridIntegrationEnabled = true;
+  bool _torboxIntegrationEnabled = true;
+  bool _showingTorboxCachedOnly = false;
 
   // Search engine toggles
   bool _useTorrentsCsv = true;
@@ -103,10 +106,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _loadApiKeys() async {
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
+    final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     if (!mounted) return;
     setState(() {
       _apiKey = rdKey;
       _torboxApiKey = torboxKey;
+      _realDebridIntegrationEnabled = rdEnabled;
+      _torboxIntegrationEnabled = torboxEnabled;
     });
   }
 
@@ -127,18 +134,31 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _errorMessage = '';
       _hasSearched = true;
       _torboxCacheStatus = null;
+      _showingTorboxCachedOnly = false;
     });
 
     // Hide keyboard
     _searchFocusNode.unfocus();
 
-    final bool cacheCheckPreference =
-        await StorageService.getTorboxCacheCheckEnabled();
-    final String? torboxKey = await StorageService.getTorboxApiKey();
+    final results = await Future.wait([
+      StorageService.getTorboxCacheCheckEnabled(),
+      StorageService.getTorboxApiKey(),
+      StorageService.getRealDebridIntegrationEnabled(),
+      StorageService.getTorboxIntegrationEnabled(),
+      StorageService.getApiKey(),
+    ]);
+    final bool cacheCheckPreference = results[0] as bool;
+    final String? torboxKey = results[1] as String?;
+    final bool rdEnabled = results[2] as bool;
+    final bool torboxEnabled = results[3] as bool;
+    final String? rdKey = results[4] as String?;
     if (mounted) {
       setState(() {
         _torboxCacheCheckEnabled = cacheCheckPreference;
         _torboxApiKey = torboxKey;
+        _realDebridIntegrationEnabled = rdEnabled;
+        _torboxIntegrationEnabled = torboxEnabled;
+        _apiKey = rdKey;
       });
     }
 
@@ -155,6 +175,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       final String? torboxKeyValue = torboxKey;
       if (cacheCheckPreference &&
+          torboxEnabled &&
           torboxKeyValue != null &&
           torboxKeyValue.isNotEmpty &&
           fetchedTorrents.isNotEmpty) {
@@ -182,11 +203,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
       }
 
+      final bool torboxActive = torboxEnabled &&
+          torboxKeyValue != null &&
+          torboxKeyValue.isNotEmpty;
+      final bool realDebridActive =
+          rdEnabled && rdKey != null && rdKey.isNotEmpty;
+      bool showOnlyCached = false;
+      List<Torrent> filteredTorrents = fetchedTorrents;
+      if (cacheCheckPreference &&
+          torboxActive &&
+          !realDebridActive &&
+          torboxCacheMap != null) {
+        filteredTorrents = fetchedTorrents.where((torrent) {
+          final hash = torrent.infohash.trim().toLowerCase();
+          return torboxCacheMap![hash] ?? false;
+        }).toList(growable: false);
+        showOnlyCached = true;
+      }
+
       setState(() {
-        _torrents = fetchedTorrents;
+        _torrents = filteredTorrents;
         _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
         _torboxCacheStatus = torboxCacheMap;
         _isLoading = false;
+        _showingTorboxCachedOnly = showOnlyCached;
       });
 
       // Apply sorting to the results
@@ -3465,6 +3505,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     return ListView(
                       padding: const EdgeInsets.only(bottom: 16),
                       children: [
+                        if (_showingTorboxCachedOnly)
+                          _buildTorboxCachedOnlyNotice(),
                         Container(
                           margin: const EdgeInsets.all(12),
                           padding: const EdgeInsets.all(16),
@@ -3510,10 +3552,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ],
                     );
                   }
+                  final bool showCachedOnlyBanner = _showingTorboxCachedOnly;
+                  final int metadataRows = showCachedOnlyBanner ? 3 : 2;
 
                   return ListView.builder(
                     padding: const EdgeInsets.only(bottom: 16),
-                    itemCount: _torrents.length + 2,
+                    itemCount: _torrents.length + metadataRows,
                     itemBuilder: (context, index) {
                       if (index == 0) {
                         return FadeTransition(
@@ -3561,10 +3605,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    _torboxCacheStatus != null &&
-                                            _torboxCacheCheckEnabled
-                                        ? '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()} • Torbox cache check'
-                                        : '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}',
+                                    () {
+                                      final baseText =
+                                          '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}';
+                                      if (_showingTorboxCachedOnly) {
+                                        return '$baseText • Torbox cached only';
+                                      }
+                                      if (_torboxCacheStatus != null &&
+                                          _torboxCacheCheckEnabled) {
+                                        return '$baseText • Torbox cache check';
+                                      }
+                                      return baseText;
+                                    }(),
                                     style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -3720,10 +3772,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         );
                       }
 
-                      final torrent = _torrents[index - 2];
+                      if (showCachedOnlyBanner && index == 2) {
+                        return _buildTorboxCachedOnlyNotice();
+                      }
+
+                      final torrent = _torrents[index - metadataRows];
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: _buildTorrentCard(torrent, index - 2),
+                        child:
+                            _buildTorrentCard(torrent, index - metadataRows),
                       );
                     },
                   );
@@ -3732,6 +3789,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTorboxCachedOnlyNotice() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E3A8A).withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            color: Color(0xFF38BDF8),
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing Torbox cached results only. Disable "Check Torbox cache during searches" in Torbox settings to see every result.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -4001,11 +4092,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 }
 
                 final Widget? torboxButton =
-                    (_torboxApiKey != null && _torboxApiKey!.isNotEmpty)
+                    (_torboxIntegrationEnabled &&
+                            _torboxApiKey != null &&
+                            _torboxApiKey!.isNotEmpty)
                         ? buildTorboxButton()
                         : null;
                 final Widget? realDebridButton =
-                    (_apiKey != null && _apiKey!.isNotEmpty)
+                    (_realDebridIntegrationEnabled &&
+                            _apiKey != null &&
+                            _apiKey!.isNotEmpty)
                         ? buildRealDebridButton()
                         : null;
 

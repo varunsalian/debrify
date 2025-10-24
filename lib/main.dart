@@ -279,6 +279,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _hasRealDebridKey = false;
   bool _hasTorboxKey = false;
   bool _initialSetupHandled = false;
+  bool _rdIntegrationEnabled = true;
+  bool _tbIntegrationEnabled = true;
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
@@ -434,18 +436,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   Future<void> _loadIntegrationState() async {
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
+    final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
 
     if (!mounted) return;
 
+    final hasRealDebrid = rdEnabled && rdKey != null && rdKey.isNotEmpty;
+    final hasTorbox = torboxEnabled && torboxKey != null && torboxKey.isNotEmpty;
+
     _applyIntegrationState(
-      hasRealDebrid: rdKey != null && rdKey.isNotEmpty,
-      hasTorbox: torboxKey != null && torboxKey.isNotEmpty,
+      hasRealDebrid: hasRealDebrid,
+      hasTorbox: hasTorbox,
+      realDebridEnabled: rdEnabled,
+      torboxEnabled: torboxEnabled,
     );
   }
 
   void _applyIntegrationState({
     required bool hasRealDebrid,
     required bool hasTorbox,
+    required bool realDebridEnabled,
+    required bool torboxEnabled,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
@@ -459,6 +470,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     if (_hasRealDebridKey == hasRealDebrid &&
         _hasTorboxKey == hasTorbox &&
+        _rdIntegrationEnabled == realDebridEnabled &&
+        _tbIntegrationEnabled == torboxEnabled &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -466,6 +479,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     setState(() {
       _hasRealDebridKey = hasRealDebrid;
       _hasTorboxKey = hasTorbox;
+      _rdIntegrationEnabled = realDebridEnabled;
+      _tbIntegrationEnabled = torboxEnabled;
       _selectedIndex = nextIndex;
     });
   }
@@ -488,9 +503,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   }
 
   void _showMissingApiKeySnack(String provider) {
+    final bool integrationDisabled = provider == 'Real Debrid'
+        ? !_rdIntegrationEnabled
+        : !_tbIntegrationEnabled;
+    final message = integrationDisabled
+        ? 'Enable $provider in Settings to use this feature.'
+        : 'Please add your $provider API key in Settings first!';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Please add your $provider API key in Settings first!'),
+        content: Text(message),
       ),
     );
   }
