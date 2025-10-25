@@ -1,9 +1,14 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/torrent.dart';
-import '../services/torrent_service.dart';
-import '../services/storage_service.dart';
+import '../models/torbox_file.dart';
+import '../models/torbox_torrent.dart';
 import '../services/debrid_service.dart';
+import '../services/storage_service.dart';
+import '../services/torbox_service.dart';
+import '../services/torrent_service.dart';
+import '../utils/file_utils.dart';
+import '../utils/series_parser.dart';
 import 'video_player_screen.dart';
 
 class DebrifyTVScreen extends StatefulWidget {
@@ -14,6 +19,11 @@ class DebrifyTVScreen extends StatefulWidget {
 }
 
 class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
+  static const String _providerRealDebrid = 'real_debrid';
+  static const String _providerTorbox = 'torbox';
+  static const String _torboxFileEntryType = 'torbox_file';
+  static const int _torboxMinVideoSizeBytes = 50 * 1024 * 1024; // 50 MB filter threshold
+
   final TextEditingController _keywordsController = TextEditingController();
   // Mixed queue: can contain Torrent items or RD-restricted link maps
   final List<dynamic> _queue = [];
@@ -26,6 +36,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _showVideoTitle = false;
   bool _hideOptions = true;
   bool _hideBackButton = true;
+  String _provider = _providerRealDebrid;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -67,6 +78,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     super.dispose();
   }
 
+  Future<void> _updateProvider(String value) async {
+    if (_provider == value) return;
+    setState(() {
+      _provider = value;
+    });
+    await StorageService.saveDebrifyTvProvider(value);
+  }
+
+  void _closeProgressDialog() {
+    if (!_progressOpen || _progressSheetContext == null) {
+      return;
+    }
+    try {
+      Navigator.of(_progressSheetContext!).pop();
+    } catch (_) {}
+    _progressOpen = false;
+    _progressSheetContext = null;
+  }
+
   Future<void> _loadSettings() async {
     final startRandom = await StorageService.getDebrifyTvStartRandom();
     final hideSeekbar = await StorageService.getDebrifyTvHideSeekbar();
@@ -74,7 +104,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
     final hideOptions = await StorageService.getDebrifyTvHideOptions();
     final hideBackButton = await StorageService.getDebrifyTvHideBackButton();
-    
+    final storedProvider = await StorageService.getDebrifyTvProvider();
+    final provider =
+        storedProvider == _providerTorbox ? _providerTorbox : _providerRealDebrid;
+
     if (mounted) {
       setState(() {
         _startRandom = startRandom;
@@ -83,6 +116,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _showVideoTitle = showVideoTitle;
         _hideOptions = hideOptions;
         _hideBackButton = hideBackButton;
+        _provider = provider;
       });
     }
   }
@@ -97,6 +131,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<void> _watch() async {
     _launchedPlayer = false;
+    await _stopPrefetch();
+    _prefetchStopRequested = false;
+    _stage2Running = false;
+    _capRestoredByStage2 = false;
+    _originalMaxCap = null;
     void _log(String m) {
       final copy = List<String>.from(_progress.value)..add(m);
       _progress.value = copy;
@@ -310,6 +349,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         );
       },
     ).whenComplete(() { _progressOpen = false; _progressSheetContext = null; });
+
+    if (_provider == _providerTorbox) {
+      await _watchWithTorbox(keywords, _log);
+      return;
+    }
 
     // Silent approach - no progress logging needed
 
@@ -790,6 +834,279 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<void> _watchWithTorbox(
+    List<String> keywords,
+    void Function(String message) log,
+  ) async {
+    final integrationEnabled =
+        await StorageService.getTorboxIntegrationEnabled();
+    if (!integrationEnabled) {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _status = 'Enable Torbox in Settings to use this provider.';
+        _isBusy = false;
+      });
+      _showSnack(
+        'Enable Torbox in Settings to use this provider.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    final apiKey = await StorageService.getTorboxApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _status = 'Add your Torbox API key in Settings to use this provider.';
+        _isBusy = false;
+      });
+      _showSnack(
+        'Please add your Torbox API key in Settings first!',
+        color: Colors.red,
+      );
+      return;
+    }
+
+    log('🌐 Torbox: searching for cached torrents...');
+    final originalCap = await StorageService.getMaxTorrentsCsvResults();
+    final Map<String, Torrent> dedup = <String, Torrent>{};
+
+    try {
+      await StorageService.setMaxTorrentsCsvResults(500);
+
+      final futures = keywords
+          .map(
+            (kw) => TorrentService.searchAllEngines(
+              kw,
+              useTorrentsCsv: true,
+              usePirateBay: true,
+            ),
+          )
+          .toList();
+
+      await for (final result in Stream.fromFutures(futures)) {
+        final torrents =
+            (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
+        int added = 0;
+        for (final torrent in torrents) {
+          final normalizedHash = _normalizeInfohash(torrent.infohash);
+          if (normalizedHash.isEmpty) continue;
+          if (!dedup.containsKey(normalizedHash)) {
+            dedup[normalizedHash] = torrent;
+            added++;
+          }
+        }
+        if (added > 0) {
+          final combined = dedup.values.toList();
+          combined.shuffle(Random());
+          _queue
+            ..clear()
+            ..addAll(combined);
+          _lastQueueSize = _queue.length;
+          _lastSearchAt = DateTime.now();
+          if (mounted) {
+            setState(() {
+              _status = 'Checking Torbox cache...';
+            });
+          }
+        }
+      }
+
+      final combinedList = dedup.values.toList();
+      if (combinedList.isEmpty) {
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() {
+            _status = 'No results found. Try different keywords.';
+          });
+          _showSnack(
+            'No results found. Try different keywords.',
+            color: Colors.red,
+          );
+        }
+        return;
+      }
+
+      final uniqueHashes = combinedList
+          .map((torrent) => _normalizeInfohash(torrent.infohash))
+          .where((hash) => hash.isNotEmpty)
+          .toList();
+
+      if (uniqueHashes.isEmpty) {
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() {
+            _status = 'No valid torrents found for Torbox.';
+          });
+        }
+        return;
+      }
+
+      Set<String> cachedHashes;
+      try {
+        cachedHashes = await TorboxService.checkCachedTorrents(
+          apiKey: apiKey,
+          infoHashes: uniqueHashes,
+          listFiles: false,
+        );
+      } catch (e) {
+        log('❌ Torbox cache check failed: $e');
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() {
+            _status = 'Torbox cache check failed. Try again.';
+          });
+          _showSnack(
+            'Torbox cache check failed: ${_formatTorboxError(e)}',
+            color: Colors.red,
+          );
+        }
+        return;
+      }
+
+      final filtered = combinedList
+          .where(
+            (torrent) =>
+                cachedHashes.contains(_normalizeInfohash(torrent.infohash)),
+          )
+          .toList();
+
+      if (filtered.isEmpty) {
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() {
+            _status = 'Torbox has no cached results for these keywords.';
+          });
+          _showSnack(
+            'Torbox has no cached results for these keywords.',
+            color: Colors.orange,
+          );
+        }
+        return;
+      }
+
+      filtered.shuffle(Random());
+      _queue
+        ..clear()
+        ..addAll(filtered);
+      _lastQueueSize = _queue.length;
+      _lastSearchAt = DateTime.now();
+      if (mounted) {
+        setState(() {
+          _status =
+              'Found ${_queue.length} cached Torbox result${_queue.length == 1 ? '' : 's'}';
+        });
+      }
+      log('✅ Found ${_queue.length} cached Torbox torrent(s)');
+
+      final random = Random();
+
+      Future<Map<String, String>?> requestTorboxNext() async {
+        while (_queue.isNotEmpty) {
+          final item = _queue.removeAt(0);
+          if (item is Map && item['type'] == _torboxFileEntryType) {
+            final resolved = await _resolveTorboxQueuedFile(
+              entry: item as Map<String, dynamic>,
+              apiKey: apiKey,
+              log: log,
+            );
+            if (resolved != null) {
+              if (mounted) {
+                setState(() {
+                  _status =
+                      _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+                });
+              }
+              return resolved;
+            }
+            continue;
+          }
+
+          if (item is Torrent) {
+            final result = await _prepareTorboxTorrent(
+              candidate: item,
+              apiKey: apiKey,
+              log: log,
+            );
+            if (result != null) {
+              if (result.extraEntries.isNotEmpty) {
+                _queue.addAll(result.extraEntries);
+                _queue.shuffle(random);
+              }
+              if (mounted) {
+                setState(() {
+                  _status = _queue.isEmpty
+                      ? ''
+                      : 'Queue has ${_queue.length} remaining';
+                });
+              }
+              return {
+                'url': result.streamUrl,
+                'title': result.title,
+              };
+            }
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _status = 'No more cached Torbox streams available.';
+          });
+        }
+        return null;
+      }
+
+      final first = await requestTorboxNext();
+      if (first == null) {
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() {
+            _status = 'No playable Torbox streams found. Try different keywords.';
+          });
+          _showSnack(
+            'No playable Torbox streams found. Try different keywords.',
+            color: Colors.red,
+          );
+        }
+        return;
+      }
+
+      _closeProgressDialog();
+      if (!mounted) return;
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(
+            videoUrl: first['url'] ?? '',
+            title: first['title'] ?? 'Debrify TV',
+            startFromRandom: _startRandom,
+            hideSeekbar: _hideSeekbar,
+            showWatermark: _showWatermark,
+            showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            hideBackButton: _hideBackButton,
+            requestMagicNext: requestTorboxNext,
+          ),
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          _status = _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+        });
+      }
+    } finally {
+      await StorageService.setMaxTorrentsCsvResults(originalCap);
+      _closeProgressDialog();
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _playNextFromQueue() async {
     if (_isBusy) return;
     final apiKey = await StorageService.getApiKey();
@@ -1015,6 +1332,43 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
+                  Text(
+                    'Content provider',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Real Debrid'),
+                        selected: _provider == _providerRealDebrid,
+                        onSelected: _isBusy
+                            ? null
+                            : (selected) {
+                                if (selected) {
+                                  _updateProvider(_providerRealDebrid);
+                                }
+                              },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Torbox'),
+                        selected: _provider == _providerTorbox,
+                        onSelected: _isBusy
+                            ? null
+                            : (selected) {
+                                if (selected) {
+                                  _updateProvider(_providerTorbox);
+                                }
+                              },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   _SwitchRow(
                     title: 'Start from random timestamp',
                     subtitle: 'Each Debrify TV video starts at a random point',
@@ -1089,6 +1443,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           _showVideoTitle = false;
                           _hideOptions = true;
                           _hideBackButton = true;
+                          _provider = _providerRealDebrid;
                         });
                         
                         // Save to storage
@@ -1098,6 +1453,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         await StorageService.saveDebrifyTvShowVideoTitle(false);
                         await StorageService.saveDebrifyTvHideOptions(true);
                         await StorageService.saveDebrifyTvHideBackButton(true);
+                        await StorageService.saveDebrifyTvProvider(
+                          _providerRealDebrid,
+                        );
                         
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -1136,6 +1494,244 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ],
       ),
     );
+  }
+
+  Future<Map<String, String>?> _resolveTorboxQueuedFile({
+    required Map<String, dynamic> entry,
+    required String apiKey,
+    required void Function(String message) log,
+  }) async {
+    final torrentId = entry['torrentId'] as int?;
+    final TorboxFile? file = entry['file'] as TorboxFile?;
+    final String? title = entry['title'] as String?;
+    if (torrentId == null || file == null) {
+      return null;
+    }
+    try {
+      final streamUrl = await TorboxService.requestFileDownloadLink(
+        apiKey: apiKey,
+        torrentId: torrentId,
+        fileId: file.id,
+      );
+      final resolvedTitle = title ?? _torboxDisplayName(file);
+      log('➡️ Torbox: streaming $resolvedTitle');
+      return {
+        'url': streamUrl,
+        'title': resolvedTitle,
+      };
+    } catch (e) {
+      log('❌ Torbox stream failed: $e');
+      return null;
+    }
+  }
+
+  Future<_TorboxPreparedTorrent?> _prepareTorboxTorrent({
+    required Torrent candidate,
+    required String apiKey,
+    required void Function(String message) log,
+  }) async {
+    final infohash = _normalizeInfohash(candidate.infohash);
+    if (infohash.isEmpty) {
+      return null;
+    }
+
+    log('⏳ Torbox: preparing ${candidate.name}');
+
+    final magnetLink = 'magnet:?xt=urn:btih:${candidate.infohash}';
+    Map<String, dynamic> response;
+    try {
+      response = await TorboxService.createTorrent(
+        apiKey: apiKey,
+        magnet: magnetLink,
+        seed: true,
+        allowZip: false,
+        addOnlyIfCached: true,
+      );
+    } catch (e) {
+      log('❌ Torbox createtorrent failed: $e');
+      return null;
+    }
+
+    final success = response['success'] as bool? ?? false;
+    if (!success) {
+      final error = (response['error'] ?? '').toString();
+      log('⚠️ Torbox createtorrent error: $error');
+      return null;
+    }
+
+    final data = response['data'];
+    final torrentId = _asIntMapValue(data, 'torrent_id');
+    if (torrentId == null) {
+      log('⚠️ Torbox createtorrent missing torrent_id');
+      return null;
+    }
+
+    TorboxTorrent? torboxTorrent;
+    for (int attempt = 0; attempt < 6; attempt++) {
+      torboxTorrent = await TorboxService.getTorrentById(
+        apiKey,
+        torrentId,
+        attempts: 1,
+        pageSize: 100,
+      );
+      if (torboxTorrent != null && torboxTorrent.files.isNotEmpty) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 400));
+    }
+
+    if (torboxTorrent == null || torboxTorrent.files.isEmpty) {
+      log('⚠️ Torbox torrent details not ready for ${candidate.name}');
+      return null;
+    }
+
+    final playableEntries = _buildTorboxPlayableEntries(
+      torboxTorrent,
+      candidate.name,
+    );
+    if (playableEntries.isEmpty) {
+      log('⚠️ Torbox torrent has no playable files ${candidate.name}');
+      return null;
+    }
+
+    final random = Random();
+    final workingEntries = List<_TorboxPlayableEntry>.from(playableEntries)
+      ..shuffle(random);
+    final next = workingEntries.removeAt(0);
+    workingEntries.shuffle(random);
+    try {
+      final streamUrl = await TorboxService.requestFileDownloadLink(
+        apiKey: apiKey,
+        torrentId: torboxTorrent.id,
+        fileId: next.file.id,
+      );
+      log('🎬 Torbox: streaming ${next.title}');
+      final torrentIdValue = torboxTorrent.id;
+      final nextExtras = workingEntries
+          .map(
+            (entry) => {
+              'type': _torboxFileEntryType,
+              'file': entry.file,
+              'title': entry.title,
+              'torrentId': torrentIdValue,
+            },
+          )
+          .toList();
+      return _TorboxPreparedTorrent(
+        streamUrl: streamUrl,
+        title: next.title,
+        extraEntries: nextExtras,
+      );
+    } catch (e) {
+      log('❌ Torbox requestdl failed: $e');
+      return null;
+    }
+  }
+
+  List<_TorboxPlayableEntry> _buildTorboxPlayableEntries(
+    TorboxTorrent torrent,
+    String fallbackTitle,
+  ) {
+    final entries = <_TorboxPlayableEntry>[];
+    final seriesCandidates = <_TorboxPlayableEntry>[];
+    final otherCandidates = <_TorboxPlayableEntry>[];
+
+    for (final file in torrent.files) {
+      if (!_torboxFileLooksLikeVideo(file)) continue;
+      if (file.size < _torboxMinVideoSizeBytes) continue;
+      final displayName = _torboxDisplayName(file);
+      final info = SeriesParser.parseFilename(displayName);
+      final title = info.isSeries
+          ? _formatTorboxSeriesTitle(info, fallbackTitle)
+          : (displayName.isNotEmpty ? displayName : fallbackTitle);
+      final entry = _TorboxPlayableEntry(
+        file: file,
+        title: title,
+        info: info,
+      );
+      if (info.isSeries && info.season != null && info.episode != null) {
+        seriesCandidates.add(entry);
+      } else {
+        otherCandidates.add(entry);
+      }
+    }
+
+    seriesCandidates.sort((a, b) {
+      final seasonCompare = (a.info.season ?? 0).compareTo(b.info.season ?? 0);
+      if (seasonCompare != 0) return seasonCompare;
+      return (a.info.episode ?? 0).compareTo(b.info.episode ?? 0);
+    });
+
+    otherCandidates.sort(
+      (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+    );
+
+    entries
+      ..addAll(seriesCandidates)
+      ..addAll(otherCandidates);
+    entries.shuffle(Random());
+    return entries;
+  }
+
+  bool _torboxFileLooksLikeVideo(TorboxFile file) {
+    if (file.zipped) return false;
+    final name = file.shortName.isNotEmpty
+        ? file.shortName
+        : FileUtils.getFileName(file.name);
+    if (FileUtils.isVideoFile(name)) return true;
+    final mime = file.mimetype?.toLowerCase();
+    return mime != null && mime.startsWith('video/');
+  }
+
+  String _torboxDisplayName(TorboxFile file) {
+    if (file.shortName.isNotEmpty) {
+      return file.shortName;
+    }
+    if (file.name.isNotEmpty) {
+      return FileUtils.getFileName(file.name);
+    }
+    return 'File ${file.id}';
+  }
+
+  String _formatTorboxSeriesTitle(SeriesInfo info, String fallback) {
+    final season = info.season?.toString().padLeft(2, '0');
+    final episode = info.episode?.toString().padLeft(2, '0');
+    final descriptor = info.episodeTitle?.trim().isNotEmpty == true
+        ? info.episodeTitle!.trim()
+        : (info.title?.trim().isNotEmpty == true ? info.title!.trim() : fallback);
+    if (season != null && episode != null) {
+      return 'S${season}E${episode} · $descriptor';
+    }
+    return fallback;
+  }
+
+  String _normalizeInfohash(String hash) {
+    return hash.trim().toLowerCase();
+  }
+
+  void _showSnack(String message, {Color color = Colors.blueGrey}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  int? _asIntMapValue(dynamic data, String key) {
+    if (data is Map<String, dynamic>) {
+      final value = data[key];
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value);
+      if (value is num) return value.toInt();
+    }
+    return null;
+  }
+
+  String _formatTorboxError(Object error) {
+    return error.toString().replaceFirst('Exception: ', '').trim();
   }
 
   // ===================== Prefetcher =====================
@@ -1290,6 +1886,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 }
 
+class _TorboxPreparedTorrent {
+  final String streamUrl;
+  final String title;
+  final List<Map<String, dynamic>> extraEntries;
+
+  _TorboxPreparedTorrent({
+    required this.streamUrl,
+    required this.title,
+    this.extraEntries = const [],
+  });
+}
+
+class _TorboxPlayableEntry {
+  final TorboxFile file;
+  final String title;
+  final SeriesInfo info;
+
+  _TorboxPlayableEntry({
+    required this.file,
+    required this.title,
+    required this.info,
+  });
+}
 
 class _InfoTile extends StatelessWidget {
   final IconData icon;

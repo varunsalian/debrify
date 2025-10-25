@@ -32,6 +32,7 @@ class StorageService {
   static const String _debrifyTvHideOptionsKey = 'debrify_tv_hide_options';
   static const String _debrifyTvHideBackButtonKey =
       'debrify_tv_hide_back_button';
+  static const String _debrifyTvProviderKey = 'debrify_tv_provider';
   static const String _playlistKey = 'user_playlist_v1';
   static const String _onboardingCompleteKey =
       'initial_setup_complete_v1';
@@ -649,6 +650,16 @@ class StorageService {
   }
 
   // Debrify TV settings methods
+  static Future<String> getDebrifyTvProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_debrifyTvProviderKey) ?? 'real_debrid';
+  }
+
+  static Future<void> saveDebrifyTvProvider(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_debrifyTvProviderKey, value);
+  }
+
   static Future<bool> getDebrifyTvStartRandom() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_debrifyTvStartRandomKey) ?? true;
