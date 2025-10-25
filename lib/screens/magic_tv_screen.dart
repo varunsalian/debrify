@@ -395,6 +395,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _DebrifyTvChannel channel,
     List<String> normalizedKeywords, {
     DebrifyTvChannelCacheEntry? baseline,
+    Set<String>? keywordsToSearch,
   }) async {
     final csvEngine = const TorrentsCsvEngine();
     final pirateEngine = const PirateBayEngine();
@@ -417,17 +418,28 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       stats.addAll(
         _filterKeywordStats(baseline.keywordStats, normalizedKeywords),
       );
+      debugPrint(
+        'DebrifyTV: Starting incremental warm for "${channel.name}" – seeded cache with ${accumulator.length} torrent(s).',
+      );
+    }
+
+    final Set<String> keywordsToWarm = keywordsToSearch != null
+        ? keywordsToSearch.map((kw) => kw.toLowerCase()).toSet()
+        : normalizedKeywords.toSet();
+
+    if (keywordsToWarm.isEmpty) {
+      debugPrint('DebrifyTV: No keywords to warm for "${channel.name}".');
     }
 
     final pirateFutures = <String, Future<List<Torrent>>>{};
-    for (final keyword in normalizedKeywords) {
+    for (final keyword in keywordsToWarm) {
       pirateFutures[keyword] = pirateEngine.search(keyword);
     }
 
     bool anySuccess = accumulator.isNotEmpty;
     String? failureMessage;
 
-    List<String> pendingKeywords = List<String>.from(normalizedKeywords);
+    List<String> pendingKeywords = List<String>.from(keywordsToWarm);
     while (pendingKeywords.isNotEmpty) {
       final batch = pendingKeywords.take(_channelCsvParallelism).toList();
       pendingKeywords = pendingKeywords.skip(batch.length).toList();
@@ -451,10 +463,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           continue;
         }
         final keyword = result.keyword;
+        debugPrint(
+          'DebrifyTV: Warmed keyword "$keyword" – added ${result.addedHashes.length} new torrent(s).',
+        );
         anySuccess = anySuccess || result.addedHashes.isNotEmpty;
         stats[keyword] = result.stat;
         failureMessage ??= result.failureMessage;
       }
+    }
+
+    if (keywordsToWarm.isEmpty) {
+      anySuccess = accumulator.isNotEmpty;
     }
 
     if (anySuccess) {
@@ -1215,6 +1234,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
+    debugPrint(
+      'DebrifyTV: ${isEdit ? 'Updating' : 'Creating'} channel "${channel.name}" with ${normalizedKeywords.length} keyword(s): ${normalizedKeywords.join(', ')}',
+    );
+
     _showChannelCreationDialog(channel.name);
     try {
       final baseline = isEdit ? _channelCache[channel.id] : null;
@@ -1223,13 +1246,90 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           'Channels support up to $_maxChannelKeywords keywords. Remove some and try again.',
           color: Colors.orange,
         );
+        debugPrint(
+          'DebrifyTV: Aborting save for "${channel.name}" – keyword cap exceeded.',
+        );
         return;
       }
 
-      final entry = await _computeChannelCacheEntry(
-        channel,
-        normalizedKeywords,
-      );
+      DebrifyTvChannelCacheEntry? workingEntry = baseline;
+
+      if (isEdit && baseline != null) {
+        final previousKeywords = baseline.normalizedKeywords.toSet();
+        final currentKeywords = normalizedKeywords.toSet();
+        final removedKeywords = previousKeywords.difference(currentKeywords);
+        final addedKeywords = currentKeywords.difference(previousKeywords);
+
+        debugPrint(
+          'DebrifyTV: Detected keyword changes for "${channel.name}" – added: ${addedKeywords.join(', ')}, removed: ${removedKeywords.join(', ')}',
+        );
+
+        if (removedKeywords.isNotEmpty) {
+          final filteredTorrents = baseline.torrents.where((cached) {
+            final torrentKeywords = cached.keywords.toSet();
+            return torrentKeywords.intersection(removedKeywords).isEmpty;
+          }).toList();
+
+          final filteredStats = Map<String, KeywordStat>.from(baseline.keywordStats)
+            ..removeWhere((key, _) => removedKeywords.contains(key));
+
+          final newStatus = filteredTorrents.isNotEmpty
+              ? DebrifyTvCacheStatus.ready
+              : DebrifyTvCacheStatus.failed;
+
+          workingEntry = baseline.copyWith(
+            normalizedKeywords: normalizedKeywords,
+            torrents: filteredTorrents,
+            keywordStats: filteredStats,
+            status: newStatus,
+            clearErrorMessage: filteredTorrents.isNotEmpty,
+          );
+
+          debugPrint(
+            'DebrifyTV: Pruned ${baseline.torrents.length - filteredTorrents.length} torrent(s) after removing keywords. Remaining: ${filteredTorrents.length}.',
+          );
+        } else if (baseline.normalizedKeywords.length != normalizedKeywords.length) {
+          workingEntry = baseline.copyWith(normalizedKeywords: normalizedKeywords);
+        }
+
+        if (addedKeywords.isNotEmpty) {
+          debugPrint(
+            'DebrifyTV: Warming new keywords for "${channel.name}": ${addedKeywords.join(', ')}',
+          );
+          workingEntry = await _computeChannelCacheEntry(
+            channel,
+            normalizedKeywords,
+            baseline: workingEntry,
+            keywordsToSearch: addedKeywords,
+          );
+          debugPrint(
+            'DebrifyTV: After warming new keywords, cache has ${workingEntry.torrents.length} torrent(s).',
+          );
+        }
+
+        if (addedKeywords.isEmpty && removedKeywords.isEmpty) {
+          debugPrint(
+            'DebrifyTV: No keyword changes for "${channel.name}" – reusing existing cache.',
+          );
+          workingEntry = baseline.copyWith(normalizedKeywords: normalizedKeywords);
+        }
+      } else {
+        debugPrint('DebrifyTV: Running full warm-up for "${channel.name}"');
+        workingEntry = await _computeChannelCacheEntry(
+          channel,
+          normalizedKeywords,
+        );
+        debugPrint(
+          'DebrifyTV: Initial warm-up complete for "${channel.name}" with ${workingEntry.torrents.length} torrent(s).',
+        );
+      }
+
+      final entry = workingEntry;
+      if (entry == null) {
+        _showSnack('Failed to build channel cache. Please try again.',
+            color: Colors.red);
+        return;
+      }
 
       if (!mounted) {
         return;
@@ -1240,6 +1340,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ? 'Need at least $_minimumTorrentsForChannel torrents to save this channel. Try different keywords.'
             : (entry.errorMessage ??
                 'Unable to find torrents for these keywords. Try again later.');
+
+        debugPrint(
+          'DebrifyTV: Cache validation failed for "${channel.name}" – ready=${entry.isReady}, torrents=${entry.torrents.length}.',
+        );
 
         if (isEdit && baseline != null) {
           setState(() {
@@ -1276,6 +1380,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final successMsg =
           isEdit ? 'Channel "${channel.name}" updated' : 'Channel "${channel.name}" saved';
       _showSnack(successMsg, color: Colors.green);
+      debugPrint('DebrifyTV: $successMsg (torrents cached: ${entry.torrents.length})');
     } catch (e) {
       debugPrint('DebrifyTV: Channel creation failed for ${channel.name}: $e');
       _showSnack('Failed to build channel cache. Please try again.',
@@ -2620,6 +2725,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         apiKey: apiKey,
         infoHashes: uniqueHashes.toList(),
         listFiles: false,
+      );
+      debugPrint(
+        'DebrifyTV: Torbox cache check returned ${cachedHashes.length} cached torrent(s) out of ${uniqueHashes.length}.',
       );
     } catch (e) {
       _closeProgressDialog();
