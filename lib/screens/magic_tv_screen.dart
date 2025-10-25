@@ -1698,38 +1698,44 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             debugPrint('DebrifyTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
             final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
             try {
-              // Silent approach - no progress logging needed
               final started = DateTime.now();
               final result = await DebridService.addTorrentToDebridPreferVideos(apiKeyEarly, magnetLink);
               final elapsed = DateTime.now().difference(started).inSeconds;
-              final videoUrl = result['downloadLink'] as String?;
-              // Append other RD-restricted links from this torrent to the END of the queue
               final String torrentId = result['torrentId'] as String? ?? '';
-              final List<dynamic> rdLinks = (result['links'] as List<dynamic>? ?? const []);
-              if (rdLinks.isNotEmpty) {
-                for (int i = 1; i < rdLinks.length; i++) {
-                  final String link = rdLinks[i]?.toString() ?? '';
-                  if (link.isEmpty) continue;
-                  final String combined = '$torrentId|$link';
-                  if (_seenRestrictedLinks.contains(link) || _seenLinkWithTorrentId.contains(combined)) {
-                    continue;
-                  }
-                  _seenRestrictedLinks.add(link);
-                  _seenLinkWithTorrentId.add(combined);
-                  _queue.add({
-                    'type': 'rd_restricted',
-                    'restrictedLink': link,
-                    'torrentId': torrentId,
-                    'displayName': item.name,
-                  });
-                }
+              final List<String> rdLinks = (result['links'] as List<dynamic>? ?? const [])
+                  .map((link) => link?.toString() ?? '')
+                  .where((link) => link.isNotEmpty)
+                  .toList();
+              if (rdLinks.isEmpty) {
+                continue;
               }
+
+              final newLinks = rdLinks
+                  .where((link) => !_seenRestrictedLinks.contains(link))
+                  .toList();
+              if (newLinks.isEmpty) {
+                continue;
+              }
+
+              newLinks.shuffle(Random());
+              final selectedLink = newLinks.removeAt(0);
+              _seenRestrictedLinks.add(selectedLink);
+              _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+
+              final unrestrict = await DebridService.unrestrictLink(apiKeyEarly, selectedLink);
+              final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
                 debugPrint('DebrifyTV: Success. Got unrestricted URL in ${elapsed}s');
-                // Silent approach - no progress logging needed
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
-                final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
+                final chosenTitle = inferred.isNotEmpty
+                    ? inferred
+                    : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
                 firstTitle = chosenTitle;
+
+                if (newLinks.isNotEmpty) {
+                  _queue.add(item);
+                }
+
                 return {'url': videoUrl, 'title': chosenTitle};
               }
             } catch (e) {
@@ -2276,8 +2282,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
       log('✅ Found ${_queue.length} cached Torbox torrent(s)');
 
-      final random = Random();
-
       Future<Map<String, String>?> requestTorboxNext() async {
         while (_queue.isNotEmpty) {
           final item = _queue.removeAt(0);
@@ -2306,9 +2310,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               log: log,
             );
             if (result != null) {
-              if (result.extraEntries.isNotEmpty) {
-                _queue.addAll(result.extraEntries);
-                _queue.shuffle(random);
+              if (result.hasMore) {
+                _queue.add(item);
               }
               if (mounted) {
                 setState(() {
@@ -2464,29 +2467,31 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               magnetLink,
             );
             final elapsed = DateTime.now().difference(started).inSeconds;
-            final videoUrl = result['downloadLink'] as String?;
             final String torrentId = result['torrentId'] as String? ?? '';
-            final List<dynamic> rdLinks =
-                (result['links'] as List<dynamic>? ?? const []);
-            if (rdLinks.isNotEmpty) {
-              for (int i = 1; i < rdLinks.length; i++) {
-                final String link = rdLinks[i]?.toString() ?? '';
-                if (link.isEmpty) continue;
-                final String combined = '$torrentId|$link';
-                if (_seenRestrictedLinks.contains(link) ||
-                    _seenLinkWithTorrentId.contains(combined)) {
-                  continue;
-                }
-                _seenRestrictedLinks.add(link);
-                _seenLinkWithTorrentId.add(combined);
-                _queue.add({
-                  'type': 'rd_restricted',
-                  'restrictedLink': link,
-                  'torrentId': torrentId,
-                  'displayName': item.name,
-                });
-              }
+            final List<String> rdLinks =
+                (result['links'] as List<dynamic>? ?? const [])
+                    .map((link) => link?.toString() ?? '')
+                    .where((link) => link.isNotEmpty)
+                    .toList();
+            if (rdLinks.isEmpty) {
+              continue;
             }
+
+            final newLinks = rdLinks
+                .where((link) => !_seenRestrictedLinks.contains(link))
+                .toList();
+            if (newLinks.isEmpty) {
+              continue;
+            }
+
+            newLinks.shuffle(Random());
+            final selectedLink = newLinks.removeAt(0);
+            _seenRestrictedLinks.add(selectedLink);
+            _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+
+            final unrestrict =
+                await DebridService.unrestrictLink(apiKey, selectedLink);
+            final videoUrl = unrestrict['download'] as String?;
             if (videoUrl != null && videoUrl.isNotEmpty) {
               debugPrint('DebrifyTV: Cached success: unrestricted in ${elapsed}s');
               final inferred = _inferTitleFromUrl(videoUrl).trim();
@@ -2494,6 +2499,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   ? inferred
                   : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
               firstTitle = chosenTitle;
+
+              if (newLinks.isNotEmpty) {
+                _queue.add(item);
+              }
+
               return {'url': videoUrl, 'title': chosenTitle};
             }
           } catch (e) {
@@ -2674,8 +2684,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           continue;
         }
 
-        if (prepared.extraEntries.isNotEmpty) {
-          _queue.insertAll(0, prepared.extraEntries);
+        if (prepared.hasMore) {
+          _queue.add(next);
         }
         return {
           'url': prepared.streamUrl,
@@ -3725,8 +3735,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return null;
     }
 
+    final currentTorrent = torboxTorrent;
+
     final playableEntries = _buildTorboxPlayableEntries(
-      torboxTorrent,
+      currentTorrent,
       candidate.name,
     );
     if (playableEntries.isEmpty) {
@@ -3735,32 +3747,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final random = Random();
-    final workingEntries = List<_TorboxPlayableEntry>.from(playableEntries)
-      ..shuffle(random);
-    final next = workingEntries.removeAt(0);
-    workingEntries.shuffle(random);
+    final filteredEntries = playableEntries
+        .where((entry) => !_seenLinkWithTorrentId
+            .contains('${currentTorrent.id}|${entry.file.id}'))
+        .toList();
+    if (filteredEntries.isEmpty) {
+      log('⚠️ Torbox torrent has no unseen playable files ${candidate.name}');
+      return null;
+    }
+
+    filteredEntries.shuffle(random);
+    final next = filteredEntries.removeAt(0);
     try {
       final streamUrl = await TorboxService.requestFileDownloadLink(
         apiKey: apiKey,
-        torrentId: torboxTorrent.id,
+        torrentId: currentTorrent.id,
         fileId: next.file.id,
       );
       log('🎬 Torbox: streaming ${next.title}');
-      final torrentIdValue = torboxTorrent.id;
-      final nextExtras = workingEntries
-          .map(
-            (entry) => {
-              'type': _torboxFileEntryType,
-              'file': entry.file,
-              'title': entry.title,
-              'torrentId': torrentIdValue,
-            },
-          )
-          .toList();
+      _seenLinkWithTorrentId.add('${currentTorrent.id}|${next.file.id}');
       return _TorboxPreparedTorrent(
         streamUrl: streamUrl,
         title: next.title,
-        extraEntries: nextExtras,
+        hasMore: filteredEntries.isNotEmpty,
       );
     } catch (e) {
       log('❌ Torbox requestdl failed: $e');
@@ -3973,45 +3982,34 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       // Convert this queue slot to rd_restricted using first link
-      final String headLink = rdLinks.first.toString();
-      if (headLink.isNotEmpty) {
-        if (!_seenRestrictedLinks.contains(headLink) && !_seenLinkWithTorrentId.contains('$torrentId|$headLink')) {
-          _seenRestrictedLinks.add(headLink);
-          _seenLinkWithTorrentId.add('$torrentId|$headLink');
-        }
+      final headLinkCandidates = rdLinks
+          .map((link) => link?.toString() ?? '')
+          .where((link) => link.isNotEmpty && !_seenRestrictedLinks.contains(link))
+          .toList();
+      if (headLinkCandidates.isEmpty) {
         if (idx < _queue.length && identical(_queue[idx], item)) {
-          _queue[idx] = {
-            'type': 'rd_restricted',
-            'restrictedLink': headLink,
-            'torrentId': torrentId,
-            'displayName': item.name,
-          };
+          _queue.removeAt(idx);
+          _queue.add(item);
         }
+        return;
       }
 
-      // Append remaining links to tail (dedup)
-      if (rdLinks.length > 1) {
-        int appended = 0;
-        for (int i = 1; i < rdLinks.length; i++) {
-          final String link = rdLinks[i]?.toString() ?? '';
-          if (link.isEmpty) continue;
-          final combo = '$torrentId|$link';
-          if (_seenRestrictedLinks.contains(link) || _seenLinkWithTorrentId.contains(combo)) {
-            continue;
-          }
-          _seenRestrictedLinks.add(link);
-          _seenLinkWithTorrentId.add(combo);
-          _queue.add({
-            'type': 'rd_restricted',
-            'restrictedLink': link,
-            'torrentId': torrentId,
-            'displayName': item.name,
-          });
-          appended++;
-        }
-        if (appended > 0) {
-          debugPrint('MagicTV: Prefetch: appended $appended RD links to tail. queueSize=${_queue.length}');
-        }
+      headLinkCandidates.shuffle(Random());
+      final headLink = headLinkCandidates.removeAt(0);
+      _seenRestrictedLinks.add(headLink);
+      _seenLinkWithTorrentId.add('$torrentId|$headLink');
+
+      if (idx < _queue.length && identical(_queue[idx], item)) {
+        _queue[idx] = {
+          'type': 'rd_restricted',
+          'restrictedLink': headLink,
+          'torrentId': torrentId,
+          'displayName': item.name,
+        };
+      }
+
+      if (headLinkCandidates.isNotEmpty) {
+        _queue.add(item);
       }
     } catch (e) {
       // On failure, move to tail for retry later
@@ -4029,12 +4027,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 class _TorboxPreparedTorrent {
   final String streamUrl;
   final String title;
-  final List<Map<String, dynamic>> extraEntries;
+  final bool hasMore;
 
   _TorboxPreparedTorrent({
     required this.streamUrl,
     required this.title,
-    this.extraEntries = const [],
+    required this.hasMore,
   });
 }
 
