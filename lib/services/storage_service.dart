@@ -660,6 +660,11 @@ class StorageService {
     await prefs.setString(_debrifyTvProviderKey, value);
   }
 
+  static Future<bool> hasDebrifyTvProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.containsKey(_debrifyTvProviderKey);
+  }
+
   static Future<bool> getDebrifyTvStartRandom() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_debrifyTvStartRandomKey) ?? true;

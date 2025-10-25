@@ -37,6 +37,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _hideOptions = true;
   bool _hideBackButton = true;
   String _provider = _providerRealDebrid;
+  bool _rdAvailable = false;
+  bool _torboxAvailable = false;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -79,6 +81,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _updateProvider(String value) async {
+    if (!_isProviderSelectable(value)) {
+      return;
+    }
     if (_provider == value) return;
     setState(() {
       _provider = value;
@@ -97,6 +102,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _progressSheetContext = null;
   }
 
+  String _determineDefaultProvider(
+    String? preferred,
+    bool rdAvailable,
+    bool torboxAvailable,
+  ) {
+    if (torboxAvailable && rdAvailable) {
+      if (preferred == _providerRealDebrid) {
+        return _providerRealDebrid;
+      }
+      if (preferred == _providerTorbox) {
+        return _providerTorbox;
+      }
+      return _providerTorbox;
+    }
+    if (torboxAvailable) {
+      return _providerTorbox;
+    }
+    if (rdAvailable) {
+      return _providerRealDebrid;
+    }
+    if (preferred == _providerTorbox) {
+      return _providerTorbox;
+    }
+    return _providerRealDebrid;
+  }
+
+  bool _isProviderSelectable(String provider) {
+    if (provider == _providerTorbox) {
+      return _torboxAvailable;
+    }
+    return _rdAvailable;
+  }
+
   Future<void> _loadSettings() async {
     final startRandom = await StorageService.getDebrifyTvStartRandom();
     final hideSeekbar = await StorageService.getDebrifyTvHideSeekbar();
@@ -105,8 +143,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final hideOptions = await StorageService.getDebrifyTvHideOptions();
     final hideBackButton = await StorageService.getDebrifyTvHideBackButton();
     final storedProvider = await StorageService.getDebrifyTvProvider();
-    final provider =
-        storedProvider == _providerTorbox ? _providerTorbox : _providerRealDebrid;
+    final hasStoredProvider = await StorageService.hasDebrifyTvProvider();
+    final rdIntegrationEnabled =
+        await StorageService.getRealDebridIntegrationEnabled();
+    final rdKey = await StorageService.getApiKey();
+    final torboxIntegrationEnabled =
+        await StorageService.getTorboxIntegrationEnabled();
+    final torboxKey = await StorageService.getTorboxApiKey();
+
+    final rdAvailable =
+        rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
+    final torboxAvailable = torboxIntegrationEnabled &&
+        torboxKey != null &&
+        torboxKey.isNotEmpty;
+    final defaultProvider = _determineDefaultProvider(
+      hasStoredProvider ? storedProvider : null,
+      rdAvailable,
+      torboxAvailable,
+    );
 
     if (mounted) {
       setState(() {
@@ -116,8 +170,47 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _showVideoTitle = showVideoTitle;
         _hideOptions = hideOptions;
         _hideBackButton = hideBackButton;
-        _provider = provider;
+        _rdAvailable = rdAvailable;
+        _torboxAvailable = torboxAvailable;
+        _provider = defaultProvider;
       });
+    }
+
+    if (defaultProvider != storedProvider) {
+      await StorageService.saveDebrifyTvProvider(defaultProvider);
+    }
+  }
+
+  Future<void> _syncProviderAvailability({String? preferred}) async {
+    final rdIntegrationEnabled =
+        await StorageService.getRealDebridIntegrationEnabled();
+    final rdKey = await StorageService.getApiKey();
+    final torboxIntegrationEnabled =
+        await StorageService.getTorboxIntegrationEnabled();
+    final torboxKey = await StorageService.getTorboxApiKey();
+
+    final rdAvailable =
+        rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
+    final torboxAvailable = torboxIntegrationEnabled &&
+        torboxKey != null &&
+        torboxKey.isNotEmpty;
+
+    final nextProvider = _determineDefaultProvider(
+      preferred ?? _provider,
+      rdAvailable,
+      torboxAvailable,
+    );
+
+    if (!mounted) return;
+    final providerChanged = nextProvider != _provider;
+    setState(() {
+      _rdAvailable = rdAvailable;
+      _torboxAvailable = torboxAvailable;
+      _provider = nextProvider;
+    });
+
+    if (providerChanged) {
+      await StorageService.saveDebrifyTvProvider(nextProvider);
     }
   }
 
@@ -140,6 +233,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final copy = List<String>.from(_progress.value)..add(m);
       _progress.value = copy;
       debugPrint('DebrifyTV: ' + m);
+    }
+    await _syncProviderAvailability();
+    if (!_rdAvailable && !_torboxAvailable) {
+      if (mounted) {
+        setState(() {
+          _status =
+              'Connect Real Debrid or Torbox in Settings to use Debrify TV.';
+        });
+      }
+      _showSnack(
+        'Connect Real Debrid or Torbox in Settings to use Debrify TV.',
+        color: Colors.orange,
+      );
+      return;
     }
     final text = _keywordsController.text.trim();
     debugPrint('DebrifyTV: Watch started. Raw input="$text"');
@@ -170,6 +277,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // show non-dismissible loading modal
     _progress.value = [];
     _progressOpen = true;
+    final providerLabel =
+        _provider == _providerTorbox ? 'Torbox' : 'Real Debrid';
     // ignore: unawaited_futures
     showDialog(
       context: context,
@@ -229,6 +338,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
+                    Text(
+                      'Provider: $providerLabel',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     
                     // Smaller loading animation
                     Container(
@@ -1344,27 +1462,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      ChoiceChip(
-                        label: const Text('Real Debrid'),
-                        selected: _provider == _providerRealDebrid,
-                        onSelected: _isBusy
-                            ? null
-                            : (selected) {
-                                if (selected) {
-                                  _updateProvider(_providerRealDebrid);
-                                }
-                              },
+                      Tooltip(
+                        message: _rdAvailable
+                            ? 'Use Real Debrid for Debrify TV'
+                            : 'Enable Real Debrid and add an API key in Settings to use this option.',
+                        child: ChoiceChip(
+                          label: const Text('Real Debrid'),
+                          selected: _provider == _providerRealDebrid,
+                          disabledColor: Colors.white12,
+                          onSelected: (!_rdAvailable || _isBusy)
+                              ? null
+                              : (selected) {
+                                  if (selected) {
+                                    _updateProvider(_providerRealDebrid);
+                                  }
+                                },
+                        ),
                       ),
-                      ChoiceChip(
-                        label: const Text('Torbox'),
-                        selected: _provider == _providerTorbox,
-                        onSelected: _isBusy
-                            ? null
-                            : (selected) {
-                                if (selected) {
-                                  _updateProvider(_providerTorbox);
-                                }
-                              },
+                      Tooltip(
+                        message: _torboxAvailable
+                            ? 'Use Torbox for Debrify TV'
+                            : 'Enable Torbox and add an API key in Settings to use this option.',
+                        child: ChoiceChip(
+                          label: const Text('Torbox'),
+                          selected: _provider == _providerTorbox,
+                          disabledColor: Colors.white12,
+                          onSelected: (!_torboxAvailable || _isBusy)
+                              ? null
+                              : (selected) {
+                                  if (selected) {
+                                    _updateProvider(_providerTorbox);
+                                  }
+                                },
+                        ),
                       ),
                     ],
                   ),
@@ -1436,6 +1566,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         // Reset to defaults
+                        final defaultProvider = _determineDefaultProvider(
+                          null,
+                          _rdAvailable,
+                          _torboxAvailable,
+                        );
                         setState(() {
                           _startRandom = true;
                           _hideSeekbar = true;
@@ -1443,7 +1578,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           _showVideoTitle = false;
                           _hideOptions = true;
                           _hideBackButton = true;
-                          _provider = _providerRealDebrid;
+                          _provider = defaultProvider;
                         });
                         
                         // Save to storage
@@ -1454,7 +1589,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         await StorageService.saveDebrifyTvHideOptions(true);
                         await StorageService.saveDebrifyTvHideBackButton(true);
                         await StorageService.saveDebrifyTvProvider(
-                          _providerRealDebrid,
+                          defaultProvider,
                         );
                         
                         ScaffoldMessenger.of(context).showSnackBar(
