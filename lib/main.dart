@@ -306,7 +306,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.search_rounded,
     Icons.playlist_play_rounded,
     Icons.download_for_offline_rounded,
-    Icons.auto_awesome_rounded,
+    Icons.tv_rounded,
     Icons.cloud_download_rounded,
     Icons.flash_on_rounded,
     Icons.settings_rounded,

@@ -33,6 +33,7 @@ class StorageService {
   static const String _debrifyTvHideBackButtonKey =
       'debrify_tv_hide_back_button';
   static const String _debrifyTvProviderKey = 'debrify_tv_provider';
+  static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
   static const String _playlistKey = 'user_playlist_v1';
   static const String _onboardingCompleteKey =
       'initial_setup_complete_v1';
@@ -723,6 +724,28 @@ class StorageService {
   static Future<void> saveDebrifyTvHideBackButton(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_debrifyTvHideBackButtonKey, value);
+  }
+
+  static Future<List<Map<String, dynamic>>> getDebrifyTvChannels() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_debrifyTvChannelsKey);
+    if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
+    try {
+      final List<dynamic> list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .where((entry) => entry is Map)
+          .map((entry) => Map<String, dynamic>.from(entry as Map))
+          .toList();
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  static Future<void> saveDebrifyTvChannels(
+    List<Map<String, dynamic>> channels,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_debrifyTvChannelsKey, jsonEncode(channels));
   }
 
   // Playlist storage (local-only MVP)

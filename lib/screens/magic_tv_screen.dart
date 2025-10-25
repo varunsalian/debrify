@@ -18,6 +18,122 @@ class DebrifyTVScreen extends StatefulWidget {
   State<DebrifyTVScreen> createState() => _DebrifyTVScreenState();
 }
 
+class _DebrifyTvChannel {
+  final String id;
+  final String name;
+  final List<String> keywords;
+  final String provider;
+  final bool startRandom;
+  final bool hideSeekbar;
+  final bool showWatermark;
+  final bool showVideoTitle;
+  final bool hideOptions;
+  final bool hideBackButton;
+
+  const _DebrifyTvChannel({
+    required this.id,
+    required this.name,
+    required this.keywords,
+    required this.provider,
+    required this.startRandom,
+    required this.hideSeekbar,
+    required this.showWatermark,
+    required this.showVideoTitle,
+    required this.hideOptions,
+    required this.hideBackButton,
+  });
+
+  factory _DebrifyTvChannel.fromJson(Map<String, dynamic> json) {
+    final dynamic keywordsRaw = json['keywords'];
+    final List<String> keywords;
+    if (keywordsRaw is List) {
+      keywords = keywordsRaw
+          .map((e) => (e?.toString() ?? '').trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    } else if (keywordsRaw is String && keywordsRaw.isNotEmpty) {
+      keywords = keywordsRaw
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    } else {
+      keywords = const <String>[];
+    }
+    return _DebrifyTvChannel(
+      id: (json['id'] as String?)?.trim().isNotEmpty ?? false
+          ? json['id'] as String
+          : DateTime.now().microsecondsSinceEpoch.toString(),
+      name: (json['name'] as String?)?.trim().isNotEmpty ?? false
+          ? (json['name'] as String).trim()
+          : 'Unnamed Channel',
+      keywords: keywords,
+      provider: (json['provider'] as String?)?.trim().isNotEmpty ?? false
+          ? (json['provider'] as String).trim()
+          : 'real_debrid',
+      startRandom: json['startRandom'] is bool
+          ? json['startRandom'] as bool
+          : true,
+      hideSeekbar: json['hideSeekbar'] is bool
+          ? json['hideSeekbar'] as bool
+          : true,
+      showWatermark: json['showWatermark'] is bool
+          ? json['showWatermark'] as bool
+          : true,
+      showVideoTitle: json['showVideoTitle'] is bool
+          ? json['showVideoTitle'] as bool
+          : false,
+      hideOptions: json['hideOptions'] is bool
+          ? json['hideOptions'] as bool
+          : true,
+      hideBackButton: json['hideBackButton'] is bool
+          ? json['hideBackButton'] as bool
+          : true,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'keywords': keywords,
+      'provider': provider,
+      'startRandom': startRandom,
+      'hideSeekbar': hideSeekbar,
+      'showWatermark': showWatermark,
+      'showVideoTitle': showVideoTitle,
+      'hideOptions': hideOptions,
+      'hideBackButton': hideBackButton,
+    };
+  }
+
+  _DebrifyTvChannel copyWith({
+    String? id,
+    String? name,
+    List<String>? keywords,
+    String? provider,
+    bool? startRandom,
+    bool? hideSeekbar,
+    bool? showWatermark,
+    bool? showVideoTitle,
+    bool? hideOptions,
+    bool? hideBackButton,
+  }) {
+    return _DebrifyTvChannel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      keywords: keywords ?? this.keywords,
+      provider: provider ?? this.provider,
+      startRandom: startRandom ?? this.startRandom,
+      hideSeekbar: hideSeekbar ?? this.hideSeekbar,
+      showWatermark: showWatermark ?? this.showWatermark,
+      showVideoTitle: showVideoTitle ?? this.showVideoTitle,
+      hideOptions: hideOptions ?? this.hideOptions,
+      hideBackButton: hideBackButton ?? this.hideBackButton,
+    );
+  }
+}
+
 class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const String _providerRealDebrid = 'real_debrid';
   static const String _providerTorbox = 'torbox';
@@ -29,6 +145,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   final List<dynamic> _queue = [];
   bool _isBusy = false;
   String _status = '';
+  List<_DebrifyTvChannel> _channels = <_DebrifyTvChannel>[];
   // Advanced options
   bool _startRandom = true;
   bool _hideSeekbar = true;
@@ -66,6 +183,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   void initState() {
     super.initState();
     _loadSettings();
+    _loadChannels();
   }
 
   @override
@@ -181,6 +299,47 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<void> _loadChannels() async {
+    final raw = await StorageService.getDebrifyTvChannels();
+    final parsed = <_DebrifyTvChannel>[];
+    for (final entry in raw) {
+      try {
+        parsed.add(_DebrifyTvChannel.fromJson(entry));
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() {
+      _channels = parsed;
+    });
+  }
+
+  Future<void> _persistChannels() async {
+    await StorageService.saveDebrifyTvChannels(
+      _channels.map((c) => c.toJson()).toList(),
+    );
+  }
+
+  Future<void> _saveChannel(_DebrifyTvChannel channel) async {
+    setState(() {
+      final index = _channels.indexWhere((c) => c.id == channel.id);
+      if (index == -1) {
+        _channels = <_DebrifyTvChannel>[..._channels, channel];
+      } else {
+        final next = List<_DebrifyTvChannel>.from(_channels);
+        next[index] = channel;
+        _channels = next;
+      }
+    });
+    await _persistChannels();
+  }
+
+  Future<void> _deleteChannel(String id) async {
+    setState(() {
+      _channels = _channels.where((c) => c.id != id).toList();
+    });
+    await _persistChannels();
+  }
+
   Future<void> _syncProviderAvailability({String? preferred}) async {
     final rdIntegrationEnabled =
         await StorageService.getRealDebridIntegrationEnabled();
@@ -220,6 +379,378 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
+  }
+
+  String _providerDisplay(String provider) {
+    return provider == _providerTorbox ? 'Torbox' : 'Real Debrid';
+  }
+
+  Future<_DebrifyTvChannel?> _openChannelDialog({
+    _DebrifyTvChannel? existing,
+  }) async {
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    final keywordsController = TextEditingController(
+      text: existing != null
+          ? existing.keywords.join(', ')
+          : _keywordsController.text,
+    );
+    String providerValue = existing?.provider ?? _provider;
+    bool startRandom = existing?.startRandom ?? _startRandom;
+    bool hideSeekbar = existing?.hideSeekbar ?? _hideSeekbar;
+    bool showWatermark = existing?.showWatermark ?? _showWatermark;
+    bool showVideoTitle = existing?.showVideoTitle ?? _showVideoTitle;
+    bool hideOptions = existing?.hideOptions ?? _hideOptions;
+    bool hideBackButton = existing?.hideBackButton ?? _hideBackButton;
+    String? error;
+
+    final result = await showDialog<_DebrifyTvChannel>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> submit() async {
+              final name = nameController.text.trim();
+              final keywords = _parseKeywords(keywordsController.text);
+              if (name.isEmpty) {
+                setModalState(() {
+                  error = 'Give the channel a name';
+                });
+                return;
+              }
+              if (keywords.isEmpty) {
+                setModalState(() {
+                  error = 'Add at least one keyword';
+                });
+                return;
+              }
+              if (providerValue == _providerRealDebrid && !_rdAvailable) {
+                setModalState(() {
+                  error = 'Enable Real Debrid in Settings first';
+                });
+                return;
+              }
+              if (providerValue == _providerTorbox && !_torboxAvailable) {
+                setModalState(() {
+                  error = 'Enable Torbox in Settings first';
+                });
+                return;
+              }
+
+              final channel = _DebrifyTvChannel(
+                id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+                name: name,
+                keywords: keywords,
+                provider: providerValue,
+                startRandom: startRandom,
+                hideSeekbar: hideSeekbar,
+                showWatermark: showWatermark,
+                showVideoTitle: showVideoTitle,
+                hideOptions: hideOptions,
+                hideBackButton: hideBackButton,
+              );
+              Navigator.of(dialogContext).pop(channel);
+            }
+
+            return Dialog(
+              backgroundColor: const Color(0xFF0F0F0F),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520, minWidth: 320),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE50914).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.tv_rounded,
+                              color: Color(0xFFE50914),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            existing == null ? 'Create Channel' : 'Edit Channel',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: nameController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Channel name',
+                          prefixIcon: Icon(Icons.label_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: keywordsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Keywords (comma separated)',
+                          prefixIcon: Icon(Icons.search_rounded),
+                        ),
+                        minLines: 1,
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: submit,
+                            icon: const Icon(Icons.save_rounded, size: 18),
+                            label: const Text('Save Channel'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE50914),
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Channel settings',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Content provider',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          Tooltip(
+                            message: _rdAvailable
+                                ? 'Use Real Debrid for this channel'
+                                : 'Enable Real Debrid and add an API key in Settings first.',
+                            child: ChoiceChip(
+                              label: const Text('Real Debrid'),
+                              selected: providerValue == _providerRealDebrid,
+                              onSelected: (!_rdAvailable)
+                                  ? null
+                                  : (selected) {
+                                      if (selected) {
+                                        setModalState(() {
+                                          providerValue = _providerRealDebrid;
+                                        });
+                                      }
+                                    },
+                            ),
+                          ),
+                          Tooltip(
+                            message: _torboxAvailable
+                                ? 'Use Torbox for this channel'
+                                : 'Enable Torbox and add an API key in Settings first.',
+                            child: ChoiceChip(
+                              label: const Text('Torbox'),
+                              selected: providerValue == _providerTorbox,
+                              onSelected: (!_torboxAvailable)
+                                  ? null
+                                  : (selected) {
+                                      if (selected) {
+                                        setModalState(() {
+                                          providerValue = _providerTorbox;
+                                        });
+                                      }
+                                    },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _SwitchRow(
+                        title: 'Start from random timestamp',
+                        subtitle: 'Each video starts at a random point',
+                        value: startRandom,
+                        onChanged: (v) => setModalState(() => startRandom = v),
+                      ),
+                      const SizedBox(height: 8),
+                      _SwitchRow(
+                        title: 'Hide seekbar',
+                        subtitle: 'Disable progress slider and time',
+                        value: hideSeekbar,
+                        onChanged: (v) => setModalState(() => hideSeekbar = v),
+                      ),
+                      const SizedBox(height: 8),
+                      _SwitchRow(
+                        title: 'Show DebrifyTV watermark',
+                        subtitle: 'Display watermark in the player',
+                        value: showWatermark,
+                        onChanged: (v) => setModalState(() => showWatermark = v),
+                      ),
+                      const SizedBox(height: 8),
+                      _SwitchRow(
+                        title: 'Show video title',
+                        subtitle: 'Display title in player controls',
+                        value: showVideoTitle,
+                        onChanged: (v) => setModalState(() => showVideoTitle = v),
+                      ),
+                      const SizedBox(height: 8),
+                      _SwitchRow(
+                        title: 'Hide all options',
+                        subtitle: 'Hide bottom controls inside the player',
+                        value: hideOptions,
+                        onChanged: (v) => setModalState(() => hideOptions = v),
+                      ),
+                      const SizedBox(height: 8),
+                      _SwitchRow(
+                        title: 'Hide back button',
+                        subtitle: 'Require device gesture or escape key to exit',
+                        value: hideBackButton,
+                        onChanged: (v) => setModalState(() => hideBackButton = v),
+                      ),
+                      if (error != null) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          error!,
+                          style: const TextStyle(color: Colors.redAccent),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    keywordsController.dispose();
+    return result;
+  }
+
+  Future<void> _handleAddChannel() async {
+    await _syncProviderAvailability();
+    final channel = await _openChannelDialog();
+    if (channel != null) {
+      await _saveChannel(channel);
+      _showSnack('Channel "${channel.name}" saved', color: Colors.green);
+    }
+  }
+
+  Future<void> _handleEditChannel(_DebrifyTvChannel channel) async {
+    await _syncProviderAvailability(preferred: channel.provider);
+    final updated = await _openChannelDialog(existing: channel);
+    if (updated != null) {
+      await _saveChannel(updated);
+      _showSnack('Channel "${updated.name}" updated', color: Colors.green);
+    }
+  }
+
+  Future<void> _handleDeleteChannel(_DebrifyTvChannel channel) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Delete channel?'),
+          content: Text(
+            'Remove "${channel.name}" and its saved keywords?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await _deleteChannel(channel.id);
+      _showSnack('Channel deleted', color: Colors.orange);
+    }
+  }
+
+  Future<void> _watchChannel(_DebrifyTvChannel channel) async {
+    if (channel.keywords.isEmpty) {
+      _showSnack('Channel has no keywords yet', color: Colors.orange);
+      return;
+    }
+    await _syncProviderAvailability(preferred: channel.provider);
+    final bool providerReady = channel.provider == _providerTorbox
+        ? _torboxAvailable
+        : _rdAvailable;
+    if (!providerReady) {
+      final providerName = _providerDisplay(channel.provider);
+      _showSnack('Enable $providerName in Settings to watch this channel',
+          color: Colors.orange);
+      return;
+    }
+
+    final previousProvider = _provider;
+    final previousStartRandom = _startRandom;
+    final previousHideSeekbar = _hideSeekbar;
+    final previousShowWatermark = _showWatermark;
+    final previousShowVideoTitle = _showVideoTitle;
+    final previousHideOptions = _hideOptions;
+    final previousHideBackButton = _hideBackButton;
+    final previousKeywords = _keywordsController.text;
+
+    setState(() {
+      _provider = channel.provider;
+      _startRandom = channel.startRandom;
+      _hideSeekbar = channel.hideSeekbar;
+      _showWatermark = channel.showWatermark;
+      _showVideoTitle = channel.showVideoTitle;
+      _hideOptions = channel.hideOptions;
+      _hideBackButton = channel.hideBackButton;
+    });
+    _keywordsController.text = channel.keywords.join(', ');
+
+    await _watch();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _provider = previousProvider;
+      _startRandom = previousStartRandom;
+      _hideSeekbar = previousHideSeekbar;
+      _showWatermark = previousShowWatermark;
+      _showVideoTitle = previousShowVideoTitle;
+      _hideOptions = previousHideOptions;
+      _hideBackButton = previousHideBackButton;
+    });
+    _keywordsController.text = previousKeywords;
   }
 
   Future<void> _watch() async {
@@ -324,7 +855,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                               ),
                             ],
                           ),
-                          child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+                          child: const Icon(Icons.tv_rounded, color: Colors.white, size: 20),
                         ),
                         const SizedBox(width: 12),
                         const Text(
@@ -1311,22 +1842,80 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return DefaultTabController(
+      length: 2,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.tv_rounded, color: Colors.white70),
+                SizedBox(width: 8),
+                Text(
+                  'Debrify TV',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12, width: 1),
+                ),
+                child: TabBar(
+                  indicator: BoxDecoration(
+                    color: const Color(0xFFE50914).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicatorPadding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  tabs: const [
+                    Tab(text: 'Quick Play'),
+                    Tab(text: 'Channels'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: TabBarView(
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  _buildQuickPlayTab(bottomInset),
+                  _buildChannelsTab(bottomInset),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickPlayTab(double bottomInset) {
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
       child: Column(
         children: [
-          const SizedBox(height: 32),
-          // Logo + headline
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.auto_awesome_rounded, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('Debrify TV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 22, letterSpacing: 0.5)),
-            ],
-          ),
-          const SizedBox(height: 18),
-          // Centered search card
+          const SizedBox(height: 12),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: Container(
@@ -1352,9 +1941,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.clear_rounded),
-                        onPressed: _isBusy ? null : () {
-                          _keywordsController.clear();
-                        },
+                        onPressed: _isBusy
+                            ? null
+                            : () {
+                                _keywordsController.clear();
+                              },
                         color: Colors.white70,
                       ),
                     ),
@@ -1365,18 +1956,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     child: ElevatedButton.icon(
                       onPressed: _isBusy ? null : _watch,
                       icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
-                      label: const Text('Watch', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      label: const Text(
+                        'Watch',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFE50914),
                         disabledBackgroundColor: const Color(0x66E50914),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
-                  // Keyboard shortcuts tip
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -1389,7 +1986,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.lightbulb_outline_rounded, color: Colors.amber[300], size: 16),
+                            Icon(Icons.lightbulb_outline_rounded,
+                                color: Colors.amber[300], size: 16),
                             const SizedBox(width: 8),
                             Text(
                               'Quick Tips',
@@ -1402,18 +2000,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text(
+                        const Text(
                           'Next Video: Android double tap far right, Mac/Windows press \'N\'',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white70,
                             fontSize: 12,
                           ),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 4),
-                        Text(
+                        const Text(
                           'Quit: Mac/Windows press ESC, Android use back button',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white70,
                             fontSize: 12,
                           ),
@@ -1427,9 +2025,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          // Stats removed as requested
-          const SizedBox(height: 24),
-          // Advanced options card
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: Container(
@@ -1446,7 +2041,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     children: const [
                       Icon(Icons.settings_rounded, color: Colors.white70, size: 18),
                       SizedBox(width: 8),
-                      Text('Advanced options', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+                      Text(
+                        'Advanced options',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -1559,13 +2160,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  
-                  // Reset to defaults button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: () async {
-                        // Reset to defaults
                         final defaultProvider = _determineDefaultProvider(
                           null,
                           _rdAvailable,
@@ -1580,8 +2178,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           _hideBackButton = true;
                           _provider = defaultProvider;
                         });
-                        
-                        // Save to storage
+
                         await StorageService.saveDebrifyTvStartRandom(true);
                         await StorageService.saveDebrifyTvHideSeekbar(true);
                         await StorageService.saveDebrifyTvShowWatermark(true);
@@ -1591,7 +2188,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         await StorageService.saveDebrifyTvProvider(
                           defaultProvider,
                         );
-                        
+
+                        if (!mounted) {
+                          return;
+                        }
+
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Reset to defaults successful'),
@@ -1622,10 +2223,253 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               constraints: const BoxConstraints(maxWidth: 900),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(_status, style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
+                child: Text(
+                  _status,
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
+                ),
               ),
             ),
           const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChannelsTab(double bottomInset) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Saved Channels',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: _handleAddChannel,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add Channel'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE50914),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _channels.isEmpty
+                ? _buildEmptyChannelsState()
+                : ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: _channels.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final channel = _channels[index];
+                      return _buildChannelCard(channel);
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyChannelsState() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12, width: 1),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.tv_rounded, color: Colors.white54, size: 36),
+            SizedBox(height: 12),
+            Text(
+              'No channels yet',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Save your favorite keyword combos so Debrify TV can play them on demand.',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChannelCard(_DebrifyTvChannel channel) {
+    final keywords = channel.keywords;
+    final optionChips = <Widget>[];
+    if (channel.startRandom) {
+      optionChips.add(_buildOptionChip(Icons.shuffle_rounded, 'Random start'));
+    }
+    if (channel.hideSeekbar) {
+      optionChips.add(_buildOptionChip(Icons.remove_red_eye_outlined, 'Seekbar hidden'));
+    }
+    if (channel.showWatermark) {
+      optionChips.add(_buildOptionChip(Icons.water_drop_outlined, 'Watermark'));
+    }
+    if (channel.showVideoTitle) {
+      optionChips.add(_buildOptionChip(Icons.title_rounded, 'Show title'));
+    }
+    if (channel.hideOptions) {
+      optionChips.add(_buildOptionChip(Icons.tune_rounded, 'Options hidden'));
+    }
+    if (channel.hideBackButton) {
+      optionChips.add(_buildOptionChip(Icons.arrow_back_ios_new_rounded, 'Back hidden'));
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101010),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white12, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      channel.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${keywords.length} keyword${keywords.length == 1 ? '' : 's'} • ${_providerDisplay(channel.provider)}',
+                      style: const TextStyle(color: Colors.white60, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Edit channel',
+                onPressed: () => _handleEditChannel(channel),
+                icon: const Icon(Icons.edit_rounded, color: Colors.white70),
+              ),
+              IconButton(
+                tooltip: 'Delete channel',
+                onPressed: () => _handleDeleteChannel(channel),
+                icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (keywords.isEmpty)
+            const Text(
+              'No keywords saved yet',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: keywords
+                  .map((keyword) => _buildKeywordChip(keyword))
+                  .toList(),
+            ),
+          if (optionChips.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: optionChips,
+            ),
+          ],
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              onPressed: _isBusy ? null : () => _watchChannel(channel),
+              icon: const Icon(Icons.play_circle_fill_rounded),
+              label: const Text('Watch'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE50914),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKeywordChip(String keyword) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12, width: 1),
+      ),
+      child: Text(
+        keyword,
+        style: const TextStyle(color: Colors.white, fontSize: 13),
+      ),
+    );
+  }
+
+  Widget _buildOptionChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white70, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
         ],
       ),
     );
