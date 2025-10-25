@@ -157,6 +157,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const int _channelTorrentsCsvMaxResultsSmall = 100;
   static const int _channelTorrentsCsvMaxResultsLarge = 25;
   static const int _channelCsvParallelism = 4;
+  static const int _playbackTorrentThreshold = 1000;
+  static const int _maxTorrentsPerKeywordPlayback = 25;
   // Advanced options
   bool _startRandom = true;
   bool _hideSeekbar = true;
@@ -859,6 +861,60 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return filtered;
   }
 
+  List<CachedTorrent> _selectTorrentsForPlayback(
+    DebrifyTvChannelCacheEntry entry,
+    List<String> normalizedKeywords,
+  ) {
+    final all = entry.torrents;
+    if (all.length <= _playbackTorrentThreshold) {
+      return all;
+    }
+
+    final selected = <CachedTorrent>[];
+    final seenHashes = <String>{};
+
+    if (normalizedKeywords.isNotEmpty) {
+      for (final keyword in normalizedKeywords) {
+        int count = 0;
+        for (final cached in all) {
+          if (!cached.keywords.contains(keyword)) continue;
+          final hash = _normalizeInfohash(cached.infohash);
+          if (hash.isEmpty || seenHashes.contains(hash)) {
+            continue;
+          }
+          selected.add(cached);
+          seenHashes.add(hash);
+          count++;
+          if (count >= _maxTorrentsPerKeywordPlayback) {
+            break;
+          }
+        }
+      }
+    }
+
+    if (selected.isEmpty) {
+      return all.take(_playbackTorrentThreshold).toList();
+    }
+
+    if (selected.length < _playbackTorrentThreshold) {
+      for (final cached in all) {
+        final hash = _normalizeInfohash(cached.infohash);
+        if (hash.isEmpty || seenHashes.contains(hash)) {
+          continue;
+        }
+        selected.add(cached);
+        seenHashes.add(hash);
+        if (selected.length >= _playbackTorrentThreshold) {
+          break;
+        }
+      }
+    }
+
+    final random = Random();
+    selected.shuffle(random);
+    return selected;
+  }
+
   String _providerDisplay(String provider) {
     return provider == _providerTorbox ? 'Torbox' : 'Real Debrid';
   }
@@ -1225,8 +1281,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     });
     _keywordsController.text = channel.keywords.join(', ');
 
+    final normalizedKeywords = _normalizedKeywords(channel.keywords);
+    final playbackSelection = _selectTorrentsForPlayback(
+      cacheEntry,
+      normalizedKeywords,
+    );
     final cachedTorrents =
-        cacheEntry.torrents.map((cached) => cached.toTorrent()).toList();
+        playbackSelection.map((cached) => cached.toTorrent()).toList();
     if (channel.provider == _providerTorbox) {
       await _watchTorboxWithCachedTorrents(cachedTorrents);
     } else {
