@@ -34,4 +34,18 @@ class Torrent {
       scrapedDate: json['scraped_date'] ?? 0,
     );
   }
-} 
+
+  Map<String, dynamic> toJson() {
+    return {
+      'rowid': rowid,
+      'infohash': infohash,
+      'name': name,
+      'size_bytes': sizeBytes,
+      'created_unix': createdUnix,
+      'seeders': seeders,
+      'leechers': leechers,
+      'completed': completed,
+      'scraped_date': scrapedDate,
+    };
+  }
+}

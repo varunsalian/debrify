@@ -1,12 +1,17 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/torrent.dart';
+import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
 import '../models/torbox_torrent.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
+import '../services/debrify_tv_cache_service.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_service.dart';
+import '../services/torrents_csv_engine.dart';
+import '../services/pirate_bay_engine.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import 'video_player_screen.dart';
@@ -146,6 +151,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _isBusy = false;
   String _status = '';
   List<_DebrifyTvChannel> _channels = <_DebrifyTvChannel>[];
+  final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
+  final Map<String, Future<void>> _cacheWarmTasks = {};
+  static const Duration _channelCacheTtl = Duration(hours: 24);
+  static const int _channelTorrentsCsvMaxResultsSmall = 100;
+  static const int _channelTorrentsCsvMaxResultsLarge = 25;
+  static const int _channelCsvParallelism = 4;
   // Advanced options
   bool _startRandom = true;
   bool _hideSeekbar = true;
@@ -184,6 +195,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     super.initState();
     _loadSettings();
     _loadChannels();
+    _loadCacheEntries();
+    unawaited(DebrifyTvCacheService.pruneExpired(_channelCacheTtl));
   }
 
   @override
@@ -210,12 +223,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   void _closeProgressDialog() {
-    if (!_progressOpen || _progressSheetContext == null) {
+    if (!_progressOpen) {
       return;
     }
-    try {
-      Navigator.of(_progressSheetContext!).pop();
-    } catch (_) {}
+    if (_progressSheetContext != null) {
+      try {
+        Navigator.of(_progressSheetContext!).pop();
+      } catch (_) {}
+    }
     _progressOpen = false;
     _progressSheetContext = null;
   }
@@ -299,6 +314,50 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  void _accumulateCachedTorrent({
+    required Map<String, CachedTorrent> accumulator,
+    required String infohash,
+    required Torrent torrent,
+    required String keyword,
+    required String source,
+  }) {
+    if (infohash.isEmpty) {
+      return;
+    }
+    final normalizedKeyword = keyword.toLowerCase();
+    final normalizedSource = source.toLowerCase();
+    final existing = accumulator[infohash];
+    if (existing == null) {
+      accumulator[infohash] = CachedTorrent.fromTorrent(
+        torrent,
+        keywords: [normalizedKeyword],
+        sources: [normalizedSource],
+      );
+      return;
+    }
+
+    final shouldOverride = torrent.seeders > existing.seeders;
+    accumulator[infohash] = existing.merge(
+      keywords: [normalizedKeyword],
+      sources: [normalizedSource],
+      override: shouldOverride ? torrent : null,
+    );
+  }
+
+  List<CachedTorrent> _sortedCachedTorrents(
+    Map<String, CachedTorrent> accumulator,
+  ) {
+    final list = accumulator.values.toList();
+    list.sort((a, b) {
+      final seedCompare = b.seeders.compareTo(a.seeders);
+      if (seedCompare != 0) {
+        return seedCompare;
+      }
+      return b.completed.compareTo(a.completed);
+    });
+    return list;
+  }
+
   Future<void> _loadChannels() async {
     final raw = await StorageService.getDebrifyTvChannels();
     final parsed = <_DebrifyTvChannel>[];
@@ -311,6 +370,370 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     setState(() {
       _channels = parsed;
     });
+  }
+
+  Future<void> _loadCacheEntries() async {
+    final entries = await DebrifyTvCacheService.loadAllEntries();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _channelCache
+        ..clear()
+        ..addAll(entries);
+    });
+  }
+
+  void _ensureCacheWarmState(
+    _DebrifyTvChannel channel, {
+    required bool triggerWarmIfMissing,
+  }) {
+    final normalizedKeywords = _normalizedKeywords(channel.keywords);
+    final cacheEntry = _channelCache[channel.id];
+
+    if (normalizedKeywords.isEmpty) {
+      if (cacheEntry != null) {
+        _channelCache.remove(channel.id);
+        unawaited(DebrifyTvCacheService.removeEntry(channel.id));
+      }
+      return;
+    }
+
+    if (cacheEntry == null) {
+      if (triggerWarmIfMissing) {
+        _startCacheWarm(channel, normalizedKeywords: normalizedKeywords);
+      }
+      return;
+    }
+
+    final existingSet = cacheEntry.normalizedKeywords.toSet();
+    final currentSet = normalizedKeywords.toSet();
+    final keywordsChanged = existingSet.length != currentSet.length ||
+        existingSet.difference(currentSet).isNotEmpty ||
+        currentSet.difference(existingSet).isNotEmpty;
+
+    if (keywordsChanged && triggerWarmIfMissing) {
+      _startCacheWarm(
+        channel,
+        normalizedKeywords: normalizedKeywords,
+        preserveExisting: true,
+      );
+      return;
+    }
+
+    if (cacheEntry.isWarming) {
+      return;
+    }
+
+    if (cacheEntry.isFailed && triggerWarmIfMissing) {
+      _startCacheWarm(
+        channel,
+        normalizedKeywords: normalizedKeywords,
+        preserveExisting: true,
+      );
+      return;
+    }
+
+    if (cacheEntry.isReady) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final expired = cacheEntry.fetchedAt == 0 ||
+          (now - cacheEntry.fetchedAt) > _channelCacheTtl.inMilliseconds;
+      if (expired && triggerWarmIfMissing) {
+        _startCacheWarm(
+          channel,
+          normalizedKeywords: normalizedKeywords,
+          preserveExisting: true,
+        );
+      }
+      return;
+    }
+
+    if (triggerWarmIfMissing) {
+      _startCacheWarm(
+        channel,
+        normalizedKeywords: normalizedKeywords,
+        preserveExisting: true,
+      );
+    }
+  }
+
+  void _startCacheWarm(
+    _DebrifyTvChannel channel, {
+    required List<String> normalizedKeywords,
+    bool preserveExisting = false,
+  }) {
+    if (normalizedKeywords.isEmpty) {
+      return;
+    }
+    if (_cacheWarmTasks.containsKey(channel.id)) {
+      return;
+    }
+
+    final existing = preserveExisting ? _channelCache[channel.id] : null;
+    final filteredTorrents = existing == null
+        ? const <CachedTorrent>[]
+        : _filterCachedTorrentsForKeywords(existing, normalizedKeywords);
+    final filteredStats = existing == null
+        ? const <String, KeywordStat>{}
+        : _filterKeywordStats(existing.keywordStats, normalizedKeywords);
+
+    final initial = DebrifyTvChannelCacheEntry(
+      version: 1,
+      channelId: channel.id,
+      normalizedKeywords: normalizedKeywords,
+      fetchedAt: existing?.fetchedAt ?? 0,
+      status: DebrifyTvCacheStatus.warming,
+      errorMessage: null,
+      torrents: filteredTorrents,
+      keywordStats: filteredStats,
+    );
+
+    setState(() {
+      _channelCache[channel.id] = initial;
+    });
+
+    final task = _warmChannel(
+      channel,
+      normalizedKeywords: normalizedKeywords,
+      baseline: existing,
+    );
+    _cacheWarmTasks[channel.id] = task;
+    task.whenComplete(() {
+      _cacheWarmTasks.remove(channel.id);
+    });
+  }
+
+  Future<void> _warmChannel(
+    _DebrifyTvChannel channel, {
+    required List<String> normalizedKeywords,
+    DebrifyTvChannelCacheEntry? baseline,
+  }) async {
+    final csvEngine = const TorrentsCsvEngine();
+    final pirateEngine = const PirateBayEngine();
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    final initialEntry = baseline ?? _channelCache[channel.id];
+    final accumulator = <String, CachedTorrent>{};
+    final stats = <String, KeywordStat>{};
+
+    if (initialEntry != null) {
+      for (final cached in _filterCachedTorrentsForKeywords(
+        initialEntry,
+        normalizedKeywords,
+      )) {
+        final normalizedHash = _normalizeInfohash(cached.infohash);
+        if (normalizedHash.isEmpty) {
+          continue;
+        }
+        accumulator[normalizedHash] = cached;
+      }
+      stats.addAll(
+        _filterKeywordStats(initialEntry.keywordStats, normalizedKeywords),
+      );
+    }
+
+    final pirateFutures = <String, Future<List<Torrent>>>{};
+    for (final keyword in normalizedKeywords) {
+      pirateFutures[keyword] = pirateEngine.search(keyword);
+    }
+
+    bool anySuccess = accumulator.isNotEmpty;
+    String? failureMessage;
+
+    List<String> pendingKeywords = List<String>.from(normalizedKeywords);
+    while (pendingKeywords.isNotEmpty) {
+      final batch = pendingKeywords.take(_channelCsvParallelism).toList();
+      pendingKeywords = pendingKeywords.skip(batch.length).toList();
+
+      final futures = batch.map((keyword) async {
+        return await _warmKeyword(
+          keyword: keyword,
+          csvEngine: csvEngine,
+          pirateFuture: pirateFutures[keyword],
+          accumulator: accumulator,
+          stats: stats,
+          now: now,
+          totalKeywords: normalizedKeywords.length,
+        );
+      }).toList();
+
+      final results = await Future.wait(futures);
+
+      for (final result in results) {
+        if (result == null) {
+          continue;
+        }
+        final keyword = result.keyword;
+        anySuccess = anySuccess || result.addedHashes.isNotEmpty;
+        stats[keyword] = result.stat;
+        failureMessage ??= result.failureMessage;
+
+        if (!mounted) {
+          return;
+        }
+
+        final partialEntry = DebrifyTvChannelCacheEntry(
+          version: 1,
+          channelId: channel.id,
+          normalizedKeywords: normalizedKeywords,
+          fetchedAt: initialEntry?.fetchedAt ?? 0,
+          status: DebrifyTvCacheStatus.warming,
+          errorMessage: null,
+          torrents: _sortedCachedTorrents(accumulator),
+          keywordStats: Map<String, KeywordStat>.from(stats),
+        );
+
+        setState(() {
+          _channelCache[channel.id] = partialEntry;
+        });
+        await DebrifyTvCacheService.saveEntry(partialEntry);
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (anySuccess) {
+      final readyEntry = DebrifyTvChannelCacheEntry(
+        version: 1,
+        channelId: channel.id,
+        normalizedKeywords: normalizedKeywords,
+        fetchedAt: DateTime.now().millisecondsSinceEpoch,
+        status: DebrifyTvCacheStatus.ready,
+        errorMessage: null,
+        torrents: _sortedCachedTorrents(accumulator),
+        keywordStats: Map<String, KeywordStat>.from(stats),
+      );
+      setState(() {
+        _channelCache[channel.id] = readyEntry;
+      });
+      await DebrifyTvCacheService.saveEntry(readyEntry);
+    } else {
+      failureMessage ??= 'No torrents found for these keywords yet.';
+      final failedEntry = DebrifyTvChannelCacheEntry(
+        version: 1,
+        channelId: channel.id,
+        normalizedKeywords: normalizedKeywords,
+        fetchedAt: DateTime.now().millisecondsSinceEpoch,
+        status: DebrifyTvCacheStatus.failed,
+        errorMessage: failureMessage,
+        torrents: const <CachedTorrent>[],
+        keywordStats: Map<String, KeywordStat>.from(stats),
+      );
+      setState(() {
+        _channelCache[channel.id] = failedEntry;
+      });
+      await DebrifyTvCacheService.saveEntry(failedEntry);
+    }
+  }
+
+  Future<_KeywordWarmResult?> _warmKeyword({
+    required String keyword,
+    required TorrentsCsvEngine csvEngine,
+    required Future<List<Torrent>>? pirateFuture,
+    required Map<String, CachedTorrent> accumulator,
+    required Map<String, KeywordStat> stats,
+    required int now,
+    required int totalKeywords,
+  }) async {
+    String? csvFailure;
+    TorrentsCsvSearchResult csvResult;
+    try {
+      csvResult = await csvEngine.searchWithConfig(
+        keyword,
+        maxResults: totalKeywords < 10
+            ? _channelTorrentsCsvMaxResultsSmall
+            : _channelTorrentsCsvMaxResultsLarge,
+      );
+    } catch (e) {
+      debugPrint(
+          'DebrifyTV: Cache warm Torrents CSV failed for "$keyword": $e');
+      csvResult = TorrentsCsvSearchResult(
+        torrents: const <Torrent>[],
+        pagesPulled: 0,
+      );
+      csvFailure = 'Torrents CSV is unavailable right now. Please try again later.';
+      return _KeywordWarmResult(
+        keyword: keyword,
+        addedHashes: const <String>{},
+        stat: (stats[keyword] ?? KeywordStat.initial()).copyWith(
+          totalFetched: 0,
+          lastSearchedAt: now,
+          pagesPulled: 0,
+          pirateBayHits: 0,
+        ),
+        failureMessage: csvFailure,
+      );
+    }
+
+    List<Torrent> pirateResult = const <Torrent>[];
+    String? pirateFailure;
+    try {
+      if (pirateFuture != null) {
+        pirateResult = await pirateFuture;
+      }
+    } catch (e) {
+      debugPrint(
+          'DebrifyTV: Cache warm Pirate Bay failed for "$keyword": $e');
+      pirateFailure = 'The Pirate Bay search failed. Some torrents may be missing.';
+    }
+
+    final keywordHashes = <String>{};
+
+      for (final torrent in csvResult.torrents) {
+        final hash = _normalizeInfohash(torrent.infohash);
+        if (hash.isEmpty) {
+          continue;
+        }
+        keywordHashes.add(hash);
+        _accumulateCachedTorrent(
+          accumulator: accumulator,
+          infohash: hash,
+          torrent: torrent,
+          keyword: keyword,
+          source: 'torrents_csv',
+        );
+      }
+
+      for (final torrent in pirateResult) {
+        final hash = _normalizeInfohash(torrent.infohash);
+        if (hash.isEmpty) {
+          continue;
+        }
+        keywordHashes.add(hash);
+        _accumulateCachedTorrent(
+          accumulator: accumulator,
+          infohash: hash,
+          torrent: torrent,
+          keyword: keyword,
+          source: 'pirate_bay',
+        );
+      }
+
+    final updatedStats = stats[keyword] ?? KeywordStat.initial();
+    final stat = updatedStats.copyWith(
+      totalFetched: keywordHashes.length,
+      lastSearchedAt: now,
+      pagesPulled: csvResult.pagesPulled,
+      pirateBayHits: pirateResult.length,
+    );
+
+    String? failureMessage;
+    if (csvFailure != null) {
+      failureMessage = csvFailure;
+    } else if (pirateFailure != null) {
+      failureMessage = pirateFailure;
+    } else if (csvResult.torrents.isEmpty && pirateResult.isEmpty) {
+      failureMessage = 'No torrents found for "$keyword" yet.';
+    }
+
+    return _KeywordWarmResult(
+      keyword: keyword,
+      addedHashes: keywordHashes,
+      stat: stat,
+      failureMessage: failureMessage,
+    );
   }
 
   Future<void> _persistChannels() async {
@@ -331,6 +754,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     });
     await _persistChannels();
+    _ensureCacheWarmState(channel, triggerWarmIfMissing: true);
   }
 
   Future<void> _deleteChannel(String id) async {
@@ -338,6 +762,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _channels = _channels.where((c) => c.id != id).toList();
     });
     await _persistChannels();
+    setState(() {
+      _channelCache.remove(id);
+    });
+    unawaited(DebrifyTvCacheService.removeEntry(id));
   }
 
   Future<void> _syncProviderAvailability({String? preferred}) async {
@@ -379,6 +807,56 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
+  }
+
+  List<String> _normalizedKeywords(List<String> keywords) {
+    final seen = <String>{};
+    final normalized = <String>[];
+    for (final keyword in keywords) {
+      final value = keyword.trim().toLowerCase();
+      if (value.isEmpty || seen.contains(value)) {
+        continue;
+      }
+      seen.add(value);
+      normalized.add(value);
+    }
+    return normalized;
+  }
+
+  List<CachedTorrent> _filterCachedTorrentsForKeywords(
+    DebrifyTvChannelCacheEntry entry,
+    List<String> normalizedKeywords,
+  ) {
+    if (entry.torrents.isEmpty) {
+      return const <CachedTorrent>[];
+    }
+    final allowed = normalizedKeywords.toSet();
+    final filtered = <CachedTorrent>[];
+    for (final cached in entry.torrents) {
+      final matching = cached.keywords.where(allowed.contains).toList();
+      if (matching.isEmpty) {
+        continue;
+      }
+      filtered.add(cached.merge(keywords: matching));
+    }
+    return filtered;
+  }
+
+  Map<String, KeywordStat> _filterKeywordStats(
+    Map<String, KeywordStat> stats,
+    List<String> normalizedKeywords,
+  ) {
+    if (stats.isEmpty) {
+      return const <String, KeywordStat>{};
+    }
+    final allowed = normalizedKeywords.toSet();
+    final filtered = <String, KeywordStat>{};
+    for (final entry in stats.entries) {
+      if (allowed.contains(entry.key)) {
+        filtered[entry.key] = entry.value;
+      }
+    }
+    return filtered;
   }
 
   String _providerDisplay(String provider) {
@@ -715,6 +1193,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
+    final cacheEntry = _channelCache[channel.id];
+    if (cacheEntry == null || !cacheEntry.isReady) {
+      _showSnack('Channel is still caching torrents. Please wait a moment.',
+          color: Colors.orange);
+      return;
+    }
+    if (cacheEntry.torrents.isEmpty) {
+      _showSnack('No torrents cached yet. Try editing the channel keywords.',
+          color: Colors.orange);
+      return;
+    }
+
     final previousProvider = _provider;
     final previousStartRandom = _startRandom;
     final previousHideSeekbar = _hideSeekbar;
@@ -735,7 +1225,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     });
     _keywordsController.text = channel.keywords.join(', ');
 
-    await _watch();
+    final cachedTorrents =
+        cacheEntry.torrents.map((cached) => cached.toTorrent()).toList();
+    if (channel.provider == _providerTorbox) {
+      await _watchTorboxWithCachedTorrents(cachedTorrents);
+    } else {
+      await _watchWithCachedTorrents(cachedTorrents);
+    }
 
     if (!mounted) {
       return;
@@ -1756,6 +2252,394 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<void> _watchWithCachedTorrents(List<Torrent> cachedTorrents) async {
+    if (cachedTorrents.isEmpty) {
+      _showSnack('Cached channel has no torrents yet. Please wait a moment.',
+          color: Colors.orange);
+      return;
+    }
+
+    _launchedPlayer = false;
+    await _stopPrefetch();
+    _prefetchStopRequested = false;
+    _stage2Running = false;
+    _capRestoredByStage2 = false;
+    _originalMaxCap = null;
+    _seenRestrictedLinks.clear();
+    _seenLinkWithTorrentId.clear();
+
+    final apiKey = await StorageService.getApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      if (!mounted) return;
+      _showSnack('Please add your Real Debrid API key in Settings first!',
+          color: Colors.orange);
+      return;
+    }
+
+    _showCachedPlaybackDialog();
+
+    _queue
+      ..clear()
+      ..addAll(List<Torrent>.from(cachedTorrents)..shuffle(Random()));
+    _lastQueueSize = _queue.length;
+    _lastSearchAt = DateTime.now();
+
+    String _inferTitleFromUrl(String url) {
+      final uri = Uri.tryParse(url);
+      final last = (uri != null && uri.pathSegments.isNotEmpty)
+          ? uri.pathSegments.last
+          : url;
+      return Uri.decodeComponent(last);
+    }
+
+    String firstTitle = 'Debrify TV';
+
+    Future<Map<String, String>?> requestMagicNext() async {
+      debugPrint('DebrifyTV: Cached requestMagicNext() queueSize=${_queue.length}');
+      while (_queue.isNotEmpty) {
+        final item = _queue.removeAt(0);
+        if (item is Map && item['type'] == 'rd_restricted') {
+          final String link = item['restrictedLink'] as String? ?? '';
+          final String rdTid = item['torrentId'] as String? ?? '';
+          debugPrint('DebrifyTV: Cached path trying RD link: torrentId=$rdTid');
+          if (link.isEmpty) continue;
+          try {
+            final started = DateTime.now();
+            final unrestrict = await DebridService.unrestrictLink(apiKey, link);
+            final elapsed = DateTime.now().difference(started).inSeconds;
+            final videoUrl = unrestrict['download'] as String?;
+            if (videoUrl != null && videoUrl.isNotEmpty) {
+              debugPrint('DebrifyTV: Cached success (RD link) in ${elapsed}s');
+              final inferred = _inferTitleFromUrl(videoUrl).trim();
+              final display = (item['displayName'] as String?)?.trim();
+              final chosenTitle =
+                  inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
+              firstTitle = chosenTitle;
+              return {'url': videoUrl, 'title': chosenTitle};
+            }
+          } catch (e) {
+            debugPrint('DebrifyTV: Cached RD link failed: $e');
+            continue;
+          }
+        }
+
+        if (item is Torrent) {
+          debugPrint(
+              'DebrifyTV: Cached trying torrent name="${item.name}" hash=${item.infohash}');
+          final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
+          try {
+            final started = DateTime.now();
+            final result = await DebridService.addTorrentToDebridPreferVideos(
+              apiKey,
+              magnetLink,
+            );
+            final elapsed = DateTime.now().difference(started).inSeconds;
+            final videoUrl = result['downloadLink'] as String?;
+            final String torrentId = result['torrentId'] as String? ?? '';
+            final List<dynamic> rdLinks =
+                (result['links'] as List<dynamic>? ?? const []);
+            if (rdLinks.isNotEmpty) {
+              for (int i = 1; i < rdLinks.length; i++) {
+                final String link = rdLinks[i]?.toString() ?? '';
+                if (link.isEmpty) continue;
+                final String combined = '$torrentId|$link';
+                if (_seenRestrictedLinks.contains(link) ||
+                    _seenLinkWithTorrentId.contains(combined)) {
+                  continue;
+                }
+                _seenRestrictedLinks.add(link);
+                _seenLinkWithTorrentId.add(combined);
+                _queue.add({
+                  'type': 'rd_restricted',
+                  'restrictedLink': link,
+                  'torrentId': torrentId,
+                  'displayName': item.name,
+                });
+              }
+            }
+            if (videoUrl != null && videoUrl.isNotEmpty) {
+              debugPrint('DebrifyTV: Cached success: unrestricted in ${elapsed}s');
+              final inferred = _inferTitleFromUrl(videoUrl).trim();
+              final chosenTitle = inferred.isNotEmpty
+                  ? inferred
+                  : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
+              firstTitle = chosenTitle;
+              return {'url': videoUrl, 'title': chosenTitle};
+            }
+          } catch (e) {
+            debugPrint('DebrifyTV: Cached Debrid add failed: $e');
+          }
+        }
+      }
+      debugPrint('DebrifyTV: Cached queue exhausted.');
+      return null;
+    }
+
+    setState(() {
+      _status = 'Finding a playable stream...';
+      _isBusy = true;
+    });
+
+    try {
+      final first = await requestMagicNext();
+      if (first == null) {
+        _closeProgressDialog();
+        if (!mounted) return;
+        setState(() {
+          _isBusy = false;
+          _status =
+              'No cached torrents played successfully. Try refreshing the channel.';
+        });
+        _showSnack(
+          'No cached torrents played successfully. Try refreshing the channel.',
+          color: Colors.orange,
+        );
+        return;
+      }
+
+      final firstUrl = first['url'] ?? '';
+      firstTitle = (first['title'] ?? firstTitle).trim().isNotEmpty
+          ? (first['title'] ?? firstTitle)
+          : firstTitle;
+
+      if (!mounted) return;
+      _activeApiKey = apiKey;
+      _startPrefetch();
+      _closeProgressDialog();
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(
+            videoUrl: firstUrl,
+            title: firstTitle,
+            startFromRandom: _startRandom,
+            hideSeekbar: _hideSeekbar,
+            showWatermark: _showWatermark,
+            showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            hideBackButton: _hideBackButton,
+            requestMagicNext: requestMagicNext,
+          ),
+        ),
+      );
+      await _stopPrefetch();
+    } finally {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+        _status = '';
+      });
+      debugPrint('DebrifyTV: Cached watch flow finished.');
+    }
+  }
+
+  Future<void> _watchTorboxWithCachedTorrents(
+    List<Torrent> cachedTorrents,
+  ) async {
+    if (cachedTorrents.isEmpty) {
+      _showSnack('Cached channel has no torrents yet. Please wait a moment.',
+          color: Colors.orange);
+      return;
+    }
+
+    void log(String message) {
+      debugPrint('DebrifyTV: $message');
+    }
+
+    final integrationEnabled =
+        await StorageService.getTorboxIntegrationEnabled();
+    if (!integrationEnabled) {
+      _showSnack('Enable Torbox in Settings to use this provider.',
+          color: Colors.orange);
+      return;
+    }
+
+    final apiKey = await StorageService.getTorboxApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _showSnack('Please add your Torbox API key in Settings first!',
+          color: Colors.orange);
+      return;
+    }
+
+    final uniqueHashes = cachedTorrents
+        .map((torrent) => _normalizeInfohash(torrent.infohash))
+        .where((hash) => hash.isNotEmpty)
+        .toSet();
+
+    if (uniqueHashes.isEmpty) {
+      _showSnack('Cached torrents look invalid. Try refreshing the channel.',
+          color: Colors.orange);
+      return;
+    }
+
+    _showCachedPlaybackDialog();
+
+    Set<String> cachedHashes;
+    try {
+      cachedHashes = await TorboxService.checkCachedTorrents(
+        apiKey: apiKey,
+        infoHashes: uniqueHashes.toList(),
+        listFiles: false,
+      );
+    } catch (e) {
+      _closeProgressDialog();
+      _showSnack(
+        'Torbox cache check failed: ${_formatTorboxError(e)}',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    final filtered = cachedTorrents
+        .where(
+          (torrent) =>
+              cachedHashes.contains(_normalizeInfohash(torrent.infohash)),
+        )
+        .toList();
+
+    if (filtered.isEmpty) {
+      _closeProgressDialog();
+      _showSnack(
+        'Cached torrents are no longer available on Torbox. Please refresh the channel.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    _queue
+      ..clear()
+      ..addAll(List<Torrent>.from(filtered)..shuffle(Random()));
+    _lastQueueSize = _queue.length;
+    _lastSearchAt = DateTime.now();
+
+    setState(() {
+      _status = 'Preparing Torbox stream...';
+      _isBusy = true;
+    });
+    Future<Map<String, String>?> requestTorboxNext() async {
+      while (_queue.isNotEmpty) {
+        final next = _queue.removeAt(0);
+        if (next is Map && next['type'] == _torboxFileEntryType) {
+          final resolved = await _resolveTorboxQueuedFile(
+            entry: Map<String, dynamic>.from(next as Map),
+            apiKey: apiKey,
+            log: log,
+          );
+          if (resolved != null) {
+            return resolved;
+          }
+          continue;
+        }
+
+        if (next is! Torrent) {
+          continue;
+        }
+
+        final prepared = await _prepareTorboxTorrent(
+          candidate: next,
+          apiKey: apiKey,
+          log: log,
+        );
+        if (prepared == null) {
+          continue;
+        }
+
+        if (prepared.extraEntries.isNotEmpty) {
+          _queue.insertAll(0, prepared.extraEntries);
+        }
+        return {
+          'url': prepared.streamUrl,
+          'title': prepared.title,
+        };
+      }
+      return null;
+    }
+
+    try {
+      final first = await requestTorboxNext();
+      if (first == null) {
+        _closeProgressDialog();
+        if (!mounted) return;
+        setState(() {
+          _status = 'No playable Torbox streams found. Try refreshing.';
+          _isBusy = false;
+        });
+        _showSnack(
+          'No cached Torbox streams are playable. Try refreshing the channel.',
+          color: Colors.orange,
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      _closeProgressDialog();
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(
+            videoUrl: first['url'] ?? '',
+            title: first['title'] ?? 'Debrify TV',
+            startFromRandom: _startRandom,
+            hideSeekbar: _hideSeekbar,
+            showWatermark: _showWatermark,
+            showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            hideBackButton: _hideBackButton,
+            requestMagicNext: requestTorboxNext,
+          ),
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          _status = _queue.isEmpty
+              ? ''
+              : 'Queue has ${_queue.length} remaining';
+        });
+      }
+    } finally {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+      });
+    }
+  }
+
+  void _showCachedPlaybackDialog() {
+    if (_progressOpen || !mounted) {
+      return;
+    }
+    _progress.value = [];
+    _progressOpen = true;
+    Future.microtask(() {
+      if (!mounted || !_progressOpen) {
+        return;
+      }
+      showGeneralDialog(
+        context: context,
+        barrierColor: Colors.black.withOpacity(0.6),
+        barrierDismissible: false,
+        transitionDuration: const Duration(milliseconds: 260),
+        pageBuilder: (ctx, _, __) {
+          return _CachedLoadingDialog(
+            onReady: (dialogCtx) {
+              _progressSheetContext = dialogCtx;
+            },
+          );
+        },
+        transitionBuilder: (ctx, animation, secondary, child) {
+          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
+          return FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: curved,
+              child: child,
+            ),
+          );
+        },
+      );
+    });
+  }
+
   Future<void> _playNextFromQueue() async {
     if (_isBusy) return;
     final apiKey = await StorageService.getApiKey();
@@ -2322,6 +3206,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Widget _buildChannelCard(_DebrifyTvChannel channel) {
     final keywords = channel.keywords;
+    final cacheEntry = _channelCache[channel.id];
+    final bool isWarming = cacheEntry?.isWarming ?? false;
+    final bool isReady = cacheEntry?.isReady ?? false;
+    final bool isFailed = cacheEntry?.isFailed ?? false;
+    final int cachedCount = cacheEntry?.torrents.length ?? 0;
+    final bool hasKeywords = keywords.isNotEmpty;
+    final bool canWatch =
+        !_isBusy && hasKeywords && isReady && cachedCount > 0;
     final optionChips = <Widget>[];
     if (channel.startRandom) {
       optionChips.add(_buildOptionChip(Icons.shuffle_rounded, 'Random start'));
@@ -2342,10 +3234,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       optionChips.add(_buildOptionChip(Icons.arrow_back_ios_new_rounded, 'Back hidden'));
     }
 
-    return Container(
+    final cardBackground = const Color(0xFF101010);
+    final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF101010),
+        color: isWarming ? cardBackground.withOpacity(0.6) : cardBackground,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white12, width: 1),
         boxShadow: [
@@ -2416,11 +3309,67 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               children: optionChips,
             ),
           ],
+          if (cacheEntry != null) ...[
+            const SizedBox(height: 12),
+            if (isWarming)
+              Row(
+                children: const [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Building torrent cache... please wait.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                ],
+              )
+            else if (isFailed)
+              Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: Colors.orangeAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      cacheEntry.errorMessage ??
+                          'Cache build failed. Tap edit to retry.',
+                      style: const TextStyle(
+                        color: Colors.orangeAccent,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  const Icon(
+                    Icons.cloud_done_rounded,
+                    color: Colors.greenAccent,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$cachedCount cached torrent${cachedCount == 1 ? '' : 's'} ready',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+          ],
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
-              onPressed: _isBusy ? null : () => _watchChannel(channel),
+              onPressed: canWatch ? () => _watchChannel(channel) : null,
               icon: const Icon(Icons.play_circle_fill_rounded),
               label: const Text('Watch'),
               style: ElevatedButton.styleFrom(
@@ -2435,6 +3384,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ),
         ],
       ),
+    );
+
+    if (!isWarming) {
+      return card;
+    }
+
+    return Stack(
+      children: [
+        card,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -2887,6 +3856,187 @@ class _TorboxPlayableEntry {
     required this.title,
     required this.info,
   });
+}
+
+class _KeywordWarmResult {
+  final String keyword;
+  final Set<String> addedHashes;
+  final KeywordStat stat;
+  final String? failureMessage;
+
+  const _KeywordWarmResult({
+    required this.keyword,
+    required this.addedHashes,
+    required this.stat,
+    this.failureMessage,
+  });
+}
+
+class _CachedLoadingDialog extends StatefulWidget {
+  final void Function(BuildContext context) onReady;
+
+  const _CachedLoadingDialog({
+    required this.onReady,
+  });
+
+  @override
+  State<_CachedLoadingDialog> createState() => _CachedLoadingDialogState();
+}
+
+class _CachedLoadingDialogState extends State<_CachedLoadingDialog> {
+  bool _notified = false;
+  Timer? _hintTimer;
+  bool _showHint = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hintTimer = Timer(const Duration(seconds: 15), () {
+      if (mounted) {
+        setState(() {
+          _showHint = true;
+        });
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_notified) {
+      _notified = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onReady(context);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _hintTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1B1B1F), Color(0xFF101014)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.4),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.45),
+              blurRadius: 22,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _GradientSpinner(),
+            const SizedBox(height: 18),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              child: _showHint
+                  ? const Text(
+                      'Rare keywords can take a little longer.',
+                      key: ValueKey('hint'),
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                      textAlign: TextAlign.center,
+                    )
+                  : const SizedBox(height: 0, key: ValueKey('no_hint')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GradientSpinner extends StatefulWidget {
+  @override
+  State<_GradientSpinner> createState() => _GradientSpinnerState();
+}
+
+class _GradientSpinnerState extends State<_GradientSpinner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Transform.rotate(
+            angle: _controller.value * 6.28318,
+            child: child,
+          );
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const SweepGradient(
+              colors: [
+                Color(0x00FFFFFF),
+                Color(0xFFE50914),
+                Color(0xFFB71C1C),
+                Color(0x00FFFFFF),
+              ],
+              stops: [0.15, 0.45, 0.85, 1.0],
+            ),
+          ),
+          child: Center(
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Icon(Icons.play_arrow_rounded,
+                    color: Colors.white70, size: 22),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _InfoTile extends StatelessWidget {

@@ -139,9 +139,10 @@ class TorboxService {
         .toList();
 
     const int chunkSize = 90;
+    const int maxConcurrent = 20;
     final Set<String> cached = <String>{};
 
-    for (int start = 0; start < sanitized.length; start += chunkSize) {
+    Future<void> processChunk(int start) async {
       final chunk = sanitized.sublist(
         start,
         math.min(start + chunkSize, sanitized.length),
@@ -197,6 +198,18 @@ class TorboxService {
         debugPrint('TorboxService: checkcached chunk failed: $e');
         rethrow;
       }
+    }
+
+    final futures = <Future<void>>[];
+    for (int start = 0; start < sanitized.length; start += chunkSize) {
+      futures.add(processChunk(start));
+      if (futures.length == maxConcurrent) {
+        await Future.wait(futures);
+        futures.clear();
+      }
+    }
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
     }
 
     debugPrint('TorboxService: Cached hashes found ${cached.length}');
