@@ -152,13 +152,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   String _status = '';
   List<_DebrifyTvChannel> _channels = <_DebrifyTvChannel>[];
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
-  final Map<String, Future<void>> _cacheWarmTasks = {};
   static const Duration _channelCacheTtl = Duration(hours: 24);
   static const int _channelTorrentsCsvMaxResultsSmall = 100;
   static const int _channelTorrentsCsvMaxResultsLarge = 25;
   static const int _channelCsvParallelism = 4;
   static const int _playbackTorrentThreshold = 1000;
   static const int _maxTorrentsPerKeywordPlayback = 25;
+  static const int _minimumTorrentsForChannel = 5;
+  static const int _maxChannelKeywords = 100;
+  final TextEditingController _channelSearchController = TextEditingController();
+  String _channelSearchTerm = '';
+  final Set<String> _expandedChannelIds = <String>{};
   // Advanced options
   bool _startRandom = true;
   bool _hideSeekbar = true;
@@ -210,6 +214,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _stage2Running = false;
     _progress.dispose();
     _keywordsController.dispose();
+    _channelSearchController.dispose();
     super.dispose();
   }
 
@@ -386,141 +391,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     });
   }
 
-  void _ensureCacheWarmState(
-    _DebrifyTvChannel channel, {
-    required bool triggerWarmIfMissing,
-  }) {
-    final normalizedKeywords = _normalizedKeywords(channel.keywords);
-    final cacheEntry = _channelCache[channel.id];
-
-    if (normalizedKeywords.isEmpty) {
-      if (cacheEntry != null) {
-        _channelCache.remove(channel.id);
-        unawaited(DebrifyTvCacheService.removeEntry(channel.id));
-      }
-      return;
-    }
-
-    if (cacheEntry == null) {
-      if (triggerWarmIfMissing) {
-        _startCacheWarm(channel, normalizedKeywords: normalizedKeywords);
-      }
-      return;
-    }
-
-    final existingSet = cacheEntry.normalizedKeywords.toSet();
-    final currentSet = normalizedKeywords.toSet();
-    final keywordsChanged = existingSet.length != currentSet.length ||
-        existingSet.difference(currentSet).isNotEmpty ||
-        currentSet.difference(existingSet).isNotEmpty;
-
-    if (keywordsChanged && triggerWarmIfMissing) {
-      _startCacheWarm(
-        channel,
-        normalizedKeywords: normalizedKeywords,
-        preserveExisting: true,
-      );
-      return;
-    }
-
-    if (cacheEntry.isWarming) {
-      return;
-    }
-
-    if (cacheEntry.isFailed && triggerWarmIfMissing) {
-      _startCacheWarm(
-        channel,
-        normalizedKeywords: normalizedKeywords,
-        preserveExisting: true,
-      );
-      return;
-    }
-
-    if (cacheEntry.isReady) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final expired = cacheEntry.fetchedAt == 0 ||
-          (now - cacheEntry.fetchedAt) > _channelCacheTtl.inMilliseconds;
-      if (expired && triggerWarmIfMissing) {
-        _startCacheWarm(
-          channel,
-          normalizedKeywords: normalizedKeywords,
-          preserveExisting: true,
-        );
-      }
-      return;
-    }
-
-    if (triggerWarmIfMissing) {
-      _startCacheWarm(
-        channel,
-        normalizedKeywords: normalizedKeywords,
-        preserveExisting: true,
-      );
-    }
-  }
-
-  void _startCacheWarm(
-    _DebrifyTvChannel channel, {
-    required List<String> normalizedKeywords,
-    bool preserveExisting = false,
-  }) {
-    if (normalizedKeywords.isEmpty) {
-      return;
-    }
-    if (_cacheWarmTasks.containsKey(channel.id)) {
-      return;
-    }
-
-    final existing = preserveExisting ? _channelCache[channel.id] : null;
-    final filteredTorrents = existing == null
-        ? const <CachedTorrent>[]
-        : _filterCachedTorrentsForKeywords(existing, normalizedKeywords);
-    final filteredStats = existing == null
-        ? const <String, KeywordStat>{}
-        : _filterKeywordStats(existing.keywordStats, normalizedKeywords);
-
-    final initial = DebrifyTvChannelCacheEntry(
-      version: 1,
-      channelId: channel.id,
-      normalizedKeywords: normalizedKeywords,
-      fetchedAt: existing?.fetchedAt ?? 0,
-      status: DebrifyTvCacheStatus.warming,
-      errorMessage: null,
-      torrents: filteredTorrents,
-      keywordStats: filteredStats,
-    );
-
-    setState(() {
-      _channelCache[channel.id] = initial;
-    });
-
-    final task = _warmChannel(
-      channel,
-      normalizedKeywords: normalizedKeywords,
-      baseline: existing,
-    );
-    _cacheWarmTasks[channel.id] = task;
-    task.whenComplete(() {
-      _cacheWarmTasks.remove(channel.id);
-    });
-  }
-
-  Future<void> _warmChannel(
-    _DebrifyTvChannel channel, {
-    required List<String> normalizedKeywords,
+  Future<DebrifyTvChannelCacheEntry> _computeChannelCacheEntry(
+    _DebrifyTvChannel channel,
+    List<String> normalizedKeywords, {
     DebrifyTvChannelCacheEntry? baseline,
   }) async {
     final csvEngine = const TorrentsCsvEngine();
     final pirateEngine = const PirateBayEngine();
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    final initialEntry = baseline ?? _channelCache[channel.id];
     final accumulator = <String, CachedTorrent>{};
     final stats = <String, KeywordStat>{};
 
-    if (initialEntry != null) {
+    if (baseline != null) {
       for (final cached in _filterCachedTorrentsForKeywords(
-        initialEntry,
+        baseline,
         normalizedKeywords,
       )) {
         final normalizedHash = _normalizeInfohash(cached.infohash);
@@ -530,7 +415,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         accumulator[normalizedHash] = cached;
       }
       stats.addAll(
-        _filterKeywordStats(initialEntry.keywordStats, normalizedKeywords),
+        _filterKeywordStats(baseline.keywordStats, normalizedKeywords),
       );
     }
 
@@ -569,35 +454,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         anySuccess = anySuccess || result.addedHashes.isNotEmpty;
         stats[keyword] = result.stat;
         failureMessage ??= result.failureMessage;
-
-        if (!mounted) {
-          return;
-        }
-
-        final partialEntry = DebrifyTvChannelCacheEntry(
-          version: 1,
-          channelId: channel.id,
-          normalizedKeywords: normalizedKeywords,
-          fetchedAt: initialEntry?.fetchedAt ?? 0,
-          status: DebrifyTvCacheStatus.warming,
-          errorMessage: null,
-          torrents: _sortedCachedTorrents(accumulator),
-          keywordStats: Map<String, KeywordStat>.from(stats),
-        );
-
-        setState(() {
-          _channelCache[channel.id] = partialEntry;
-        });
-        await DebrifyTvCacheService.saveEntry(partialEntry);
       }
     }
 
-    if (!mounted) {
-      return;
-    }
-
     if (anySuccess) {
-      final readyEntry = DebrifyTvChannelCacheEntry(
+      return DebrifyTvChannelCacheEntry(
         version: 1,
         channelId: channel.id,
         normalizedKeywords: normalizedKeywords,
@@ -607,27 +468,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         torrents: _sortedCachedTorrents(accumulator),
         keywordStats: Map<String, KeywordStat>.from(stats),
       );
-      setState(() {
-        _channelCache[channel.id] = readyEntry;
-      });
-      await DebrifyTvCacheService.saveEntry(readyEntry);
-    } else {
-      failureMessage ??= 'No torrents found for these keywords yet.';
-      final failedEntry = DebrifyTvChannelCacheEntry(
-        version: 1,
-        channelId: channel.id,
-        normalizedKeywords: normalizedKeywords,
-        fetchedAt: DateTime.now().millisecondsSinceEpoch,
-        status: DebrifyTvCacheStatus.failed,
-        errorMessage: failureMessage,
-        torrents: const <CachedTorrent>[],
-        keywordStats: Map<String, KeywordStat>.from(stats),
-      );
-      setState(() {
-        _channelCache[channel.id] = failedEntry;
-      });
-      await DebrifyTvCacheService.saveEntry(failedEntry);
     }
+
+    failureMessage ??= 'No torrents found for these keywords yet.';
+    return DebrifyTvChannelCacheEntry(
+      version: 1,
+      channelId: channel.id,
+      normalizedKeywords: normalizedKeywords,
+      fetchedAt: DateTime.now().millisecondsSinceEpoch,
+      status: DebrifyTvCacheStatus.failed,
+      errorMessage: failureMessage,
+      torrents: const <CachedTorrent>[],
+      keywordStats: Map<String, KeywordStat>.from(stats),
+    );
   }
 
   Future<_KeywordWarmResult?> _warmKeyword({
@@ -744,24 +597,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<void> _saveChannel(_DebrifyTvChannel channel) async {
-    setState(() {
-      final index = _channels.indexWhere((c) => c.id == channel.id);
-      if (index == -1) {
-        _channels = <_DebrifyTvChannel>[..._channels, channel];
-      } else {
-        final next = List<_DebrifyTvChannel>.from(_channels);
-        next[index] = channel;
-        _channels = next;
-      }
-    });
-    await _persistChannels();
-    _ensureCacheWarmState(channel, triggerWarmIfMissing: true);
-  }
-
   Future<void> _deleteChannel(String id) async {
     setState(() {
       _channels = _channels.where((c) => c.id != id).toList();
+      _expandedChannelIds.remove(id);
     });
     await _persistChannels();
     setState(() {
@@ -919,15 +758,50 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return provider == _providerTorbox ? 'Torbox' : 'Real Debrid';
   }
 
+  bool _addKeywordsToList(
+    String raw,
+    List<String> keywordList,
+    void Function(void Function()) setState,
+  ) {
+    if (raw.isEmpty) return false;
+    final parsed = _parseKeywords(raw.replaceAll('\n', ','));
+    if (parsed.isEmpty) return false;
+    var limitReached = false;
+    setState(() {
+      for (final kw in parsed) {
+        if (keywordList.length >= _maxChannelKeywords) {
+          limitReached = true;
+          break;
+        }
+        final exists = keywordList.any(
+          (existing) => existing.toLowerCase() == kw.toLowerCase(),
+        );
+        if (!exists) {
+          keywordList.add(kw);
+        }
+      }
+    });
+    return limitReached || keywordList.length >= _maxChannelKeywords;
+  }
+
   Future<_DebrifyTvChannel?> _openChannelDialog({
     _DebrifyTvChannel? existing,
   }) async {
     final nameController = TextEditingController(text: existing?.name ?? '');
-    final keywordsController = TextEditingController(
-      text: existing != null
-          ? existing.keywords.join(', ')
-          : _keywordsController.text,
-    );
+    final keywordInputController = TextEditingController();
+    final List<String> keywordList = [];
+    final seenKeywords = <String>{};
+    final initialKeywords =
+        existing?.keywords ?? _parseKeywords(_keywordsController.text);
+    for (final kw in initialKeywords) {
+      final trimmed = kw.trim();
+      if (trimmed.isEmpty) continue;
+      final lower = trimmed.toLowerCase();
+      if (seenKeywords.contains(lower)) continue;
+      seenKeywords.add(lower);
+      keywordList.add(trimmed);
+      if (keywordList.length >= _maxChannelKeywords) break;
+    }
     String providerValue = existing?.provider ?? _provider;
     bool startRandom = existing?.startRandom ?? _startRandom;
     bool hideSeekbar = existing?.hideSeekbar ?? _hideSeekbar;
@@ -945,7 +819,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           builder: (context, setModalState) {
             Future<void> submit() async {
               final name = nameController.text.trim();
-              final keywords = _parseKeywords(keywordsController.text);
+              final keywords = <String>[];
+              final seen = <String>{};
+              for (final raw in keywordList) {
+                final trimmed = raw.trim();
+                if (trimmed.isEmpty) continue;
+                final lower = trimmed.toLowerCase();
+                if (seen.contains(lower)) continue;
+                seen.add(lower);
+                keywords.add(trimmed);
+              }
               if (name.isEmpty) {
                 setModalState(() {
                   error = 'Give the channel a name';
@@ -955,6 +838,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               if (keywords.isEmpty) {
                 setModalState(() {
                   error = 'Add at least one keyword';
+                });
+                return;
+              }
+              if (keywords.length > _maxChannelKeywords) {
+                setModalState(() {
+                  error =
+                      'You can add up to $_maxChannelKeywords keywords per channel.';
                 });
                 return;
               }
@@ -1034,14 +924,97 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: keywordsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Keywords (comma separated)',
-                          prefixIcon: Icon(Icons.search_rounded),
+                      Text(
+                        'Keywords (${keywordList.length}/$_maxChannelKeywords)',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
-                        minLines: 1,
-                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Tip: type a keyword and press Enter. Add multiples by separating with commas.',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ...keywordList.map(
+                            (keyword) => InputChip(
+                              label: Text(keyword),
+                              onDeleted: () {
+                                setModalState(() {
+                                  keywordList.remove(keyword);
+                                  if (error != null &&
+                                      error!
+                                          .contains('$_maxChannelKeywords keywords') &&
+                                      keywordList.length < _maxChannelKeywords) {
+                                    error = null;
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                          SizedBox(
+                            width: 200,
+                        child: TextField(
+                          controller: keywordInputController,
+                          decoration: const InputDecoration(
+                            hintText: 'Add keyword',
+                            prefixIcon: Icon(Icons.add_rounded),
+                          ),
+                          style: const TextStyle(color: Colors.white),
+                          onSubmitted: (value) {
+                            final limitReached = _addKeywordsToList(
+                              value,
+                                  keywordList,
+                                  setModalState,
+                                );
+                                keywordInputController.clear();
+                                if (limitReached) {
+                                  setModalState(() {
+                                    error =
+                                        'You can add up to $_maxChannelKeywords keywords per channel.';
+                                  });
+                                } else if (error != null &&
+                                    error!
+                                        .contains('$_maxChannelKeywords keywords')) {
+                                  setModalState(() {
+                                    error = null;
+                                  });
+                                }
+                              },
+                              onChanged: (value) {
+                                if (value.contains(',')) {
+                                  final limitReached = _addKeywordsToList(
+                                    value,
+                                    keywordList,
+                                    setModalState,
+                                  );
+                                  keywordInputController.clear();
+                                  if (limitReached) {
+                                    setModalState(() {
+                                      error =
+                                          'You can add up to $_maxChannelKeywords keywords per channel.';
+                                    });
+                                  } else if (error != null &&
+                                      error!
+                                          .contains('$_maxChannelKeywords keywords')) {
+                                    setModalState(() {
+                                      error = null;
+                                    });
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -1182,7 +1155,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
 
     nameController.dispose();
-    keywordsController.dispose();
+    keywordInputController.dispose();
     return result;
   }
 
@@ -1190,8 +1163,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     await _syncProviderAvailability();
     final channel = await _openChannelDialog();
     if (channel != null) {
-      await _saveChannel(channel);
-      _showSnack('Channel "${channel.name}" saved', color: Colors.green);
+      await _createOrUpdateChannel(channel, isEdit: false);
     }
   }
 
@@ -1199,8 +1171,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     await _syncProviderAvailability(preferred: channel.provider);
     final updated = await _openChannelDialog(existing: channel);
     if (updated != null) {
-      await _saveChannel(updated);
-      _showSnack('Channel "${updated.name}" updated', color: Colors.green);
+      await _createOrUpdateChannel(updated, isEdit: true);
     }
   }
 
@@ -1233,6 +1204,87 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<void> _createOrUpdateChannel(
+    _DebrifyTvChannel channel, {
+    required bool isEdit,
+  }) async {
+    final normalizedKeywords = _normalizedKeywords(channel.keywords);
+    if (normalizedKeywords.isEmpty) {
+      _showSnack('Add at least one keyword before saving.',
+          color: Colors.orange);
+      return;
+    }
+
+    _showChannelCreationDialog(channel.name);
+    try {
+      final baseline = isEdit ? _channelCache[channel.id] : null;
+      if (normalizedKeywords.length > _maxChannelKeywords) {
+        _showSnack(
+          'Channels support up to $_maxChannelKeywords keywords. Remove some and try again.',
+          color: Colors.orange,
+        );
+        return;
+      }
+
+      final entry = await _computeChannelCacheEntry(
+        channel,
+        normalizedKeywords,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      if (!entry.isReady || entry.torrents.length < _minimumTorrentsForChannel) {
+        final message = entry.isReady
+            ? 'Need at least $_minimumTorrentsForChannel torrents to save this channel. Try different keywords.'
+            : (entry.errorMessage ??
+                'Unable to find torrents for these keywords. Try again later.');
+
+        if (isEdit && baseline != null) {
+          setState(() {
+            _channelCache[channel.id] = baseline;
+          });
+          await DebrifyTvCacheService.saveEntry(baseline);
+        } else {
+          setState(() {
+            _channelCache.remove(channel.id);
+          });
+          await DebrifyTvCacheService.removeEntry(channel.id);
+        }
+
+        _showSnack(message, color: Colors.orange);
+        return;
+      }
+
+      setState(() {
+        final index = _channels.indexWhere((c) => c.id == channel.id);
+        if (index == -1) {
+          _channels = <_DebrifyTvChannel>[..._channels, channel];
+        } else {
+          final next = List<_DebrifyTvChannel>.from(_channels);
+          next[index] = channel;
+          _channels = next;
+        }
+        _channelCache[channel.id] = entry;
+        _expandedChannelIds.add(channel.id);
+      });
+
+      await _persistChannels();
+      await DebrifyTvCacheService.saveEntry(entry);
+
+      final successMsg =
+          isEdit ? 'Channel "${channel.name}" updated' : 'Channel "${channel.name}" saved';
+      _showSnack(successMsg, color: Colors.green);
+    } catch (e) {
+      debugPrint('DebrifyTV: Channel creation failed for ${channel.name}: $e');
+      _showSnack('Failed to build channel cache. Please try again.',
+          color: Colors.red);
+    } finally {
+      _closeProgressDialog();
+    }
+  }
+
   Future<void> _watchChannel(_DebrifyTvChannel channel) async {
     if (channel.keywords.isEmpty) {
       _showSnack('Channel has no keywords yet', color: Colors.orange);
@@ -1250,9 +1302,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final cacheEntry = _channelCache[channel.id];
-    if (cacheEntry == null || !cacheEntry.isReady) {
-      _showSnack('Channel is still caching torrents. Please wait a moment.',
+    if (cacheEntry == null) {
+      _showSnack('Channel cache not found. Edit the channel to rebuild it.',
           color: Colors.orange);
+      return;
+    }
+    if (!cacheEntry.isReady) {
+      final message = cacheEntry.errorMessage ??
+          'Channel cache failed to build. Try editing and saving again.';
+      _showSnack(message, color: Colors.orange);
       return;
     }
     if (cacheEntry.torrents.isEmpty) {
@@ -1353,6 +1411,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _status = 'Enter valid keywords';
       });
       debugPrint('DebrifyTV: Aborting. Parsed keywords became empty after trimming.');
+      return;
+    }
+    if (keywords.length > 5) {
+      setState(() {
+        _status = 'Quick Play supports up to 5 keywords. Create a channel for larger sets.';
+      });
+      _showSnack(
+        'Quick Play supports up to 5 keywords. Create a channel for bigger combos.',
+        color: Colors.orange,
+      );
+      debugPrint('DebrifyTV: Aborting. Too many keywords for Quick Play (${keywords.length}).');
       return;
     }
 
@@ -2665,6 +2734,43 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  void _showChannelCreationDialog(String channelName) {
+    if (_progressOpen || !mounted) {
+      return;
+    }
+    _progress.value = [];
+    _progressOpen = true;
+    Future.microtask(() {
+      if (!mounted || !_progressOpen) {
+        return;
+      }
+      showGeneralDialog(
+        context: context,
+        barrierColor: Colors.black.withOpacity(0.6),
+        barrierDismissible: false,
+        transitionDuration: const Duration(milliseconds: 260),
+        pageBuilder: (ctx, _, __) {
+          return _ChannelCreationDialog(
+            channelName: channelName,
+            onReady: (dialogCtx) {
+              _progressSheetContext = dialogCtx;
+            },
+          );
+        },
+        transitionBuilder: (ctx, animation, secondary, child) {
+          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
+          return FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: curved,
+              child: child,
+            ),
+          );
+        },
+      );
+    });
+  }
+
   void _showCachedPlaybackDialog() {
     if (_progressOpen || !mounted) {
       return;
@@ -3181,6 +3287,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildChannelsTab(double bottomInset) {
+    final searchTerm = _channelSearchTerm.trim().toLowerCase();
+    final filteredChannels = searchTerm.isEmpty
+        ? _channels
+        : _channels
+            .where(
+              (channel) => channel.name.toLowerCase().contains(searchTerm),
+            )
+            .toList();
+
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
       child: Column(
@@ -3213,15 +3328,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ],
           ),
           const SizedBox(height: 16),
+          TextField(
+            controller: _channelSearchController,
+            onChanged: (value) {
+              setState(() {
+                _channelSearchTerm = value;
+              });
+            },
+            decoration: InputDecoration(
+              hintText: 'Search channels...',
+              hintStyle: const TextStyle(color: Colors.white54),
+              prefixIcon:
+                  const Icon(Icons.search_rounded, color: Colors.white60),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.08),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            style: const TextStyle(color: Colors.white),
+          ),
+          const SizedBox(height: 16),
           Expanded(
-            child: _channels.isEmpty
-                ? _buildEmptyChannelsState()
+            child: filteredChannels.isEmpty
+                ? (_channels.isEmpty
+                    ? _buildEmptyChannelsState()
+                    : _buildNoChannelResultsState())
                 : ListView.separated(
                     padding: EdgeInsets.zero,
-                    itemCount: _channels.length,
+                    itemCount: filteredChannels.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
-                      final channel = _channels[index];
+                      final channel = filteredChannels[index];
                       return _buildChannelCard(channel);
                     },
                   ),
@@ -3265,16 +3404,37 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
+  Widget _buildNoChannelResultsState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(Icons.search_off_rounded, color: Colors.white54, size: 36),
+          SizedBox(height: 12),
+          Text(
+            'No channels match your search',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Try a different name or clear the filter to see all channels.',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChannelCard(_DebrifyTvChannel channel) {
     final keywords = channel.keywords;
     final cacheEntry = _channelCache[channel.id];
-    final bool isWarming = cacheEntry?.isWarming ?? false;
-    final bool isReady = cacheEntry?.isReady ?? false;
-    final bool isFailed = cacheEntry?.isFailed ?? false;
     final int cachedCount = cacheEntry?.torrents.length ?? 0;
-    final bool hasKeywords = keywords.isNotEmpty;
-    final bool canWatch =
-        !_isBusy && hasKeywords && isReady && cachedCount > 0;
+    final bool isExpanded = _expandedChannelIds.contains(channel.id);
     final optionChips = <Widget>[];
     if (channel.startRandom) {
       optionChips.add(_buildOptionChip(Icons.shuffle_rounded, 'Random start'));
@@ -3295,11 +3455,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       optionChips.add(_buildOptionChip(Icons.arrow_back_ios_new_rounded, 'Back hidden'));
     }
 
-    final cardBackground = const Color(0xFF101010);
     final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isWarming ? cardBackground.withOpacity(0.6) : cardBackground,
+        color: const Color(0xFF101010),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white12, width: 1),
         boxShadow: [
@@ -3314,26 +3473,47 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              IconButton(
+                tooltip: isExpanded ? 'Collapse details' : 'Show details',
+                onPressed: () {
+                  setState(() {
+                    if (isExpanded) {
+                      _expandedChannelIds.remove(channel.id);
+                    } else {
+                      _expandedChannelIds.add(channel.id);
+                    }
+                  });
+                },
+                icon: Icon(
+                  isExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white70,
+                ),
+              ),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      channel.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${keywords.length} keyword${keywords.length == 1 ? '' : 's'} • ${_providerDisplay(channel.provider)}',
-                      style: const TextStyle(color: Colors.white60, fontSize: 13),
-                    ),
-                  ],
+                child: Text(
+                  channel.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _isBusy ? null : () => _watchChannel(channel),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Watch'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE50914),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
               IconButton(
@@ -3344,128 +3524,79 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               IconButton(
                 tooltip: 'Delete channel',
                 onPressed: () => _handleDeleteChannel(channel),
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                icon: const Icon(Icons.delete_outline_rounded,
+                    color: Colors.redAccent),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          if (keywords.isEmpty)
-            const Text(
-              'No keywords saved yet',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
-            )
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: keywords
-                  .map((keyword) => _buildKeywordChip(keyword))
-                  .toList(),
-            ),
-          if (optionChips.isNotEmpty) ...[
+          if (isExpanded) ...[
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: optionChips,
+            Row(
+              children: [
+                Icon(
+                  Icons.settings_input_component_rounded,
+                  color: Colors.white54,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${keywords.length} keyword${keywords.length == 1 ? '' : 's'} • ${_providerDisplay(channel.provider)}',
+                  style: const TextStyle(color: Colors.white60, fontSize: 13),
+                ),
+              ],
             ),
-          ],
-          if (cacheEntry != null) ...[
-            const SizedBox(height: 12),
-            if (isWarming)
-              Row(
-                children: const [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Building torrent cache... please wait.',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ),
-                ],
-              )
-            else if (isFailed)
-              Row(
-                children: [
-                  const Icon(Icons.error_outline_rounded,
-                      color: Colors.orangeAccent, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      cacheEntry.errorMessage ??
-                          'Cache build failed. Tap edit to retry.',
-                      style: const TextStyle(
-                        color: Colors.orangeAccent,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 10),
+            if (keywords.isEmpty)
+              const Text(
+                'No keywords saved yet',
+                style: TextStyle(color: Colors.white54, fontSize: 13),
               )
             else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: keywords
+                    .map((keyword) => _buildKeywordChip(keyword))
+                    .toList(),
+              ),
+            if (optionChips.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: optionChips,
+              ),
+            ],
+            if (cacheEntry != null) ...[
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  const Icon(
-                    Icons.cloud_done_rounded,
-                    color: Colors.greenAccent,
+                  Icon(
+                    cachedCount > 0
+                        ? Icons.cloud_done_rounded
+                        : Icons.cloud_download_rounded,
+                    color: cachedCount > 0
+                        ? Colors.greenAccent
+                        : Colors.blueAccent,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    '$cachedCount cached torrent${cachedCount == 1 ? '' : 's'} ready',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  Expanded(
+                    child: Text(
+                      cachedCount > 0
+                          ? '$cachedCount cached torrent${cachedCount == 1 ? '' : 's'} ready'
+                          : 'Cache will auto-refresh when you edit the channel.',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
                   ),
                 ],
               ),
+            ],
           ],
-          const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              onPressed: canWatch ? () => _watchChannel(channel) : null,
-              icon: const Icon(Icons.play_circle_fill_rounded),
-              label: const Text('Watch'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE50914),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
-
-    if (!isWarming) {
-      return card;
-    }
-
-    return Stack(
-      children: [
-        card,
-        Positioned.fill(
-          child: IgnorePointer(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    return card;
   }
 
   Widget _buildKeywordChip(String keyword) {
@@ -4022,6 +4153,75 @@ class _CachedLoadingDialogState extends State<_CachedLoadingDialog> {
                       textAlign: TextAlign.center,
                     )
                   : const SizedBox(height: 0, key: ValueKey('no_hint')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChannelCreationDialog extends StatelessWidget {
+  final String channelName;
+  final void Function(BuildContext context) onReady;
+
+  const _ChannelCreationDialog({
+    required this.channelName,
+    required this.onReady,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      onReady(context);
+    });
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1B1B1F), Color(0xFF101014)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.4),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.45),
+              blurRadius: 24,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _GradientSpinner(),
+            const SizedBox(height: 18),
+            Text(
+              'Building "${channelName}"',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            const SizedBox(
+              width: 240,
+              child: Text(
+                'Fetching torrents and getting everything ready. Hang tight!',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),
