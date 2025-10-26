@@ -800,35 +800,39 @@ class StorageService {
   }
 
   static String computePlaylistDedupeKey(Map<String, dynamic> item) {
+    final providerRaw = (item['provider'] as String?) ?? 'realdebrid';
+    final provider = providerRaw.toLowerCase();
     final String? torrentHash = item['torrent_hash'] as String?;
     if (torrentHash != null && torrentHash.isNotEmpty) {
-      return 'hash:${torrentHash}'.toLowerCase();
+      return '$provider|hash:${torrentHash.toLowerCase()}';
     }
     final dynamic torboxIdRaw = item['torboxTorrentId'];
     if (torboxIdRaw != null) {
       final String torboxId = torboxIdRaw.toString();
       final dynamic singleFileId = item['torboxFileId'];
       if (singleFileId != null) {
-        return 'torbox:${torboxId}:file:${singleFileId.toString()}'
-            .toLowerCase();
+        final fileKey = 'torbox:${torboxId}:file:${singleFileId.toString()}';
+        return '$provider|${fileKey.toLowerCase()}';
       }
       final dynamic multiFileIds = item['torboxFileIds'];
       if (multiFileIds is List && multiFileIds.isNotEmpty) {
         final joined = multiFileIds.map((e) => e.toString()).join(',');
-        return 'torbox:${torboxId}:files:$joined'.toLowerCase();
+        final filesKey = 'torbox:${torboxId}:files:$joined';
+        return '$provider|${filesKey.toLowerCase()}';
       }
-      return 'torbox:$torboxId'.toLowerCase();
+      return '$provider|torbox:${torboxId.toLowerCase()}';
     }
     final String? rdId = (item['rdTorrentId'] as String?);
     if (rdId != null && rdId.isNotEmpty) {
-      return 'rd:${rdId}'.toLowerCase();
+      return '$provider|rd:${rdId.toLowerCase()}';
     }
     final String source =
         (item['restrictedLink'] as String?)?.trim() ??
         (item['url'] as String?)?.trim() ??
         '';
     final String title = (item['title'] as String?)?.trim() ?? '';
-    return '${source}|${title}'.toLowerCase();
+    final legacyKey = '${source}|${title}'.toLowerCase();
+    return '$provider|$legacyKey';
   }
 
   /// Add a new playlist item if it does not already exist.
@@ -836,9 +840,19 @@ class StorageService {
   /// Returns true if inserted, false if duplicate.
   static Future<bool> addPlaylistItemRaw(Map<String, dynamic> item) async {
     final items = await getPlaylistItemsRaw();
-    final newKey = computePlaylistDedupeKey(item);
-    final exists = items.any((e) => computePlaylistDedupeKey(e) == newKey);
-    if (exists) return false;
+    final initialKey = computePlaylistDedupeKey(item);
+    debugPrint('Playlist dedupe: initialKey=$initialKey');
+    for (final existing in items) {
+      final existingKey = computePlaylistDedupeKey(existing);
+      final existingProvider = (existing['provider'] as String?) ?? 'unknown';
+      debugPrint('Playlist dedupe: existingKey=$existingKey provider=$existingProvider');
+    }
+    final initialExists =
+        items.any((entry) => computePlaylistDedupeKey(entry) == initialKey);
+    if (initialExists) {
+      debugPrint('Playlist dedupe: blocked by initial key match');
+      return false;
+    }
 
     final enriched = Map<String, dynamic>.from(item);
     enriched['addedAt'] = DateTime.now().millisecondsSinceEpoch;
@@ -906,6 +920,16 @@ class StorageService {
     print(
       '   addedAt: ${DateTime.fromMillisecondsSinceEpoch(enriched['addedAt']).toIso8601String()}',
     );
+
+    final finalKey = computePlaylistDedupeKey(enriched);
+    if (finalKey != initialKey) {
+      final finalExists =
+          items.any((entry) => computePlaylistDedupeKey(entry) == finalKey);
+      if (finalExists) {
+        debugPrint('Playlist dedupe: blocked by final key match ($finalKey)');
+        return false;
+      }
+    }
 
     items.add(enriched);
     await savePlaylistItemsRaw(items);
