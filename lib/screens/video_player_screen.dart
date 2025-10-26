@@ -42,6 +42,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final Future<Map<String, String>?> Function()? requestMagicNext;
   // Advanced: start each video at a random timestamp
   final bool startFromRandom;
+  final int randomStartMaxPercent;
   // Advanced: hide seekbar (double-tap seek still enabled)
   final bool hideSeekbar;
   // Watermark: show DebrifyTV tag overlay
@@ -63,12 +64,14 @@ class VideoPlayerScreen extends StatefulWidget {
     this.rdTorrentId,
     this.requestMagicNext,
     this.startFromRandom = false,
+    this.randomStartMaxPercent = 40,
     this.hideSeekbar = false,
     this.showWatermark = false,
     this.showVideoTitle = true,
     this.hideOptions = false,
     this.hideBackButton = false,
-  }) : super(key: key);
+  })  : assert(randomStartMaxPercent >= 0),
+        super(key: key);
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -115,6 +118,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     with TickerProviderStateMixin {
   late mk.Player _player;
   late mkv.VideoController _videoController;
+  final math.Random _random = math.Random();
   SeriesPlaylist? _cachedSeriesPlaylist;
   final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
   String?
@@ -196,6 +200,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
+
+  Duration? _randomStartOffset(Duration duration) {
+    final num clampedPercent =
+        widget.randomStartMaxPercent.clamp(0, 99);
+    if (duration <= Duration.zero || clampedPercent <= 0) {
+      return null;
+    }
+    final maxFraction = clampedPercent.toDouble() / 100.0;
+    if (maxFraction <= 0) {
+      return null;
+    }
+    final randomFraction = _random.nextDouble() * maxFraction;
+    final milliseconds = (duration.inMilliseconds * randomFraction).floor();
+    if (milliseconds <= 0) {
+      return null;
+    }
+    return Duration(milliseconds: milliseconds);
+  }
 
   @override
   void initState() {
@@ -342,13 +364,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await _waitForVideoReady();
         // Random start takes precedence over resume
         if (widget.startFromRandom) {
-          final dur = _duration;
-          if (dur > Duration.zero) {
-            final fraction = 0.1 + (0.8 * math.Random().nextDouble());
-            final pos = Duration(
-              milliseconds: (dur.inMilliseconds * fraction).floor(),
-            );
-            await _player.seek(pos);
+          final offset = _randomStartOffset(_duration);
+          if (offset != null) {
+            await _player.seek(offset);
+          } else {
+            await _maybeRestoreResume();
           }
         } else {
           await _maybeRestoreResume();
@@ -811,13 +831,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // If advanced option is enabled, jump to a random timestamp for Debrify TV items
           if (widget.startFromRandom) {
             await _waitForVideoReady();
-            final dur = _duration;
-            if (dur > Duration.zero) {
-              final fraction = 0.1 + (0.8 * math.Random().nextDouble());
-              final pos = Duration(
-                milliseconds: (dur.inMilliseconds * fraction).floor(),
-              );
-              await _player.seek(pos);
+            final offset = _randomStartOffset(_duration);
+            if (offset != null) {
+              await _player.seek(offset);
             }
           }
           if (title.isNotEmpty) {

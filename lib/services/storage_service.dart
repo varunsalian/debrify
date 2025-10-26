@@ -33,10 +33,15 @@ class StorageService {
   static const String _debrifyTvHideBackButtonKey =
       'debrify_tv_hide_back_button';
   static const String _debrifyTvProviderKey = 'debrify_tv_provider';
+  static const String _debrifyTvRandomStartPercentKey =
+      'debrify_tv_random_start_percent';
   static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
   static const String _playlistKey = 'user_playlist_v1';
   static const String _onboardingCompleteKey =
       'initial_setup_complete_v1';
+  static const int _debrifyTvRandomStartPercentDefault = 40;
+  static const int _debrifyTvRandomStartPercentMin = 10;
+  static const int _debrifyTvRandomStartPercentMax = 90;
 
   // Note: Plain text storage is fine for API key since they're stored locally on user's device
   // and can be easily regenerated if compromised
@@ -674,6 +679,29 @@ class StorageService {
   static Future<void> saveDebrifyTvStartRandom(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_debrifyTvStartRandomKey, value);
+  }
+
+  static int _normalizeDebrifyTvRandomStartPercent(int? value) {
+    final candidate = value ?? _debrifyTvRandomStartPercentDefault;
+    if (candidate < _debrifyTvRandomStartPercentMin) {
+      return _debrifyTvRandomStartPercentMin;
+    }
+    if (candidate > _debrifyTvRandomStartPercentMax) {
+      return _debrifyTvRandomStartPercentMax;
+    }
+    return candidate;
+  }
+
+  static Future<int> getDebrifyTvRandomStartPercent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getInt(_debrifyTvRandomStartPercentKey);
+    return _normalizeDebrifyTvRandomStartPercent(stored);
+  }
+
+  static Future<void> saveDebrifyTvRandomStartPercent(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = _normalizeDebrifyTvRandomStartPercent(value);
+    await prefs.setInt(_debrifyTvRandomStartPercentKey, normalized);
   }
 
   static Future<bool> getDebrifyTvHideSeekbar() async {

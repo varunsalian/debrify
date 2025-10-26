@@ -16,6 +16,37 @@ import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import 'video_player_screen.dart';
 
+const int _randomStartPercentDefault = 40;
+const int _randomStartPercentMin = 10;
+const int _randomStartPercentMax = 90;
+
+int _clampRandomStartPercent(int? value) {
+  final candidate = value ?? _randomStartPercentDefault;
+  if (candidate < _randomStartPercentMin) {
+    return _randomStartPercentMin;
+  }
+  if (candidate > _randomStartPercentMax) {
+    return _randomStartPercentMax;
+  }
+  return candidate;
+}
+
+int _parseRandomStartPercent(dynamic value) {
+  if (value is int) {
+    return _clampRandomStartPercent(value);
+  }
+  if (value is double) {
+    return _clampRandomStartPercent(value.round());
+  }
+  if (value is String) {
+    final parsed = int.tryParse(value);
+    if (parsed != null) {
+      return _clampRandomStartPercent(parsed);
+    }
+  }
+  return _randomStartPercentDefault;
+}
+
 class DebrifyTVScreen extends StatefulWidget {
   const DebrifyTVScreen({super.key});
 
@@ -29,6 +60,7 @@ class _DebrifyTvChannel {
   final List<String> keywords;
   final String provider;
   final bool startRandom;
+  final int randomStartPercent;
   final bool hideSeekbar;
   final bool showWatermark;
   final bool showVideoTitle;
@@ -41,6 +73,7 @@ class _DebrifyTvChannel {
     required this.keywords,
     required this.provider,
     required this.startRandom,
+    required this.randomStartPercent,
     required this.hideSeekbar,
     required this.showWatermark,
     required this.showVideoTitle,
@@ -49,6 +82,9 @@ class _DebrifyTvChannel {
   });
 
   factory _DebrifyTvChannel.fromJson(Map<String, dynamic> json) {
+    final hideOptions = json['hideOptions'] is bool
+        ? json['hideOptions'] as bool
+        : true;
     final dynamic keywordsRaw = json['keywords'];
     final List<String> keywords;
     if (keywordsRaw is List) {
@@ -79,18 +115,17 @@ class _DebrifyTvChannel {
       startRandom: json['startRandom'] is bool
           ? json['startRandom'] as bool
           : true,
-      hideSeekbar: json['hideSeekbar'] is bool
-          ? json['hideSeekbar'] as bool
-          : true,
+      randomStartPercent: _parseRandomStartPercent(
+        json['randomStartPercent'],
+      ),
+      hideSeekbar: hideOptions,
       showWatermark: json['showWatermark'] is bool
           ? json['showWatermark'] as bool
           : true,
       showVideoTitle: json['showVideoTitle'] is bool
           ? json['showVideoTitle'] as bool
           : false,
-      hideOptions: json['hideOptions'] is bool
-          ? json['hideOptions'] as bool
-          : true,
+      hideOptions: hideOptions,
       hideBackButton: json['hideBackButton'] is bool
           ? json['hideBackButton'] as bool
           : true,
@@ -104,7 +139,8 @@ class _DebrifyTvChannel {
       'keywords': keywords,
       'provider': provider,
       'startRandom': startRandom,
-      'hideSeekbar': hideSeekbar,
+      'randomStartPercent': randomStartPercent,
+      'hideSeekbar': hideOptions,
       'showWatermark': showWatermark,
       'showVideoTitle': showVideoTitle,
       'hideOptions': hideOptions,
@@ -118,22 +154,24 @@ class _DebrifyTvChannel {
     List<String>? keywords,
     String? provider,
     bool? startRandom,
-    bool? hideSeekbar,
+    int? randomStartPercent,
     bool? showWatermark,
     bool? showVideoTitle,
     bool? hideOptions,
     bool? hideBackButton,
   }) {
+    final nextHideOptions = hideOptions ?? this.hideOptions;
     return _DebrifyTvChannel(
       id: id ?? this.id,
       name: name ?? this.name,
       keywords: keywords ?? this.keywords,
       provider: provider ?? this.provider,
       startRandom: startRandom ?? this.startRandom,
-      hideSeekbar: hideSeekbar ?? this.hideSeekbar,
+      randomStartPercent: randomStartPercent ?? this.randomStartPercent,
+      hideSeekbar: nextHideOptions,
       showWatermark: showWatermark ?? this.showWatermark,
       showVideoTitle: showVideoTitle ?? this.showVideoTitle,
-      hideOptions: hideOptions ?? this.hideOptions,
+      hideOptions: nextHideOptions,
       hideBackButton: hideBackButton ?? this.hideBackButton,
     );
   }
@@ -165,6 +203,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   final Set<String> _expandedChannelIds = <String>{};
   // Advanced options
   bool _startRandom = true;
+  int _randomStartPercent = _randomStartPercentDefault;
   bool _hideSeekbar = true;
   bool _showWatermark = true;
   bool _showVideoTitle = false;
@@ -237,9 +276,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       try {
         Navigator.of(_progressSheetContext!).pop();
       } catch (_) {}
+      _progressSheetContext = null;
+      _progressOpen = false;
+      return;
     }
-    _progressOpen = false;
-    _progressSheetContext = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_progressOpen) {
+        return;
+      }
+      if (_progressSheetContext != null) {
+        _closeProgressDialog();
+        return;
+      }
+      if (mounted) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {}
+      }
+      _progressSheetContext = null;
+      _progressOpen = false;
+    });
   }
 
   String _determineDefaultProvider(
@@ -277,10 +333,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<void> _loadSettings() async {
     final startRandom = await StorageService.getDebrifyTvStartRandom();
-    final hideSeekbar = await StorageService.getDebrifyTvHideSeekbar();
+    final randomStartPercent =
+        await StorageService.getDebrifyTvRandomStartPercent();
+    final hideOptions = await StorageService.getDebrifyTvHideOptions();
     final showWatermark = await StorageService.getDebrifyTvShowWatermark();
     final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
-    final hideOptions = await StorageService.getDebrifyTvHideOptions();
     final hideBackButton = await StorageService.getDebrifyTvHideBackButton();
     final storedProvider = await StorageService.getDebrifyTvProvider();
     final hasStoredProvider = await StorageService.hasDebrifyTvProvider();
@@ -305,7 +362,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (mounted) {
       setState(() {
         _startRandom = startRandom;
-        _hideSeekbar = hideSeekbar;
+        _randomStartPercent = _clampRandomStartPercent(randomStartPercent);
+        _hideSeekbar = hideOptions;
         _showWatermark = showWatermark;
         _showVideoTitle = showVideoTitle;
         _hideOptions = hideOptions;
@@ -314,6 +372,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _torboxAvailable = torboxAvailable;
         _provider = defaultProvider;
       });
+    }
+
+    if (await StorageService.getDebrifyTvHideSeekbar() != hideOptions) {
+      unawaited(StorageService.saveDebrifyTvHideSeekbar(hideOptions));
     }
 
     if (defaultProvider != storedProvider) {
@@ -823,10 +885,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     String providerValue = existing?.provider ?? _provider;
     bool startRandom = existing?.startRandom ?? _startRandom;
-    bool hideSeekbar = existing?.hideSeekbar ?? _hideSeekbar;
+    int randomStartPercent =
+        existing?.randomStartPercent ?? _randomStartPercent;
+    randomStartPercent = _clampRandomStartPercent(randomStartPercent);
+    bool hideOptions = existing?.hideOptions ?? _hideOptions;
     bool showWatermark = existing?.showWatermark ?? _showWatermark;
     bool showVideoTitle = existing?.showVideoTitle ?? _showVideoTitle;
-    bool hideOptions = existing?.hideOptions ?? _hideOptions;
     bool hideBackButton = existing?.hideBackButton ?? _hideBackButton;
     String? error;
 
@@ -886,7 +950,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 keywords: keywords,
                 provider: providerValue,
                 startRandom: startRandom,
-                hideSeekbar: hideSeekbar,
+                randomStartPercent: randomStartPercent,
+                hideSeekbar: hideOptions,
                 showWatermark: showWatermark,
                 showVideoTitle: showVideoTitle,
                 hideOptions: hideOptions,
@@ -1121,13 +1186,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         value: startRandom,
                         onChanged: (v) => setModalState(() => startRandom = v),
                       ),
-                      const SizedBox(height: 8),
-                      _SwitchRow(
-                        title: 'Hide seekbar',
-                        subtitle: 'Disable progress slider and time',
-                        value: hideSeekbar,
-                        onChanged: (v) => setModalState(() => hideSeekbar = v),
-                      ),
+                      if (startRandom) ...[
+                        const SizedBox(height: 8),
+                        _RandomStartSlider(
+                          value: randomStartPercent,
+                          onChanged: (next) => setModalState(
+                            () => randomStartPercent = next,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       _SwitchRow(
                         title: 'Show DebrifyTV watermark',
@@ -1238,7 +1305,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       'DebrifyTV: ${isEdit ? 'Updating' : 'Creating'} channel "${channel.name}" with ${normalizedKeywords.length} keyword(s): ${normalizedKeywords.join(', ')}',
     );
 
-    _showChannelCreationDialog(channel.name);
+    bool progressShown = false;
+    void ensureProgressDialog() {
+      if (!progressShown) {
+        _showChannelCreationDialog(channel.name);
+        progressShown = true;
+      }
+    }
+
     try {
       final baseline = isEdit ? _channelCache[channel.id] : null;
       if (normalizedKeywords.length > _maxChannelKeywords) {
@@ -1253,18 +1327,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       DebrifyTvChannelCacheEntry? workingEntry = baseline;
+      final currentKeywordSet = normalizedKeywords.toSet();
+      Set<String> addedKeywords = const <String>{};
+      Set<String> removedKeywords = const <String>{};
 
       if (isEdit && baseline != null) {
         final previousKeywords = baseline.normalizedKeywords.toSet();
-        final currentKeywords = normalizedKeywords.toSet();
-        final removedKeywords = previousKeywords.difference(currentKeywords);
-        final addedKeywords = currentKeywords.difference(previousKeywords);
+        removedKeywords = previousKeywords.difference(currentKeywordSet);
+        addedKeywords = currentKeywordSet.difference(previousKeywords);
 
         debugPrint(
           'DebrifyTV: Detected keyword changes for "${channel.name}" – added: ${addedKeywords.join(', ')}, removed: ${removedKeywords.join(', ')}',
         );
 
         if (removedKeywords.isNotEmpty) {
+          ensureProgressDialog();
           final filteredTorrents = baseline.torrents.where((cached) {
             final torrentKeywords = cached.keywords.toSet();
             return torrentKeywords.intersection(removedKeywords).isEmpty;
@@ -1293,6 +1370,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
 
         if (addedKeywords.isNotEmpty) {
+          ensureProgressDialog();
           debugPrint(
             'DebrifyTV: Warming new keywords for "${channel.name}": ${addedKeywords.join(', ')}',
           );
@@ -1314,6 +1392,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           workingEntry = baseline.copyWith(normalizedKeywords: normalizedKeywords);
         }
       } else {
+        ensureProgressDialog();
         debugPrint('DebrifyTV: Running full warm-up for "${channel.name}"');
         workingEntry = await _computeChannelCacheEntry(
           channel,
@@ -1386,7 +1465,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _showSnack('Failed to build channel cache. Please try again.',
           color: Colors.red);
     } finally {
-      _closeProgressDialog();
+      if (progressShown) {
+        _closeProgressDialog();
+      }
     }
   }
 
@@ -1426,6 +1507,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final previousProvider = _provider;
     final previousStartRandom = _startRandom;
+    final previousRandomStartPercent = _randomStartPercent;
     final previousHideSeekbar = _hideSeekbar;
     final previousShowWatermark = _showWatermark;
     final previousShowVideoTitle = _showVideoTitle;
@@ -1436,7 +1518,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     setState(() {
       _provider = channel.provider;
       _startRandom = channel.startRandom;
-      _hideSeekbar = channel.hideSeekbar;
+      _randomStartPercent = channel.randomStartPercent;
+      _hideSeekbar = channel.hideOptions;
       _showWatermark = channel.showWatermark;
       _showVideoTitle = channel.showVideoTitle;
       _hideOptions = channel.hideOptions;
@@ -1464,6 +1547,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     setState(() {
       _provider = previousProvider;
       _startRandom = previousStartRandom;
+      _randomStartPercent = previousRandomStartPercent;
       _hideSeekbar = previousHideSeekbar;
       _showWatermark = previousShowWatermark;
       _showVideoTitle = previousShowVideoTitle;
@@ -1962,6 +2046,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     videoUrl: firstUrl,
                     title: firstTitleResolved,
                     startFromRandom: _startRandom,
+                    randomStartMaxPercent: _randomStartPercent,
                     hideSeekbar: _hideSeekbar,
                     showWatermark: _showWatermark,
                     showVideoTitle: _showVideoTitle,
@@ -2198,6 +2283,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             videoUrl: firstUrl,
             title: firstTitle,
             startFromRandom: _startRandom,
+            randomStartMaxPercent: _randomStartPercent,
             hideSeekbar: _hideSeekbar,
             showWatermark: _showWatermark,
             showVideoTitle: _showVideoTitle,
@@ -2464,6 +2550,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             videoUrl: first['url'] ?? '',
             title: first['title'] ?? 'Debrify TV',
             startFromRandom: _startRandom,
+            randomStartMaxPercent: _randomStartPercent,
             hideSeekbar: _hideSeekbar,
             showWatermark: _showWatermark,
             showVideoTitle: _showVideoTitle,
@@ -2657,6 +2744,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             videoUrl: firstUrl,
             title: firstTitle,
             startFromRandom: _startRandom,
+            randomStartMaxPercent: _randomStartPercent,
             hideSeekbar: _hideSeekbar,
             showWatermark: _showWatermark,
             showVideoTitle: _showVideoTitle,
@@ -2827,6 +2915,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             videoUrl: first['url'] ?? '',
             title: first['title'] ?? 'Debrify TV',
             startFromRandom: _startRandom,
+            randomStartMaxPercent: _randomStartPercent,
             hideSeekbar: _hideSeekbar,
             showWatermark: _showWatermark,
             showVideoTitle: _showVideoTitle,
@@ -2959,6 +3048,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   videoUrl: videoUrl,
                   title: next.name,
                   startFromRandom: _startRandom,
+                  randomStartMaxPercent: _randomStartPercent,
                   hideSeekbar: _hideSeekbar,
                   showWatermark: _showWatermark,
                   showVideoTitle: _showVideoTitle,
@@ -3278,16 +3368,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       await StorageService.saveDebrifyTvStartRandom(v);
                     },
                   ),
-                  const SizedBox(height: 8),
-                  _SwitchRow(
-                    title: 'Hide seekbar',
-                    subtitle: 'Disable progress slider and time; double-tap still works',
-                    value: _hideSeekbar,
-                    onChanged: (v) async {
-                      setState(() => _hideSeekbar = v);
-                      await StorageService.saveDebrifyTvHideSeekbar(v);
-                    },
-                  ),
+                  if (_startRandom) ...[
+                    const SizedBox(height: 8),
+                    _RandomStartSlider(
+                      value: _randomStartPercent,
+                      onChanged: (next) {
+                        setState(() => _randomStartPercent = next);
+                      },
+                      onChangeEnd: (next) {
+                        StorageService.saveDebrifyTvRandomStartPercent(next);
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   _SwitchRow(
                     title: 'Show DebrifyTV watermark',
@@ -3314,8 +3406,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     subtitle: 'Hide all bottom controls (next, audio, etc.) - back button stays',
                     value: _hideOptions,
                     onChanged: (v) async {
-                      setState(() => _hideOptions = v);
+                      setState(() {
+                        _hideOptions = v;
+                        _hideSeekbar = v;
+                      });
                       await StorageService.saveDebrifyTvHideOptions(v);
+                      await StorageService.saveDebrifyTvHideSeekbar(v);
                     },
                   ),
                   const SizedBox(height: 8),
@@ -3555,10 +3651,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final bool isExpanded = _expandedChannelIds.contains(channel.id);
     final optionChips = <Widget>[];
     if (channel.startRandom) {
-      optionChips.add(_buildOptionChip(Icons.shuffle_rounded, 'Random start'));
-    }
-    if (channel.hideSeekbar) {
-      optionChips.add(_buildOptionChip(Icons.remove_red_eye_outlined, 'Seekbar hidden'));
+      optionChips.add(
+        _buildOptionChip(
+          Icons.shuffle_rounded,
+          'Random start (first ${channel.randomStartPercent}%)',
+        ),
+      );
     }
     if (channel.showWatermark) {
       optionChips.add(_buildOptionChip(Icons.water_drop_outlined, 'Watermark'));
@@ -4482,6 +4580,68 @@ class _StatsTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RandomStartSlider extends StatelessWidget {
+  final int value;
+  final ValueChanged<int> onChanged;
+  final ValueChanged<int>? onChangeEnd;
+
+  const _RandomStartSlider({
+    required this.value,
+    required this.onChanged,
+    this.onChangeEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: Colors.white70,
+      fontWeight: FontWeight.w600,
+    );
+    final helperStyle = theme.textTheme.bodySmall?.copyWith(
+      color: Colors.white60,
+    );
+    final divisions =
+        (_randomStartPercentMax - _randomStartPercentMin) ~/ 5;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Random start within first $value%',
+          style: textStyle,
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackShape: const RoundedRectSliderTrackShape(),
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
+          ),
+          child: Slider(
+            value: value.toDouble(),
+            min: _randomStartPercentMin.toDouble(),
+            max: _randomStartPercentMax.toDouble(),
+            divisions: divisions == 0 ? null : divisions,
+            label: '$value%',
+            onChanged: (raw) {
+              final next = _clampRandomStartPercent(raw.round());
+              onChanged(next);
+            },
+            onChangeEnd: onChangeEnd == null
+                ? null
+                : (raw) => onChangeEnd!(
+                      _clampRandomStartPercent(raw.round()),
+                    ),
+          ),
+        ),
+        Text(
+          'Videos will jump to a random moment inside the first $value% of playback.',
+          style: helperStyle,
+        ),
+      ],
     );
   }
 }
