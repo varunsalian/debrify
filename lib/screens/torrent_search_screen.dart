@@ -1993,7 +1993,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   'title': finalTitle,
                                   'url': '',
                                   'restrictedLink': links[0],
-                                  'apiKey': apiKey,
                                   'rdTorrentId': result['torrentId']
                                       ?.toString(),
                                   'kind': 'single',
@@ -2017,7 +2016,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   'title': torrentName,
                                   'kind': 'collection',
                                   'rdTorrentId': torrentId,
-                                  'apiKey': apiKey,
                                   'count': links.length,
                                 });
                             if (!mounted) return;

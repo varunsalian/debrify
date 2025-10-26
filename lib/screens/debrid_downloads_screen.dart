@@ -2765,7 +2765,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             'title': torrent.filename,
             'url': '',
             'restrictedLink': torrent.links[0],
-            'apiKey': _apiKey,
             'rdTorrentId': torrent.id,
             'kind': 'single',
           });
@@ -2790,7 +2789,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         'title': torrent.filename,
         'kind': 'collection',
         'rdTorrentId': torrent.id,
-        'apiKey': _apiKey,
         'count': torrent.links.length,
       });
       if (!mounted) return;
@@ -4065,7 +4063,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           'title': torrent.filename,
           'url': '',
           'restrictedLink': torrent.links[index],
-          'apiKey': _apiKey,
           'rdTorrentId': torrent.id,
           'kind': 'single',
         };
