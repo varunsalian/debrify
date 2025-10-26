@@ -19,11 +19,15 @@ class PlaylistScreen extends StatefulWidget {
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
   late Future<List<Map<String, dynamic>>> _loader;
+  late final TextEditingController _searchController;
+  String _searchTerm = '';
 
   @override
   void initState() {
     super.initState();
     _loader = _syncAndLoadPlaylist();
+    _searchController = TextEditingController();
+    _searchController.addListener(_handleSearchChanged);
   }
 
   Future<List<Map<String, dynamic>>> _syncAndLoadPlaylist() async {
@@ -35,6 +39,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     setState(() {
       _loader = StorageService.getPlaylistItemsRaw();
     });
+  }
+
+  void _handleSearchChanged() {
+    setState(() {
+      _searchTerm = _searchController.text;
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_handleSearchChanged);
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _playItem(Map<String, dynamic> item) async {
@@ -506,6 +523,53 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     return raw.replaceFirst('Exception: ', '').trim();
   }
 
+  String _prettifyProvider(String? raw) {
+    if (raw == null || raw.isEmpty) return 'Real-Debrid';
+    switch (raw.toLowerCase()) {
+      case 'realdebrid':
+      case 'real-debrid':
+      case 'real_debrid':
+        return 'Real-Debrid';
+      case 'torbox':
+        return 'TorBox';
+      case 'alldebrid':
+      case 'all-debrid':
+      case 'all_debrid':
+        return 'AllDebrid';
+      default:
+        return _titleCase(raw);
+    }
+  }
+
+  String _prettifyKind(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    switch (raw.toLowerCase()) {
+      case 'single':
+        return 'Single File';
+      case 'collection':
+        return 'Collection';
+      case 'series':
+        return 'Series';
+      case 'season':
+        return 'Season Pack';
+      default:
+        return _titleCase(raw);
+    }
+  }
+
+  String _titleCase(String value) {
+    final sanitized = value.replaceAll(RegExp(r'[\-_]+'), ' ');
+    final parts = sanitized.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+    return parts
+        .map((part) {
+          final lower = part.toLowerCase();
+          if (lower.isEmpty) return lower;
+          return lower[0].toUpperCase() + lower.substring(1);
+        })
+        .join(' ')
+        .trim();
+  }
+
   int _findFirstEpisodeIndex(List<SeriesInfo> infos) {
     int startIndex = 0;
     int? bestSeason;
@@ -654,57 +718,277 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _loader,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final items = snapshot.data ?? const <Map<String, dynamic>>[];
-          if (items.isEmpty) {
-            return ListView(
-              children: [
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.6,
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.playlist_add_rounded, size: 48, color: Colors.white70),
-                        SizedBox(height: 12),
-                        Text('Your playlist is empty', style: TextStyle(fontSize: 16)),
-                        SizedBox(height: 6),
-                        Text('Add items from Debrid or Let me choose', style: TextStyle(color: Colors.white60)),
-                      ],
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B1120),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0F172A), Color(0xFF020617)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            color: const Color(0xFFE50914),
+            backgroundColor: const Color(0xFF0F172A),
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _loader,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final items = (snapshot.data ?? const <Map<String, dynamic>>[]).toList();
+
+                if (items.isEmpty) {
+                  return CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
                     ),
+                    slivers: [
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withValues(alpha: 0.05),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.queue_music_rounded,
+                                  size: 48,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              const Text(
+                                'Nothing queued up yet',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Add shows or movies from Debrid or Let me choose and they will appear here ready to stream.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white.withValues(alpha: 0.65),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                items.sort((a, b) {
+                  final bAdded = _asInt(b['addedAt']) ?? 0;
+                  final aAdded = _asInt(a['addedAt']) ?? 0;
+                  return bAdded.compareTo(aAdded);
+                });
+
+                final query = _searchTerm.trim().toLowerCase();
+                final filteredItems = query.isEmpty
+                    ? items
+                    : items.where((item) {
+                        final title = ((item['title'] as String?) ?? '').toLowerCase();
+                        final series = ((item['seriesTitle'] as String?) ?? '').toLowerCase();
+                        final combined = '$title $series'.trim();
+                        return combined.contains(query);
+                      }).toList();
+
+                final totalCount = items.length;
+                final shownCount = filteredItems.length;
+                final bool isFiltering = query.isNotEmpty;
+                final headerSubtitle = isFiltering
+                    ? 'Showing $shownCount of $totalCount saved ${totalCount == 1 ? 'item' : 'items'}'
+                    : '$totalCount saved ${totalCount == 1 ? 'item' : 'items'} ready to play';
+
+                return CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
                   ),
-                ),
-              ],
-            );
-          }
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Your Playlist',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              headerSubtitle,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search playlist...',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            prefixIcon: const Icon(
+                              Icons.search_rounded,
+                              color: Colors.white60,
+                            ),
+                            suffixIcon: _searchTerm.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.close_rounded, color: Colors.white60),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                    },
+                                  ),
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.08),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                    if (filteredItems.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withValues(alpha: 0.05),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.search_off_rounded,
+                                  size: 44,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              const Text(
+                                'No matches found',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Try a different title or clear your search to see everything again.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white.withValues(alpha: 0.65),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              if (isFiltering) ...[
+                                const SizedBox(height: 16),
+                                TextButton(
+                                  onPressed: () => _searchController.clear(),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: const Color(0xFFE50914),
+                                  ),
+                                  child: const Text('Clear search'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final item = filteredItems[index];
+                              final String title = (item['title'] as String?) ?? 'Video';
+                              final String? posterUrl = item['posterUrl'] as String?;
+                              final int? sizeBytes = _asInt(item['sizeBytes']);
+                              final String? sizeLabel =
+                                  sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
+                              final int? addedAt = _asInt(item['addedAt']);
+                              final String? addedLabel = (addedAt != null && addedAt > 0)
+                                  ? 'Added ${Formatters.formatDate(addedAt)}'
+                                  : null;
+                              final String providerLabel = _prettifyProvider(item['provider'] as String?);
+                              final String kindLabel = _prettifyKind(item['kind'] as String?);
+                              final String? subtitle = item['seriesTitle'] as String?;
+                              final metadata = <String>[
+                                if (providerLabel.isNotEmpty) providerLabel,
+                                if (kindLabel.isNotEmpty) kindLabel,
+                                if (sizeLabel != null) sizeLabel,
+                              ];
 
-          items.sort((a, b) => ((b['addedAt'] ?? 0) as int).compareTo((a['addedAt'] ?? 0) as int));
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              final String title = (item['title'] as String?) ?? 'Video';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _PlaylistCard(
-                  title: title,
-                  posterUrl: item['posterUrl'] as String?,
-                  onPlay: () => _playItem(item),
-                  onRemove: () => _removeItem(item),
-                ),
-              );
-            },
-          );
-        },
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: index == filteredItems.length - 1 ? 0 : 20,
+                                ),
+                                child: _PlaylistCard(
+                                  title: title,
+                                  subtitle: subtitle,
+                                  posterUrl: posterUrl,
+                                  metadata: metadata,
+                                  addedLabel: addedLabel,
+                                  onPlay: () => _playItem(item),
+                                  onRemove: () => _removeItem(item),
+                                ),
+                              );
+                            },
+                            childCount: filteredItems.length,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -712,210 +996,326 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
 class _PlaylistCard extends StatelessWidget {
   final String title;
+  final String? subtitle;
   final String? posterUrl;
+  final List<String> metadata;
+  final String? addedLabel;
   final VoidCallback onPlay;
   final VoidCallback onRemove;
 
   const _PlaylistCard({
     required this.title,
+    this.subtitle,
     this.posterUrl,
+    this.metadata = const <String>[],
+    this.addedLabel,
     required this.onPlay,
     required this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      clipBehavior: Clip.antiAlias,
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
         onTap: onPlay,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          height: 120,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF1E293B),
-                Color(0xFF334155),
+        borderRadius: BorderRadius.circular(24),
+        splashColor: Colors.white.withValues(alpha: 0.08),
+        highlightColor: Colors.white.withValues(alpha: 0.04),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 190),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF1F2937),
+                  Color(0xFF0F172A),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.38),
+                  blurRadius: 32,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 24),
+                ),
               ],
             ),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              // Image section
-              Container(
-                width: 80,
-                height: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF475569),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: _buildPosterLayer(),
                 ),
-                child: posterUrl != null && posterUrl!.isNotEmpty
-                    ? Image.network(
-                        posterUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return _buildImagePlaceholder();
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return _buildImagePlaceholder();
-                        },
-                      )
-                    : _buildImagePlaceholder(),
-              ),
-              
-              // Content section
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomLeft,
+                        end: Alignment.topRight,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.65),
+                          Colors.black.withValues(alpha: 0.35),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: -60,
+                  right: -40,
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFFE50914).withValues(alpha: 0.45),
+                          const Color(0xFF9333EA).withValues(alpha: 0.25),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Title
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      
-                      // Bottom row with play button and remove button
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Play button
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE50914),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          
-                          // Remove button
-                          GestureDetector(
-                            onTap: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  backgroundColor: const Color(0xFF1E293B),
-                                  title: const Text(
-                                    'Remove from Playlist',
-                                    style: TextStyle(color: Colors.white),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.2,
                                   ),
-                                  content: Text(
-                                    'Are you sure you want to remove "$title" from your playlist?',
-                                    style: const TextStyle(color: Colors.white70),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.of(context).pop(false),
-                                      style: TextButton.styleFrom(
-                                        backgroundColor: Colors.white.withOpacity(0.1),
-                                        foregroundColor: Colors.white70,
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                          side: BorderSide(
-                                            color: Colors.white.withOpacity(0.2),
-                                            width: 1,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Cancel',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => Navigator.of(context).pop(true),
-                                      style: TextButton.styleFrom(
-                                        backgroundColor: Colors.red.withOpacity(0.2),
-                                        foregroundColor: Colors.red,
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                          side: BorderSide(
-                                            color: Colors.red.withOpacity(0.3),
-                                            width: 1,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Remove',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) {
-                                onRemove();
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.red.withOpacity(0.3),
-                                  width: 1,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              child: const Icon(
-                                Icons.close_rounded,
-                                color: Colors.red,
-                                size: 18,
+                              const SizedBox(width: 12),
+                              _buildRemoveButton(context),
+                            ],
+                          ),
+                          if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              subtitle!,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.72),
+                                fontSize: 15,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          if (metadata.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: metadata
+                                  .map(
+                                    (label) => _MetadataTag(label: label),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: onPlay,
+                            icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                            label: const Text(
+                              'Play now',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
                               ),
                             ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE50914),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              elevation: 0,
+                            ),
                           ),
+                          const SizedBox(width: 16),
+                          if (addedLabel != null && addedLabel!.isNotEmpty)
+                            Expanded(
+                              child: Text(
+                                addedLabel!,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.65),
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                         ],
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildImagePlaceholder() {
+  Widget _buildPosterLayer() {
+    final radius = BorderRadius.circular(24);
+    if (posterUrl == null || posterUrl!.isEmpty) {
+      return ClipRRect(
+        borderRadius: radius,
+        child: _buildFallbackBackground(),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: radius,
+      child: Image.network(
+        posterUrl!,
+        fit: BoxFit.cover,
+        color: Colors.black.withValues(alpha: 0.35),
+        colorBlendMode: BlendMode.darken,
+        errorBuilder: (context, error, stackTrace) => _buildFallbackBackground(),
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return _buildFallbackBackground();
+        },
+      ),
+    );
+  }
+
+  Widget _buildFallbackBackground() {
     return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: const Color(0xFF475569),
-      child: const Icon(
-        Icons.video_library_rounded,
-        color: Colors.white54,
-        size: 32,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF1D4ED8),
+            Color(0xFF9333EA),
+          ],
+          begin: Alignment.bottomLeft,
+          end: Alignment.topRight,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRemoveButton(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.32),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: IconButton(
+        icon: const Icon(Icons.delete_outline_rounded),
+        color: Colors.white70,
+        splashRadius: 20,
+        onPressed: () async {
+          final confirmed = await _confirmRemoval(context);
+          if (confirmed == true) {
+            onRemove();
+          }
+        },
+      ),
+    );
+  }
+
+  Future<bool?> _confirmRemoval(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        title: const Text(
+          'Remove from playlist?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '“$title” will be removed from your playlist. You can always add it again later.',
+          style: const TextStyle(color: Colors.white70, fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFE50914),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataTag extends StatelessWidget {
+  final String label;
+
+  const _MetadataTag({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12.5,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }
