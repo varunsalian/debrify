@@ -901,6 +901,33 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             Future<void> submit() async {
+              final pendingRaw = keywordInputController.text.trim();
+              if (pendingRaw.isNotEmpty) {
+                final pendingKeywords = _parseKeywords(pendingRaw);
+                for (final rawKw in pendingKeywords) {
+                  final trimmedKw = rawKw.trim();
+                  if (trimmedKw.isEmpty) {
+                    continue;
+                  }
+                  final alreadyPresent = keywordList.any(
+                    (existing) =>
+                        existing.toLowerCase() == trimmedKw.toLowerCase(),
+                  );
+                  if (alreadyPresent) {
+                    continue;
+                  }
+                  if (keywordList.length >= _maxChannelKeywords) {
+                    setModalState(() {
+                      error =
+                          'You can add up to $_maxChannelKeywords keywords per channel.';
+                    });
+                    return;
+                  }
+                  keywordList.add(trimmedKw);
+                }
+                keywordInputController.clear();
+              }
+
               final name = nameController.text.trim();
               final keywords = <String>[];
               final seen = <String>{};
