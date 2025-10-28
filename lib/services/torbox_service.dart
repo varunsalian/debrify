@@ -163,7 +163,7 @@ class TorboxService {
         );
         final response = await http
             .get(uri, headers: headers)
-            .timeout(const Duration(seconds: 15));
+            .timeout(const Duration(seconds: 60));
 
         if (response.statusCode != 200) {
           debugPrint(
@@ -195,8 +195,9 @@ class TorboxService {
           }
         }
       } catch (e) {
-        debugPrint('TorboxService: checkcached chunk failed: $e');
-        rethrow;
+        debugPrint(
+          'TorboxService: checkcached chunk failed (ignored): $e',
+        );
       }
     }
 

@@ -197,7 +197,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const int _playbackTorrentThreshold = 1000;
   static const int _maxTorrentsPerKeywordPlayback = 25;
   static const int _minimumTorrentsForChannel = 5;
-  static const int _maxChannelKeywords = 100;
+  static const int _maxChannelKeywords = 1000;
   final TextEditingController _channelSearchController = TextEditingController();
   String _channelSearchTerm = '';
   final Set<String> _expandedChannelIds = <String>{};
