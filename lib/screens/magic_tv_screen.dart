@@ -198,6 +198,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const int _maxTorrentsPerKeywordPlayback = 25;
   static const int _minimumTorrentsForChannel = 5;
   static const int _maxChannelKeywords = 1000;
+  static const int _keywordWarmEstimateMs = 1000;
   final TextEditingController _channelSearchController = TextEditingController();
   String _channelSearchTerm = '';
   final Set<String> _expandedChannelIds = <String>{};
@@ -743,6 +744,41 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       normalized.add(value);
     }
     return normalized;
+  }
+
+  int _estimatedWarmDurationSeconds(
+    int keywordCount, {
+    int? totalKeywordUniverse,
+  }) {
+    if (keywordCount <= 0) {
+      return 0;
+    }
+
+    final int effectiveUniverse = max(1, totalKeywordUniverse ?? keywordCount);
+    final bool useExpandedCsvFetch = effectiveUniverse < 10;
+    final int maxResultsConfig = useExpandedCsvFetch
+        ? _channelTorrentsCsvMaxResultsSmall
+        : _channelTorrentsCsvMaxResultsLarge;
+
+    final int csvRequestsPerKeyword = max(
+      1,
+      min(20, ((maxResultsConfig + 24) ~/ 25)),
+    );
+
+    final int batches = max(
+      1,
+      ((keywordCount + _channelCsvParallelism - 1) ~/ _channelCsvParallelism),
+    );
+
+    final int csvRequests = batches * csvRequestsPerKeyword;
+    final int csvDurationMs = csvRequests * _keywordWarmEstimateMs;
+
+    // Pirate Bay requests run concurrently ahead of the warm loop. Keep a single
+    // request's cost so we don't under-estimate tiny workloads.
+    final int pirateDurationMs = _keywordWarmEstimateMs;
+    final int estimatedMs = max(csvDurationMs, pirateDurationMs);
+
+    return (estimatedMs + 999) ~/ 1000;
   }
 
   List<CachedTorrent> _filterCachedTorrentsForKeywords(
@@ -1332,10 +1368,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       'DebrifyTV: ${isEdit ? 'Updating' : 'Creating'} channel "${channel.name}" with ${normalizedKeywords.length} keyword(s): ${normalizedKeywords.join(', ')}',
     );
 
+    final int estimatedSeconds = _estimatedWarmDurationSeconds(
+      normalizedKeywords.length,
+      totalKeywordUniverse: normalizedKeywords.length,
+    );
     bool progressShown = false;
-    void ensureProgressDialog() {
+    void ensureProgressDialog({int? countdownSeconds}) {
       if (!progressShown) {
-        _showChannelCreationDialog(channel.name);
+        _showChannelCreationDialog(
+          channel.name,
+          countdownSeconds: countdownSeconds ?? estimatedSeconds,
+        );
         progressShown = true;
       }
     }
@@ -1397,7 +1440,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
 
         if (addedKeywords.isNotEmpty) {
-          ensureProgressDialog();
+          ensureProgressDialog(
+            countdownSeconds: _estimatedWarmDurationSeconds(
+              addedKeywords.length,
+              totalKeywordUniverse: normalizedKeywords.length,
+            ),
+          );
           debugPrint(
             'DebrifyTV: Warming new keywords for "${channel.name}": ${addedKeywords.join(', ')}',
           );
@@ -2968,7 +3016,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  void _showChannelCreationDialog(String channelName) {
+  void _showChannelCreationDialog(
+    String channelName, {
+    int? countdownSeconds,
+  }) {
     if (_progressOpen || !mounted) {
       return;
     }
@@ -2986,6 +3037,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         pageBuilder: (ctx, _, __) {
           return _ChannelCreationDialog(
             channelName: channelName,
+            countdownSeconds: countdownSeconds,
             onReady: (dialogCtx) {
               _progressSheetContext = dialogCtx;
             },
@@ -4392,19 +4444,60 @@ class _CachedLoadingDialogState extends State<_CachedLoadingDialog> {
   }
 }
 
-class _ChannelCreationDialog extends StatelessWidget {
+class _ChannelCreationDialog extends StatefulWidget {
   final String channelName;
+  final int? countdownSeconds;
   final void Function(BuildContext context) onReady;
 
   const _ChannelCreationDialog({
     required this.channelName,
+    this.countdownSeconds,
     required this.onReady,
   });
 
   @override
+  State<_ChannelCreationDialog> createState() => _ChannelCreationDialogState();
+}
+
+class _ChannelCreationDialogState extends State<_ChannelCreationDialog> {
+  Timer? _countdownTimer;
+  int? _remainingSeconds;
+
+  @override
+  void initState() {
+    super.initState();
+    _remainingSeconds = widget.countdownSeconds;
+    if (_remainingSeconds != null && _remainingSeconds! > 0) {
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        setState(() {
+          final next = (_remainingSeconds ?? 0) - 1;
+          if (next <= 0) {
+            _remainingSeconds = 0;
+            timer.cancel();
+          } else {
+            _remainingSeconds = next;
+          }
+        });
+      });
+    } else if (_remainingSeconds != null && _remainingSeconds! <= 0) {
+      _remainingSeconds = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      onReady(context);
+      widget.onReady(context);
     });
     return Center(
       child: Container(
@@ -4433,7 +4526,7 @@ class _ChannelCreationDialog extends StatelessWidget {
             _GradientSpinner(),
             const SizedBox(height: 18),
             Text(
-              'Building "${channelName}"',
+              'Building "${widget.channelName}"',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -4454,6 +4547,19 @@ class _ChannelCreationDialog extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ),
+            if (widget.countdownSeconds != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _remainingSeconds != null && _remainingSeconds! > 0
+                    ? 'About ${_remainingSeconds!}s remaining…'
+                    : 'Taking longer than usual…',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
         ),
       ),
