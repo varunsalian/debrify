@@ -5,6 +5,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
+import android.text.TextUtils;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -14,9 +15,12 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.core.content.ContextCompat;
 import androidx.media3.common.C;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
@@ -26,13 +30,19 @@ import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter;
+import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.DefaultTimeBar;
 import androidx.media3.ui.PlayerView;
+import androidx.media3.ui.SubtitleView;
 
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
 
 import java.util.ArrayList;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 
@@ -66,10 +76,24 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View timeContainer;
     private View buttonsRow;
     private AppCompatButton pauseButton;
+    private AppCompatButton audioButton;
+    private AppCompatButton subtitleButton;
+    private AppCompatButton aspectButton;
     private View nextOverlay;
     private TextView nextText;
     private TextView nextSubtext;
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
+    private int resizeModeIndex = 0;
+    private final int[] resizeModes = new int[] {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT,
+            AspectRatioFrameLayout.RESIZE_MODE_FILL,
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    };
+    private final String[] resizeModeLabels = new String[] {
+            "Fit",
+            "Fill",
+            "Zoom"
+    };
 
     private boolean startFromRandom;
     private int randomMaxPercent;
@@ -189,6 +213,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         playerView.setUseController(true);
         playerView.setControllerAutoShow(true);
         playerView.setControllerShowTimeoutMs(4000);
+        playerView.setResizeMode(resizeModes[resizeModeIndex]);
+        SubtitleView subtitleView = playerView.getSubtitleView();
+        if (subtitleView != null) {
+            subtitleView.setBottomPaddingFraction(0.02f);
+        }
         playerView.requestFocus();
     }
 
@@ -254,6 +283,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         timeContainer = playerView.findViewById(R.id.debrify_controls_time_container);
         buttonsRow = playerView.findViewById(R.id.debrify_controls_buttons);
         pauseButton = playerView.findViewById(R.id.debrify_pause_button);
+        audioButton = playerView.findViewById(R.id.debrify_audio_button);
+        subtitleButton = playerView.findViewById(R.id.debrify_subtitle_button);
+        aspectButton = playerView.findViewById(R.id.debrify_aspect_button);
         DefaultTimeBar timeBar = playerView.findViewById(androidx.media3.ui.R.id.exo_progress);
         View nextButton = playerView.findViewById(R.id.debrify_next_button);
 
@@ -282,6 +314,37 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 }
             });
             updatePauseButtonLabel();
+        }
+
+        if (audioButton != null) {
+            audioButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+            audioButton.setOnClickListener(v -> {
+                cycleAudioTrack();
+                if (!hideOptions) {
+                    playerView.showController();
+                }
+            });
+        }
+
+        if (subtitleButton != null) {
+            subtitleButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+            subtitleButton.setOnClickListener(v -> {
+                cycleSubtitleTrack();
+                if (!hideOptions) {
+                    playerView.showController();
+                }
+            });
+        }
+
+        if (aspectButton != null) {
+            aspectButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+            aspectButton.setOnClickListener(v -> {
+                cycleAspectRatio();
+                if (!hideOptions) {
+                    playerView.showController();
+                }
+            });
+            updateAspectButtonLabel();
         }
 
         if (nextButton != null) {
@@ -361,6 +424,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         pauseButton.setBackgroundResource(playing
                 ? R.drawable.debrify_tv_button_pause_bg
                 : R.drawable.debrify_tv_button_secondary_bg);
+        updateAspectButtonLabel();
+    }
+
+    private void updateAspectButtonLabel() {
+        if (aspectButton == null) {
+            return;
+        }
+        aspectButton.setText(resizeModeLabels[resizeModeIndex]);
     }
 
     private void showTitleTemporarily(@Nullable String title) {
@@ -482,6 +553,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         player.play();
         playedCount += 1;
         updateTitle(title);
+        player.addListener(new Player.Listener() {
+            @Override
+            public void onTracksChanged(Tracks tracks) {
+                player.removeListener(this);
+                ensureDefaultSubtitleSelected();
+            }
+        });
     }
 
     private void updateTitle(@Nullable String title) {
@@ -506,6 +584,25 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             player.seekTo(offset);
         }
         randomApplied = true;
+    }
+
+    private void ensureDefaultSubtitleSelected() {
+        if (trackSelector == null) {
+            return;
+        }
+        List<TrackOption> subtitleTracks = collectTrackOptions(C.TRACK_TYPE_TEXT);
+        if (subtitleTracks.isEmpty()) {
+            return;
+        }
+        TrackOption first = subtitleTracks.get(0);
+        DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .addOverride(new TrackSelectionOverride(
+                        first.group.getMediaTrackGroup(),
+                        Collections.singletonList(first.trackIndex)));
+        trackSelector.setParameters(builder.build());
+        showToast("Subtitles: " + first.label);
     }
 
     private void requestNextStream() {
@@ -591,6 +688,151 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         updatePauseButtonLabel();
     }
 
+    private void cycleAudioTrack() {
+        if (player == null || trackSelector == null) {
+            return;
+        }
+        List<TrackOption> audioTracks = collectTrackOptions(C.TRACK_TYPE_AUDIO);
+        if (audioTracks.isEmpty()) {
+            showToast("No alternate audio tracks");
+            return;
+        }
+        int currentIndex = -1;
+        for (int i = 0; i < audioTracks.size(); i++) {
+            TrackOption option = audioTracks.get(i);
+            if (option.group.isTrackSelected(option.trackIndex)) {
+                currentIndex = i;
+                break;
+            }
+        }
+        int nextIndex = (currentIndex + 1) % audioTracks.size();
+        TrackOption next = audioTracks.get(nextIndex);
+        DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters()
+                .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                .addOverride(new TrackSelectionOverride(
+                        next.group.getMediaTrackGroup(),
+                        Collections.singletonList(next.trackIndex)));
+        trackSelector.setParameters(builder.build());
+        showToast("Audio: " + next.label);
+    }
+
+    private void cycleSubtitleTrack() {
+        if (player == null || trackSelector == null) {
+            return;
+        }
+        List<TrackOption> subtitleTracks = collectTrackOptions(C.TRACK_TYPE_TEXT);
+        if (subtitleTracks.isEmpty()) {
+            showToast("No subtitles available");
+            return;
+        }
+        DefaultTrackSelector.Parameters parameters = trackSelector.getParameters();
+        int currentIndex = -1;
+        for (int i = 0; i < subtitleTracks.size(); i++) {
+            TrackOption option = subtitleTracks.get(i);
+            if (option.group.isTrackSelected(option.trackIndex)) {
+                currentIndex = i;
+                break;
+            }
+        }
+        int nextIndex = currentIndex + 1;
+        DefaultTrackSelector.Parameters.Builder builder =
+                trackSelector.buildUponParameters().clearOverridesOfType(C.TRACK_TYPE_TEXT);
+        if (nextIndex >= subtitleTracks.size()) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
+            trackSelector.setParameters(builder.build());
+            showToast("Subtitles off");
+            return;
+        }
+        TrackOption next = subtitleTracks.get(nextIndex);
+        builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .addOverride(new TrackSelectionOverride(
+                        next.group.getMediaTrackGroup(),
+                        Collections.singletonList(next.trackIndex)));
+        trackSelector.setParameters(builder.build());
+        showToast("Subtitles: " + next.label);
+    }
+
+    private void cycleAspectRatio() {
+        resizeModeIndex = (resizeModeIndex + 1) % resizeModes.length;
+        if (playerView != null) {
+            playerView.setResizeMode(resizeModes[resizeModeIndex]);
+        }
+        updateAspectButtonLabel();
+        showToast("Aspect: " + resizeModeLabels[resizeModeIndex]);
+    }
+
+    private List<TrackOption> collectTrackOptions(int trackType) {
+        List<TrackOption> options = new ArrayList<>();
+        if (player == null) {
+            return options;
+        }
+        Tracks tracks = player.getCurrentTracks();
+        int fallbackIndex = 1;
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != trackType || !group.isSupported()) {
+                continue;
+            }
+            for (int i = 0; i < group.length; i++) {
+                if (!group.isTrackSupported(i)) {
+                    continue;
+                }
+                Format format = group.getTrackFormat(i);
+                String label = buildTrackLabel(format, fallbackIndex, trackType);
+                options.add(new TrackOption(group, i, label));
+                fallbackIndex++;
+            }
+        }
+        return options;
+    }
+
+    private String buildTrackLabel(Format format, int fallbackIndex, int trackType) {
+        List<String> parts = new ArrayList<>();
+        if (format.label != null && !format.label.isEmpty()) {
+            parts.add(format.label);
+        }
+        String languageLabel = formatLanguage(format.language);
+        if (languageLabel != null && !languageLabel.isEmpty()) {
+            parts.add(languageLabel);
+        }
+        if (trackType == C.TRACK_TYPE_AUDIO && format.channelCount != Format.NO_VALUE) {
+            parts.add(format.channelCount + "ch");
+        }
+        if (parts.isEmpty()) {
+            String prefix = trackType == C.TRACK_TYPE_AUDIO ? "Track" : "Subtitle";
+            parts.add(prefix + " " + fallbackIndex);
+        }
+        return TextUtils.join(" • ", parts);
+    }
+
+    private String formatLanguage(@Nullable String languageTag) {
+        if (languageTag == null || languageTag.isEmpty() || "und".equals(languageTag)) {
+            return null;
+        }
+        Locale locale = Locale.forLanguageTag(languageTag);
+        String display = locale.getDisplayLanguage(Locale.getDefault());
+        if (display == null || display.isEmpty()) {
+            return languageTag;
+        }
+        return display;
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    private static class TrackOption {
+        final Tracks.Group group;
+        final int trackIndex;
+        final String label;
+
+        TrackOption(Tracks.Group group, int trackIndex, String label) {
+            this.group = group;
+            this.trackIndex = trackIndex;
+            this.label = label;
+        }
+    }
+
     private void seekBy(long offsetMs) {
         if (player == null) {
             return;
@@ -665,6 +907,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         if (player != null) {
+            player.removeListener(playbackListener);
             player.stop();
             player.release();
             player = null;

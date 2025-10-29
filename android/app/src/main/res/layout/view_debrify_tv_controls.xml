@@ -92,55 +92,126 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <androidx.appcompat.widget.AppCompatImageButton
-            android:id="@id/exo_play_pause"
-            style="@style/Widget.AppCompat.ImageButton"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone"
-            android:contentDescription="@string/debrify_tv_control_play_pause" />
-
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/debrify_pause_button"
-            style="@style/Widget.AppCompat.Button"
+        <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="22dp"
-            android:background="@drawable/debrify_tv_button_pause_bg"
-            android:contentDescription="@string/debrify_tv_control_play_pause"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:minHeight="0dp"
-            android:minWidth="0dp"
-            android:layout_marginEnd="6dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp"
-            android:text="@string/debrify_tv_control_pause_button"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="9sp" />
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/debrify_next_button"
-            style="@style/Widget.AppCompat.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="22dp"
-            android:background="@drawable/debrify_tv_button_secondary_bg"
-            android:contentDescription="@string/debrify_tv_control_next"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:layout_marginStart="6dp"
-            android:minHeight="0dp"
-            android:minWidth="0dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp"
-            android:text="@string/debrify_tv_control_next"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:textSize="9sp" />
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@id/exo_play_pause"
+                style="@style/Widget.AppCompat.ImageButton"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                android:contentDescription="@string/debrify_tv_control_play_pause" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_pause_button"
+                style="@style/Widget.AppCompat.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:background="@drawable/debrify_tv_button_pause_bg"
+                android:contentDescription="@string/debrify_tv_control_play_pause"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:layout_marginEnd="6dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="@string/debrify_tv_control_pause_button"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="9sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_next_button"
+                style="@style/Widget.AppCompat.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:background="@drawable/debrify_tv_button_secondary_bg"
+                android:contentDescription="@string/debrify_tv_control_next"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="@string/debrify_tv_control_next"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="9sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_audio_button"
+                style="@style/Widget.AppCompat.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:background="@drawable/debrify_tv_button_secondary_bg"
+                android:contentDescription="@string/debrify_tv_control_audio"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:layout_marginEnd="6dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="@string/debrify_tv_control_audio"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="9sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_subtitle_button"
+                style="@style/Widget.AppCompat.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:background="@drawable/debrify_tv_button_secondary_bg"
+                android:contentDescription="@string/debrify_tv_control_subtitle"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:layout_marginEnd="6dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="@string/debrify_tv_control_subtitle"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="9sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_aspect_button"
+                style="@style/Widget.AppCompat.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:background="@drawable/debrify_tv_button_secondary_bg"
+                android:contentDescription="@string/debrify_tv_control_aspect"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="@string/debrify_tv_control_aspect"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="9sp" />
+
+        </LinearLayout>
 
         <View
             android:layout_width="0dp"

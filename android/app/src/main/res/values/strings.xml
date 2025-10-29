@@ -9,6 +9,9 @@
     <string name="debrify_tv_control_pause_button">Pause</string>
     <string name="debrify_tv_control_next">Next</string>
     <string name="debrify_tv_control_fast_forward">Fast forward 10 seconds</string>
+    <string name="debrify_tv_control_audio">Audio</string>
+    <string name="debrify_tv_control_subtitle">Subtitles</string>
+    <string name="debrify_tv_control_aspect">Aspect</string>
     <string name="debrify_tv_next_loading">Fetching next stream</string>
     <string name="debrify_tv_next_hint">Sit tight, loading…</string>
 </resources>
