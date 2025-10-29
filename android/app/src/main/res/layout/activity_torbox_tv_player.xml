@@ -58,4 +58,51 @@
         android:textSize="14sp"
         android:textStyle="bold" />
 
+    <FrameLayout
+        android:id="@+id/player_next_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#4D000000"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp"
+            android:gravity="center"
+            android:background="@drawable/debrify_tv_next_card">
+
+            <ProgressBar
+                android:id="@+id/player_next_spinner"
+                style="@android:style/Widget.DeviceDefault.ProgressBar.Small"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@android:color/white" />
+
+            <TextView
+                android:id="@+id/player_next_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="@string/debrify_tv_next_loading"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/player_next_subtext"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="#CCFFFFFF"
+                android:textSize="12sp"
+                android:text="@string/debrify_tv_next_hint" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+
 </FrameLayout>

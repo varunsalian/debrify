@@ -49,6 +49,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View timeContainer;
     private View buttonsRow;
     private AppCompatButton pauseButton;
+    private View nextOverlay;
+    private TextView nextText;
+    private TextView nextSubtext;
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
 
     private boolean startFromRandom;
@@ -67,6 +70,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
+    private final Runnable hideNextOverlayRunnable = this::performHideNextOverlay;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -77,6 +81,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         titleView = findViewById(R.id.player_title);
         hintView = findViewById(R.id.player_hint);
         watermarkView = findViewById(R.id.player_watermark);
+        nextOverlay = findViewById(R.id.player_next_overlay);
+        nextText = findViewById(R.id.player_next_text);
+        nextSubtext = findViewById(R.id.player_next_subtext);
 
         Intent intent = getIntent();
         String initialUrl = intent.getStringExtra("initialUrl");
@@ -316,6 +323,65 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .start();
     }
 
+    private void showNextOverlay(@Nullable String headline, @Nullable String subline) {
+        if (nextOverlay == null) {
+            return;
+        }
+        runOnUiThread(() -> {
+            nextOverlay.removeCallbacks(hideNextOverlayRunnable);
+            if (nextText != null && headline != null && !headline.isEmpty()) {
+                nextText.setText(headline);
+            }
+            if (nextSubtext != null) {
+                if (subline != null && !subline.isEmpty()) {
+                    nextSubtext.setVisibility(View.VISIBLE);
+                    nextSubtext.setText(subline);
+                } else {
+                    nextSubtext.setVisibility(View.GONE);
+                }
+            }
+            nextOverlay.animate().cancel();
+            nextOverlay.setVisibility(View.VISIBLE);
+            nextOverlay.setAlpha(0f);
+            nextOverlay.animate().alpha(1f).setDuration(200L).start();
+        });
+    }
+
+    private void hideNextOverlay() {
+        scheduleHideNextOverlay(0L);
+    }
+
+    private void scheduleHideNextOverlay(long delayMs) {
+        if (nextOverlay == null) {
+            return;
+        }
+        runOnUiThread(() -> {
+            nextOverlay.removeCallbacks(hideNextOverlayRunnable);
+            nextOverlay.postDelayed(hideNextOverlayRunnable, delayMs);
+        });
+    }
+
+    private void performHideNextOverlay() {
+        if (nextOverlay == null) {
+            return;
+        }
+        if (nextOverlay.getVisibility() != View.VISIBLE) {
+            nextOverlay.setAlpha(1f);
+            return;
+        }
+        nextOverlay.animate().cancel();
+        nextOverlay.animate()
+                .alpha(0f)
+                .setDuration(150L)
+                .withEndAction(() -> {
+                    if (nextOverlay != null) {
+                        nextOverlay.setVisibility(View.GONE);
+                        nextOverlay.setAlpha(1f);
+                    }
+                })
+                .start();
+    }
+
     private void playMedia(String url, @Nullable String title) {
         if (player == null || url == null || url.isEmpty()) {
             return;
@@ -368,10 +434,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             Toast.makeText(this, "Playback bridge unavailable", Toast.LENGTH_SHORT).show();
             return;
         }
+        showNextOverlay(getString(R.string.debrify_tv_next_loading),
+                getString(R.string.debrify_tv_next_hint));
         requestingNext = true;
-        if (hintView != null) {
-            runOnUiThread(() -> hintView.setVisibility(View.GONE));
-        }
         channel.invokeMethod("requestTorboxNext", null, new MethodChannel.Result() {
             @Override
             public void success(@Nullable Object result) {
@@ -388,7 +453,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     handleNoMoreStreams();
                     return;
                 }
+                if (nextTitle != null && !nextTitle.isEmpty()) {
+                    showNextOverlay(getString(R.string.debrify_tv_next_loading), nextTitle);
+                }
                 playMedia(nextUrl, nextTitle);
+                scheduleHideNextOverlay(350L);
             }
 
             @Override
@@ -397,17 +466,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 Toast.makeText(TorboxTvPlayerActivity.this,
                         errorMessage != null ? errorMessage : "Failed to load next stream",
                         Toast.LENGTH_SHORT).show();
+                hideNextOverlay();
             }
 
             @Override
             public void notImplemented() {
                 requestingNext = false;
+                hideNextOverlay();
             }
         });
     }
 
     private void handleNoMoreStreams() {
         runOnUiThread(() -> {
+            hideNextOverlay();
             Toast.makeText(TorboxTvPlayerActivity.this,
                     "No more Torbox streams available",
                     Toast.LENGTH_SHORT).show();
@@ -514,6 +586,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             player.release();
             player = null;
         }
+        hideNextOverlay();
         cancelTitleFade();
         notifyFlutterPlaybackFinished();
         super.onDestroy();
