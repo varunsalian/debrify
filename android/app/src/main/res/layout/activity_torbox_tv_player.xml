@@ -16,29 +16,39 @@
         app:show_timeout="5000" />
 
     <LinearLayout
+        android:id="@+id/player_header_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
+        android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="12dp">
 
         <TextView
             android:id="@+id/player_title"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFFFF"
-            android:textSize="22sp"
-            android:textStyle="bold"
+            android:ellipsize="end"
+            android:gravity="center"
             android:maxLines="2"
-            android:ellipsize="end" />
+            android:textColor="#CCFFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:textAlignment="center"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/player_hint"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:gravity="center"
             android:textColor="#CCFFFFFF"
-            android:textSize="16sp" />
+            android:textSize="13sp"
+            android:textAlignment="center" />
     </LinearLayout>
 
     <TextView
