@@ -281,6 +281,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _initialSetupHandled = false;
   bool _rdIntegrationEnabled = true;
   bool _tbIntegrationEnabled = true;
+  bool _isAndroidTv = false;
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
@@ -386,6 +387,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _handleInitialExperience();
     });
+
+    AndroidNativeDownloader.isTelevision().then((isTv) {
+      if (!mounted) return;
+      setState(() {
+        _isAndroidTv = isTv;
+        if (_isAndroidTv) {
+          _selectedIndex = 3; // Debrify TV
+        }
+      });
+    });
   }
 
   @override
@@ -489,6 +500,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     bool? hasRealDebrid,
     bool? hasTorbox,
   }) {
+    if (_isAndroidTv) {
+      return const [3, 6];
+    }
+
     final rd = hasRealDebrid ?? _hasRealDebridKey;
     final tb = hasTorbox ?? _hasTorboxKey;
     if (!rd && !tb) {

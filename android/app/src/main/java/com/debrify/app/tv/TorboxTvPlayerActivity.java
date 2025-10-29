@@ -3,6 +3,7 @@ package com.debrify.app.tv;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -33,6 +34,7 @@ import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter;
 import androidx.media3.ui.AspectRatioFrameLayout;
+import androidx.media3.ui.CaptionStyleCompat;
 import androidx.media3.ui.DefaultTimeBar;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.SubtitleView;
@@ -223,6 +225,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleOverlay.setBottomPaddingFraction(0.01f);
             subtitleOverlay.setPadding(24, 0, 24, 0);
             subtitleOverlay.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+            subtitleOverlay.setStyle(new CaptionStyleCompat(
+                    Color.WHITE,
+                    Color.TRANSPARENT,
+                    Color.TRANSPARENT,
+                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                    Color.BLACK,
+                    Typeface.create("sans-serif-medium", Typeface.NORMAL)));
         }
         playerView.requestFocus();
     }
