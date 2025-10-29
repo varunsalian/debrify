@@ -3,7 +3,6 @@ package com.debrify.app
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.app.UiModeManager
@@ -12,10 +11,26 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.util.ArrayList
+import com.debrify.app.tv.TorboxTvPlayerActivity
 
 class MainActivity : FlutterActivity() {
 	private val CHANNEL = "com.debrify.app/downloader"
 	private val EVENTS = "com.debrify.app/downloader_events"
+    private val ANDROID_TV_CHANNEL = "com.debrify.app/android_tv_player"
+
+    companion object {
+        @JvmStatic
+        private var androidTvPlayerChannel: MethodChannel? = null
+
+        @JvmStatic
+        fun getAndroidTvPlayerChannel(): MethodChannel? = androidTvPlayerChannel
+
+        @JvmStatic
+        fun setAndroidTvPlayerChannel(channel: MethodChannel?) {
+            androidTvPlayerChannel = channel
+        }
+    }
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
@@ -136,7 +151,7 @@ class MainActivity : FlutterActivity() {
 						result.success(false)
 					}
 				}
-				else -> result.notImplemented()
+			else -> result.notImplemented()
 			}
 		}
 
@@ -149,5 +164,93 @@ class MainActivity : FlutterActivity() {
 				com.debrify.app.download.ChannelBridge.setSink(null)
 			}
 		})
+
+        val tvChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            ANDROID_TV_CHANNEL
+        )
+        setAndroidTvPlayerChannel(tvChannel)
+        tvChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "launchTorboxPlayback" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments<Map<String, Any?>>()
+                    if (args == null) {
+                        result.error("bad_args", "Missing launch arguments", null)
+                        return@setMethodCallHandler
+                    }
+                    handleLaunchTorboxPlayback(args, result)
+                }
+                else -> result.notImplemented()
+            }
+        }
 	}
-} 
+
+    private fun handleLaunchTorboxPlayback(
+        args: Map<String, Any?>,
+        result: MethodChannel.Result
+    ) {
+        val initialUrl = (args["initialUrl"] as? String)?.trim()
+        if (initialUrl.isNullOrEmpty()) {
+            result.error("bad_args", "initialUrl is required", null)
+            return
+        }
+        val initialTitleRaw = (args["initialTitle"] as? String)?.trim()
+        val initialTitle = if (initialTitleRaw.isNullOrEmpty()) "Debrify TV" else initialTitleRaw
+
+        @Suppress("UNCHECKED_CAST")
+        val magnetsRaw = args["magnets"] as? List<Map<String, Any?>>
+        if (magnetsRaw == null || magnetsRaw.isEmpty()) {
+            result.error("bad_args", "Magnets list is required", null)
+            return
+        }
+
+        val magnetBundles = ArrayList<Bundle>()
+        magnetsRaw.forEach { entry ->
+            val magnet = (entry["magnet"] as? String)?.trim()
+            if (magnet.isNullOrEmpty()) {
+                return@forEach
+            }
+            val bundle = Bundle()
+            bundle.putString("magnet", magnet)
+            bundle.putString("hash", (entry["hash"] as? String)?.trim() ?: "")
+            bundle.putString("name", (entry["name"] as? String)?.trim() ?: "")
+            (entry["sizeBytes"] as? Number)?.let { bundle.putLong("sizeBytes", it.toLong()) }
+            (entry["seeders"] as? Number)?.let { bundle.putInt("seeders", it.toInt()) }
+            magnetBundles.add(bundle)
+        }
+
+        if (magnetBundles.isEmpty()) {
+            result.error("bad_args", "No valid magnet entries", null)
+            return
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        val config = args["config"] as? Map<String, Any?>
+        val intent = Intent(this, TorboxTvPlayerActivity::class.java).apply {
+            putExtra("initialUrl", initialUrl)
+            putExtra("initialTitle", initialTitle)
+            putParcelableArrayListExtra("magnetList", magnetBundles)
+            putExtra(
+                "startFromRandom",
+                config?.get("startFromRandom") as? Boolean ?: false
+            )
+            putExtra(
+                "randomStartMaxPercent",
+                (config?.get("randomStartMaxPercent") as? Number)?.toInt() ?: 40
+            )
+            putExtra("hideSeekbar", config?.get("hideSeekbar") as? Boolean ?: false)
+            putExtra("hideOptions", config?.get("hideOptions") as? Boolean ?: false)
+            putExtra("showVideoTitle", config?.get("showVideoTitle") as? Boolean ?: true)
+            putExtra("showWatermark", config?.get("showWatermark") as? Boolean ?: false)
+            putExtra("hideBackButton", config?.get("hideBackButton") as? Boolean ?: false)
+        }
+
+        try {
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("launch_failed", e.message, null)
+        }
+    }
+}

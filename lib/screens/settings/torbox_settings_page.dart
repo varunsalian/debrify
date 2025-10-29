@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../widgets/torbox_account_status_widget.dart';
@@ -13,6 +14,12 @@ class TorboxSettingsPage extends StatefulWidget {
 
 class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   final TextEditingController _apiKeyController = TextEditingController();
+  final FocusNode _apiKeyFocusNode = FocusNode();
+  static const Map<ShortcutActivator, Intent> _dpadShortcuts =
+      <ShortcutActivator, Intent>{
+    SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+    SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+  };
 
   String? _savedApiKey;
   bool _isEditing = false;
@@ -51,6 +58,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _apiKeyFocusNode.dispose();
     super.dispose();
   }
 
@@ -101,6 +109,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     debugPrint('TorboxSettingsPage: Deleting stored API key.');
     await StorageService.deleteTorboxApiKey();
     TorboxAccountService.clearUserInfo();
+    FocusScope.of(context).unfocus();
     setState(() {
       _savedApiKey = null;
       _isEditing = false;
@@ -237,25 +246,47 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                           ),
                           const SizedBox(height: 16),
                           if (_isEditing) ...[
-                            TextField(
-                              controller: _apiKeyController,
-                              obscureText: _obscure,
-                              enabled: !_saving,
-                              decoration: InputDecoration(
-                                labelText: 'Torbox API Key',
-                                prefixIcon: const Icon(Icons.security),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _obscure
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
+                            Shortcuts(
+                              shortcuts: _dpadShortcuts,
+                              child: Actions(
+                                actions: <Type, Action<Intent>>{
+                                  NextFocusIntent: CallbackAction<NextFocusIntent>(
+                                    onInvoke: (intent) {
+                                      FocusScope.of(context).nextFocus();
+                                      return null;
+                                    },
                                   ),
-                                  onPressed: () => setState(
-                                    () => _obscure = !_obscure,
+                                  PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+                                    onInvoke: (intent) {
+                                      FocusScope.of(context).previousFocus();
+                                      return null;
+                                    },
                                   ),
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                },
+                                child: TextField(
+                                  focusNode: _apiKeyFocusNode,
+                                  controller: _apiKeyController,
+                                  obscureText: _obscure,
+                                  enabled: !_saving,
+                                  textInputAction: TextInputAction.done,
+                                  decoration: InputDecoration(
+                                    labelText: 'Torbox API Key',
+                                    prefixIcon: const Icon(Icons.security),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscure
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
+                                      ),
+                                      onPressed: () => setState(
+                                        () => _obscure = !_obscure,
+                                      ),
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => _saving ? null : _saveKey(),
                                 ),
                               ),
                             ),
@@ -323,9 +354,27 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: () => setState(
-                                        () => _isEditing = true,
-                                      ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isEditing = true;
+                                      if (_savedApiKey != null &&
+                                          _savedApiKey!.isNotEmpty) {
+                                            _apiKeyController
+                                              ..text = _savedApiKey!
+                                              ..selection = TextSelection.collapsed(
+                                                offset: _savedApiKey!.length,
+                                              );
+                                      } else {
+                                        _apiKeyController.clear();
+                                      }
+                                    });
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                      if (mounted) {
+                                        _apiKeyFocusNode.requestFocus();
+                                      }
+                                    });
+                                  },
                                       icon: const Icon(Icons.edit),
                                       label: const Text('Edit'),
                                     ),
@@ -345,9 +394,18 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                               ),
                             ] else ...[
                               FilledButton.icon(
-                                onPressed: () => setState(
-                                  () => _isEditing = true,
-                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isEditing = true;
+                                    _apiKeyController.clear();
+                                  });
+                                  WidgetsBinding.instance
+                                      .addPostFrameCallback((_) {
+                                    if (mounted) {
+                                      _apiKeyFocusNode.requestFocus();
+                                    }
+                                  });
+                                },
                                 icon: const Icon(Icons.add),
                                 label: const Text('Add API Key'),
                               ),

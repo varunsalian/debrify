@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/torrent.dart';
 import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
 import '../models/torbox_torrent.dart';
+import '../services/android_native_downloader.dart';
+import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../services/debrify_tv_cache_service.dart';
@@ -224,6 +227,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<void>? _prefetchTask;
   String? _activeApiKey;
   final Set<String> _inflightInfohashes = {};
+  bool _isAndroidTv = false;
+  late final FocusNode _keywordsFocusNode;
+  late final FocusNode _watchButtonFocusNode;
 
   // Progress UI state
   final ValueNotifier<List<String>> _progress = ValueNotifier<List<String>>([]);
@@ -239,6 +245,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   @override
   void initState() {
     super.initState();
+    _keywordsFocusNode = FocusNode(
+      debugLabel: 'DebrifyTVKeywords',
+      onKeyEvent: _handleKeywordsKeyEvent,
+    );
+    _watchButtonFocusNode = FocusNode(debugLabel: 'DebrifyTVWatchButton');
     _loadSettings();
     _loadChannels();
     _loadCacheEntries();
@@ -255,7 +266,32 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _progress.dispose();
     _keywordsController.dispose();
     _channelSearchController.dispose();
+    _keywordsFocusNode.dispose();
+    _watchButtonFocusNode.dispose();
+    AndroidTvPlayerBridge.clearTorboxProvider();
     super.dispose();
+  }
+
+  KeyEventResult _handleKeywordsKeyEvent(FocusNode node, KeyEvent event) {
+    if (!_isAndroidTv) {
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _watchButtonFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      final ctx = node.context;
+      if (ctx != null) {
+        FocusScope.of(ctx).previousFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
   }
 
   Future<void> _updateProvider(String value) async {
@@ -359,6 +395,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       rdAvailable,
       torboxAvailable,
     );
+    final isTv = await AndroidNativeDownloader.isTelevision();
 
     if (mounted) {
       setState(() {
@@ -372,6 +409,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _rdAvailable = rdAvailable;
         _torboxAvailable = torboxAvailable;
         _provider = defaultProvider;
+        _isAndroidTv = isTv;
       });
     }
 
@@ -1253,6 +1291,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         const SizedBox(height: 8),
                         _RandomStartSlider(
                           value: randomStartPercent,
+                          isAndroidTv: _isAndroidTv,
                           onChanged: (next) => setModalState(
                             () => randomStartPercent = next,
                           ),
@@ -1718,12 +1757,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 maxWidth: MediaQuery.of(context).size.width * 0.9,
                 maxHeight: MediaQuery.of(context).size.height * 0.6,
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  Widget content = Column(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
                     // Compact header
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1863,25 +1903,38 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             _status = '';
                           });
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withOpacity(0.1),
-                          foregroundColor: Colors.white70,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.1),
+                            foregroundColor: Colors.white70,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
                     ),
                   ],
-                ),
+                  );
+
+                  content = Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                    child: content,
+                  );
+
+                  return SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      child: content,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -2619,6 +2672,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _closeProgressDialog();
       if (!mounted) return;
 
+      final launchedOnTv = await _launchTorboxOnAndroidTv(
+        firstStream: first,
+        requestNext: requestTorboxNext,
+        queueSnapshot: List<Torrent>.from(filtered),
+      );
+      if (launchedOnTv) {
+        return;
+      }
+
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
@@ -2841,6 +2903,78 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<bool> _launchTorboxOnAndroidTv({
+    required Map<String, String> firstStream,
+    required Future<Map<String, String>?> Function() requestNext,
+    required List<Torrent> queueSnapshot,
+  }) async {
+    if (!_isAndroidTv) {
+      return false;
+    }
+    final initialUrl = firstStream['url'] ?? '';
+    if (initialUrl.isEmpty) {
+      return false;
+    }
+    final magnets = <Map<String, dynamic>>[];
+    for (final torrent in queueSnapshot) {
+      final normalized = _normalizeInfohash(torrent.infohash);
+      if (normalized.isEmpty) {
+        continue;
+      }
+      magnets.add({
+        'hash': normalized,
+        'magnet': 'magnet:?xt=urn:btih:${torrent.infohash}',
+        'name': torrent.name,
+        'sizeBytes': torrent.sizeBytes,
+        'seeders': torrent.seeders,
+      });
+    }
+    if (magnets.isEmpty) {
+      return false;
+    }
+
+    final title = (firstStream['title'] ?? '').trim();
+
+    try {
+      final launched = await AndroidTvPlayerBridge.launchTorboxPlayback(
+        initialUrl: initialUrl,
+        title: title.isEmpty ? 'Debrify TV' : title,
+        magnets: magnets,
+        requestNext: requestNext,
+        onFinished: () {
+          AndroidTvPlayerBridge.clearTorboxProvider();
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _status =
+                _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+          });
+        },
+        startFromRandom: _startRandom,
+        randomStartMaxPercent: _randomStartPercent,
+        hideSeekbar: _hideSeekbar,
+        hideOptions: _hideOptions,
+        showVideoTitle: _showVideoTitle,
+        showWatermark: _showWatermark,
+        hideBackButton: _hideBackButton,
+      );
+      if (launched) {
+        if (mounted) {
+          setState(() {
+            _status = 'Playing via Android TV';
+          });
+        }
+        return true;
+      }
+    } catch (e) {
+      debugPrint('DebrifyTV: Android TV bridge failed: $e');
+    }
+
+    AndroidTvPlayerBridge.clearTorboxProvider();
+    return false;
+  }
+
   Future<void> _watchTorboxWithCachedTorrents(
     List<Torrent> cachedTorrents,
   ) async {
@@ -2984,6 +3118,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (!mounted) return;
       _closeProgressDialog();
+
+      final launchedOnTv = await _launchTorboxOnAndroidTv(
+        firstStream: first,
+        requestNext: requestTorboxNext,
+        queueSnapshot: List<Torrent>.from(filtered),
+      );
+      if (launchedOnTv) {
+        return;
+      }
+
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
@@ -3272,6 +3416,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 children: [
                   TextField(
                     controller: _keywordsController,
+                    focusNode: _keywordsFocusNode,
                     textInputAction: TextInputAction.search,
                     onSubmitted: (_) => _watch(),
                     decoration: InputDecoration(
@@ -3292,6 +3437,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   SizedBox(
                     height: 44,
                     child: ElevatedButton.icon(
+                      focusNode: _watchButtonFocusNode,
                       onPressed: _isBusy ? null : _watch,
                       icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
                       label: const Text(
@@ -3451,6 +3597,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     const SizedBox(height: 8),
                     _RandomStartSlider(
                       value: _randomStartPercent,
+                      isAndroidTv: _isAndroidTv,
                       onChanged: (next) {
                         setState(() => _randomStartPercent = next);
                       },
@@ -4717,16 +4864,56 @@ class _StatsTile extends StatelessWidget {
   }
 }
 
-class _RandomStartSlider extends StatelessWidget {
+class _RandomStartSlider extends StatefulWidget {
   final int value;
   final ValueChanged<int> onChanged;
   final ValueChanged<int>? onChangeEnd;
+  final bool isAndroidTv;
 
   const _RandomStartSlider({
     required this.value,
+    required this.isAndroidTv,
     required this.onChanged,
     this.onChangeEnd,
   });
+
+  @override
+  State<_RandomStartSlider> createState() => _RandomStartSliderState();
+}
+
+class _RandomStartSliderState extends State<_RandomStartSlider> {
+  FocusNode? _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isAndroidTv) {
+      _focusNode = FocusNode(
+        debugLabel: 'RandomStartSlider',
+        onKeyEvent: _handleKeyEvent,
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _RandomStartSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isAndroidTv && _focusNode == null) {
+      _focusNode = FocusNode(
+        debugLabel: 'RandomStartSlider',
+        onKeyEvent: _handleKeyEvent,
+      );
+    } else if (!widget.isAndroidTv && _focusNode != null) {
+      _focusNode!.dispose();
+      _focusNode = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4740,11 +4927,12 @@ class _RandomStartSlider extends StatelessWidget {
     );
     final divisions =
         (_randomStartPercentMax - _randomStartPercentMin) ~/ 5;
-    return Column(
+
+    Widget sliderColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Random start within first $value%',
+          'Random start within first ${widget.value}%',
           style: textStyle,
         ),
         SliderTheme(
@@ -4754,28 +4942,51 @@ class _RandomStartSlider extends StatelessWidget {
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
           ),
           child: Slider(
-            value: value.toDouble(),
+            value: widget.value.toDouble(),
+            focusNode: widget.isAndroidTv ? _focusNode : null,
             min: _randomStartPercentMin.toDouble(),
             max: _randomStartPercentMax.toDouble(),
             divisions: divisions == 0 ? null : divisions,
-            label: '$value%',
+            label: '${widget.value}%',
             onChanged: (raw) {
               final next = _clampRandomStartPercent(raw.round());
-              onChanged(next);
+              widget.onChanged(next);
             },
-            onChangeEnd: onChangeEnd == null
+            onChangeEnd: widget.onChangeEnd == null
                 ? null
-                : (raw) => onChangeEnd!(
+                : (raw) => widget.onChangeEnd!(
                       _clampRandomStartPercent(raw.round()),
                     ),
           ),
         ),
         Text(
-          'Videos will jump to a random moment inside the first $value% of playback.',
+          'Videos will jump to a random moment inside the first ${widget.value}% of playback.',
           style: helperStyle,
         ),
       ],
     );
+
+    return sliderColumn;
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      if (node.context != null) {
+        FocusScope.of(node.context!).nextFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (node.context != null) {
+        FocusScope.of(node.context!).previousFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
   }
 }
 

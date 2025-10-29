@@ -54,6 +54,13 @@
             </intent-filter>
             <!-- OAuth redirect is handled by flutter_appauth via manifest placeholders -->
         </activity>
+        <activity
+            android:name=".tv.TorboxTvPlayerActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:configChanges="keyboard|keyboardHidden|navigation|screenSize|screenLayout|smallestScreenSize|orientation|uiMode"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

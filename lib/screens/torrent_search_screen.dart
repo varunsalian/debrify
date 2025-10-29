@@ -30,6 +30,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _csvTileFocusNode = FocusNode();
+  final FocusNode _pbTileFocusNode = FocusNode();
+  final FocusNode _csvSwitchFocusNode = FocusNode(skipTraversal: true);
+  final FocusNode _pbSwitchFocusNode = FocusNode(skipTraversal: true);
+  bool _searchFocused = false;
+  bool _csvTileFocused = false;
+  bool _pbTileFocused = false;
   List<Torrent> _torrents = [];
   Map<String, int> _engineCounts = {};
   bool _isLoading = false;
@@ -54,6 +61,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   late AnimationController _listAnimationController;
   late Animation<double> _listAnimation;
 
+  static const Map<ShortcutActivator, Intent> _activateShortcuts =
+      <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      };
+
   @override
   void initState() {
     super.initState();
@@ -68,6 +82,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         curve: Curves.easeInOut,
       ),
     );
+
+    _searchFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _searchFocused = _searchFocusNode.hasFocus;
+      });
+    });
 
     _listAnimationController.forward();
     _loadDefaultSettings();
@@ -121,6 +142,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _csvTileFocusNode.dispose();
+    _pbTileFocusNode.dispose();
+    _csvSwitchFocusNode.dispose();
+    _pbSwitchFocusNode.dispose();
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     _listAnimationController.dispose();
     super.dispose();
@@ -203,9 +228,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
       }
 
-      final bool torboxActive = torboxEnabled &&
-          torboxKeyValue != null &&
-          torboxKeyValue.isNotEmpty;
+      final bool torboxActive =
+          torboxEnabled && torboxKeyValue != null && torboxKeyValue.isNotEmpty;
       final bool realDebridActive =
           rdEnabled && rdKey != null && rdKey.isNotEmpty;
       bool showOnlyCached = false;
@@ -214,10 +238,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           torboxActive &&
           !realDebridActive &&
           torboxCacheMap != null) {
-        filteredTorrents = fetchedTorrents.where((torrent) {
-          final hash = torrent.infohash.trim().toLowerCase();
-          return torboxCacheMap![hash] ?? false;
-        }).toList(growable: false);
+        filteredTorrents = fetchedTorrents
+            .where((torrent) {
+              final hash = torrent.infohash.trim().toLowerCase();
+              return torboxCacheMap![hash] ?? false;
+            })
+            .toList(growable: false);
         showOnlyCached = true;
       }
 
@@ -237,6 +263,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
+    }
+  }
+
+  void _setUseTorrentsCsv(bool value) {
+    if (_useTorrentsCsv == value) return;
+    setState(() {
+      _useTorrentsCsv = value;
+    });
+    if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+      _searchTorrents(_searchController.text);
+    }
+  }
+
+  void _setUsePirateBay(bool value) {
+    if (_usePirateBay == value) return;
+    setState(() {
+      _usePirateBay = value;
+    });
+    if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+      _searchTorrents(_searchController.text);
     }
   }
 
@@ -3097,470 +3143,674 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       ),
       child: SafeArea(
-        child: Column(
-          children: [
-            // Search Box
-            Container(
-              margin: const EdgeInsets.all(8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFF1E40AF).withValues(alpha: 0.9), // Blue 800
-                    const Color(0xFF1E3A8A).withValues(alpha: 0.8), // Blue 900
+        child: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Column(
+            children: [
+              // Search Box
+              Container(
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(
+                        0xFF1E40AF,
+                      ).withValues(alpha: 0.9), // Blue 800
+                      const Color(
+                        0xFF1E3A8A,
+                      ).withValues(alpha: 0.8), // Blue 900
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                      blurRadius: 25,
+                      offset: const Offset(0, 15),
+                    ),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
-                    blurRadius: 25,
-                    offset: const Offset(0, 15),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Search Input
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _searchFocusNode,
-                      onSubmitted: (query) => _searchTorrents(query),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Search all engines...',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
-                        ),
-                        prefixIcon: const Icon(
-                          Icons.search_rounded,
-                          color: Color(0xFF6366F1),
-                        ),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(
-                                  Icons.clear_rounded,
-                                  color: Color(0xFFEF4444),
-                                ),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {});
-                                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Search Input
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOutCubic,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: _searchFocused
+                            ? Border.all(
+                                color: const Color(0xFF6366F1),
+                                width: 1.6,
                               )
                             : null,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceVariant,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                (_searchFocused
+                                        ? const Color(0xFF6366F1)
+                                        : const Color(0xFF6366F1))
+                                    .withValues(
+                                      alpha: _searchFocused ? 0.45 : 0.3,
+                                    ),
+                            blurRadius: _searchFocused ? 16 : 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      onChanged: (value) => setState(() {}),
-                    ),
-                  ),
-
-                  // Search Engine Toggles
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B).withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF1E40AF).withValues(alpha: 0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Switch(
-                                value: _useTorrentsCsv,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _useTorrentsCsv = value;
-                                  });
-                                  // Auto-refresh if we have results
-                                  if (_hasSearched &&
-                                      _searchController.text
-                                          .trim()
-                                          .isNotEmpty) {
-                                    _searchTorrents(_searchController.text);
-                                  }
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Torrents CSV',
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      ),
-                                  overflow: TextOverflow.ellipsis,
+                      child: Shortcuts(
+                        shortcuts: const <ShortcutActivator, Intent>{
+                          SingleActivator(LogicalKeyboardKey.arrowDown):
+                              NextFocusIntent(),
+                          SingleActivator(LogicalKeyboardKey.arrowUp):
+                              PreviousFocusIntent(),
+                        },
+                        child: Actions(
+                          actions: <Type, Action<Intent>>{
+                            NextFocusIntent: CallbackAction<NextFocusIntent>(
+                              onInvoke: (intent) {
+                                FocusScope.of(context).nextFocus();
+                                return null;
+                              },
+                            ),
+                            PreviousFocusIntent:
+                                CallbackAction<PreviousFocusIntent>(
+                                  onInvoke: (intent) {
+                                    FocusScope.of(context).previousFocus();
+                                    return null;
+                                  },
                                 ),
+                          },
+                          child: TextField(
+                            controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            onSubmitted: (query) => _searchTorrents(query),
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: 'Search all engines...',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
                               ),
-                            ],
+                              prefixIcon: const Icon(
+                                Icons.search_rounded,
+                                color: Color(0xFF6366F1),
+                              ),
+                              suffixIcon: _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(
+                                        Icons.clear_rounded,
+                                        color: Color(0xFFEF4444),
+                                      ),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() {});
+                                        _searchFocusNode.requestFocus();
+                                      },
+                                    )
+                                  : null,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHigh,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                            ),
+                            onChanged: (value) => setState(() {}),
                           ),
                         ),
-                        Container(
-                          width: 1,
-                          height: 24,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.outline.withValues(alpha: 0.3),
-                        ),
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Switch(
-                                value: _usePirateBay,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _usePirateBay = value;
-                                  });
-                                  // Auto-refresh if we have results
-                                  if (_hasSearched &&
-                                      _searchController.text
-                                          .trim()
-                                          .isNotEmpty) {
-                                    _searchTorrents(_searchController.text);
-                                  }
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Pirate Bay',
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Content Section
-            Expanded(
-              child: Builder(
-                builder: (context) {
-                  if (_isLoading) {
-                    return ListView.builder(
-                      padding: const EdgeInsets.only(
-                        bottom: 16,
-                        left: 12,
-                        right: 12,
-                        top: 12,
                       ),
-                      itemCount: 6,
-                      itemBuilder: (context, i) {
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
+                    ),
+
+                    // Search Engine Toggles
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
                             color: const Color(
-                              0xFF1E293B,
-                            ).withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(16),
+                              0xFF1E40AF,
+                            ).withValues(alpha: 0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Shimmer(width: double.infinity, height: 18),
-                              SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(child: Shimmer(height: 22)),
-                                  SizedBox(width: 8),
-                                  Shimmer(width: 70, height: 22),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  }
-
-                  if (_errorMessage.isNotEmpty) {
-                    return ListView(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.all(12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF7F1D1D), Color(0xFF991B1B)],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFFEF4444,
-                                ).withValues(alpha: 0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: FocusableActionDetector(
+                              focusNode: _csvTileFocusNode,
+                              shortcuts: _activateShortcuts,
+                              actions: <Type, Action<Intent>>{
+                                ActivateIntent: CallbackAction<ActivateIntent>(
+                                  onInvoke: (intent) {
+                                    _setUseTorrentsCsv(!_useTorrentsCsv);
+                                    return null;
+                                  },
+                                ),
+                              },
+                              onShowFocusHighlight: (visible) {
+                                if (_csvTileFocused != visible) {
+                                  setState(() => _csvTileFocused = visible);
+                                }
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                curve: Curves.easeOutCubic,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(
-                                  Icons.error_outline_rounded,
-                                  color: Colors.white,
-                                  size: 36,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Oops! Something went wrong',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                _errorMessage,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontSize: 12,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              ElevatedButton.icon(
-                                onPressed: () =>
-                                    _searchTorrents(_searchController.text),
-                                icon: const Icon(Icons.refresh_rounded),
-                                label: const Text('Try Again'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: const Color(0xFF7F1D1D),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-
-                  if (!_hasSearched) {
-                    return ListView(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.all(8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF1E293B), Color(0xFF334155)],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFF6366F1,
-                                  ).withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(
-                                  Icons.search_rounded,
-                                  color: Color(0xFF6366F1),
-                                  size: 32,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Ready to Search?',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Enter a torrent name above to get started',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha: 0.7),
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(10),
+                                  color: _csvTileFocused
+                                      ? const Color(
+                                          0xFF3B82F6,
+                                        ).withValues(alpha: 0.18)
+                                      : Colors.transparent,
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.2),
+                                    color: _csvTileFocused
+                                        ? const Color(
+                                            0xFF3B82F6,
+                                          ).withValues(alpha: 0.6)
+                                        : Colors.transparent,
                                   ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.tips_and_updates_rounded,
-                                      color: const Color(0xFFF59E0B),
-                                      size: 16,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  canRequestFocus: false,
+                                  onTap: () =>
+                                      _setUseTorrentsCsv(!_useTorrentsCsv),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 6,
                                     ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        'Try: movies, games, software',
-                                        style: TextStyle(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.8,
-                                          ),
-                                          fontSize: 10,
+                                    child: Row(
+                                      children: [
+                                        Switch(
+                                          focusNode: _csvSwitchFocusNode,
+                                          value: _useTorrentsCsv,
+                                          onChanged: _setUseTorrentsCsv,
                                         ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Torrents CSV',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 24,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.outline.withValues(alpha: 0.3),
+                          ),
+                          Expanded(
+                            child: FocusableActionDetector(
+                              focusNode: _pbTileFocusNode,
+                              shortcuts: _activateShortcuts,
+                              actions: <Type, Action<Intent>>{
+                                ActivateIntent: CallbackAction<ActivateIntent>(
+                                  onInvoke: (intent) {
+                                    _setUsePirateBay(!_usePirateBay);
+                                    return null;
+                                  },
+                                ),
+                              },
+                              onShowFocusHighlight: (visible) {
+                                if (_pbTileFocused != visible) {
+                                  setState(() => _pbTileFocused = visible);
+                                }
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                curve: Curves.easeOutCubic,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  color: _pbTileFocused
+                                      ? const Color(
+                                          0xFF3B82F6,
+                                        ).withValues(alpha: 0.18)
+                                      : Colors.transparent,
+                                  border: Border.all(
+                                    color: _pbTileFocused
+                                        ? const Color(
+                                            0xFF3B82F6,
+                                          ).withValues(alpha: 0.6)
+                                        : Colors.transparent,
+                                  ),
+                                ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  canRequestFocus: false,
+                                  onTap: () => _setUsePirateBay(!_usePirateBay),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 6,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Switch(
+                                          focusNode: _pbSwitchFocusNode,
+                                          value: _usePirateBay,
+                                          onChanged: _setUsePirateBay,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Pirate Bay',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Content Section
+              Expanded(
+                child: Builder(
+                  builder: (context) {
+                    if (_isLoading) {
+                      return ListView.builder(
+                        padding: const EdgeInsets.only(
+                          bottom: 16,
+                          left: 12,
+                          right: 12,
+                          top: 12,
+                        ),
+                        itemCount: 6,
+                        itemBuilder: (context, i) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF1E293B,
+                              ).withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Shimmer(width: double.infinity, height: 18),
+                                SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(child: Shimmer(height: 22)),
+                                    SizedBox(width: 8),
+                                    Shimmer(width: 70, height: 22),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-
-                  if (_torrents.isEmpty) {
-                    return ListView(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      children: [
-                        if (_showingTorboxCachedOnly)
-                          _buildTorboxCachedOnlyNotice(),
-                        Container(
-                          margin: const EdgeInsets.all(12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                              ],
                             ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              SizedBox(height: 16),
-                              Text(
-                                'No Results Found',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Try different keywords or check your spelling',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white70,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                  final bool showCachedOnlyBanner = _showingTorboxCachedOnly;
-                  final int metadataRows = showCachedOnlyBanner ? 3 : 2;
+                          );
+                        },
+                      );
+                    }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    itemCount: _torrents.length + metadataRows,
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return FadeTransition(
-                          opacity: _listAnimation,
-                          child: Container(
+                    if (_errorMessage.isNotEmpty) {
+                      return ListView(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF7F1D1D), Color(0xFF991B1B)],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFFEF4444,
+                                  ).withValues(alpha: 0.3),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.error_outline_rounded,
+                                    color: Colors.white,
+                                    size: 36,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Oops! Something went wrong',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _errorMessage,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    fontSize: 12,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton.icon(
+                                  onPressed: () =>
+                                      _searchTorrents(_searchController.text),
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text('Try Again'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: const Color(0xFF7F1D1D),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
+                    if (!_hasSearched) {
+                      return ListView(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF6366F1,
+                                    ).withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.search_rounded,
+                                    color: Color(0xFF6366F1),
+                                    size: 32,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Ready to Search?',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Enter a torrent name above to get started',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.tips_and_updates_rounded,
+                                        color: const Color(0xFFF59E0B),
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Try: movies, games, software',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                            fontSize: 10,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
+                    if (_torrents.isEmpty) {
+                      return ListView(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        children: [
+                          if (_showingTorboxCachedOnly)
+                            _buildTorboxCachedOnlyNotice(),
+                          Container(
+                            margin: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                SizedBox(height: 16),
+                                Text(
+                                  'No Results Found',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Try different keywords or check your spelling',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.white70,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    final bool showCachedOnlyBanner = _showingTorboxCachedOnly;
+                    final int metadataRows = showCachedOnlyBanner ? 3 : 2;
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      itemCount: _torrents.length + metadataRows,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return FadeTransition(
+                            opacity: _listAnimation,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF1E40AF),
+                                    Color(0xFF1E3A8A),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF1E40AF,
+                                    ).withValues(alpha: 0.4),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Icon(
+                                      Icons.search_rounded,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      () {
+                                        final baseText =
+                                            '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}';
+                                        if (_showingTorboxCachedOnly) {
+                                          return '$baseText • Torbox cached only';
+                                        }
+                                        if (_torboxCacheStatus != null &&
+                                            _torboxCacheCheckEnabled) {
+                                          return '$baseText • Torbox cache check';
+                                        }
+                                        return baseText;
+                                      }(),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                        if (index == 1) {
+                          return Container(
                             margin: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 6,
@@ -3570,222 +3820,157 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF1E40AF), Color(0xFF1E3A8A)],
-                              ),
+                              color: const Color(
+                                0xFF1E293B,
+                              ).withValues(alpha: 0.8),
                               borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFF3B82F6,
+                                ).withValues(alpha: 0.2),
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: const Color(
                                     0xFF1E40AF,
-                                  ).withValues(alpha: 0.4),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
+                                  ).withValues(alpha: 0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
                             child: Row(
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Icon(
-                                    Icons.search_rounded,
-                                    color: Colors.white,
-                                    size: 14,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    () {
-                                      final baseText =
-                                          '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}';
-                                      if (_showingTorboxCachedOnly) {
-                                        return '$baseText • Torbox cached only';
-                                      }
-                                      if (_torboxCacheStatus != null &&
-                                          _torboxCacheCheckEnabled) {
-                                        return '$baseText • Torbox cache check';
-                                      }
-                                      return baseText;
-                                    }(),
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      if (index == 1) {
-                        return Container(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF1E293B,
-                            ).withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: const Color(
-                                0xFF3B82F6,
-                              ).withValues(alpha: 0.2),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFF1E40AF,
-                                ).withValues(alpha: 0.1),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.sort_rounded,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Sort by:',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: DropdownButton<String>(
-                                  value: _sortBy,
-                                  onChanged: (String? newValue) {
-                                    if (newValue != null) {
-                                      setState(() {
-                                        _sortBy = newValue;
-                                      });
-                                      _sortTorrents();
-                                    }
-                                  },
-                                  items: const [
-                                    DropdownMenuItem(
-                                      value: 'relevance',
-                                      child: Text(
-                                        'Relevance',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'name',
-                                      child: Text(
-                                        'Name',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'size',
-                                      child: Text(
-                                        'Size',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'seeders',
-                                      child: Text(
-                                        'Seeders',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'date',
-                                      child: Text(
-                                        'Date',
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                  ],
-                                  style: TextStyle(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface,
-                                    fontSize: 12,
-                                  ),
-                                  underline: Container(),
-                                  icon: Icon(
-                                    Icons.arrow_drop_down,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _sortAscending = !_sortAscending;
-                                  });
-                                  _sortTorrents();
-                                },
-                                icon: Icon(
-                                  _sortAscending
-                                      ? Icons.arrow_upward
-                                      : Icons.arrow_downward,
+                                Icon(
+                                  Icons.sort_rounded,
                                   color: Theme.of(
                                     context,
                                   ).colorScheme.onSurfaceVariant,
                                   size: 16,
                                 ),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                  minWidth: 24,
-                                  minHeight: 24,
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Sort by:',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: DropdownButton<String>(
+                                    value: _sortBy,
+                                    onChanged: (String? newValue) {
+                                      if (newValue != null) {
+                                        setState(() {
+                                          _sortBy = newValue;
+                                        });
+                                        _sortTorrents();
+                                      }
+                                    },
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: 'relevance',
+                                        child: Text(
+                                          'Relevance',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'name',
+                                        child: Text(
+                                          'Name',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'size',
+                                        child: Text(
+                                          'Size',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'seeders',
+                                        child: Text(
+                                          'Seeders',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'date',
+                                        child: Text(
+                                          'Date',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface,
+                                      fontSize: 12,
+                                    ),
+                                    underline: Container(),
+                                    icon: Icon(
+                                      Icons.arrow_drop_down,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _sortAscending = !_sortAscending;
+                                    });
+                                    _sortTorrents();
+                                  },
+                                  icon: Icon(
+                                    _sortAscending
+                                        ? Icons.arrow_upward
+                                        : Icons.arrow_downward,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                    size: 16,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 24,
+                                    minHeight: 24,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        if (showCachedOnlyBanner && index == 2) {
+                          return _buildTorboxCachedOnlyNotice();
+                        }
+
+                        final torrent = _torrents[index - metadataRows];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _buildTorrentCard(
+                            torrent,
+                            index - metadataRows,
                           ),
                         );
-                      }
-
-                      if (showCachedOnlyBanner && index == 2) {
-                        return _buildTorboxCachedOnlyNotice();
-                      }
-
-                      final torrent = _torrents[index - metadataRows];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child:
-                            _buildTorrentCard(torrent, index - metadataRows),
-                      );
-                    },
-                  );
-                },
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -4091,16 +4276,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
                 final Widget? torboxButton =
                     (_torboxIntegrationEnabled &&
-                            _torboxApiKey != null &&
-                            _torboxApiKey!.isNotEmpty)
-                        ? buildTorboxButton()
-                        : null;
+                        _torboxApiKey != null &&
+                        _torboxApiKey!.isNotEmpty)
+                    ? buildTorboxButton()
+                    : null;
                 final Widget? realDebridButton =
                     (_realDebridIntegrationEnabled &&
-                            _apiKey != null &&
-                            _apiKey!.isNotEmpty)
-                        ? buildRealDebridButton()
-                        : null;
+                        _apiKey != null &&
+                        _apiKey!.isNotEmpty)
+                    ? buildRealDebridButton()
+                    : null;
 
                 if (torboxButton == null && realDebridButton == null) {
                   return const SizedBox.shrink();

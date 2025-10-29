@@ -2,4 +2,8 @@
 <resources>
     <color name="ic_launcher_background">#6366F1</color>
     <color name="ic_launcher_foreground">#FFFFFF</color>
+    <color name="tv_seek_progress">#FF3B82F6</color>
+    <color name="tv_seek_background">#66FFFFFF</color>
+    <color name="tv_button_selected">#FF6366F1</color>
+    <color name="tv_button_idle">#40FFFFFF</color>
 </resources> 

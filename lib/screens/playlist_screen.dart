@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/storage_service.dart';
 import '../services/debrid_service.dart';
@@ -20,7 +21,9 @@ class PlaylistScreen extends StatefulWidget {
 class _PlaylistScreenState extends State<PlaylistScreen> {
   late Future<List<Map<String, dynamic>>> _loader;
   late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
   String _searchTerm = '';
+  bool _searchFocused = false;
 
   @override
   void initState() {
@@ -28,6 +31,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _loader = _syncAndLoadPlaylist();
     _searchController = TextEditingController();
     _searchController.addListener(_handleSearchChanged);
+    _searchFocusNode = FocusNode(debugLabel: 'playlist-search')
+      ..addListener(() {
+        if (!mounted) return;
+        setState(() {
+          _searchFocused = _searchFocusNode.hasFocus;
+        });
+      });
   }
 
   Future<List<Map<String, dynamic>>> _syncAndLoadPlaylist() async {
@@ -51,6 +61,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   void dispose() {
     _searchController.removeListener(_handleSearchChanged);
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -820,11 +831,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     ? 'Showing $shownCount of $totalCount saved ${totalCount == 1 ? 'item' : 'items'}'
                     : '$totalCount saved ${totalCount == 1 ? 'item' : 'items'} ready to play';
 
-                return CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics(),
-                  ),
-                  slivers: [
+                return FocusTraversalGroup(
+                  policy: OrderedTraversalPolicy(),
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    slivers: [
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
@@ -854,31 +867,78 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: 'Search playlist...',
-                            hintStyle: const TextStyle(color: Colors.white54),
-                            prefixIcon: const Icon(
-                              Icons.search_rounded,
-                              color: Colors.white60,
-                            ),
-                            suffixIcon: _searchTerm.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(Icons.close_rounded, color: Colors.white60),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                    },
+                        child: Shortcuts(
+                          shortcuts: const <ShortcutActivator, Intent>{
+                            SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+                            SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+                          },
+                          child: Actions(
+                            actions: <Type, Action<Intent>>{
+                              NextFocusIntent: CallbackAction<NextFocusIntent>(
+                                onInvoke: (intent) {
+                                  FocusScope.of(context).nextFocus();
+                                  return null;
+                                },
+                              ),
+                              PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+                                onInvoke: (intent) {
+                                  FocusScope.of(context).previousFocus();
+                                  return null;
+                                },
+                              ),
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 160),
+                              curve: Curves.easeOutCubic,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: _searchFocused
+                                      ? const Color(0xFFE50914)
+                                      : Colors.transparent,
+                                  width: 1.6,
+                                ),
+                                boxShadow: _searchFocused
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFFE50914).withValues(alpha: 0.25),
+                                          blurRadius: 18,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: TextField(
+                                focusNode: _searchFocusNode,
+                                controller: _searchController,
+                                textInputAction: TextInputAction.search,
+                                decoration: InputDecoration(
+                                  hintText: 'Search playlist...',
+                                  hintStyle: const TextStyle(color: Colors.white54),
+                                  prefixIcon: const Icon(
+                                    Icons.search_rounded,
+                                    color: Colors.white60,
                                   ),
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide.none,
+                                  suffixIcon: _searchTerm.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          icon: const Icon(Icons.close_rounded, color: Colors.white60),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            _searchFocusNode.requestFocus();
+                                          },
+                                        ),
+                                  filled: true,
+                                  fillColor: Colors.white.withValues(alpha: 0.08),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                style: const TextStyle(color: Colors.white),
+                              ),
                             ),
                           ),
-                          style: const TextStyle(color: Colors.white),
                         ),
                       ),
                     ),
@@ -984,6 +1044,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         ),
                       ),
                   ],
+                ),
                 );
               },
             ),
@@ -994,7 +1055,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 }
 
-class _PlaylistCard extends StatelessWidget {
+class _PlaylistCard extends StatefulWidget {
   final String title;
   final String? subtitle;
   final String? posterUrl;
@@ -1014,177 +1075,330 @@ class _PlaylistCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPlay,
-        borderRadius: BorderRadius.circular(24),
-        splashColor: Colors.white.withValues(alpha: 0.08),
-        highlightColor: Colors.white.withValues(alpha: 0.04),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 190),
-          child: Ink(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF1F2937),
-                  Color(0xFF0F172A),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.38),
-                  blurRadius: 32,
-                  spreadRadius: -4,
-                  offset: const Offset(0, 24),
-                ),
-              ],
+  State<_PlaylistCard> createState() => _PlaylistCardState();
+}
+
+class _PlaylistCardState extends State<_PlaylistCard> {
+  late final FocusNode _focusNode;
+  late final FocusNode _removeFocusNode;
+  bool _focused = false;
+  bool _removeFocused = false;
+
+  static const Map<ShortcutActivator, Intent> _activateShortcuts = <ShortcutActivator, Intent>{
+    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+    SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode(debugLabel: 'playlist-card-${widget.title}')
+      ..addListener(_handleCardFocusChange);
+    _removeFocusNode = FocusNode(debugLabel: 'playlist-card-remove-${widget.title}')
+      ..addListener(_handleRemoveFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PlaylistCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.title != oldWidget.title) {
+      _focusNode.debugLabel = 'playlist-card-${widget.title}';
+      _removeFocusNode.debugLabel = 'playlist-card-remove-${widget.title}';
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleCardFocusChange);
+    _focusNode.dispose();
+    _removeFocusNode.removeListener(_handleRemoveFocusChange);
+    _removeFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleCardFocusChange() {
+    if (!mounted) return;
+    setState(() {
+      _focused = _focusNode.hasFocus;
+    });
+    if (_focusNode.hasFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.05,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      });
+    }
+  }
+
+  void _handleRemoveFocusChange() {
+    if (!mounted) return;
+    setState(() {
+      _removeFocused = _removeFocusNode.hasFocus;
+    });
+  }
+
+  Future<void> _handleRemovePressed(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        title: const Text(
+          'Remove from playlist?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '“${widget.title}” will be removed from your playlist. You can always add it again later.',
+          style: const TextStyle(color: Colors.white70, fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: _buildPosterLayer(),
-                ),
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomLeft,
-                        end: Alignment.topRight,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.65),
-                          Colors.black.withValues(alpha: 0.35),
-                        ],
-                      ),
-                    ),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFE50914),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      widget.onRemove();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final highlightColor = theme.colorScheme.primary;
+
+    return FocusableActionDetector(
+      focusNode: _focusNode,
+      shortcuts: _activateShortcuts,
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            widget.onPlay();
+            return null;
+          },
+        ),
+      },
+      onShowFocusHighlight: (visible) {
+        if (_focused != visible) {
+          setState(() => _focused = visible);
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          border: _focused
+              ? Border.all(color: highlightColor, width: 2)
+              : null,
+          boxShadow: _focused
+              ? [
+                  BoxShadow(
+                    color: highlightColor.withValues(alpha: 0.28),
+                    blurRadius: 28,
+                    offset: const Offset(0, 14),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 32,
+                    spreadRadius: -4,
+                    offset: const Offset(0, 24),
+                  ),
+                ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onPlay,
+            borderRadius: BorderRadius.circular(24),
+            canRequestFocus: false,
+            splashColor: Colors.white.withValues(alpha: 0.08),
+            highlightColor: Colors.white.withValues(alpha: 0.04),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 190),
+              child: Ink(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF1F2937),
+                      Color(0xFF0F172A),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
                   ),
                 ),
-                Positioned(
-                  top: -60,
-                  right: -40,
-                  child: Container(
-                    width: 140,
-                    height: 140,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFFE50914).withValues(alpha: 0.45),
-                          const Color(0xFF9333EA).withValues(alpha: 0.25),
-                        ],
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: _buildPosterLayer(),
+                    ),
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomLeft,
+                            end: Alignment.topRight,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.65),
+                              Colors.black.withValues(alpha: 0.35),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Column(
+                    Positioned(
+                      top: -60,
+                      right: -40,
+                      child: Container(
+                        width: 140,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xFFE50914).withValues(alpha: 0.45),
+                              const Color(0xFF9333EA).withValues(alpha: 0.25),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  title,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.2,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      widget.title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.2,
+                                      ),
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                  maxLines: 3,
+                                  const SizedBox(width: 12),
+                                  _buildRemoveButton(context),
+                                ],
+                              ),
+                              if (widget.subtitle != null &&
+                                  widget.subtitle!.trim().isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  widget.subtitle!,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.72),
+                                    fontSize: 15,
+                                  ),
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              _buildRemoveButton(context),
+                              ],
+                              if (widget.metadata.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: widget.metadata
+                                      .map(
+                                        (label) => _MetadataTag(label: label),
+                                      )
+                                      .toList(),
+                                ),
+                              ],
                             ],
                           ),
-                          if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              subtitle!,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.72),
-                                fontSize: 15,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                          if (metadata.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: metadata
-                                  .map(
-                                    (label) => _MetadataTag(label: label),
-                                  )
-                                  .toList(),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: onPlay,
-                            icon: const Icon(Icons.play_arrow_rounded, size: 24),
-                            label: const Text(
-                              'Play now',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE50914),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 0,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          if (addedLabel != null && addedLabel!.isNotEmpty)
-                            Expanded(
-                              child: Text(
-                                addedLabel!,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.65),
-                                  fontSize: 13,
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: widget.onPlay,
+                                icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                                label: const Text(
+                                  'Play now',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFE50914),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: 0,
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 16),
+                              if (widget.addedLabel != null &&
+                                  widget.addedLabel!.isNotEmpty)
+                                Expanded(
+                                  child: Text(
+                                    widget.addedLabel!,
+                                    style: TextStyle(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.65),
+                                      fontSize: 13,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -1194,7 +1408,7 @@ class _PlaylistCard extends StatelessWidget {
 
   Widget _buildPosterLayer() {
     final radius = BorderRadius.circular(24);
-    if (posterUrl == null || posterUrl!.isEmpty) {
+    if (widget.posterUrl == null || widget.posterUrl!.isEmpty) {
       return ClipRRect(
         borderRadius: radius,
         child: _buildFallbackBackground(),
@@ -1204,7 +1418,7 @@ class _PlaylistCard extends StatelessWidget {
     return ClipRRect(
       borderRadius: radius,
       child: Image.network(
-        posterUrl!,
+        widget.posterUrl!,
         fit: BoxFit.cover,
         color: Colors.black.withValues(alpha: 0.35),
         colorBlendMode: BlendMode.darken,
@@ -1233,62 +1447,55 @@ class _PlaylistCard extends StatelessWidget {
   }
 
   Widget _buildRemoveButton(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.32),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: IconButton(
-        icon: const Icon(Icons.delete_outline_rounded),
-        color: Colors.white70,
-        splashRadius: 20,
-        onPressed: () async {
-          final confirmed = await _confirmRemoval(context);
-          if (confirmed == true) {
-            onRemove();
-          }
-        },
-      ),
-    );
-  }
+    final theme = Theme.of(context);
+    final highlightColor = theme.colorScheme.error;
 
-  Future<bool?> _confirmRemoval(BuildContext context) {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+    return FocusableActionDetector(
+      focusNode: _removeFocusNode,
+      shortcuts: _activateShortcuts,
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            _handleRemovePressed(context);
+            return null;
+          },
         ),
-        title: const Text(
-          'Remove from playlist?',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          '“$title” will be removed from your playlist. You can always add it again later.',
-          style: const TextStyle(color: Colors.white70, fontSize: 15),
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white70,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            ),
-            child: const Text('Keep'),
+      },
+      onShowFocusHighlight: (visible) {
+        if (_removeFocused != visible) {
+          setState(() => _removeFocused = visible);
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: _removeFocused
+              ? highlightColor.withValues(alpha: 0.22)
+              : Colors.black.withValues(alpha: 0.32),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: _removeFocused
+                ? highlightColor.withValues(alpha: 0.7)
+                : Colors.white.withValues(alpha: 0.12),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFE50914),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: () => _handleRemovePressed(context),
+            customBorder: const CircleBorder(),
+            canRequestFocus: false,
+            child: const Padding(
+              padding: EdgeInsets.all(10),
+              child: Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.white70,
+                size: 22,
+              ),
             ),
-            child: const Text('Remove'),
           ),
-        ],
+        ),
       ),
     );
   }

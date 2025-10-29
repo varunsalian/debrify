@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Debrify</string>
-</resources> 
+    <string name="tv_audio_tracks">Audio Tracks</string>
+    <string name="tv_subtitle_tracks">Subtitle Tracks</string>
+</resources>
