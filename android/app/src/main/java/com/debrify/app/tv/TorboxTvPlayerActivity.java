@@ -9,6 +9,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.core.content.ContextCompat;
@@ -16,7 +17,15 @@ import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.LoadControl;
+import androidx.media3.exoplayer.RenderersFactory;
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter;
 import androidx.media3.ui.DefaultTimeBar;
 import androidx.media3.ui.PlayerView;
 
@@ -37,11 +46,19 @@ import io.flutter.plugin.common.MethodChannel;
 public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private static final long SEEK_STEP_MS = 10_000L;
+    private static final long DEFAULT_TARGET_BUFFER_MS = 12_000L;
+    private static final long HIGH_TARGET_BUFFER_MS = 22_000L;
+    private static final long MAX_TARGET_BUFFER_MS = 32_000L;
+    private static final long BACK_BUFFER_MS = 15_000L;
     private static final long TITLE_FADE_DELAY_MS = 4000L;
     private static final long TITLE_FADE_DURATION_MS = 220L;
 
     private PlayerView playerView;
     private ExoPlayer player;
+    private DefaultTrackSelector trackSelector;
+    private RenderersFactory renderersFactory;
+    private DefaultBandwidthMeter bandwidthMeter;
+    private long currentTargetBufferMs = DEFAULT_TARGET_BUFFER_MS;
     private TextView titleView;
     private TextView hintView;
     private TextView watermarkView;
@@ -71,6 +88,25 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
     private final Runnable hideNextOverlayRunnable = this::performHideNextOverlay;
+    private final Player.Listener playbackListener = new Player.Listener() {
+        @Override
+        public void onPlaybackStateChanged(int playbackState) {
+            if (playbackState == Player.STATE_READY) {
+                if (startFromRandom && !randomApplied) {
+                    maybeSeekRandomly();
+                }
+            } else if (playbackState == Player.STATE_ENDED) {
+                randomApplied = false;
+                requestNextStream();
+            }
+            updatePauseButtonLabel();
+        }
+
+        @Override
+        public void onIsPlayingChanged(boolean isPlaying) {
+            updatePauseButtonLabel();
+        }
+    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -118,34 +154,80 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         playMedia(initialUrl, initialTitle);
     }
 
+    @OptIn(markerClass = UnstableApi.class)
     private void initialisePlayer() {
-        player = new ExoPlayer.Builder(this).build();
+        renderersFactory = new DefaultRenderersFactory(this)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                .setEnableDecoderFallback(true)
+                .setAllowedVideoJoiningTimeMs(300);
+
+        bandwidthMeter = new DefaultBandwidthMeter.Builder(this).build();
+
+        trackSelector = new DefaultTrackSelector(this, new AdaptiveTrackSelection.Factory());
+        trackSelector.setParameters(trackSelector.buildUponParameters()
+                .setPreferredAudioLanguage("en")
+                .build());
+
+        LoadControl loadControl = buildLoadControl(bandwidthMeter.getBitrateEstimate());
+        createPlayer(loadControl);
+    }
+
+    @OptIn(markerClass = UnstableApi.class)
+    private void createPlayer(LoadControl loadControl) {
+        if (player != null) {
+            player.removeListener(playbackListener);
+            player.release();
+        }
+        player = new ExoPlayer.Builder(this, renderersFactory)
+                .setTrackSelector(trackSelector)
+                .setLoadControl(loadControl)
+                .setBandwidthMeter(bandwidthMeter)
+                .build();
+        player.addListener(playbackListener);
         playerView.setPlayer(player);
         playerView.setKeepScreenOn(true);
         playerView.setUseController(true);
         playerView.setControllerAutoShow(true);
         playerView.setControllerShowTimeoutMs(4000);
         playerView.requestFocus();
+    }
 
-        player.addListener(new Player.Listener() {
-            @Override
-            public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_READY) {
-                    if (startFromRandom && !randomApplied) {
-                        maybeSeekRandomly();
-                    }
-                } else if (playbackState == Player.STATE_ENDED) {
-                    randomApplied = false;
-                    requestNextStream();
-                }
-                updatePauseButtonLabel();
-            }
+    private LoadControl buildLoadControl(long estimatedBitrate) {
+        long targetBufferMs = selectTargetBufferMs(estimatedBitrate);
+        long minBufferMs = Math.min(targetBufferMs / 2, 7_500L);
+        currentTargetBufferMs = targetBufferMs;
+        return new DefaultLoadControl.Builder()
+                .setBufferDurationsMs((int) minBufferMs, (int) targetBufferMs, 1_000, 2_000)
+                .setBackBuffer((int) BACK_BUFFER_MS, true)
+                .build();
+    }
 
-            @Override
-            public void onIsPlayingChanged(boolean isPlaying) {
-                updatePauseButtonLabel();
-            }
-        });
+    private void maybeRecreatePlayerForBandwidth() {
+        if (bandwidthMeter == null) {
+            return;
+        }
+        long estimate = bandwidthMeter.getBitrateEstimate();
+        long desiredTarget = selectTargetBufferMs(estimate);
+        if (Math.abs(desiredTarget - currentTargetBufferMs) > 2_000L) {
+            LoadControl tuned = buildLoadControl(estimate);
+            createPlayer(tuned);
+        }
+    }
+
+    private long selectTargetBufferMs(long estimatedBitrate) {
+        if (estimatedBitrate <= 0) {
+            return DEFAULT_TARGET_BUFFER_MS;
+        }
+        if (estimatedBitrate >= 12_000_000L) {
+            return MAX_TARGET_BUFFER_MS;
+        }
+        if (estimatedBitrate >= 6_000_000L) {
+            return HIGH_TARGET_BUFFER_MS;
+        }
+        if (estimatedBitrate >= 3_000_000L) {
+            return 16_000L;
+        }
+        return DEFAULT_TARGET_BUFFER_MS;
     }
 
     private void applyUiPreferences(@Nullable String initialTitle) {
@@ -387,6 +469,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         randomApplied = false;
+        maybeRecreatePlayerForBandwidth();
         MediaMetadata metadata = new MediaMetadata.Builder()
                 .setTitle(title != null ? title : "")
                 .build();
