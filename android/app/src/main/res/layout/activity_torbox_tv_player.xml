@@ -58,6 +58,16 @@
         android:textSize="14sp"
         android:textStyle="bold" />
 
+    <androidx.media3.ui.SubtitleView
+        android:id="@+id/player_subtitles"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:gravity="center"
+        android:layout_marginBottom="36dp"
+        android:paddingLeft="32dp"
+        android:paddingRight="32dp" />
+
     <FrameLayout
         android:id="@+id/player_next_overlay"
         android:layout_width="match_parent"

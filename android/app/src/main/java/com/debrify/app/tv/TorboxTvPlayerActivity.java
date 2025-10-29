@@ -3,9 +3,11 @@ package com.debrify.app.tv;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.graphics.Typeface;
+import android.text.TextUtils;
+import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.View;
-import android.text.TextUtils;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,7 +40,6 @@ import androidx.media3.ui.SubtitleView;
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
 
-import java.util.ArrayList;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -82,6 +83,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View nextOverlay;
     private TextView nextText;
     private TextView nextSubtext;
+    private SubtitleView subtitleOverlay;
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
     private int resizeModeIndex = 0;
     private final int[] resizeModes = new int[] {
@@ -144,6 +146,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         nextOverlay = findViewById(R.id.player_next_overlay);
         nextText = findViewById(R.id.player_next_text);
         nextSubtext = findViewById(R.id.player_next_subtext);
+        subtitleOverlay = findViewById(R.id.player_subtitles);
 
         Intent intent = getIntent();
         String initialUrl = intent.getStringExtra("initialUrl");
@@ -214,9 +217,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         playerView.setControllerAutoShow(true);
         playerView.setControllerShowTimeoutMs(4000);
         playerView.setResizeMode(resizeModes[resizeModeIndex]);
-        SubtitleView subtitleView = playerView.getSubtitleView();
-        if (subtitleView != null) {
-            subtitleView.setBottomPaddingFraction(0.02f);
+        if (subtitleOverlay != null) {
+            subtitleOverlay.setApplyEmbeddedStyles(true);
+            subtitleOverlay.setApplyEmbeddedFontSizes(true);
+            subtitleOverlay.setBottomPaddingFraction(0.01f);
+            subtitleOverlay.setPadding(24, 0, 24, 0);
+            subtitleOverlay.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
         }
         playerView.requestFocus();
     }
