@@ -6,4 +6,5 @@
     <color name="tv_seek_background">#66FFFFFF</color>
     <color name="tv_button_selected">#FF6366F1</color>
     <color name="tv_button_idle">#40FFFFFF</color>
+    <color name="debrify_red">#FFE50914</color>
 </resources> 

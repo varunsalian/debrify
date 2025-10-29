@@ -10,10 +10,12 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.DefaultTimeBar;
 import androidx.media3.ui.PlayerView;
 
 import com.debrify.app.MainActivity;
@@ -98,6 +100,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         initialisePlayer();
         applyUiPreferences(initialTitle);
+        setupControllerUi();
 
         hintView.setText(buildDefaultHint());
         playMedia(initialUrl, initialTitle);
@@ -107,16 +110,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         player = new ExoPlayer.Builder(this).build();
         playerView.setPlayer(player);
         playerView.setKeepScreenOn(true);
-        playerView.setUseController(!hideOptions);
+        playerView.setUseController(true);
         playerView.setControllerAutoShow(true);
+        playerView.setControllerShowTimeoutMs(5000);
         playerView.requestFocus();
-
-        if (hideSeekbar) {
-            View progress = playerView.findViewById(androidx.media3.ui.R.id.exo_progress);
-            if (progress != null) {
-                progress.setVisibility(View.GONE);
-            }
-        }
 
         player.addListener(new Player.Listener() {
             @Override
@@ -146,6 +143,51 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             watermarkView.setVisibility(View.VISIBLE);
         } else {
             watermarkView.setVisibility(View.GONE);
+        }
+    }
+
+    private void setupControllerUi() {
+        View controlsRoot = playerView.findViewById(R.id.debrify_controls_root);
+        DefaultTimeBar timeBar = playerView.findViewById(androidx.media3.ui.R.id.exo_progress);
+        View nextButton = playerView.findViewById(R.id.debrify_next_button);
+
+        if (controlsRoot != null) {
+            controlsRoot.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+        }
+
+        View buttonsRow = playerView.findViewById(R.id.debrify_controls_buttons);
+        if (buttonsRow != null) {
+            buttonsRow.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+        }
+
+        if (nextButton != null) {
+            nextButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+            nextButton.setOnClickListener(v -> {
+                requestNextStream();
+                if (!hideOptions) {
+                    playerView.showController();
+                }
+            });
+        }
+
+        if (timeBar != null) {
+            timeBar.setVisibility(hideSeekbar ? View.GONE : View.VISIBLE);
+            int red = ContextCompat.getColor(this, R.color.debrify_red);
+            int faded = ContextCompat.getColor(this, R.color.tv_seek_background);
+            timeBar.setPlayedColor(red);
+            timeBar.setScrubberColor(red);
+            timeBar.setBufferedColor(faded);
+            timeBar.setUnplayedColor(faded);
+        }
+
+        if (hideOptions) {
+            playerView.setUseController(false);
+            playerView.hideController();
+        } else {
+            playerView.setUseController(true);
+            playerView.setControllerAutoShow(true);
+            playerView.setControllerShowTimeoutMs(5000);
+            playerView.showController();
         }
     }
 

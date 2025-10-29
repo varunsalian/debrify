@@ -11,7 +11,9 @@
         android:layout_height="match_parent"
         android:keepScreenOn="true"
         app:use_controller="true"
-        app:resize_mode="fit" />
+        app:resize_mode="fit"
+        app:controller_layout_id="@layout/view_debrify_tv_controls"
+        app:show_timeout="5000" />
 
     <LinearLayout
         android:layout_width="match_parent"

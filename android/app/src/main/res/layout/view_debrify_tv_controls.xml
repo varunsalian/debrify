@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/debrify_controls_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="10dp"
+    android:paddingTop="6dp"
+    android:background="@drawable/debrify_tv_controls_scrim"
+    android:gravity="bottom"
+    android:clipToPadding="false">
+
+    <androidx.media3.ui.DefaultTimeBar
+        android:id="@id/exo_progress"
+        android:layout_width="match_parent"
+        android:layout_height="18dp"
+        android:layout_marginBottom="6dp"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:nextFocusDown="@id/exo_play_pause"
+        app:ad_marker_color="@android:color/transparent"
+        app:bar_height="2dp"
+        app:buffered_color="@color/tv_seek_background"
+        app:played_ad_marker_color="@android:color/transparent"
+        app:played_color="@color/debrify_red"
+        app:scrubber_color="@color/debrify_red"
+        app:scrubber_drawable="@null"
+        app:scrubber_disabled_size="8dp"
+        app:scrubber_dragged_size="14dp"
+        app:scrubber_enabled_size="10dp"
+        app:touch_target_height="32dp"
+        app:unplayed_color="@color/tv_seek_background" />
+
+    <LinearLayout
+        android:id="@+id/debrify_controls_buttons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@id/exo_rew"
+            style="@style/Widget.AppCompat.ImageButton"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginEnd="2dp"
+            android:background="@drawable/debrify_tv_control_bg"
+            android:contentDescription="@string/debrify_tv_control_rewind"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusUp="@id/exo_progress"
+            android:padding="5dp"
+            android:tint="@android:color/white"
+            app:srcCompat="@drawable/exo_icon_rewind" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@id/exo_play_pause"
+            style="@style/Widget.AppCompat.ImageButton"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="2dp"
+            android:background="@drawable/debrify_tv_control_bg"
+            android:contentDescription="@string/debrify_tv_control_play_pause"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusUp="@id/exo_progress"
+            android:padding="6dp"
+            android:tint="@android:color/white"
+            app:srcCompat="@drawable/exo_icon_play" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/debrify_next_button"
+            style="@style/Widget.AppCompat.ImageButton"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginEnd="2dp"
+            android:background="@drawable/debrify_tv_control_bg"
+            android:contentDescription="@string/debrify_tv_control_next"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusUp="@id/exo_progress"
+            android:padding="5dp"
+            android:tint="@android:color/white"
+            app:srcCompat="@drawable/exo_icon_next" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@id/exo_ffwd"
+            style="@style/Widget.AppCompat.ImageButton"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/debrify_tv_control_bg"
+            android:contentDescription="@string/debrify_tv_control_fast_forward"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusUp="@id/exo_progress"
+            android:padding="5dp"
+            android:tint="@android:color/white"
+            app:srcCompat="@drawable/exo_icon_fastforward" />
+
+        <View
+            android:layout_width="8dp"
+            android:layout_height="0dp" />
+
+        <TextView
+            android:id="@id/exo_position"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="2dp"
+            android:textColor="@android:color/white"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:text="/"
+            android:textColor="@android:color/white"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@id/exo_duration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@android:color/white"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+</LinearLayout>
