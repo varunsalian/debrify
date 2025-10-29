@@ -10,6 +10,7 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatButton;
 import androidx.core.content.ContextCompat;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -45,6 +46,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private TextView titleView;
     private TextView hintView;
     private TextView watermarkView;
+    private View controlsOverlay;
+    private View timeContainer;
+    private View buttonsRow;
+    private AppCompatButton pauseButton;
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
 
     private boolean startFromRandom;
@@ -129,6 +134,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     randomApplied = false;
                     requestNextStream();
                 }
+                updatePauseButtonLabel();
+            }
+
+            @Override
+            public void onIsPlayingChanged(boolean isPlaying) {
+                updatePauseButtonLabel();
             }
         });
     }
@@ -149,17 +160,38 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void setupControllerUi() {
-        View controlsRoot = playerView.findViewById(R.id.debrify_controls_root);
+        controlsOverlay = playerView.findViewById(R.id.debrify_controls_root);
+        timeContainer = playerView.findViewById(R.id.debrify_controls_time_container);
+        buttonsRow = playerView.findViewById(R.id.debrify_controls_buttons);
+        pauseButton = playerView.findViewById(R.id.debrify_pause_button);
         DefaultTimeBar timeBar = playerView.findViewById(androidx.media3.ui.R.id.exo_progress);
         View nextButton = playerView.findViewById(R.id.debrify_next_button);
 
-        if (controlsRoot != null) {
-            controlsRoot.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+        if (controlsOverlay != null) {
+            controlsOverlay.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
         }
 
-        View buttonsRow = playerView.findViewById(R.id.debrify_controls_buttons);
         if (buttonsRow != null) {
             buttonsRow.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+        }
+
+        if (timeContainer != null) {
+            if (hideSeekbar) {
+                timeContainer.setVisibility(View.GONE);
+            } else if (hideOptions) {
+                timeContainer.setVisibility(View.VISIBLE);
+            }
+        }
+
+        if (pauseButton != null) {
+            pauseButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+            pauseButton.setOnClickListener(v -> {
+                togglePlayPause();
+                if (!hideOptions) {
+                    playerView.showController();
+                }
+            });
+            updatePauseButtonLabel();
         }
 
         if (nextButton != null) {
@@ -189,8 +221,38 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             playerView.setUseController(true);
             playerView.setControllerAutoShow(true);
             playerView.setControllerShowTimeoutMs(5000);
+            playerView.setControllerVisibilityListener(
+                    (PlayerView.ControllerVisibilityListener) this::onControllerVisibilityChanged);
+            onControllerVisibilityChanged(playerView.isControllerFullyVisible() ? View.VISIBLE : View.GONE);
             playerView.showController();
         }
+    }
+
+    private void onControllerVisibilityChanged(int visibility) {
+        if (controlsOverlay == null) {
+            return;
+        }
+        boolean visible = visibility == View.VISIBLE;
+        controlsOverlay.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (!hideSeekbar && timeContainer != null) {
+            timeContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+        if (!hideOptions && buttonsRow != null) {
+            buttonsRow.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void updatePauseButtonLabel() {
+        if (pauseButton == null) {
+            return;
+        }
+        boolean playing = player != null && player.isPlaying();
+        pauseButton.setText(getString(playing
+                ? R.string.debrify_tv_control_pause_button
+                : R.string.debrify_tv_control_play_button));
+        pauseButton.setBackgroundResource(playing
+                ? R.drawable.debrify_tv_button_pause_bg
+                : R.drawable.debrify_tv_button_secondary_bg);
     }
 
     private void playMedia(String url, @Nullable String title) {
@@ -329,6 +391,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         } else {
             player.play();
         }
+        updatePauseButtonLabel();
     }
 
     private void seekBy(long offsetMs) {
@@ -346,6 +409,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         player.seekTo(target);
         if (playerView != null) {
             playerView.hideController();
+            if (controlsOverlay != null) {
+                controlsOverlay.setVisibility(View.GONE);
+            }
+            if (!hideSeekbar && timeContainer != null) {
+                timeContainer.setVisibility(View.GONE);
+            }
+            if (!hideOptions && buttonsRow != null) {
+                buttonsRow.setVisibility(View.GONE);
+            }
         }
     }
 
