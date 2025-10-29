@@ -24,7 +24,6 @@ import com.debrify.app.MainActivity;
 import com.debrify.app.R;
 
 import java.util.ArrayList;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 
@@ -37,8 +36,6 @@ import io.flutter.plugin.common.MethodChannel;
  */
 public class TorboxTvPlayerActivity extends AppCompatActivity {
 
-    private static final String HINT_DEFAULT = "Long press OK to play next";
-    private static final String HINT_LOADING = "Loading next stream...";
     private static final long SEEK_STEP_MS = 10_000L;
     private static final long TITLE_FADE_DELAY_MS = 4000L;
     private static final long TITLE_FADE_DURATION_MS = 220L;
@@ -111,8 +108,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         initialisePlayer();
         applyUiPreferences(initialTitle);
         setupControllerUi();
-
-        hintView.setText(buildDefaultHint());
         playMedia(initialUrl, initialTitle);
     }
 
@@ -122,7 +117,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         playerView.setKeepScreenOn(true);
         playerView.setUseController(true);
         playerView.setControllerAutoShow(true);
-        playerView.setControllerShowTimeoutMs(5000);
+        playerView.setControllerShowTimeoutMs(4000);
         playerView.requestFocus();
 
         player.addListener(new Player.Listener() {
@@ -132,7 +127,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     if (startFromRandom && !randomApplied) {
                         maybeSeekRandomly();
                     }
-                    setHintDefault();
                 } else if (playbackState == Player.STATE_ENDED) {
                     randomApplied = false;
                     requestNextStream();
@@ -159,6 +153,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             watermarkView.setVisibility(View.VISIBLE);
         } else {
             watermarkView.setVisibility(View.GONE);
+        }
+
+        if (hintView != null) {
+            hintView.setVisibility(View.GONE);
         }
     }
 
@@ -238,7 +236,22 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         boolean visible = visibility == View.VISIBLE;
         controlsOverlay.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!hideSeekbar && timeContainer != null) {
-            timeContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
+            timeContainer.animate().cancel();
+            if (visible) {
+                timeContainer.setAlpha(0f);
+                timeContainer.setVisibility(View.VISIBLE);
+                timeContainer.animate().alpha(1f).setDuration(150L).start();
+            } else {
+                timeContainer.animate()
+                        .alpha(0f)
+                        .setDuration(150L)
+                        .withEndAction(() -> {
+                            if (timeContainer != null) {
+                                timeContainer.setVisibility(View.GONE);
+                            }
+                        })
+                        .start();
+            }
         }
         if (!hideOptions && buttonsRow != null) {
             buttonsRow.setVisibility(visible ? View.VISIBLE : View.GONE);
@@ -320,7 +333,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         player.play();
         playedCount += 1;
         updateTitle(title);
-        setHintDefault();
     }
 
     private void updateTitle(@Nullable String title) {
@@ -357,7 +369,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         requestingNext = true;
-        runOnUiThread(() -> hintView.setText(HINT_LOADING));
+        if (hintView != null) {
+            runOnUiThread(() -> hintView.setVisibility(View.GONE));
+        }
         channel.invokeMethod("requestTorboxNext", null, new MethodChannel.Result() {
             @Override
             public void success(@Nullable Object result) {
@@ -383,13 +397,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 Toast.makeText(TorboxTvPlayerActivity.this,
                         errorMessage != null ? errorMessage : "Failed to load next stream",
                         Toast.LENGTH_SHORT).show();
-                setHintDefault();
             }
 
             @Override
             public void notImplemented() {
                 requestingNext = false;
-                setHintDefault();
             }
         });
     }
@@ -401,22 +413,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     Toast.LENGTH_SHORT).show();
             finish();
         });
-    }
-
-    private void setHintDefault() {
-        if (hintView == null) {
-            return;
-        }
-        hintView.setText(buildDefaultHint());
-    }
-
-    private String buildDefaultHint() {
-        int queueSize = magnetQueue != null ? magnetQueue.size() : 0;
-        int remaining = Math.max(0, queueSize - playedCount);
-        if (remaining > 0) {
-            return String.format(Locale.US, "%s (%d left)", HINT_DEFAULT, remaining);
-        }
-        return HINT_DEFAULT;
     }
 
     @Nullable

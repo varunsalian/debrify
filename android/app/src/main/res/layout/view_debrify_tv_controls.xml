@@ -20,43 +20,20 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="4dp">
 
-        <TextView
-            android:id="@id/exo_position"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:textColor="@android:color/white"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="@id/exo_progress"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="@id/exo_progress" />
-
-        <TextView
-            android:id="@id/exo_duration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:textColor="@android:color/white"
-            android:textSize="10sp"
-            app:layout_constraintBottom_toBottomOf="@id/exo_progress"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="@id/exo_progress" />
-
         <androidx.media3.ui.DefaultTimeBar
             android:id="@id/exo_progress"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="10dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:nextFocusDown="@id/exo_play_pause"
+            android:nextFocusDown="@id/debrify_pause_button"
             app:ad_marker_color="@android:color/transparent"
             app:bar_height="2dp"
             app:buffered_color="@color/tv_seek_background"
-            app:layout_constraintEnd_toStartOf="@id/exo_duration"
-            app:layout_constraintStart_toEndOf="@id/exo_position"
-            app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
             app:played_ad_marker_color="@android:color/transparent"
             app:played_color="@color/debrify_red"
             app:scrubber_color="@color/debrify_red"
@@ -73,9 +50,47 @@
         android:id="@+id/debrify_controls_buttons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingTop="2dp">
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp">
+
+        <LinearLayout
+            android:id="@+id/debrify_time_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@id/exo_position"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:textColor="@android:color/white"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:textColor="@android:color/white"
+                android:textSize="10sp"
+                android:text="/" />
+
+            <TextView
+                android:id="@id/exo_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/white"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@id/exo_play_pause"
@@ -94,7 +109,6 @@
             android:contentDescription="@string/debrify_tv_control_play_pause"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:nextFocusUp="@id/exo_progress"
             android:minHeight="0dp"
             android:minWidth="0dp"
             android:layout_marginEnd="6dp"
@@ -116,7 +130,6 @@
             android:contentDescription="@string/debrify_tv_control_next"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:nextFocusUp="@id/exo_progress"
             android:layout_marginStart="6dp"
             android:minHeight="0dp"
             android:minWidth="0dp"
@@ -128,6 +141,11 @@
             android:textAllCaps="false"
             android:textColor="@android:color/white"
             android:textSize="9sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
     </LinearLayout>
 
