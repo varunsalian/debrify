@@ -230,6 +230,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _isAndroidTv = false;
   late final FocusNode _keywordsFocusNode;
   late final FocusNode _watchButtonFocusNode;
+  late final FocusNode _channelSearchFocusNode;
 
   // Progress UI state
   final ValueNotifier<List<String>> _progress = ValueNotifier<List<String>>([]);
@@ -250,6 +251,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       onKeyEvent: _handleKeywordsKeyEvent,
     );
     _watchButtonFocusNode = FocusNode(debugLabel: 'DebrifyTVWatchButton');
+    _channelSearchFocusNode = FocusNode(
+      debugLabel: 'DebrifyTVChannelSearch',
+      onKeyEvent: _handleChannelSearchKeyEvent,
+    );
     _loadSettings();
     _loadChannels();
     _loadCacheEntries();
@@ -268,6 +273,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _channelSearchController.dispose();
     _keywordsFocusNode.dispose();
     _watchButtonFocusNode.dispose();
+    _channelSearchFocusNode.dispose();
     AndroidTvPlayerBridge.clearTorboxProvider();
     super.dispose();
   }
@@ -283,6 +289,32 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (key == LogicalKeyboardKey.arrowDown) {
       _watchButtonFocusNode.requestFocus();
       return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      final ctx = node.context;
+      if (ctx != null) {
+        FocusScope.of(ctx).previousFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleChannelSearchKeyEvent(
+      FocusNode node, KeyEvent event) {
+    if (!_isAndroidTv) {
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      final ctx = node.context;
+      if (ctx != null) {
+        FocusScope.of(ctx).nextFocus();
+        return KeyEventResult.handled;
+      }
     }
     if (key == LogicalKeyboardKey.arrowUp) {
       final ctx = node.context;
@@ -944,6 +976,62 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     final nameController = TextEditingController(text: existing?.name ?? '');
     final keywordInputController = TextEditingController();
+    FocusNode? channelNameFocus;
+    FocusNode? channelKeywordFocus;
+    KeyEventResult handleNameKey(FocusNode node, KeyEvent event) {
+      if (!_isAndroidTv) {
+        return KeyEventResult.ignored;
+      }
+      if (event is! KeyDownEvent) {
+        return KeyEventResult.ignored;
+      }
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowDown) {
+        channelKeywordFocus?.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowUp) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).previousFocus();
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    }
+
+    KeyEventResult handleKeywordKey(FocusNode node, KeyEvent event) {
+      if (!_isAndroidTv) {
+        return KeyEventResult.ignored;
+      }
+      if (event is! KeyDownEvent) {
+        return KeyEventResult.ignored;
+      }
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        channelNameFocus?.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).nextFocus();
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (_isAndroidTv) {
+      channelNameFocus = FocusNode(
+        debugLabel: 'DebrifyTVChannelName',
+        onKeyEvent: handleNameKey,
+      );
+      channelKeywordFocus = FocusNode(
+        debugLabel: 'DebrifyTVChannelKeyword',
+        onKeyEvent: handleKeywordKey,
+      );
+    }
     final List<String> keywordList = [];
     final seenKeywords = <String>{};
     final initialKeywords =
@@ -968,11 +1056,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     bool hideBackButton = existing?.hideBackButton ?? _hideBackButton;
     String? error;
 
-    final result = await showDialog<_DebrifyTvChannel>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
+    _DebrifyTvChannel? result;
+    try {
+      result = await showDialog<_DebrifyTvChannel>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
           builder: (context, setModalState) {
             Future<void> submit() async {
               final pendingRaw = keywordInputController.text.trim();
@@ -1102,6 +1192,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: nameController,
+                        focusNode: channelNameFocus,
+                        autofocus: _isAndroidTv,
                         textCapitalization: TextCapitalization.words,
                         decoration: const InputDecoration(
                           labelText: 'Channel name',
@@ -1148,16 +1240,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           ),
                           SizedBox(
                             width: 200,
-                        child: TextField(
-                          controller: keywordInputController,
-                          decoration: const InputDecoration(
-                            hintText: 'Add keyword',
-                            prefixIcon: Icon(Icons.add_rounded),
-                          ),
-                          style: const TextStyle(color: Colors.white),
-                          onSubmitted: (value) {
-                            final limitReached = _addKeywordsToList(
-                              value,
+                            child: TextField(
+                              controller: keywordInputController,
+                              focusNode: channelKeywordFocus,
+                              decoration: const InputDecoration(
+                                hintText: 'Add keyword',
+                                prefixIcon: Icon(Icons.add_rounded),
+                              ),
+                              style: const TextStyle(color: Colors.white),
+                              onSubmitted: (value) {
+                                final limitReached = _addKeywordsToList(
+                                  value,
                                   keywordList,
                                   setModalState,
                                 );
@@ -1339,11 +1432,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             );
           },
         );
-      },
-    );
+        },
+      );
+    } finally {
+      channelNameFocus?.dispose();
+      channelKeywordFocus?.dispose();
+      nameController.dispose();
+      keywordInputController.dispose();
+    }
 
-    nameController.dispose();
-    keywordInputController.dispose();
     return result;
   }
 
@@ -3770,6 +3867,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           const SizedBox(height: 16),
           TextField(
             controller: _channelSearchController,
+            focusNode: _isAndroidTv ? _channelSearchFocusNode : null,
             onChanged: (value) {
               setState(() {
                 _channelSearchTerm = value;
