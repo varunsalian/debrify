@@ -11,6 +11,7 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
@@ -37,6 +38,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private static final String HINT_DEFAULT = "Long press OK to play next";
     private static final String HINT_LOADING = "Loading next stream...";
+    private static final long SEEK_STEP_MS = 10_000L;
 
     private PlayerView playerView;
     private ExoPlayer player;
@@ -329,6 +331,24 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     }
 
+    private void seekBy(long offsetMs) {
+        if (player == null) {
+            return;
+        }
+        long position = player.getCurrentPosition();
+        long duration = player.getDuration();
+        long target = position + offsetMs;
+        if (duration != C.TIME_UNSET) {
+            target = Math.max(0L, Math.min(target, duration));
+        } else {
+            target = Math.max(0L, target);
+        }
+        player.seekTo(target);
+        if (playerView != null) {
+            playerView.hideController();
+        }
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
@@ -354,6 +374,24 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return true;
         }
         return super.onKeyUp(keyCode, event);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (playerView != null && playerView.isControllerFullyVisible()) {
+                return super.dispatchKeyEvent(event);
+            }
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                seekBy(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? SEEK_STEP_MS : -SEEK_STEP_MS);
+                return true;
+            }
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

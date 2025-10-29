@@ -5,6 +5,6 @@
     <string name="tv_subtitle_tracks">Subtitle Tracks</string>
     <string name="debrify_tv_control_rewind">Rewind 10 seconds</string>
     <string name="debrify_tv_control_play_pause">Play or pause</string>
-    <string name="debrify_tv_control_next">Play next</string>
+    <string name="debrify_tv_control_next">Next</string>
     <string name="debrify_tv_control_fast_forward">Fast forward 10 seconds</string>
 </resources>
