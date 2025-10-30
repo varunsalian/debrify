@@ -202,7 +202,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   String _status = '';
   List<_DebrifyTvChannel> _channels = <_DebrifyTvChannel>[];
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
-  static const Duration _channelCacheTtl = Duration(hours: 24);
   static const int _channelTorrentsCsvMaxResultsSmall = 100;
   static const int _channelTorrentsCsvMaxResultsLarge = 25;
   static const int _channelCsvParallelism = 4;
@@ -267,7 +266,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _loadSettings();
     _loadChannels();
     _loadCacheEntries();
-    unawaited(DebrifyTvCacheService.pruneExpired(_channelCacheTtl));
   }
 
   @override

@@ -162,7 +162,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         nextSubtext = findViewById(R.id.player_next_subtext);
         tvStaticView = findViewById(R.id.tv_static_view);
         tvScanlines = findViewById(R.id.tv_scanlines);
-        subtitleOverlay = findViewById(R.id.player_subtitles);
+        // Get PlayerView's internal SubtitleView (the one actually being used)
+        subtitleOverlay = playerView.getSubtitleView();
 
         Intent intent = getIntent();
         
@@ -251,18 +252,22 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         playerView.setControllerShowTimeoutMs(4000);
         playerView.setResizeMode(resizeModes[resizeModeIndex]);
         if (subtitleOverlay != null) {
-            subtitleOverlay.setApplyEmbeddedStyles(true);
-            subtitleOverlay.setApplyEmbeddedFontSizes(true);
-            subtitleOverlay.setBottomPaddingFraction(0.01f);
-            subtitleOverlay.setPadding(24, 0, 24, 0);
-            subtitleOverlay.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+            subtitleOverlay.setApplyEmbeddedStyles(false);
+            subtitleOverlay.setApplyEmbeddedFontSizes(false);
+            // Convert 60dp to pixels for bottom padding (fixed distance from screen bottom)
+            float density = getResources().getDisplayMetrics().density;
+            int bottomPaddingPx = (int) (60 * density);
+            subtitleOverlay.setPadding(0, 0, 0, bottomPaddingPx);
+            subtitleOverlay.setBottomPaddingFraction(0.0f);
+            // Smaller text size: 12sp for TV viewing
+            subtitleOverlay.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
             subtitleOverlay.setStyle(new CaptionStyleCompat(
                     Color.WHITE,
                     Color.TRANSPARENT,
                     Color.TRANSPARENT,
                     CaptionStyleCompat.EDGE_TYPE_OUTLINE,
                     Color.BLACK,
-                    Typeface.create("sans-serif-medium", Typeface.NORMAL)));
+                    Typeface.create("sans-serif", Typeface.NORMAL)));
         }
         playerView.requestFocus();
     }

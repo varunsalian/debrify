@@ -76,30 +76,6 @@ class DebrifyTvCacheService {
     await updateEntry(channelId, (_) => null);
   }
 
-  static Future<void> pruneExpired(Duration ttl) async {
-    final prefs = await SharedPreferences.getInstance();
-    final all = await loadAllEntries();
-    if (all.isEmpty) {
-      return;
-    }
-
-    final threshold = DateTime.now().subtract(ttl).millisecondsSinceEpoch;
-    final keysToRemove = all.entries
-        .where((entry) => entry.value.fetchedAt > 0 && entry.value.fetchedAt < threshold)
-        .map((entry) => entry.key)
-        .toList();
-
-    if (keysToRemove.isEmpty) {
-      return;
-    }
-
-    for (final key in keysToRemove) {
-      all.remove(key);
-    }
-
-    await _persistAll(prefs, all);
-  }
-
   static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
