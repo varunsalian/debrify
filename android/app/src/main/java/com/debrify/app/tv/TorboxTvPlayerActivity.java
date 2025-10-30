@@ -756,15 +756,49 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (subtitleTracks.isEmpty()) {
             return;
         }
-        TrackOption first = subtitleTracks.get(0);
-        DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .addOverride(new TrackSelectionOverride(
-                        first.group.getMediaTrackGroup(),
-                        Collections.singletonList(first.trackIndex)));
-        trackSelector.setParameters(builder.build());
-        showToast("Subtitles: " + first.label);
+        
+        // Search for English subtitle track using regex
+        TrackOption englishTrack = null;
+        for (TrackOption option : subtitleTracks) {
+            String label = option.label != null ? option.label.toLowerCase() : "";
+            
+            // Get track format to extract language and id
+            Format format = option.group.getMediaTrackGroup().getFormat(option.trackIndex);
+            String language = format.language != null ? format.language.toLowerCase() : "";
+            String id = format.id != null ? format.id.toLowerCase() : "";
+            
+            // Check if track is English using regex pattern
+            if (isEnglishSubtitle(label) || isEnglishSubtitle(id) || isEnglishSubtitle(language)) {
+                englishTrack = option;
+                android.util.Log.d("TorboxTvPlayer", "Found English subtitle: label=" + option.label + " id=" + format.id + " lang=" + format.language);
+                break;
+            }
+        }
+        
+        // Only enable subtitles if English track is found
+        if (englishTrack != null) {
+            DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .addOverride(new TrackSelectionOverride(
+                            englishTrack.group.getMediaTrackGroup(),
+                            Collections.singletonList(englishTrack.trackIndex)));
+            trackSelector.setParameters(builder.build());
+            // Don't show toast for auto-selection, only for manual changes
+            android.util.Log.d("TorboxTvPlayer", "Auto-enabled English subtitles: " + englishTrack.label);
+        } else {
+            // No English subtitle found, leave subtitles disabled
+            android.util.Log.d("TorboxTvPlayer", "No English subtitle found, subtitles remain disabled");
+        }
+    }
+    
+    private boolean isEnglishSubtitle(String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        // Regex patterns to match English subtitles
+        // Matches: "en", "eng", "english", "en-us", "en-gb", etc.
+        return text.matches(".*\\b(en|eng|english)\\b.*");
     }
 
     private void requestNextStream() {
