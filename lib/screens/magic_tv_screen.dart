@@ -70,6 +70,7 @@ class _DebrifyTvChannel {
   final bool showVideoTitle;
   final bool hideOptions;
   final bool hideBackButton;
+  final bool avoidNsfw; // Per-channel NSFW filter setting
 
   const _DebrifyTvChannel({
     required this.id,
@@ -83,6 +84,7 @@ class _DebrifyTvChannel {
     required this.showVideoTitle,
     required this.hideOptions,
     required this.hideBackButton,
+    required this.avoidNsfw,
   });
 
   factory _DebrifyTvChannel.fromJson(Map<String, dynamic> json) {
@@ -133,6 +135,9 @@ class _DebrifyTvChannel {
       hideBackButton: json['hideBackButton'] is bool
           ? json['hideBackButton'] as bool
           : true,
+      avoidNsfw: json['avoidNsfw'] is bool
+          ? json['avoidNsfw'] as bool
+          : true, // Default to enabled for backward compatibility
     );
   }
 
@@ -149,6 +154,7 @@ class _DebrifyTvChannel {
       'showVideoTitle': showVideoTitle,
       'hideOptions': hideOptions,
       'hideBackButton': hideBackButton,
+      'avoidNsfw': avoidNsfw,
     };
   }
 
@@ -163,6 +169,7 @@ class _DebrifyTvChannel {
     bool? showVideoTitle,
     bool? hideOptions,
     bool? hideBackButton,
+    bool? avoidNsfw,
   }) {
     final nextHideOptions = hideOptions ?? this.hideOptions;
     return _DebrifyTvChannel(
@@ -177,6 +184,7 @@ class _DebrifyTvChannel {
       showVideoTitle: showVideoTitle ?? this.showVideoTitle,
       hideOptions: nextHideOptions,
       hideBackButton: hideBackButton ?? this.hideBackButton,
+      avoidNsfw: avoidNsfw ?? this.avoidNsfw,
     );
   }
 }
@@ -564,6 +572,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     DebrifyTvChannelCacheEntry? baseline,
     Set<String>? keywordsToSearch,
   }) async {
+    // Use channel's own NSFW setting
+    final channelAvoidNsfw = channel.avoidNsfw;
     final csvEngine = const TorrentsCsvEngine();
     final pirateEngine = const PirateBayEngine();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -620,6 +630,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           stats: stats,
           now: now,
           totalKeywords: normalizedKeywords.length,
+          avoidNsfw: channelAvoidNsfw, // Use channel's NSFW setting
         );
       }).toList();
 
@@ -677,6 +688,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     required Map<String, KeywordStat> stats,
     required int now,
     required int totalKeywords,
+    required bool avoidNsfw, // Use channel's NSFW setting
   }) async {
     String? csvFailure;
     TorrentsCsvSearchResult csvResult;
@@ -720,9 +732,37 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       pirateFailure = 'The Pirate Bay search failed. Some torrents may be missing.';
     }
 
+    // Apply NSFW filter to search results before caching
+    List<Torrent> csvTorrents = csvResult.torrents;
+    List<Torrent> pirateTorrents = pirateResult;
+    
+    if (avoidNsfw) {
+      final csvBefore = csvTorrents.length;
+      csvTorrents = csvTorrents.where((torrent) {
+        if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+          return false;
+        }
+        return true;
+      }).toList();
+      
+      final pirateBefore = pirateTorrents.length;
+      pirateTorrents = pirateTorrents.where((torrent) {
+        if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+          return false;
+        }
+        return true;
+      }).toList();
+      
+      final totalBefore = csvBefore + pirateBefore;
+      final totalAfter = csvTorrents.length + pirateTorrents.length;
+      if (totalBefore != totalAfter) {
+        debugPrint('DebrifyTV: Cache NSFW filter for "$keyword": $totalBefore → $totalAfter torrents');
+      }
+    }
+    
     final keywordHashes = <String>{};
 
-      for (final torrent in csvResult.torrents) {
+      for (final torrent in csvTorrents) {
         final hash = _normalizeInfohash(torrent.infohash);
         if (hash.isEmpty) {
           continue;
@@ -737,7 +777,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         );
       }
 
-      for (final torrent in pirateResult) {
+      for (final torrent in pirateTorrents) {
         final hash = _normalizeInfohash(torrent.infohash);
         if (hash.isEmpty) {
           continue;
@@ -1079,16 +1119,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       keywordList.add(trimmed);
       if (keywordList.length >= _maxChannelKeywords) break;
     }
-    String providerValue = existing?.provider ?? _provider;
-    bool startRandom = existing?.startRandom ?? _startRandom;
-    int randomStartPercent =
-        existing?.randomStartPercent ?? _randomStartPercent;
+    // Channel defaults - completely isolated from Quick Watch
+    String providerValue = existing?.provider ?? 'real_debrid';
+    bool startRandom = existing?.startRandom ?? true;
+    int randomStartPercent = existing?.randomStartPercent ?? _randomStartPercentDefault;
     randomStartPercent = _clampRandomStartPercent(randomStartPercent);
-    bool hideOptions = existing?.hideOptions ?? _hideOptions;
-    bool showWatermark = existing?.showWatermark ?? _showWatermark;
-    bool showVideoTitle = existing?.showVideoTitle ?? _showVideoTitle;
-    bool hideBackButton = existing?.hideBackButton ?? _hideBackButton;
-    bool avoidNsfw = _avoidNsfw; // Use global setting (not per-channel)
+    bool hideOptions = existing?.hideOptions ?? true;
+    bool showWatermark = existing?.showWatermark ?? true;
+    bool showVideoTitle = existing?.showVideoTitle ?? false;
+    bool hideBackButton = existing?.hideBackButton ?? true;
+    bool avoidNsfw = existing?.avoidNsfw ?? true;
+    final bool originalAvoidNsfw = avoidNsfw; // Track original value
     String? error;
 
     _DebrifyTvChannel? result;
@@ -1182,6 +1223,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 showVideoTitle: showVideoTitle,
                 hideOptions: hideOptions,
                 hideBackButton: hideBackButton,
+                avoidNsfw: avoidNsfw, // Channel's own NSFW setting
               );
               Navigator.of(dialogContext).pop(channel);
             }
@@ -1458,10 +1500,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         title: 'Avoid NSFW content',
                         subtitle: 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
                         value: avoidNsfw,
-                        onChanged: (v) async {
-                          setModalState(() => avoidNsfw = v);
-                          await StorageService.saveDebrifyTvAvoidNsfw(v);
-                          setState(() => _avoidNsfw = v);
+                        onChanged: (v) {
+                          setModalState(() {
+                            avoidNsfw = v; // Only update local channel setting
+                          });
                         },
                       ),
                       if (error != null) ...[
@@ -1500,9 +1542,34 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<void> _handleEditChannel(_DebrifyTvChannel channel) async {
     await _syncProviderAvailability(preferred: channel.provider);
+    
+    // Store current channel's NSFW setting before dialog
+    final nsfwBeforeEdit = channel.avoidNsfw;
+    
     final updated = await _openChannelDialog(existing: channel);
     if (updated != null) {
-      await _createOrUpdateChannel(updated, isEdit: true);
+      // Check if channel's NSFW setting changed
+      final nsfwAfterEdit = updated.avoidNsfw;
+      final nsfwChanged = nsfwBeforeEdit != nsfwAfterEdit;
+      
+      if (nsfwChanged) {
+        // NSFW setting changed for this channel - rebuild cache with new filter
+        debugPrint('DebrifyTV: Channel NSFW filter changed. Forcing full cache rebuild...');
+        
+        // Clear existing cache to force full rebuild
+        _channelCache.remove(updated.id);
+        
+        // Rebuild cache with new NSFW filter setting (isEdit: false forces full rebuild)
+        await _createOrUpdateChannel(updated, isEdit: false);
+        
+        _showSnack(
+          'Channel cache rebuilt with updated NSFW filter.',
+          color: Colors.green,
+        );
+      } else {
+        // No NSFW change, just normal update
+        await _createOrUpdateChannel(updated, isEdit: true);
+      }
     }
   }
 
