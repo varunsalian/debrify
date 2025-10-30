@@ -405,16 +405,31 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (!hideSeekbar && timeContainer != null) {
             timeContainer.animate().cancel();
             if (visible) {
-                timeContainer.setAlpha(0f);
+                boolean alreadyVisible =
+                        timeContainer.getVisibility() == View.VISIBLE && timeContainer.getAlpha() >= 0.95f;
                 timeContainer.setVisibility(View.VISIBLE);
-                timeContainer.animate().alpha(1f).setDuration(150L).start();
-            } else {
+                if (!alreadyVisible) {
+                    timeContainer.setAlpha(0f);
+                    timeContainer.animate()
+                            .alpha(1f)
+                            .setDuration(150L)
+                            .withEndAction(() -> {
+                                if (timeContainer != null) {
+                                    timeContainer.setAlpha(1f);
+                                }
+                            })
+                            .start();
+                } else {
+                    timeContainer.setAlpha(1f);
+                }
+            } else if (timeContainer.getVisibility() == View.VISIBLE) {
                 timeContainer.animate()
                         .alpha(0f)
                         .setDuration(150L)
                         .withEndAction(() -> {
                             if (timeContainer != null) {
                                 timeContainer.setVisibility(View.GONE);
+                                timeContainer.setAlpha(0f);
                             }
                         })
                         .start();
