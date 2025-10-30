@@ -68,50 +68,80 @@
         android:paddingLeft="32dp"
         android:paddingRight="32dp" />
 
+    <!-- Retro TV Static Effect Overlay -->
     <FrameLayout
         android:id="@+id/player_next_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#4D000000"
+        android:background="#000000"
         android:visibility="gone">
 
+        <!-- Animated TV static background -->
+        <View
+            android:id="@+id/tv_static_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#000000" />
+
+        <!-- Scan lines overlay -->
+        <View
+            android:id="@+id/tv_scanlines"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/tv_scanlines_pattern"
+            android:alpha="0.3" />
+
+        <!-- Center message with retro TV styling -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:orientation="vertical"
-            android:padding="24dp"
             android:gravity="center"
-            android:background="@drawable/debrify_tv_next_card">
+            android:padding="48dp">
 
-            <ProgressBar
-                android:id="@+id/player_next_spinner"
-                style="@android:style/Widget.DeviceDefault.ProgressBar.Small"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:indeterminate="true"
-                android:indeterminateTint="@android:color/white" />
-
+            <!-- Retro TV "No Signal" style text -->
             <TextView
                 android:id="@+id/player_next_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:text="@string/debrify_tv_next_loading"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:textStyle="bold" />
+                android:text="📺 TUNING..."
+                android:textColor="#00FF00"
+                android:textSize="36sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:shadowColor="#003300"
+                android:shadowDx="2"
+                android:shadowDy="2"
+                android:shadowRadius="4"
+                android:letterSpacing="0.1" />
 
+            <!-- Next video title -->
             <TextView
                 android:id="@+id/player_next_subtext"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textColor="#CCFFFFFF"
-                android:textSize="12sp"
-                android:text="@string/debrify_tv_next_hint" />
+                android:layout_marginTop="24dp"
+                android:textColor="#00FF00"
+                android:textSize="16sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:maxWidth="700dp"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:shadowColor="#003300"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="2"
+                android:visibility="gone" />
 
         </LinearLayout>
+
+        <!-- Vignette effect (darker edges) -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/tv_vignette" />
 
     </FrameLayout>
 

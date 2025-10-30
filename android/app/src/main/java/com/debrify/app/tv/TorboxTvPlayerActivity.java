@@ -3,6 +3,8 @@ package com.debrify.app.tv;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.text.TextUtils;
@@ -90,7 +92,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View nextOverlay;
     private TextView nextText;
     private TextView nextSubtext;
+    private View tvStaticView;
+    private View tvScanlines;
     private SubtitleView subtitleOverlay;
+    private android.animation.ValueAnimator staticAnimator;
+    private Handler staticHandler = new Handler(Looper.getMainLooper());
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
     private int resizeModeIndex = 0;
     private final int[] resizeModes = new int[] {
@@ -153,6 +159,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         nextOverlay = findViewById(R.id.player_next_overlay);
         nextText = findViewById(R.id.player_next_text);
         nextSubtext = findViewById(R.id.player_next_subtext);
+        tvStaticView = findViewById(R.id.tv_static_view);
+        tvScanlines = findViewById(R.id.tv_scanlines);
         subtitleOverlay = findViewById(R.id.player_subtitles);
 
         Intent intent = getIntent();
@@ -529,27 +537,126 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void showNextOverlay(@Nullable String headline, @Nullable String subline) {
-        if (nextOverlay == null) {
+        if (nextOverlay == null || player == null) {
             return;
         }
+        
         runOnUiThread(() -> {
-            nextOverlay.removeCallbacks(hideNextOverlayRunnable);
-            if (nextText != null && headline != null && !headline.isEmpty()) {
-                nextText.setText(headline);
+            // Pause the current video
+            if (player.isPlaying()) {
+                player.pause();
             }
+            
+            nextOverlay.removeCallbacks(hideNextOverlayRunnable);
+            
+            // Set retro TV message
+            String displayHeadline = getRandomTvStaticMessage();
+            if (nextText != null) {
+                nextText.setText(displayHeadline);
+            }
+            
+            // Show next video title if available
             if (nextSubtext != null) {
                 if (subline != null && !subline.isEmpty()) {
                     nextSubtext.setVisibility(View.VISIBLE);
-                    nextSubtext.setText(subline);
+                    nextSubtext.setText("▶ " + subline.toUpperCase());
                 } else {
                     nextSubtext.setVisibility(View.GONE);
                 }
             }
-            nextOverlay.animate().cancel();
+            
+            // Start TV static animation
+            startTvStaticEffect();
+            
+            // Animate overlay in
             nextOverlay.setVisibility(View.VISIBLE);
             nextOverlay.setAlpha(0f);
-            nextOverlay.animate().alpha(1f).setDuration(200L).start();
+            nextOverlay.animate()
+                .alpha(1f)
+                .setDuration(150L)
+                .start();
         });
+    }
+    
+    private String getRandomTvStaticMessage() {
+        String[] messages = {
+            "📺 TUNING...",
+            "📺 SIGNAL LOST",
+            "📺 PLEASE STAND BY",
+            "📺 CHANNEL SWITCHING",
+            "📺 NO SIGNAL",
+            "📺 ADJUSTING FREQUENCY",
+            "📺 TECHNICAL DIFFICULTIES",
+            "📺 ONE MOMENT PLEASE",
+            "📺 LOADING CHANNEL",
+            "📺 SEARCHING..."
+        };
+        return messages[random.nextInt(messages.length)];
+    }
+    
+    private void startTvStaticEffect() {
+        if (tvStaticView == null) {
+            return;
+        }
+        
+        // Stop any existing animation
+        stopTvStaticEffect();
+        
+        // Create random gray noise effect by rapidly changing background colors
+        final Runnable staticRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (tvStaticView != null && nextOverlay.getVisibility() == View.VISIBLE) {
+                    // Generate random gray value for TV static
+                    int grayValue = 20 + random.nextInt(80); // Random between 20-100
+                    int color = Color.rgb(grayValue, grayValue, grayValue);
+                    tvStaticView.setBackgroundColor(color);
+                    
+                    // Randomly flicker the text
+                    if (nextText != null && random.nextInt(10) > 7) {
+                        nextText.setAlpha(0.7f + random.nextFloat() * 0.3f);
+                    }
+                    
+                    // Continue animation
+                    staticHandler.postDelayed(this, 50); // Update every 50ms for smooth static
+                }
+            }
+        };
+        staticHandler.post(staticRunnable);
+        
+        // Animate scan lines slowly moving
+        if (tvScanlines != null) {
+            tvScanlines.animate()
+                .translationY(20f)
+                .setDuration(1000)
+                .setInterpolator(new android.view.animation.LinearInterpolator())
+                .withEndAction(() -> {
+                    if (tvScanlines != null) {
+                        tvScanlines.setTranslationY(-20f);
+                        if (nextOverlay.getVisibility() == View.VISIBLE) {
+                            startTvStaticEffect(); // Restart scan line animation
+                        }
+                    }
+                })
+                .start();
+        }
+    }
+    
+    private void stopTvStaticEffect() {
+        staticHandler.removeCallbacksAndMessages(null);
+        
+        if (tvStaticView != null) {
+            tvStaticView.setBackgroundColor(Color.BLACK);
+        }
+        
+        if (tvScanlines != null) {
+            tvScanlines.animate().cancel();
+            tvScanlines.setTranslationY(0f);
+        }
+        
+        if (nextText != null) {
+            nextText.setAlpha(1f);
+        }
     }
 
     private void hideNextOverlay() {
@@ -574,10 +681,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             nextOverlay.setAlpha(1f);
             return;
         }
+        
+        // Stop TV static effect
+        stopTvStaticEffect();
+        
+        // Fade out the overlay
         nextOverlay.animate().cancel();
         nextOverlay.animate()
                 .alpha(0f)
-                .setDuration(150L)
+                .setDuration(200L)
                 .withEndAction(() -> {
                     if (nextOverlay != null) {
                         nextOverlay.setVisibility(View.GONE);
@@ -690,6 +802,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             @Override
             public void success(@Nullable Object result) {
                 requestingNext = false;
+                
                 if (!(result instanceof Map)) {
                     handleNoMoreStreams();
                     return;
@@ -702,9 +815,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     handleNoMoreStreams();
                     return;
                 }
+                
+                // Update TV static message to show video is ready
                 if (nextTitle != null && !nextTitle.isEmpty()) {
-                    showNextOverlay(getString(R.string.debrify_tv_next_loading), nextTitle);
+                    runOnUiThread(() -> {
+                        if (nextText != null) {
+                            nextText.setText("📺 SIGNAL ACQUIRED");
+                        }
+                        if (nextSubtext != null) {
+                            nextSubtext.setVisibility(View.VISIBLE);
+                            nextSubtext.setText("▶ " + nextTitle.toUpperCase());
+                        }
+                    });
                 }
+                
                 playMedia(nextUrl, nextTitle);
                 scheduleHideNextOverlay(350L);
             }
@@ -975,6 +1099,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        // Clean up TV static effect
+        stopTvStaticEffect();
+        if (staticHandler != null) {
+            staticHandler.removeCallbacksAndMessages(null);
+        }
+        
         if (player != null) {
             player.removeListener(playbackListener);
             player.stop();
