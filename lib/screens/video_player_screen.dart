@@ -198,6 +198,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   int _transitionPhase = 1; // 1 = static, 2 = reveal
   DateTime? _transitionPhase2Started;
 
+  // Retro TV static loading messages
+  String _tvStaticMessage = '📺 TUNING...';
+  String _tvStaticSubtext = ''; // Second line for video title
+  final List<String> _tvStaticMessages = [
+    '📺 BUFFERING... JUST KIDDING',
+    '📺 RETICULATING SPLINES...',
+    '📺 SUMMONING VIDEO GODS...',
+    '📺 ENGAGING HYPERDRIVE...',
+    '📺 CALIBRATING FLUX CAPACITOR',
+    '📺 CONSULTING THE ALGORITHMS',
+    '📺 WARMING UP THE PIXELS',
+    '📺 BRIBING THE SERVERS...',
+  ];
+
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
 
@@ -519,8 +533,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _transitionStopTimer?.cancel();
     _transitionPhaseTimer?.cancel();
     _transitionPhase = 1;
+    // Pick a random retro TV message and reset subtext
+    _tvStaticMessage = _tvStaticMessages[
+        math.Random().nextInt(_tvStaticMessages.length)];
+    _tvStaticSubtext = ''; // Clear subtext until video is ready
     debugPrint('Player: Transition overlay started.');
-    _rainbowController.repeat(period: const Duration(milliseconds: 800));
+    // Match Android TV: update every 50ms for smooth static effect
+    _rainbowController.repeat(period: const Duration(milliseconds: 50));
     if (mounted) setState(() {});
   }
 
@@ -827,6 +846,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final title = result != null ? (result['title'] ?? '') : '';
         if (url.isNotEmpty) {
           debugPrint('Player: MagicTV next success. Opening new URL.');
+          
+          // Update TV static overlay to show signal acquired
+          if (title.isNotEmpty && mounted) {
+            setState(() {
+              _tvStaticMessage = '📺 SIGNAL ACQUIRED';
+              _tvStaticSubtext = '▶ ${title.toUpperCase()}';
+            });
+          }
+          
           await _player.open(mk.Media(url), play: true);
           // If advanced option is enabled, jump to a random timestamp for Debrify TV items
           if (widget.startFromRandom) {
@@ -1854,30 +1882,107 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  // Fullscreen transition overlay: rainbow or fallback static
+  // Fullscreen transition overlay: retro TV static effect (matches Android TV)
   Widget _buildTransitionOverlay() {
     return Positioned.fill(
       child: IgnorePointer(
         ignoring: true,
         child: AnimatedBuilder(
           animation: _rainbowController,
-          builder: (_, __) => Stack(
-            fit: StackFit.expand,
-            children: [
-              if (_transitionPhase == 1)
+          builder: (_, __) {
+            // Generate random gray value for TV static (easier on eyes)
+            // Use microseconds for truly random values each frame
+            final random = math.Random(DateTime.now().microsecondsSinceEpoch);
+            // Moderate range: 30-90 for visible but not harsh static
+            final grayValue = 30 + random.nextInt(60); // Random between 30-90
+            final staticColor = Color.fromRGBO(grayValue, grayValue, grayValue, 1.0);
+            
+            // Randomly flicker text (70% chance full opacity, 30% flicker)
+            final textAlpha = random.nextInt(10) > 7 
+                ? (0.7 + random.nextDouble() * 0.3) 
+                : 1.0;
+            
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                // TV Static background - rapidly changing gray color
+                ColoredBox(color: staticColor),
+                
+                // Animated scan lines with pattern
                 CustomPaint(
-                  painter: _TvStaticPainter(
-                    seed: (_rainbowController.value * 10000).floor(),
+                  painter: _TvScanlinesPatternPainter(
+                    offset: _rainbowController.value,
                   ),
                 ),
-              if (_transitionPhase == 2)
-                CustomPaint(
-                  painter: _TvStaticPainter(
-                    seed: (_rainbowController.value * 20000).floor(),
+                
+                // Center text with retro TV styling
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(48.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Opacity(
+                          opacity: textAlpha,
+                          child: Text(
+                            _tvStaticMessage,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: const Color(0xFF00FF00), // Retro green
+                              fontSize: 36,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 4,
+                              shadows: [
+                                Shadow(
+                                  color: const Color(0xFF003300),
+                                  offset: const Offset(2, 2),
+                                  blurRadius: 4,
+                                ),
+                                Shadow(
+                                  color: const Color(0xFF00FF00).withOpacity(0.5),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_tvStaticSubtext.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          Opacity(
+                            opacity: textAlpha,
+                            child: Text(
+                              _tvStaticSubtext,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: const Color(0xFF00FF00), // Retro green
+                                fontSize: 16,
+                                fontFamily: 'monospace',
+                                shadows: [
+                                  Shadow(
+                                    color: const Color(0xFF003300),
+                                    offset: const Offset(1, 1),
+                                    blurRadius: 2,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
-            ],
-          ),
+                
+                // Vignette overlay
+                CustomPaint(
+                  painter: _TvVignettePainter(),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -3261,39 +3366,54 @@ class _DoubleTapRipplePainter extends CustomPainter {
   bool shouldRepaint(covariant _DoubleTapRipplePainter oldDelegate) => true;
 }
 
-class _TvStaticPainter extends CustomPainter {
-  final int seed;
-  _TvStaticPainter({required this.seed});
+class _TvScanlinesPatternPainter extends CustomPainter {
+  final double offset;
+  _TvScanlinesPatternPainter({required this.offset});
+  
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Match Android: oscillate between -20 and +20 pixels
+    final oscillation = math.sin(offset * 2 * math.pi) * 20;
+    
+    // Draw horizontal scan lines with slight white overlay
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.05)
+      ..strokeWidth = 1;
+    
+    // Draw lines every 4 pixels with animated offset
+    for (double y = oscillation; y < size.height + 40; y += 4) {
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        paint,
+      );
+    }
+  }
+  
+  @override
+  bool shouldRepaint(covariant _TvScanlinesPatternPainter oldDelegate) => true;
+}
+
+class _TvVignettePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    // Opaque black base
-    canvas.drawRect(rect, Paint()..color = Colors.black);
-    // Dense white/gray noise dots
-    final rnd = math.Random(seed);
-    final paint = Paint()..isAntiAlias = false;
-    final density = 0.08; // proportion of pixels approximated via rects
-    final int dots = (size.width * size.height * density / 4).ceil();
-    for (int i = 0; i < dots; i++) {
-      final dx = rnd.nextDouble() * size.width;
-      final dy = rnd.nextDouble() * size.height;
-      final shade = rnd.nextBool()
-          ? 1.0
-          : (0.75 + rnd.nextDouble() * 0.25); // white or light gray
-      paint.color = Color.fromRGBO(
-        (shade * 255).toInt(),
-        (shade * 255).toInt(),
-        (shade * 255).toInt(),
-        1.0,
-      );
-      final w = 2.0;
-      final h = 2.0;
-      canvas.drawRect(Rect.fromLTWH(dx, dy, w, h), paint);
-    }
+    // Match Android vignette: 60% radius, transparent center to dark edges
+    final gradient = RadialGradient(
+      center: Alignment.center,
+      radius: 0.6, // Match Android gradientRadius="60%"
+      colors: const [
+        Color(0x00000000), // Transparent center
+        Color(0x66000000), // Lighter black edges (102/255 alpha) so static is visible
+      ],
+      stops: const [0.0, 1.0],
+    );
+    final paint = Paint()..shader = gradient.createShader(rect);
+    canvas.drawRect(rect, paint);
   }
-
+  
   @override
-  bool shouldRepaint(covariant _TvStaticPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _TvVignettePainter oldDelegate) => false;
 }
 
 class _BloomOverlayPainter extends CustomPainter {
