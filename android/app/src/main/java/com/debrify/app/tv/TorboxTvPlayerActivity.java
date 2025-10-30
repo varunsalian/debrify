@@ -580,16 +580,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     
     private String getRandomTvStaticMessage() {
         String[] messages = {
-            "📺 TUNING...",
-            "📺 SIGNAL LOST",
-            "📺 PLEASE STAND BY",
-            "📺 CHANNEL SWITCHING",
-            "📺 NO SIGNAL",
-            "📺 ADJUSTING FREQUENCY",
-            "📺 TECHNICAL DIFFICULTIES",
-            "📺 ONE MOMENT PLEASE",
-            "📺 LOADING CHANNEL",
-            "📺 SEARCHING..."
+            "📺 BUFFERING... JUST KIDDING",
+            "📺 RETICULATING SPLINES...",
+            "📺 SUMMONING VIDEO GODS...",
+            "📺 ENGAGING HYPERDRIVE...",
+            "📺 CALIBRATING FLUX CAPACITOR",
+            "📺 CONSULTING THE ALGORITHMS",
+            "📺 WARMING UP THE PIXELS",
+            "📺 BRIBING THE SERVERS..."
         };
         return messages[random.nextInt(messages.length)];
     }
