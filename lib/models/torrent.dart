@@ -8,6 +8,7 @@ class Torrent {
   final int leechers;
   final int completed;
   final int scrapedDate;
+  final String? category; // Optional: PirateBay category (5xx = NSFW)
 
   Torrent({
     required this.rowid,
@@ -19,6 +20,7 @@ class Torrent {
     required this.leechers,
     required this.completed,
     required this.scrapedDate,
+    this.category,
   });
 
   factory Torrent.fromJson(Map<String, dynamic> json) {
@@ -32,6 +34,7 @@ class Torrent {
       leechers: json['leechers'] ?? 0,
       completed: json['completed'] ?? 0,
       scrapedDate: json['scraped_date'] ?? 0,
+      category: json['category']?.toString(),
     );
   }
 
@@ -46,6 +49,7 @@ class Torrent {
       'leechers': leechers,
       'completed': completed,
       'scraped_date': scrapedDate,
+      if (category != null) 'category': category,
     };
   }
 }

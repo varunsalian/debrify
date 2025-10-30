@@ -48,6 +48,7 @@ class PirateBayEngine extends SearchEngine {
       leechers: int.tryParse(json['leechers'] ?? '0') ?? 0,
       completed: 0, // Pirate Bay doesn't provide completed count
       scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      category: json['category']?.toString(), // Capture category (5xx = NSFW)
     );
   }
 } 

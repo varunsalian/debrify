@@ -17,6 +17,7 @@ import '../services/torrents_csv_engine.dart';
 import '../services/pirate_bay_engine.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
+import '../utils/nsfw_filter.dart';
 import 'video_player_screen.dart';
 
 const int _randomStartPercentDefault = 40;
@@ -213,6 +214,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _showVideoTitle = false;
   bool _hideOptions = true;
   bool _hideBackButton = true;
+  bool _avoidNsfw = true; // Default enabled for content filtering
   String _provider = _providerRealDebrid;
   bool _rdAvailable = false;
   bool _torboxAvailable = false;
@@ -438,6 +440,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final showWatermark = await StorageService.getDebrifyTvShowWatermark();
     final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
     final hideBackButton = await StorageService.getDebrifyTvHideBackButton();
+    final avoidNsfw = await StorageService.getDebrifyTvAvoidNsfw();
     final storedProvider = await StorageService.getDebrifyTvProvider();
     final hasStoredProvider = await StorageService.hasDebrifyTvProvider();
     final rdIntegrationEnabled =
@@ -468,6 +471,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _showVideoTitle = showVideoTitle;
         _hideOptions = hideOptions;
         _hideBackButton = hideBackButton;
+        _avoidNsfw = avoidNsfw;
         _rdAvailable = rdAvailable;
         _torboxAvailable = torboxAvailable;
         _provider = defaultProvider;
@@ -1084,6 +1088,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     bool showWatermark = existing?.showWatermark ?? _showWatermark;
     bool showVideoTitle = existing?.showVideoTitle ?? _showVideoTitle;
     bool hideBackButton = existing?.hideBackButton ?? _hideBackButton;
+    bool avoidNsfw = _avoidNsfw; // Use global setting (not per-channel)
     String? error;
 
     _DebrifyTvChannel? result;
@@ -1447,6 +1452,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         subtitle: 'Require device gesture or escape key to exit',
                         value: hideBackButton,
                         onChanged: (v) => setModalState(() => hideBackButton = v),
+                      ),
+                      const SizedBox(height: 8),
+                      _SwitchRow(
+                        title: 'Avoid NSFW content',
+                        subtitle: 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
+                        value: avoidNsfw,
+                        onChanged: (v) async {
+                          setModalState(() => avoidNsfw = v);
+                          await StorageService.saveDebrifyTvAvoidNsfw(v);
+                          setState(() => _avoidNsfw = v);
+                        },
                       ),
                       if (error != null) ...[
                         const SizedBox(height: 16),
@@ -2236,8 +2252,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               (result['engineCounts'] as Map<String, int>?) ?? const {};
           debugPrint(
               'DebrifyTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts');
+        
+        // Apply NSFW filter if enabled
+        List<Torrent> torrentsToProcess = torrents;
+        if (_avoidNsfw) {
+          final beforeCount = torrents.length;
+          torrentsToProcess = torrents.where((torrent) {
+            if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+              debugPrint('DebrifyTV: Filtered NSFW torrent: ${torrent.name}');
+              return false;
+            }
+            return true;
+          }).toList();
+          if (beforeCount != torrentsToProcess.length) {
+            debugPrint('DebrifyTV: NSFW filter: $beforeCount → ${torrentsToProcess.length} torrents');
+          }
+        }
+        
         int added = 0;
-        for (final t in torrents) {
+        for (final t in torrentsToProcess) {
           if (!dedupByInfohash.containsKey(t.infohash)) {
             dedupByInfohash[t.infohash] = t;
             added++;
@@ -2648,8 +2681,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await for (final result in Stream.fromFutures(futures)) {
         final torrents =
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
+        
+        // Apply NSFW filter if enabled
+        List<Torrent> torrentsToProcess = torrents;
+        if (_avoidNsfw) {
+          final beforeCount = torrents.length;
+          torrentsToProcess = torrents.where((torrent) {
+            if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+              debugPrint('Torbox: Filtered NSFW torrent: ${torrent.name}');
+              return false;
+            }
+            return true;
+          }).toList();
+          if (beforeCount != torrentsToProcess.length) {
+            debugPrint('Torbox: NSFW filter: $beforeCount → ${torrentsToProcess.length} torrents');
+          }
+        }
+        
         int added = 0;
-        for (final torrent in torrents) {
+        for (final torrent in torrentsToProcess) {
           final normalizedHash = _normalizeInfohash(torrent.infohash);
           if (normalizedHash.isEmpty) continue;
           if (!dedup.containsKey(normalizedHash)) {
@@ -2923,9 +2973,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     _showCachedPlaybackDialog();
 
+    // Apply NSFW filter to cached torrents if enabled
+    List<Torrent> torrentsToUse = cachedTorrents;
+    if (_avoidNsfw) {
+      final beforeCount = cachedTorrents.length;
+      torrentsToUse = cachedTorrents.where((torrent) {
+        if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+          debugPrint('DebrifyTV: Filtered cached NSFW torrent: ${torrent.name}');
+          return false;
+        }
+        return true;
+      }).toList();
+      if (beforeCount != torrentsToUse.length) {
+        debugPrint('DebrifyTV: NSFW filter on cached: $beforeCount → ${torrentsToUse.length} torrents');
+      }
+    }
+
     _queue
       ..clear()
-      ..addAll(List<Torrent>.from(cachedTorrents)..shuffle(Random()));
+      ..addAll(List<Torrent>.from(torrentsToUse)..shuffle(Random()));
     _lastQueueSize = _queue.length;
     _lastSearchAt = DateTime.now();
 
@@ -3915,6 +3981,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     onChanged: (v) async {
                       setState(() => _hideBackButton = v);
                       await StorageService.saveDebrifyTvHideBackButton(v);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _SwitchRow(
+                    title: 'Avoid NSFW content',
+                    subtitle: 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
+                    value: _avoidNsfw,
+                    onChanged: (v) async {
+                      setState(() => _avoidNsfw = v);
+                      await StorageService.saveDebrifyTvAvoidNsfw(v);
                     },
                   ),
                   const SizedBox(height: 16),

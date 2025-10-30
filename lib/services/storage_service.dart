@@ -32,6 +32,7 @@ class StorageService {
   static const String _debrifyTvHideOptionsKey = 'debrify_tv_hide_options';
   static const String _debrifyTvHideBackButtonKey =
       'debrify_tv_hide_back_button';
+  static const String _debrifyTvAvoidNsfwKey = 'debrify_tv_avoid_nsfw';
   static const String _debrifyTvProviderKey = 'debrify_tv_provider';
   static const String _debrifyTvRandomStartPercentKey =
       'debrify_tv_random_start_percent';
@@ -752,6 +753,16 @@ class StorageService {
   static Future<void> saveDebrifyTvHideBackButton(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_debrifyTvHideBackButtonKey, value);
+  }
+
+  static Future<bool> getDebrifyTvAvoidNsfw() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_debrifyTvAvoidNsfwKey) ?? true; // Default enabled
+  }
+
+  static Future<void> saveDebrifyTvAvoidNsfw(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_debrifyTvAvoidNsfwKey, value);
   }
 
   static Future<List<Map<String, dynamic>>> getDebrifyTvChannels() async {
