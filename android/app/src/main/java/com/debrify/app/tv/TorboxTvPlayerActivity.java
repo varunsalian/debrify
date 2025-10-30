@@ -275,8 +275,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleOverlay.setApplyEmbeddedFontSizes(false);
             // No padding fraction - using XML padding for fixed screen-bottom positioning
             subtitleOverlay.setBottomPaddingFraction(0.0f);
-            // Smaller text size: 12sp for TV viewing
-            subtitleOverlay.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+            // Text size: 16sp for TV viewing (comfortable size)
+            subtitleOverlay.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
             subtitleOverlay.setStyle(new CaptionStyleCompat(
                     Color.WHITE,
                     Color.TRANSPARENT,
@@ -725,6 +725,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         randomApplied = false;
         maybeRecreatePlayerForBandwidth();
+        
+        // Clear previous video's subtitles before loading new video
+        if (subtitleOverlay != null) {
+            subtitleOverlay.setCues(java.util.Collections.emptyList());
+        }
+        
         MediaMetadata metadata = new MediaMetadata.Builder()
                 .setTitle(title != null ? title : "")
                 .build();
@@ -1092,6 +1098,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         } else {
             target = Math.max(0L, target);
         }
+        android.util.Log.d("TorboxTvPlayer", "Seeking from " + position + "ms to " + target + "ms (offset=" + offsetMs + "ms)");
         player.seekTo(target);
         if (playerView != null) {
             playerView.hideController();
@@ -1166,11 +1173,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            if (playerView != null && playerView.isControllerFullyVisible()) {
-                return super.dispatchKeyEvent(event);
-            }
-            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                seekBy(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? SEEK_STEP_MS : -SEEK_STEP_MS);
+            // Left/Right arrows ALWAYS seek (regardless of menu visibility)
+            // Use Down arrow to navigate into menu, then use left/right within menu
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) {
+                    // First press - seek
+                    seekBy(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? SEEK_STEP_MS : -SEEK_STEP_MS);
+                }
+                // Consume all down events to prevent controls from showing
                 return true;
             }
             if (event.getAction() == KeyEvent.ACTION_UP) {

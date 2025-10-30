@@ -66,7 +66,7 @@
         android:layout_gravity="bottom|center_horizontal"
         android:paddingLeft="48dp"
         android:paddingRight="48dp"
-        android:paddingBottom="60dp" />
+        android:paddingBottom="24dp" />
 
     <!-- Retro TV Static Effect Overlay -->
     <FrameLayout
