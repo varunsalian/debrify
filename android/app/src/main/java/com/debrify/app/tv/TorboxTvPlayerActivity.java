@@ -162,8 +162,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         nextSubtext = findViewById(R.id.player_next_subtext);
         tvStaticView = findViewById(R.id.tv_static_view);
         tvScanlines = findViewById(R.id.tv_scanlines);
-        // Get PlayerView's internal SubtitleView (the one actually being used)
-        subtitleOverlay = playerView.getSubtitleView();
+        // Use our custom SubtitleView that's positioned independently
+        subtitleOverlay = findViewById(R.id.player_subtitles_custom);
 
         Intent intent = getIntent();
         
@@ -246,6 +246,25 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .build();
         player.addListener(playbackListener);
         playerView.setPlayer(player);
+        
+        // Hide PlayerView's internal SubtitleView to use our custom one
+        SubtitleView internalSubtitleView = playerView.getSubtitleView();
+        if (internalSubtitleView != null) {
+            internalSubtitleView.setVisibility(View.GONE);
+        }
+        
+        // Connect player subtitle output to our custom SubtitleView
+        if (subtitleOverlay != null) {
+            player.addListener(new Player.Listener() {
+                @Override
+                public void onCues(androidx.media3.common.text.CueGroup cueGroup) {
+                    if (subtitleOverlay != null) {
+                        subtitleOverlay.setCues(cueGroup.cues);
+                    }
+                }
+            });
+        }
+        
         playerView.setKeepScreenOn(true);
         playerView.setUseController(true);
         playerView.setControllerAutoShow(true);
@@ -254,10 +273,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (subtitleOverlay != null) {
             subtitleOverlay.setApplyEmbeddedStyles(false);
             subtitleOverlay.setApplyEmbeddedFontSizes(false);
-            // Convert 60dp to pixels for bottom padding (fixed distance from screen bottom)
-            float density = getResources().getDisplayMetrics().density;
-            int bottomPaddingPx = (int) (60 * density);
-            subtitleOverlay.setPadding(0, 0, 0, bottomPaddingPx);
+            // No padding fraction - using XML padding for fixed screen-bottom positioning
             subtitleOverlay.setBottomPaddingFraction(0.0f);
             // Smaller text size: 12sp for TV viewing
             subtitleOverlay.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);

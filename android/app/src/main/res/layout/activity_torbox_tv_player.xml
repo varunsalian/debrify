@@ -58,6 +58,16 @@
         android:textSize="14sp"
         android:textStyle="bold" />
 
+    <!-- Custom SubtitleView - positioned independently of video -->
+    <androidx.media3.ui.SubtitleView
+        android:id="@+id/player_subtitles_custom"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="bottom|center_horizontal"
+        android:paddingLeft="48dp"
+        android:paddingRight="48dp"
+        android:paddingBottom="60dp" />
+
     <!-- Retro TV Static Effect Overlay -->
     <FrameLayout
         android:id="@+id/player_next_overlay"
