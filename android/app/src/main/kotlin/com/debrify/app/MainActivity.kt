@@ -171,74 +171,96 @@ class MainActivity : FlutterActivity() {
         )
         setAndroidTvPlayerChannel(tvChannel)
         tvChannel.setMethodCallHandler { call, result ->
+            android.util.Log.d("DebrifyTV", "MainActivity: Method channel received: ${call.method}")
             when (call.method) {
                 "launchTorboxPlayback" -> {
+                    android.util.Log.d("DebrifyTV", "MainActivity: Handling launchTorboxPlayback")
                     @Suppress("UNCHECKED_CAST")
                     val args = call.arguments<Map<String, Any?>>()
                     if (args == null) {
+                        android.util.Log.e("DebrifyTV", "MainActivity: Missing arguments")
                         result.error("bad_args", "Missing launch arguments", null)
                         return@setMethodCallHandler
                     }
-                    handleLaunchTorboxPlayback(args, result)
+                    handleLaunchTvPlayback(args, result, "torbox")
                 }
-                else -> result.notImplemented()
+                "launchRealDebridPlayback" -> {
+                    android.util.Log.d("DebrifyTV", "MainActivity: Handling launchRealDebridPlayback")
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments<Map<String, Any?>>()
+                    if (args == null) {
+                        android.util.Log.e("DebrifyTV", "MainActivity: Missing arguments")
+                        result.error("bad_args", "Missing launch arguments", null)
+                        return@setMethodCallHandler
+                    }
+                    handleLaunchTvPlayback(args, result, "real_debrid")
+                }
+                else -> {
+                    android.util.Log.w("DebrifyTV", "MainActivity: Method not implemented: ${call.method}")
+                    result.notImplemented()
+                }
             }
         }
 	}
 
-    private fun handleLaunchTorboxPlayback(
+    private fun handleLaunchTvPlayback(
         args: Map<String, Any?>,
-        result: MethodChannel.Result
+        result: MethodChannel.Result,
+        provider: String
     ) {
+        android.util.Log.d("DebrifyTV", "MainActivity: handleLaunchTvPlayback() called with provider=$provider")
+        
         val initialUrl = (args["initialUrl"] as? String)?.trim()
+        android.util.Log.d("DebrifyTV", "MainActivity: initialUrl=${initialUrl?.take(50)}...")
+        
         if (initialUrl.isNullOrEmpty()) {
+            android.util.Log.e("DebrifyTV", "MainActivity: initialUrl is null or empty")
             result.error("bad_args", "initialUrl is required", null)
             return
         }
+        
         val initialTitleRaw = (args["initialTitle"] as? String)?.trim()
         val initialTitle = if (initialTitleRaw.isNullOrEmpty()) "Debrify TV" else initialTitleRaw
-
-        @Suppress("UNCHECKED_CAST")
-        val magnetsRaw = args["magnets"] as? List<Map<String, Any?>>
-        if (magnetsRaw == null || magnetsRaw.isEmpty()) {
-            result.error("bad_args", "Magnets list is required", null)
-            return
-        }
-
-        val magnetBundles = ArrayList<Bundle>()
-        magnetsRaw.forEach { entry ->
-            val magnet = (entry["magnet"] as? String)?.trim()
-            if (magnet.isNullOrEmpty()) {
-                return@forEach
-            }
-            val bundle = Bundle()
-            bundle.putString("magnet", magnet)
-            bundle.putString("hash", (entry["hash"] as? String)?.trim() ?: "")
-            bundle.putString("name", (entry["name"] as? String)?.trim() ?: "")
-            (entry["sizeBytes"] as? Number)?.let { bundle.putLong("sizeBytes", it.toLong()) }
-            (entry["seeders"] as? Number)?.let { bundle.putInt("seeders", it.toInt()) }
-            magnetBundles.add(bundle)
-        }
-
-        if (magnetBundles.isEmpty()) {
-            result.error("bad_args", "No valid magnet entries", null)
-            return
-        }
+        android.util.Log.d("DebrifyTV", "MainActivity: title=$initialTitle")
 
         @Suppress("UNCHECKED_CAST")
         val config = args["config"] as? Map<String, Any?>
+        android.util.Log.d("DebrifyTV", "MainActivity: config=$config")
+        
+        android.util.Log.d("DebrifyTV", "MainActivity: Creating intent for TorboxTvPlayerActivity")
         val intent = Intent(this, TorboxTvPlayerActivity::class.java).apply {
             putExtra("initialUrl", initialUrl)
             putExtra("initialTitle", initialTitle)
-            putParcelableArrayListExtra("magnetList", magnetBundles)
-            putExtra(
-                "startFromRandom",
-                config?.get("startFromRandom") as? Boolean ?: false
-            )
-            putExtra(
-                "randomStartMaxPercent",
-                (config?.get("randomStartMaxPercent") as? Number)?.toInt() ?: 40
-            )
+            putExtra("provider", provider)
+            
+            // For Torbox: magnets are required. For Real-Debrid: magnets are optional
+            @Suppress("UNCHECKED_CAST")
+            val magnetsRaw = args["magnets"] as? List<Map<String, Any?>>
+            if (magnetsRaw != null && magnetsRaw.isNotEmpty()) {
+                android.util.Log.d("DebrifyTV", "MainActivity: Processing ${magnetsRaw.size} magnets")
+                val magnetBundles = ArrayList<Bundle>()
+                magnetsRaw.forEach { entry ->
+                    val magnet = (entry["magnet"] as? String)?.trim()
+                    if (!magnet.isNullOrEmpty()) {
+                        val bundle = Bundle()
+                        bundle.putString("magnet", magnet)
+                        bundle.putString("hash", (entry["hash"] as? String)?.trim() ?: "")
+                        bundle.putString("name", (entry["name"] as? String)?.trim() ?: "")
+                        (entry["sizeBytes"] as? Number)?.let { bundle.putLong("sizeBytes", it.toLong()) }
+                        (entry["seeders"] as? Number)?.let { bundle.putInt("seeders", it.toInt()) }
+                        magnetBundles.add(bundle)
+                    }
+                }
+                if (magnetBundles.isNotEmpty()) {
+                    android.util.Log.d("DebrifyTV", "MainActivity: Added ${magnetBundles.size} magnet bundles")
+                    putParcelableArrayListExtra("magnetList", magnetBundles)
+                }
+            } else {
+                android.util.Log.d("DebrifyTV", "MainActivity: No magnets provided (OK for Real-Debrid)")
+            }
+            
+            putExtra("startFromRandom", config?.get("startFromRandom") as? Boolean ?: false)
+            putExtra("randomStartMaxPercent", (config?.get("randomStartMaxPercent") as? Number)?.toInt() ?: 40)
             putExtra("hideSeekbar", config?.get("hideSeekbar") as? Boolean ?: false)
             putExtra("hideOptions", config?.get("hideOptions") as? Boolean ?: false)
             putExtra("showVideoTitle", config?.get("showVideoTitle") as? Boolean ?: true)
@@ -247,9 +269,13 @@ class MainActivity : FlutterActivity() {
         }
 
         try {
+            android.util.Log.d("DebrifyTV", "MainActivity: Starting TorboxTvPlayerActivity")
             startActivity(intent)
+            android.util.Log.d("DebrifyTV", "MainActivity: ✅ Activity started successfully")
             result.success(true)
         } catch (e: Exception) {
+            android.util.Log.e("DebrifyTV", "MainActivity: ❌ Failed to start activity: ${e.message}")
+            e.printStackTrace()
             result.error("launch_failed", e.message, null)
         }
     }

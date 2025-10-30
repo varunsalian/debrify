@@ -458,7 +458,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       torboxAvailable,
     );
     final isTv = await AndroidNativeDownloader.isTelevision();
-
+    
     if (mounted) {
       setState(() {
         _startRandom = startRandom;
@@ -2025,22 +2025,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         onPressed: () {
                           _cancelActiveWatch(dialogContext: context);
                         },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.1),
-                            foregroundColor: Colors.white70,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                          foregroundColor: Colors.white70,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
                           ),
                         ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                   );
@@ -2218,15 +2218,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         pendingKeywords = pendingKeywords.skip(batch.length).toList();
 
         final futures = batch.map((kw) {
-          debugPrint('DebrifyTV: Searching engines for "$kw"...');
+        debugPrint('DebrifyTV: Searching engines for "$kw"...');
           return TorrentService.searchAllEngines(
             kw,
             useTorrentsCsv: true,
             usePirateBay: true,
           );
-        }).toList();
+      }).toList();
 
-        await for (final result in Stream.fromFutures(futures)) {
+      await for (final result in Stream.fromFutures(futures)) {
           if (_watchCancelled) {
             break;
           }
@@ -2236,77 +2236,91 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               (result['engineCounts'] as Map<String, int>?) ?? const {};
           debugPrint(
               'DebrifyTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts');
-          int added = 0;
-          for (final t in torrents) {
-            if (!dedupByInfohash.containsKey(t.infohash)) {
-              dedupByInfohash[t.infohash] = t;
-              added++;
-            }
+        int added = 0;
+        for (final t in torrents) {
+          if (!dedupByInfohash.containsKey(t.infohash)) {
+            dedupByInfohash[t.infohash] = t;
+            added++;
           }
-          if (added > 0) {
+        }
+        if (added > 0) {
             if (_watchCancelled) {
               break;
             }
-            final combined = dedupByInfohash.values.toList();
-            combined.shuffle(Random());
-            _queue
-              ..clear()
-              ..addAll(combined);
-            _lastQueueSize = _queue.length;
-            _lastSearchAt = DateTime.now();
-            // Silent approach - no progress logging needed
+          final combined = dedupByInfohash.values.toList();
+          combined.shuffle(Random());
+          _queue
+            ..clear()
+            ..addAll(combined);
+          _lastQueueSize = _queue.length;
+          _lastSearchAt = DateTime.now();
+          // Silent approach - no progress logging needed
             if (mounted && !_watchCancelled) {
-              setState(() {
-                _status = 'Preparing your content...';
-              });
+          setState(() {
+            _status = 'Preparing your content...';
+          });
             }
 
-            // Do not start prefetch until player launches
+          // Do not start prefetch until player launches
 
-            // Try to launch player as soon as a playable stream is available
+          // Try to launch player as soon as a playable stream is available
             if (!_launchedPlayer && !_watchCancelled) {
-              final first = await requestMagicNext();
+            final first = await requestMagicNext();
               if (_watchCancelled) {
                 break;
               }
               if (first != null && mounted && !_launchedPlayer && !_watchCancelled) {
-                _launchedPlayer = true;
-                final firstUrl = first['url'] ?? '';
+              _launchedPlayer = true;
+              final firstUrl = first['url'] ?? '';
                 final firstTitleResolved = (first['title'] ?? firstTitle)
                         .trim()
                         .isNotEmpty
                     ? (first['title'] ?? firstTitle)
                     : firstTitle;
                 if (!_watchCancelled && _progressOpen && _progressSheetContext != null) {
-                  Navigator.of(_progressSheetContext!).pop();
-                }
+                Navigator.of(_progressSheetContext!).pop();
+              }
                 debugPrint(
                     'DebrifyTV: Launching player early. Remaining queue=${_queue.length}');
 
-                // Start background prefetch only while player is active
+              // Start background prefetch only while player is active
                 if (!_watchCancelled) {
-                  _activeApiKey = apiKeyEarly;
-                  _startPrefetch();
+                _activeApiKey = apiKeyEarly;
+                _startPrefetch();
 
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => VideoPlayerScreen(
-                        videoUrl: firstUrl,
-                        title: firstTitleResolved,
-                        startFromRandom: _startRandom,
+                // Try to launch on Android TV first (early launch path)
+                final launchedOnTv = await _launchRealDebridOnAndroidTv(
+                  firstStream: first,
+                  requestNext: requestMagicNext,
+                );
+                
+                if (launchedOnTv) {
+                  // Successfully launched on Android TV
+                  debugPrint('DebrifyTV: Early launch - Real-Debrid playback started on Android TV');
+                  // Prefetch will continue in background while TV player is active
+                  break; // Exit the search loop
+                }
+
+                // Fall back to Flutter video player
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => VideoPlayerScreen(
+                    videoUrl: firstUrl,
+                    title: firstTitleResolved,
+                    startFromRandom: _startRandom,
                         randomStartMaxPercent: _randomStartPercent,
-                        hideSeekbar: _hideSeekbar,
-                        showWatermark: _showWatermark,
-                        showVideoTitle: _showVideoTitle,
-                        hideOptions: _hideOptions,
-                        hideBackButton: _hideBackButton,
-                        requestMagicNext: requestMagicNext,
-                      ),
-                    ),
-                  );
+                    hideSeekbar: _hideSeekbar,
+                    showWatermark: _showWatermark,
+                    showVideoTitle: _showVideoTitle,
+                    hideOptions: _hideOptions,
+                    hideBackButton: _hideBackButton,
+                    requestMagicNext: requestMagicNext,
+                  ),
+                ),
+              );
 
-                  // Stop prefetch when player exits
-                  await _stopPrefetch();
+              // Stop prefetch when player exits
+              await _stopPrefetch();
                 }
               }
             }
@@ -2329,8 +2343,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       debugPrint('DebrifyTV: Search failed: $e');
     } finally {
-      final restoreTo = _originalMaxCap ?? 50;
-      await StorageService.setMaxTorrentsCsvResults(restoreTo);
+        final restoreTo = _originalMaxCap ?? 50;
+        await StorageService.setMaxTorrentsCsvResults(restoreTo);
       if (restoreTo != initialMaxResults) {
         debugPrint('DebrifyTV: Restored Torrents CSV max to $restoreTo after Real Debrid search');
       }
@@ -2524,15 +2538,32 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
       final firstUrl = first['url'] ?? '';
       firstTitle = (first['title'] ?? firstTitle).trim().isNotEmpty ? (first['title'] ?? firstTitle) : firstTitle;
-      // Navigate to the player with a Next callback
+      
       if (!mounted) return;
       debugPrint('MagicTV: Launching player. Remaining queue=${_queue.length}');
+      
       // Start background prefetch while player is active
       _activeApiKey = apiKey;
       _startPrefetch();
+      
       if (_progressOpen && _progressSheetContext != null) {
         Navigator.of(_progressSheetContext!).pop();
       }
+      
+      // Try to launch on Android TV first
+      final launchedOnTv = await _launchRealDebridOnAndroidTv(
+        firstStream: first,
+        requestNext: requestMagicNext,
+      );
+      
+      if (launchedOnTv) {
+        // Successfully launched on Android TV
+        debugPrint('MagicTV: Real-Debrid playback started on Android TV');
+        // Prefetch will continue in background while TV player is active
+        return;
+      }
+      
+      // Fall back to Flutter video player
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
@@ -2635,7 +2666,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _lastQueueSize = _queue.length;
           _lastSearchAt = DateTime.now();
           if (mounted) {
-            setState(() {
+    setState(() {
               _status = 'Checking Torbox cache...';
             });
           }
@@ -2807,7 +2838,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (first == null) {
         _closeProgressDialog();
         if (mounted && !_watchCancelled) {
-          setState(() {
+        setState(() {
             _status = 'No playable Torbox streams found. Try different keywords.';
           });
           _showSnack(
@@ -2819,7 +2850,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       _closeProgressDialog();
-      if (!mounted) return;
+        if (!mounted) return;
 
       final launchedOnTv = await _launchTorboxOnAndroidTv(
         firstStream: first,
@@ -2872,8 +2903,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (cachedTorrents.isEmpty) {
       _showSnack('Cached channel has no torrents yet. Please wait a moment.',
           color: Colors.orange);
-      return;
-    }
+        return;
+      }
 
     _launchedPlayer = false;
     await _stopPrefetch();
@@ -3005,7 +3036,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final first = await requestMagicNext();
       if (first == null) {
         _closeProgressDialog();
-        if (!mounted) return;
+      if (!mounted) return;
         setState(() {
           _isBusy = false;
           _status =
@@ -3027,6 +3058,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _activeApiKey = apiKey;
       _startPrefetch();
       _closeProgressDialog();
+      
+      // Try to launch on Android TV first (for cached flow)
+      final launchedOnTv = await _launchRealDebridOnAndroidTv(
+        firstStream: first,
+        requestNext: requestMagicNext,
+      );
+      
+      if (launchedOnTv) {
+        // Successfully launched on Android TV
+        debugPrint('DebrifyTV: Cached flow - Real-Debrid playback started on Android TV');
+        // Prefetch will continue in background while TV player is active
+        return;
+      }
+      
+      // Fall back to Flutter video player
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
@@ -3124,6 +3170,75 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     AndroidTvPlayerBridge.clearTorboxProvider();
+    return false;
+  }
+
+  Future<bool> _launchRealDebridOnAndroidTv({
+    required Map<String, String> firstStream,
+    required Future<Map<String, String>?> Function() requestNext,
+  }) async {
+    debugPrint('DebrifyTV: _launchRealDebridOnAndroidTv() called');
+    debugPrint('DebrifyTV: _isAndroidTv=$_isAndroidTv');
+    
+    if (!_isAndroidTv) {
+      debugPrint('DebrifyTV: Not Android TV, skipping native launch');
+      return false;
+    }
+    
+    final initialUrl = firstStream['url'] ?? '';
+    debugPrint('DebrifyTV: initialUrl=${initialUrl.substring(0, initialUrl.length > 50 ? 50 : initialUrl.length)}...');
+    
+    if (initialUrl.isEmpty) {
+      debugPrint('DebrifyTV: Initial URL is empty, cannot launch');
+      return false;
+    }
+    
+    final title = (firstStream['title'] ?? '').trim();
+    debugPrint('DebrifyTV: title="$title"');
+    debugPrint('DebrifyTV: Calling AndroidTvPlayerBridge.launchRealDebridPlayback()...');
+
+    try {
+      final launched = await AndroidTvPlayerBridge.launchRealDebridPlayback(
+        initialUrl: initialUrl,
+        title: title.isEmpty ? 'Debrify TV' : title,
+        requestNext: requestNext,
+        onFinished: () {
+          debugPrint('DebrifyTV: Android TV playback finished callback');
+          AndroidTvPlayerBridge.clearStreamProvider();
+          if (!mounted) return;
+          setState(() {
+            _status = _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+          });
+        },
+        startFromRandom: _startRandom,
+        randomStartMaxPercent: _randomStartPercent,
+        hideSeekbar: _hideSeekbar,
+        hideOptions: _hideOptions,
+        showVideoTitle: _showVideoTitle,
+        showWatermark: _showWatermark,
+        hideBackButton: _hideBackButton,
+      );
+      
+      debugPrint('DebrifyTV: AndroidTvPlayerBridge.launchRealDebridPlayback() returned: $launched');
+      
+      if (launched) {
+        if (mounted) {
+          setState(() {
+            _status = 'Playing via Android TV';
+          });
+        }
+        debugPrint('DebrifyTV: ✅ Successfully launched Real-Debrid on Android TV');
+        return true;
+      } else {
+        debugPrint('DebrifyTV: ❌ AndroidTvPlayerBridge returned false - launch failed');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('DebrifyTV: ❌ Exception during Android TV launch: $e');
+      debugPrint('DebrifyTV: Stack trace: $stackTrace');
+    }
+    
+    AndroidTvPlayerBridge.clearStreamProvider();
+    debugPrint('DebrifyTV: Falling back to Flutter player');
     return false;
   }
 
@@ -3480,15 +3595,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       length: 2,
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomInset),
-        child: Column(
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        children: [
             const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
                 Icon(Icons.tv_rounded, color: Colors.white70),
-                SizedBox(width: 8),
+              SizedBox(width: 8),
                 Text(
                   'Debrify TV',
                   style: TextStyle(
@@ -3579,8 +3694,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         onPressed: _isBusy
                             ? null
                             : () {
-                                _keywordsController.clear();
-                              },
+                          _keywordsController.clear();
+                        },
                         color: Colors.white70,
                       ),
                     ),
@@ -3746,7 +3861,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     },
                   ),
                   if (_startRandom) ...[
-                    const SizedBox(height: 8),
+                  const SizedBox(height: 8),
                     _RandomStartSlider(
                       value: _randomStartPercent,
                       isAndroidTv: _isAndroidTv,
@@ -3821,7 +3936,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           _hideBackButton = true;
                           _provider = defaultProvider;
                         });
-
+                        
                         await StorageService.saveDebrifyTvStartRandom(true);
                         await StorageService.saveDebrifyTvHideSeekbar(true);
                         await StorageService.saveDebrifyTvShowWatermark(true);
@@ -3835,7 +3950,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         if (!mounted) {
                           return;
                         }
-
+                        
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Reset to defaults successful'),
@@ -4589,15 +4704,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       headLinkCandidates.shuffle(Random());
       final headLink = headLinkCandidates.removeAt(0);
-      _seenRestrictedLinks.add(headLink);
-      _seenLinkWithTorrentId.add('$torrentId|$headLink');
+          _seenRestrictedLinks.add(headLink);
+          _seenLinkWithTorrentId.add('$torrentId|$headLink');
 
-      if (idx < _queue.length && identical(_queue[idx], item)) {
-        _queue[idx] = {
-          'type': 'rd_restricted',
-          'restrictedLink': headLink,
-          'torrentId': torrentId,
-          'displayName': item.name,
+        if (idx < _queue.length && identical(_queue[idx], item)) {
+          _queue[idx] = {
+            'type': 'rd_restricted',
+            'restrictedLink': headLink,
+            'torrentId': torrentId,
+            'displayName': item.name,
         };
       }
 

@@ -52,12 +52,16 @@ import java.util.Random;
 import io.flutter.plugin.common.MethodChannel;
 
 /**
- * Android TV playback activity that streams Torbox content through ExoPlayer.
+ * Android TV playback activity that streams debrid content through ExoPlayer.
+ * Supports both Torbox and Real-Debrid providers.
  *
- * A long press on the center (OK) button requests the next Torbox stream from Flutter.
+ * A long press on the center (OK) button requests the next stream from Flutter.
  */
 public class TorboxTvPlayerActivity extends AppCompatActivity {
 
+    private static final String PROVIDER_TORBOX = "torbox";
+    private static final String PROVIDER_REAL_DEBRID = "real_debrid";
+    
     private static final long SEEK_STEP_MS = 10_000L;
     private static final long DEFAULT_TARGET_BUFFER_MS = 12_000L;
     private static final long HIGH_TARGET_BUFFER_MS = 22_000L;
@@ -66,6 +70,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private static final long TITLE_FADE_DELAY_MS = 4000L;
     private static final long TITLE_FADE_DURATION_MS = 220L;
 
+    private String provider;
     private PlayerView playerView;
     private ExoPlayer player;
     private DefaultTrackSelector trackSelector;
@@ -151,8 +156,25 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         subtitleOverlay = findViewById(R.id.player_subtitles);
 
         Intent intent = getIntent();
+        
+        // Read provider type (default to torbox for backward compatibility)
+        provider = intent.getStringExtra("provider");
+        android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: onCreate() - received provider=" + provider);
+        
+        if (provider == null || provider.isEmpty()) {
+            provider = PROVIDER_TORBOX;
+            android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Provider was null/empty, defaulting to " + PROVIDER_TORBOX);
+        }
+        
+        android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Final provider=" + provider);
+        
         String initialUrl = intent.getStringExtra("initialUrl");
         String initialTitle = intent.getStringExtra("initialTitle");
+        
+        android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: initialUrl=" + (initialUrl != null ? initialUrl.substring(0, Math.min(50, initialUrl.length())) : "null") + "...");
+        android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: initialTitle=" + initialTitle);
+        
+        // Read magnet list (optional for Real-Debrid)
         ArrayList<Bundle> extrasList;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             extrasList = intent.getParcelableArrayListExtra("magnetList", Bundle.class);
@@ -636,18 +658,35 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void requestNextStream() {
+        android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: requestNextStream() called");
+        
         if (requestingNext) {
+            android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Already requesting next, ignoring");
             return;
         }
+        
         MethodChannel channel = MainActivity.getAndroidTvPlayerChannel();
         if (channel == null) {
+            android.util.Log.e("DebrifyTV", "TorboxTvPlayerActivity: Method channel is null!");
             Toast.makeText(this, "Playback bridge unavailable", Toast.LENGTH_SHORT).show();
             return;
         }
+        
         showNextOverlay(getString(R.string.debrify_tv_next_loading),
                 getString(R.string.debrify_tv_next_hint));
         requestingNext = true;
-        channel.invokeMethod("requestTorboxNext", null, new MethodChannel.Result() {
+        
+        // Determine which method to call based on provider
+        String methodName;
+        if (PROVIDER_REAL_DEBRID.equals(provider)) {
+            methodName = "requestRealDebridNext";
+        } else {
+            methodName = "requestTorboxNext";
+        }
+        
+        android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Calling method channel: " + methodName);
+        
+        channel.invokeMethod(methodName, null, new MethodChannel.Result() {
             @Override
             public void success(@Nullable Object result) {
                 requestingNext = false;
@@ -673,9 +712,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             @Override
             public void error(String errorCode, @Nullable String errorMessage, @Nullable Object errorDetails) {
                 requestingNext = false;
-                Toast.makeText(TorboxTvPlayerActivity.this,
-                        errorMessage != null ? errorMessage : "Failed to load next stream",
-                        Toast.LENGTH_SHORT).show();
+                String displayMsg = errorMessage != null ? errorMessage : "Failed to load next stream";
+                Toast.makeText(TorboxTvPlayerActivity.this, displayMsg, Toast.LENGTH_SHORT).show();
                 hideNextOverlay();
             }
 
@@ -690,8 +728,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void handleNoMoreStreams() {
         runOnUiThread(() -> {
             hideNextOverlay();
+            String providerName = PROVIDER_REAL_DEBRID.equals(provider) ? "Real-Debrid" : "Torbox";
             Toast.makeText(TorboxTvPlayerActivity.this,
-                    "No more Torbox streams available",
+                    "No more " + providerName + " streams available",
                     Toast.LENGTH_SHORT).show();
             finish();
         });
@@ -956,7 +995,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         MethodChannel channel = MainActivity.getAndroidTvPlayerChannel();
         if (channel != null) {
             try {
-                channel.invokeMethod("torboxPlaybackFinished", null);
+                String methodName;
+                if (PROVIDER_REAL_DEBRID.equals(provider)) {
+                    methodName = "realDebridPlaybackFinished";
+                } else {
+                    methodName = "torboxPlaybackFinished";
+                }
+                channel.invokeMethod(methodName, null);
             } catch (Exception ignored) {
             }
         }
