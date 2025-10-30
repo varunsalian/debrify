@@ -50,6 +50,7 @@ Future<void> _initOrientation() async {
   try {
     // If running on Android TV, prefer landscape. Otherwise allow all orientations (respect auto-rotate).
     final isTv = await AndroidNativeDownloader.isTelevision();
+    _updateFocusHighlightStrategy(isTv);
     if (isTv) {
       await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
         DeviceOrientation.landscapeLeft,
@@ -65,6 +66,7 @@ Future<void> _initOrientation() async {
       ]);
     }
   } catch (_) {
+    _updateFocusHighlightStrategy(false);
     // Fallback to all orientations if detection fails
     await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
       DeviceOrientation.portraitUp,
@@ -72,6 +74,15 @@ Future<void> _initOrientation() async {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+  }
+}
+
+void _updateFocusHighlightStrategy(bool isTv) {
+  final target = isTv
+      ? FocusHighlightStrategy.alwaysTraditional
+      : FocusHighlightStrategy.automatic;
+  if (FocusManager.instance.highlightStrategy != target) {
+    FocusManager.instance.highlightStrategy = target;
   }
 }
 

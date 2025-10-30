@@ -4136,7 +4136,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ],
       ),
     );
-    return card;
+    if (!_isAndroidTv) {
+      return card;
+    }
+    return _FocusHighlightWrapper(
+      enabled: true,
+      borderRadius: BorderRadius.circular(20),
+      debugLabel: 'debrify-tv-channel-card-${channel.id}',
+      child: card,
+    );
   }
 
   Widget _buildKeywordChip(String keyword) {
@@ -4877,6 +4885,103 @@ class _GradientSpinnerState extends State<_GradientSpinner>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _FocusHighlightWrapper extends StatefulWidget {
+  final Widget child;
+  final BorderRadius borderRadius;
+  final bool enabled;
+  final String debugLabel;
+
+  const _FocusHighlightWrapper({
+    required this.child,
+    required this.borderRadius,
+    required this.debugLabel,
+    this.enabled = false,
+  });
+
+  @override
+  State<_FocusHighlightWrapper> createState() => _FocusHighlightWrapperState();
+}
+
+class _FocusHighlightWrapperState extends State<_FocusHighlightWrapper> {
+  late final FocusNode _focusNode;
+  bool _hasFocusedDescendant = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode(
+      debugLabel: widget.debugLabel,
+      canRequestFocus: false,
+      skipTraversal: true,
+    )..addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FocusHighlightWrapper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.debugLabel != oldWidget.debugLabel) {
+      _focusNode.debugLabel = widget.debugLabel;
+    }
+    if (!widget.enabled && _hasFocusedDescendant) {
+      setState(() {
+        _hasFocusedDescendant = false;
+      });
+    }
+  }
+
+  void _handleFocusChange() {
+    final next = _focusNode.hasFocus;
+    if (next != _hasFocusedDescendant) {
+      setState(() {
+        _hasFocusedDescendant = next;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChange);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) {
+      return widget.child;
+    }
+    final highlightColor = Theme.of(context).colorScheme.primary;
+    return Focus(
+      focusNode: _focusNode,
+      canRequestFocus: false,
+      skipTraversal: true,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          borderRadius: widget.borderRadius,
+          border: Border.all(
+            color: _hasFocusedDescendant
+                ? highlightColor
+                : Colors.transparent,
+            width: 2,
+          ),
+          boxShadow: _hasFocusedDescendant
+              ? [
+                  BoxShadow(
+                    color: highlightColor.withValues(alpha: 0.35),
+                    blurRadius: 26,
+                    offset: const Offset(0, 12),
+                  ),
+                ]
+              : null,
+        ),
+        child: widget.child,
       ),
     );
   }
