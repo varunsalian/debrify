@@ -122,6 +122,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean requestingNext = false;
     private boolean finishedNotified = false;
     private boolean longPressHandled = false;
+    private boolean longPressDownHandled = false;
     private int playedCount = 0;
 
     private final Random random = new Random();
@@ -1078,16 +1079,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Long press handling is done in dispatchKeyEvent
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            if (event.getRepeatCount() >= 2) {
-                if (!longPressHandled) {
-                    longPressHandled = true;
-                    requestNextStream();
-                }
-                return true;
-            }
+            // Consume center/enter to prevent default behavior
             return true;
         }
+        // Let down arrow pass through for navigation when controls are visible
         return super.onKeyDown(keyCode, event);
     }
 
@@ -1100,12 +1097,53 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             longPressHandled = false;
             return true;
         }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            // Reset long press flag
+            longPressDownHandled = false;
+        }
         return super.onKeyUp(keyCode, event);
     }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        
+        // Intercept center/enter button to prevent controls from showing during long press
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                // Trigger long press action at repeatCount >= 2
+                if (event.getRepeatCount() >= 2) {
+                    if (!longPressHandled) {
+                        longPressHandled = true;
+                        requestNextStream();
+                    }
+                    return true;
+                }
+                // Consume repeating events to prevent controls from showing
+                if (event.getRepeatCount() >= 1) {
+                    return true;
+                }
+            }
+        }
+        
+        // Intercept down button to prevent controls from showing during long press
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                // Trigger long press action at repeatCount >= 2
+                if (event.getRepeatCount() >= 2) {
+                    if (!longPressDownHandled) {
+                        longPressDownHandled = true;
+                        cycleAspectRatio();
+                    }
+                    return true;
+                }
+                // Consume repeating events to prevent controls from showing
+                if (event.getRepeatCount() >= 1) {
+                    return true;
+                }
+            }
+        }
+        
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (playerView != null && playerView.isControllerFullyVisible()) {
                 return super.dispatchKeyEvent(event);
