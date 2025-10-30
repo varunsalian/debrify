@@ -239,9 +239,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   int _lastQueueSize = 0;
   DateTime? _lastSearchAt;
   bool _launchedPlayer = false;
-  bool _stage2Running = false;
+  bool _watchCancelled = false;
   int? _originalMaxCap;
-  bool _capRestoredByStage2 = false;
 
   @override
   void initState() {
@@ -266,8 +265,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _prefetchStopRequested = true;
     _stopPrefetch();
-    // Cancel Stage 2 if running
-    _stage2Running = false;
     _progress.dispose();
     _keywordsController.dispose();
     _channelSearchController.dispose();
@@ -365,6 +362,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _progressSheetContext = null;
       _progressOpen = false;
     });
+  }
+
+  void _cancelActiveWatch({BuildContext? dialogContext, bool clearQueue = true}) {
+    if (_watchCancelled) {
+      if (dialogContext != null) {
+        try {
+          Navigator.of(dialogContext).pop();
+        } catch (_) {}
+      }
+      return;
+    }
+    _watchCancelled = true;
+    _prefetchStopRequested = true;
+    unawaited(_stopPrefetch());
+    if (clearQueue) {
+      _queue.clear();
+    }
+    _progress.value = [];
+    if (dialogContext != null) {
+      try {
+        Navigator.of(dialogContext).pop();
+      } catch (_) {}
+      _progressOpen = false;
+      _progressSheetContext = null;
+    } else if (_progressOpen) {
+      _closeProgressDialog();
+    }
+    if (mounted) {
+      setState(() {
+        _isBusy = false;
+        _status = '';
+      });
+    }
   }
 
   String _determineDefaultProvider(
@@ -1772,8 +1802,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _launchedPlayer = false;
     await _stopPrefetch();
     _prefetchStopRequested = false;
-    _stage2Running = false;
-    _capRestoredByStage2 = false;
+    _watchCancelled = false;
     _originalMaxCap = null;
     void _log(String m) {
       final copy = List<String>.from(_progress.value)..add(m);
@@ -1994,11 +2023,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.of(context).pop();
-                          setState(() {
-                            _isBusy = false;
-                            _status = '';
-                          });
+                          _cancelActiveWatch(dialogContext: context);
                         },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white.withOpacity(0.1),
@@ -2046,16 +2071,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Silent approach - no progress logging needed
 
-    // Stage 1: Use a small cap to get the first playable quickly
-    const int _stage1Cap = 50;
+    // Pull the full result set (500 max) up front using limited parallelism
+    const int initialMaxResults = 500;
     _originalMaxCap = await StorageService.getMaxTorrentsCsvResults();
-    debugPrint('DebrifyTV: Temporarily setting Torrents CSV max from ${_originalMaxCap} to $_stage1Cap for Stage 1');
+    if (_originalMaxCap != initialMaxResults) {
+      debugPrint(
+          'DebrifyTV: Temporarily setting Torrents CSV max from $_originalMaxCap to $initialMaxResults for Real Debrid search');
+    }
     try {
-      await StorageService.setMaxTorrentsCsvResults(_stage1Cap);
+      await StorageService.setMaxTorrentsCsvResults(initialMaxResults);
 
       // Require RD API key early so we can prefetch as soon as results arrive
-      final apiKeyEarly = await StorageService.getApiKey();
-      if (apiKeyEarly == null || apiKeyEarly.isEmpty) {
+      final String? apiKeyEarlyRaw = await StorageService.getApiKey();
+      if (apiKeyEarlyRaw == null || apiKeyEarlyRaw.isEmpty) {
         if (!mounted) return;
         _log('❌ Real Debrid API key not found - please add it in Settings');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2064,6 +2092,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         debugPrint('DebrifyTV: Missing Real Debrid API key.');
         return;
       }
+      final String apiKeyEarly = apiKeyEarlyRaw;
 
       // Helper to infer a filename-like title from a URL
       String _inferTitleFromUrl(String url) {
@@ -2077,9 +2106,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       String firstTitle = 'Debrify TV';
 
       Future<Map<String, String>?> requestMagicNext() async {
+        if (_watchCancelled) {
+          return null;
+        }
         debugPrint('DebrifyTV: requestMagicNext() called. queueSize=${_queue.length}');
-        while (_queue.isNotEmpty) {
+        while (_queue.isNotEmpty && !_watchCancelled) {
           final item = _queue.removeAt(0);
+          if (_watchCancelled) {
+            break;
+          }
           // Case 1: RD-restricted entry (append-only items)
           if (item is Map && item['type'] == 'rd_restricted') {
             final String link = item['restrictedLink'] as String? ?? '';
@@ -2087,18 +2122,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             debugPrint('DebrifyTV: Trying RD link from queue: torrentId=$rdTid');
             if (link.isEmpty) continue;
             try {
-              // Silent approach - no progress logging needed
               final started = DateTime.now();
               final unrestrict = await DebridService.unrestrictLink(apiKeyEarly, link);
+              if (_watchCancelled) {
+                return null;
+              }
               final elapsed = DateTime.now().difference(started).inSeconds;
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
                 debugPrint('DebrifyTV: Success (RD link). Unrestricted in ${elapsed}s');
-                // Silent approach - no progress logging needed
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
                 final display = (item['displayName'] as String?)?.trim();
                 final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
                 firstTitle = chosenTitle;
+                if (_watchCancelled) {
+                  return null;
+                }
                 return {'url': videoUrl, 'title': chosenTitle};
               }
             } catch (e) {
@@ -2114,6 +2153,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             try {
               final started = DateTime.now();
               final result = await DebridService.addTorrentToDebridPreferVideos(apiKeyEarly, magnetLink);
+              if (_watchCancelled) {
+                return null;
+              }
               final elapsed = DateTime.now().difference(started).inSeconds;
               final String torrentId = result['torrentId'] as String? ?? '';
               final List<String> rdLinks = (result['links'] as List<dynamic>? ?? const [])
@@ -2137,6 +2179,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
 
               final unrestrict = await DebridService.unrestrictLink(apiKeyEarly, selectedLink);
+              if (_watchCancelled) {
+                return null;
+              }
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
                 debugPrint('DebrifyTV: Success. Got unrestricted URL in ${elapsed}s');
@@ -2146,10 +2191,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
                 firstTitle = chosenTitle;
 
-                if (newLinks.isNotEmpty) {
+                if (!_watchCancelled && newLinks.isNotEmpty) {
                   _queue.add(item);
                 }
 
+                if (_watchCancelled) {
+                  return null;
+                }
                 return {'url': videoUrl, 'title': chosenTitle};
               }
             } catch (e) {
@@ -2163,132 +2211,111 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       final Map<String, Torrent> dedupByInfohash = {};
 
-      // Silent approach - no progress logging needed
-      
-      // Launch per-keyword searches in parallel and process as they complete
-      final futures = keywords.map((kw) {
-        debugPrint('DebrifyTV: Searching engines for "$kw"...');
-        return TorrentService.searchAllEngines(kw, useTorrentsCsv: true, usePirateBay: true);
-      }).toList();
+      // Launch limited batches of per-keyword searches so we don't overwhelm
+      List<String> pendingKeywords = List<String>.from(keywords);
+      while (pendingKeywords.isNotEmpty && !_watchCancelled) {
+        final batch = pendingKeywords.take(_channelCsvParallelism).toList();
+        pendingKeywords = pendingKeywords.skip(batch.length).toList();
 
-      await for (final result in Stream.fromFutures(futures)) {
-        final List<Torrent> torrents = (result['torrents'] as List<Torrent>?) ?? <Torrent>[];
-        final engineCounts = (result['engineCounts'] as Map<String, int>?) ?? const {};
-        debugPrint('DebrifyTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts');
-        int added = 0;
-        for (final t in torrents) {
-          if (!dedupByInfohash.containsKey(t.infohash)) {
-            dedupByInfohash[t.infohash] = t;
-            added++;
+        final futures = batch.map((kw) {
+          debugPrint('DebrifyTV: Searching engines for "$kw"...');
+          return TorrentService.searchAllEngines(
+            kw,
+            useTorrentsCsv: true,
+            usePirateBay: true,
+          );
+        }).toList();
+
+        await for (final result in Stream.fromFutures(futures)) {
+          if (_watchCancelled) {
+            break;
           }
-        }
-        if (added > 0) {
-          final combined = dedupByInfohash.values.toList();
-          combined.shuffle(Random());
-          _queue
-            ..clear()
-            ..addAll(combined);
-          _lastQueueSize = _queue.length;
-          _lastSearchAt = DateTime.now();
-          // Silent approach - no progress logging needed
-          setState(() {
-            _status = 'Preparing your content...';
-          });
+          final List<Torrent> torrents =
+              (result['torrents'] as List<Torrent>?) ?? <Torrent>[];
+          final engineCounts =
+              (result['engineCounts'] as Map<String, int>?) ?? const {};
+          debugPrint(
+              'DebrifyTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts');
+          int added = 0;
+          for (final t in torrents) {
+            if (!dedupByInfohash.containsKey(t.infohash)) {
+              dedupByInfohash[t.infohash] = t;
+              added++;
+            }
+          }
+          if (added > 0) {
+            if (_watchCancelled) {
+              break;
+            }
+            final combined = dedupByInfohash.values.toList();
+            combined.shuffle(Random());
+            _queue
+              ..clear()
+              ..addAll(combined);
+            _lastQueueSize = _queue.length;
+            _lastSearchAt = DateTime.now();
+            // Silent approach - no progress logging needed
+            if (mounted && !_watchCancelled) {
+              setState(() {
+                _status = 'Preparing your content...';
+              });
+            }
 
-          // Do not start prefetch until player launches
+            // Do not start prefetch until player launches
 
-          // Try to launch player as soon as a playable stream is available
-          if (!_launchedPlayer) {
-            final first = await requestMagicNext();
-            if (first != null && mounted && !_launchedPlayer) {
-              _launchedPlayer = true;
-              final firstUrl = first['url'] ?? '';
-              final firstTitleResolved = (first['title'] ?? firstTitle).trim().isNotEmpty ? (first['title'] ?? firstTitle) : firstTitle;
-              if (_progressOpen && _progressSheetContext != null) {
-                Navigator.of(_progressSheetContext!).pop();
+            // Try to launch player as soon as a playable stream is available
+            if (!_launchedPlayer && !_watchCancelled) {
+              final first = await requestMagicNext();
+              if (_watchCancelled) {
+                break;
               }
-              debugPrint('DebrifyTV: Launching player early. Remaining queue=${_queue.length}');
+              if (first != null && mounted && !_launchedPlayer && !_watchCancelled) {
+                _launchedPlayer = true;
+                final firstUrl = first['url'] ?? '';
+                final firstTitleResolved = (first['title'] ?? firstTitle)
+                        .trim()
+                        .isNotEmpty
+                    ? (first['title'] ?? firstTitle)
+                    : firstTitle;
+                if (!_watchCancelled && _progressOpen && _progressSheetContext != null) {
+                  Navigator.of(_progressSheetContext!).pop();
+                }
+                debugPrint(
+                    'DebrifyTV: Launching player early. Remaining queue=${_queue.length}');
 
-              // Start background prefetch only while player is active
-              if (apiKeyEarly != null && apiKeyEarly.isNotEmpty) {
-                _activeApiKey = apiKeyEarly;
-                _startPrefetch();
+                // Start background prefetch only while player is active
+                if (!_watchCancelled) {
+                  _activeApiKey = apiKeyEarly;
+                  _startPrefetch();
+
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoPlayerScreen(
+                        videoUrl: firstUrl,
+                        title: firstTitleResolved,
+                        startFromRandom: _startRandom,
+                        randomStartMaxPercent: _randomStartPercent,
+                        hideSeekbar: _hideSeekbar,
+                        showWatermark: _showWatermark,
+                        showVideoTitle: _showVideoTitle,
+                        hideOptions: _hideOptions,
+                        hideBackButton: _hideBackButton,
+                        requestMagicNext: requestMagicNext,
+                      ),
+                    ),
+                  );
+
+                  // Stop prefetch when player exits
+                  await _stopPrefetch();
+                }
               }
-
-              // Stage 2: Expand search in background to full (500) WHILE user watches
-              if (!_stage2Running) {
-                _stage2Running = true;
-                // ignore: unawaited_futures
-                (() async {
-                  debugPrint('DebrifyTV: Stage 2 expansion starting. Temporarily setting max to 500');
-                  try {
-                    await StorageService.setMaxTorrentsCsvResults(500);
-                    final futures2 = keywords.map((kw) {
-                      debugPrint('DebrifyTV: [Stage 2] Searching engines for "$kw"...');
-                      return TorrentService.searchAllEngines(kw, useTorrentsCsv: true, usePirateBay: true);
-                    }).toList();
-                    await for (final res2 in Stream.fromFutures(futures2)) {
-                      final List<Torrent> more = (res2['torrents'] as List<Torrent>?) ?? <Torrent>[];
-                      int added2 = 0;
-                      for (final t in more) {
-                        if (!dedupByInfohash.containsKey(t.infohash)) {
-                          dedupByInfohash[t.infohash] = t;
-                          added2++;
-                        }
-                      }
-                      if (added2 > 0) {
-                        final combined2 = dedupByInfohash.values.toList();
-                        combined2.shuffle(Random());
-                        // Preserve already prepared RD links at the head
-                        final preparedOld = _queue
-                            .where((e) => e is Map && e['type'] == 'rd_restricted')
-                            .take(_minPrepared)
-                            .toList();
-                        _queue
-                          ..clear()
-                          ..addAll(preparedOld)
-                          ..addAll(combined2);
-                        _lastQueueSize = _queue.length;
-                        _lastSearchAt = DateTime.now();
-                        debugPrint('DebrifyTV: [Stage 2] Queue expanded to ${_queue.length} (preserved ${preparedOld.length} prepared in head)');
-                      }
-                    }
-                  } catch (e) {
-                    debugPrint('DebrifyTV: Stage 2 expansion failed: $e');
-                  } finally {
-                    final restoreTo = _originalMaxCap ?? 50;
-                    await StorageService.setMaxTorrentsCsvResults(restoreTo);
-                    _stage2Running = false;
-                    _capRestoredByStage2 = true;
-                    debugPrint('DebrifyTV: Stage 2 done. Restored Torrents CSV max to $restoreTo');
-                  }
-                })();
-              }
-
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => VideoPlayerScreen(
-                    videoUrl: firstUrl,
-                    title: firstTitleResolved,
-                    startFromRandom: _startRandom,
-                    randomStartMaxPercent: _randomStartPercent,
-                    hideSeekbar: _hideSeekbar,
-                    showWatermark: _showWatermark,
-                    showVideoTitle: _showVideoTitle,
-                    hideOptions: _hideOptions,
-                    hideBackButton: _hideBackButton,
-                    requestMagicNext: requestMagicNext,
-                  ),
-                ),
-              );
-
-              // Stop prefetch when player exits
-              await _stopPrefetch();
             }
           }
         }
+        if (_watchCancelled) {
+          break;
+        }
       }
-
       // Final queue snapshot (if we didn't launch early)
       if (!_launchedPlayer) {
         debugPrint('DebrifyTV: Queue prepared. size=${_queue.length}');
@@ -2302,17 +2329,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       debugPrint('DebrifyTV: Search failed: $e');
     } finally {
-      // Restore only if Stage 2 didn't already restore
-      if (!_stage2Running && !_capRestoredByStage2) {
-        final restoreTo = _originalMaxCap ?? 50;
-        await StorageService.setMaxTorrentsCsvResults(restoreTo);
-        debugPrint('DebrifyTV: Restored Torrents CSV max to $restoreTo after Stage 1');
+      final restoreTo = _originalMaxCap ?? 50;
+      await StorageService.setMaxTorrentsCsvResults(restoreTo);
+      if (restoreTo != initialMaxResults) {
+        debugPrint('DebrifyTV: Restored Torrents CSV max to $restoreTo after Real Debrid search');
       }
       if (mounted) {
         setState(() {
           _isBusy = false;
         });
       }
+    }
+
+    if (_watchCancelled) {
+      debugPrint('DebrifyTV: Watch was cancelled before completion.');
+      return;
     }
 
     if (!mounted) return;
@@ -2699,20 +2730,32 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       log('✅ Found ${_queue.length} cached Torbox torrent(s)');
 
       Future<Map<String, String>?> requestTorboxNext() async {
-        while (_queue.isNotEmpty) {
+        if (_watchCancelled) {
+          return null;
+        }
+        while (_queue.isNotEmpty && !_watchCancelled) {
           final item = _queue.removeAt(0);
+          if (_watchCancelled) {
+            break;
+          }
           if (item is Map && item['type'] == _torboxFileEntryType) {
             final resolved = await _resolveTorboxQueuedFile(
               entry: item as Map<String, dynamic>,
               apiKey: apiKey,
               log: log,
             );
+            if (_watchCancelled) {
+              return null;
+            }
             if (resolved != null) {
-              if (mounted) {
+              if (mounted && !_watchCancelled) {
                 setState(() {
                   _status =
                       _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
                 });
+              }
+              if (_watchCancelled) {
+                return null;
               }
               return resolved;
             }
@@ -2725,16 +2768,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               apiKey: apiKey,
               log: log,
             );
+            if (_watchCancelled) {
+              return null;
+            }
             if (result != null) {
-              if (result.hasMore) {
+              if (result.hasMore && !_watchCancelled) {
                 _queue.add(item);
               }
-              if (mounted) {
+              if (mounted && !_watchCancelled) {
                 setState(() {
                   _status = _queue.isEmpty
                       ? ''
                       : 'Queue has ${_queue.length} remaining';
                 });
+              }
+              if (_watchCancelled) {
+                return null;
               }
               return {
                 'url': result.streamUrl,
@@ -2743,7 +2792,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             }
           }
         }
-        if (mounted) {
+        if (mounted && !_watchCancelled) {
           setState(() {
             _status = 'No more cached Torbox streams available.';
           });
@@ -2752,9 +2801,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       final first = await requestTorboxNext();
+      if (_watchCancelled) {
+        return;
+      }
       if (first == null) {
         _closeProgressDialog();
-        if (mounted) {
+        if (mounted && !_watchCancelled) {
           setState(() {
             _status = 'No playable Torbox streams found. Try different keywords.';
           });
@@ -2774,28 +2826,33 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         requestNext: requestTorboxNext,
         queueSnapshot: List<Torrent>.from(filtered),
       );
+      if (_watchCancelled) {
+        return;
+      }
       if (launchedOnTv) {
         return;
       }
 
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => VideoPlayerScreen(
-            videoUrl: first['url'] ?? '',
-            title: first['title'] ?? 'Debrify TV',
-            startFromRandom: _startRandom,
-            randomStartMaxPercent: _randomStartPercent,
-            hideSeekbar: _hideSeekbar,
-            showWatermark: _showWatermark,
-            showVideoTitle: _showVideoTitle,
-            hideOptions: _hideOptions,
-            hideBackButton: _hideBackButton,
-            requestMagicNext: requestTorboxNext,
+      if (!_watchCancelled) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => VideoPlayerScreen(
+              videoUrl: first['url'] ?? '',
+              title: first['title'] ?? 'Debrify TV',
+              startFromRandom: _startRandom,
+              randomStartMaxPercent: _randomStartPercent,
+              hideSeekbar: _hideSeekbar,
+              showWatermark: _showWatermark,
+              showVideoTitle: _showVideoTitle,
+              hideOptions: _hideOptions,
+              hideBackButton: _hideBackButton,
+              requestMagicNext: requestTorboxNext,
+            ),
           ),
-        ),
-      );
+        );
+      }
 
-      if (mounted) {
+      if (mounted && !_watchCancelled) {
         setState(() {
           _status = _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
         });
@@ -2821,8 +2878,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _launchedPlayer = false;
     await _stopPrefetch();
     _prefetchStopRequested = false;
-    _stage2Running = false;
-    _capRestoredByStage2 = false;
     _originalMaxCap = null;
     _seenRestrictedLinks.clear();
     _seenLinkWithTorrentId.clear();
