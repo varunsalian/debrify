@@ -3959,23 +3959,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
             const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-                Icon(Icons.tv_rounded, color: Colors.white70),
-              SizedBox(width: 8),
-                Text(
-                  'Debrify TV',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 22,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+          const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
@@ -4512,29 +4496,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final keywords = channel.keywords;
     final cacheEntry = _channelCache[channel.id];
     final int cachedCount = cacheEntry?.torrents.length ?? 0;
-    final bool isExpanded = _expandedChannelIds.contains(channel.id);
-    final optionChips = <Widget>[];
-    if (channel.startRandom) {
-      optionChips.add(
-        _buildOptionChip(
-          Icons.shuffle_rounded,
-          'Random start (first ${channel.randomStartPercent}%)',
-        ),
-      );
-    }
-    if (channel.showWatermark) {
-      optionChips.add(_buildOptionChip(Icons.water_drop_outlined, 'Watermark'));
-    }
-    if (channel.showVideoTitle) {
-      optionChips.add(_buildOptionChip(Icons.title_rounded, 'Show title'));
-    }
-    if (channel.hideOptions) {
-      optionChips.add(_buildOptionChip(Icons.tune_rounded, 'Options hidden'));
-    }
-    if (channel.hideBackButton) {
-      optionChips.add(_buildOptionChip(Icons.arrow_back_ios_new_rounded, 'Back hidden'));
-    }
-
     final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -4554,24 +4515,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         children: [
           Row(
             children: [
-              IconButton(
-                tooltip: isExpanded ? 'Collapse details' : 'Show details',
-                onPressed: () {
-                  setState(() {
-                    if (isExpanded) {
-                      _expandedChannelIds.remove(channel.id);
-                    } else {
-                      _expandedChannelIds.add(channel.id);
-                    }
-                  });
-                },
-                icon: Icon(
-                  isExpanded
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                  color: Colors.white70,
-                ),
-              ),
               Expanded(
                 child: Text(
                   channel.name,
@@ -4609,47 +4552,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ),
             ],
           ),
-          if (isExpanded) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  Icons.settings_input_component_rounded,
-                  color: Colors.white54,
-                  size: 16,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${keywords.length} keyword${keywords.length == 1 ? '' : 's'} • ${_providerDisplay(channel.provider)}',
-                  style: const TextStyle(color: Colors.white60, fontSize: 13),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (keywords.isEmpty)
-              const Text(
-                'No keywords saved yet',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: keywords
-                    .map((keyword) => _buildKeywordChip(keyword))
-                    .toList(),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                Icons.settings_input_component_rounded,
+                color: Colors.white54,
+                size: 16,
               ),
-            if (optionChips.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: optionChips,
+              const SizedBox(width: 6),
+              Text(
+                '${keywords.length} keyword${keywords.length == 1 ? '' : 's'} • ${_providerDisplay(channel.provider)}',
+                style: const TextStyle(color: Colors.white60, fontSize: 13),
               ),
             ],
-            if (cacheEntry != null) ...[
-              const SizedBox(height: 12),
-              Row(
+          ),
+          if (cacheEntry != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
                 children: [
                   Icon(
                     cachedCount > 0
@@ -4665,14 +4586,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     child: Text(
                       cachedCount > 0
                           ? '$cachedCount cached torrent${cachedCount == 1 ? '' : 's'} ready'
-                          : 'Cache will auto-refresh when you edit the channel.',
+                          : 'Cache will refresh on edit.',
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ),
                 ],
               ),
-            ],
-          ],
+            ),
         ],
       ),
     );
