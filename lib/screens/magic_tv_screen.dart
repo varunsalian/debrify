@@ -3272,7 +3272,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         title: title.isEmpty ? 'Debrify TV' : title,
         magnets: magnets,
         requestNext: requestNext,
-        onFinished: () {
+        onFinished: () async {
           AndroidTvPlayerBridge.clearTorboxProvider();
           if (!mounted) {
             return;

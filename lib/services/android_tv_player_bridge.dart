@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 // For debugPrint
@@ -10,6 +9,7 @@ import 'package:flutter/material.dart' show debugPrint;
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
 typedef ChannelSwitchProvider = Future<Map<String, dynamic>?> Function();
+typedef PlaybackFinishedCallback = Future<void> Function();
 
 /// Bridge helper for launching native Android TV playback using ExoPlayer.
 ///
@@ -22,7 +22,7 @@ class AndroidTvPlayerBridge {
 
   static StreamNextProvider? _streamNextProvider;
   static ChannelSwitchProvider? _channelSwitchProvider;
-  static VoidCallback? _playbackFinishedCallback;
+  static PlaybackFinishedCallback? _playbackFinishedCallback;
   static bool _handlerInitialized = false;
   
   // Deprecated: use _streamNextProvider
@@ -30,8 +30,8 @@ class AndroidTvPlayerBridge {
   static set _torboxNextProvider(StreamNextProvider? provider) => _streamNextProvider = provider;
   
   // Deprecated: use _playbackFinishedCallback
-  static VoidCallback? get _torboxFinishedCallback => _playbackFinishedCallback;
-  static set _torboxFinishedCallback(VoidCallback? callback) => _playbackFinishedCallback = callback;
+  static PlaybackFinishedCallback? get _torboxFinishedCallback => _playbackFinishedCallback;
+  static set _torboxFinishedCallback(PlaybackFinishedCallback? callback) => _playbackFinishedCallback = callback;
 
   static void _ensureInitialized() {
     if (_handlerInitialized) {
@@ -70,11 +70,17 @@ class AndroidTvPlayerBridge {
         case 'torboxPlaybackFinished':
         case 'realDebridPlaybackFinished':
         case 'streamPlaybackFinished':
+          final finished = _playbackFinishedCallback;
           _streamNextProvider = null;
           _channelSwitchProvider = null;
-          final finished = _playbackFinishedCallback;
           _playbackFinishedCallback = null;
-          finished?.call();
+          if (finished != null) {
+            try {
+              await finished();
+            } catch (e, stack) {
+              debugPrint('AndroidTvPlayerBridge: onFinished callback threw: $e\n$stack');
+            }
+          }
           return null;
         default:
           throw PlatformException(
@@ -91,7 +97,7 @@ class AndroidTvPlayerBridge {
     required String title,
     required List<Map<String, dynamic>> magnets,
     required TorboxNextProvider requestNext,
-    VoidCallback? onFinished,
+    PlaybackFinishedCallback? onFinished,
     bool startFromRandom = false,
     int randomStartMaxPercent = 40,
     bool hideSeekbar = false,
@@ -146,7 +152,7 @@ class AndroidTvPlayerBridge {
     required String title,
     required StreamNextProvider requestNext,
     ChannelSwitchProvider? requestChannelSwitch,
-    VoidCallback? onFinished,
+    PlaybackFinishedCallback? onFinished,
     bool startFromRandom = false,
     int randomStartMaxPercent = 40,
     bool hideSeekbar = false,
