@@ -97,6 +97,7 @@ class AndroidTvPlayerBridge {
     required String title,
     required List<Map<String, dynamic>> magnets,
     required TorboxNextProvider requestNext,
+    ChannelSwitchProvider? requestChannelSwitch,
     PlaybackFinishedCallback? onFinished,
     bool startFromRandom = false,
     int randomStartMaxPercent = 40,
@@ -109,12 +110,13 @@ class AndroidTvPlayerBridge {
     if (!Platform.isAndroid) {
       return false;
     }
-    if (initialUrl.isEmpty || magnets.isEmpty) {
+    if (initialUrl.isEmpty) {
       return false;
     }
 
     _ensureInitialized();
     _streamNextProvider = requestNext;
+    _channelSwitchProvider = requestChannelSwitch;
     _playbackFinishedCallback = onFinished;
 
     try {
@@ -143,6 +145,7 @@ class AndroidTvPlayerBridge {
     }
 
     _streamNextProvider = null;
+    _channelSwitchProvider = null;
     _playbackFinishedCallback = null;
     return false;
   }
