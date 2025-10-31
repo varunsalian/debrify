@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import '../models/torrent.dart';
 import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
@@ -1507,9 +1509,118 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<void> _handleImportChannels() async {
+    if (_isBusy) {
+      return;
+    }
+
+    String repoUrl =
+        (await StorageService.getDebrifyTvImportRepoUrl()).trim();
+    if (repoUrl.isEmpty) {
+      _showSnack(
+        'Set a channel repository URL in Settings before importing.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    Uri treeUri;
+    try {
+      treeUri = Uri.parse(repoUrl);
+      if (!treeUri.hasAbsolutePath ||
+          (treeUri.scheme != 'http' && treeUri.scheme != 'https')) {
+        throw const FormatException('invalid');
+      }
+    } catch (_) {
+      _showSnack(
+        'Repository URL is invalid. Update it in Settings and try again.',
+        color: Colors.red,
+      );
+      return;
+    }
+
+    List<_ImportChannelCandidate> candidates;
+    try {
+      candidates = await _fetchImportChannelCandidates(treeUri);
+    } catch (e) {
+      _showSnack(
+        'Failed to fetch channels: ${_formatImportError(e)}',
+        color: Colors.red,
+      );
+      return;
+    }
+
+    if (candidates.isEmpty) {
+      _showSnack(
+        'No channel files found at the repository URL.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    final selected = await showDialog<_ImportChannelCandidate>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Import Channels'),
+          content: SizedBox(
+            width: 420,
+            height: 360,
+            child: ListView.separated(
+              itemCount: candidates.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, index) {
+                final candidate = candidates[index];
+                return ListTile(
+                  title: Text(candidate.displayName),
+                  subtitle: Text(candidate.name,
+                      style: const TextStyle(fontSize: 12)),
+                  trailing: FilledButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop(candidate);
+                    },
+                    child: const Text('Import'),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (selected == null) {
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      await _importChannelCandidate(selected, treeUri);
+    } catch (e) {
+      _showSnack('Import failed: ${_formatImportError(e)}', color: Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _handleEditChannel(_DebrifyTvChannel channel) async {
     await _syncProviderAvailability();
-    
+
     // Store current channel's NSFW setting before dialog
     final nsfwBeforeEdit = channel.avoidNsfw;
     
@@ -1567,6 +1678,129 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await _deleteChannel(channel.id);
       _showSnack('Channel deleted', color: Colors.orange);
     }
+  }
+
+  Future<List<_ImportChannelCandidate>> _fetchImportChannelCandidates(
+      Uri treeUri) async {
+    debugPrint('DebrifyTV: Import - fetching tree ${treeUri.toString()}');
+    final response = await http.get(treeUri);
+    if (response.statusCode != 200) {
+      debugPrint(
+          'DebrifyTV: Import - tree request failed [${response.statusCode}] ${response.reasonPhrase}');
+      throw Exception('HTTP ${response.statusCode}');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) {
+      throw const FormatException('Unexpected response structure');
+    }
+    final candidates = <_ImportChannelCandidate>[];
+    for (final entry in decoded) {
+      if (entry is! Map) continue;
+      final type = entry['type'] as String?;
+      final name = entry['name'] as String?;
+      final path = entry['path'] as String?;
+      if (type != 'blob' || name == null || path == null) {
+        continue;
+      }
+      if (!name.toLowerCase().endsWith('.txt')) {
+        continue;
+      }
+      candidates.add(_ImportChannelCandidate(name: name, path: path));
+    }
+    candidates.sort(
+      (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
+    );
+    return candidates;
+  }
+
+  Future<void> _importChannelCandidate(
+    _ImportChannelCandidate candidate,
+    Uri treeUri,
+  ) async {
+    final rawUri = _buildRawFileUri(treeUri, candidate.path);
+    debugPrint('DebrifyTV: Import - fetching raw ${rawUri.toString()}');
+    final response = await http.get(rawUri);
+    if (response.statusCode != 200) {
+      debugPrint(
+          'DebrifyTV: Import - raw request failed [${response.statusCode}] ${response.reasonPhrase}');
+      throw Exception('HTTP ${response.statusCode}');
+    }
+
+    final lines = const LineSplitter().convert(response.body);
+    final seen = <String>{};
+    final keywords = <String>[];
+
+    for (final rawLine in lines) {
+      final parts = rawLine.split(',');
+      for (final part in parts) {
+        final trimmed = part.trim();
+        if (trimmed.isEmpty) {
+          continue;
+        }
+        if (trimmed.length > 120) {
+          debugPrint(
+              'DebrifyTV: Import - keyword too long (${trimmed.length} chars): $trimmed');
+          throw FormatException(
+              'Keyword exceeds 120 characters: "${trimmed.substring(0, trimmed.length > 40 ? 40 : trimmed.length)}${trimmed.length > 40 ? '…' : ''}"');
+        }
+        final lower = trimmed.toLowerCase();
+        if (seen.add(lower)) {
+          debugPrint('DebrifyTV: Import - accepted keyword: $trimmed');
+          keywords.add(trimmed);
+        }
+      }
+    }
+
+    if (keywords.isEmpty) {
+      throw const FormatException('No keywords found in the selected file.');
+    }
+    if (keywords.length > 500) {
+      throw const FormatException(
+          'Channel files must contain 500 keywords or fewer.');
+    }
+
+    final String baseName = candidate.displayName;
+    String channelName = baseName;
+    int suffix = 2;
+    final lowerExisting =
+        _channels.map((c) => c.name.toLowerCase()).toSet();
+    while (lowerExisting.contains(channelName.toLowerCase())) {
+      channelName = '$baseName ($suffix)';
+      suffix++;
+    }
+
+    final channel = _DebrifyTvChannel(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: channelName,
+      keywords: keywords,
+      startRandom: _startRandom,
+      randomStartPercent: _randomStartPercent,
+      hideSeekbar: _hideOptions,
+      showWatermark: _showWatermark,
+      showVideoTitle: _showVideoTitle,
+      hideOptions: _hideOptions,
+      hideBackButton: _hideBackButton,
+      avoidNsfw: _avoidNsfw,
+    );
+
+    await _createOrUpdateChannel(channel, isEdit: false);
+    _showSnack('Imported "${channel.name}"', color: Colors.green);
+  }
+
+  Uri _buildRawFileUri(Uri treeUri, String filePath) {
+    final List<String> segments = treeUri.pathSegments;
+    if (segments.length < 4) {
+      throw const FormatException('Repository URL is not a GitLab tree API endpoint.');
+    }
+    final encodedProject = Uri.encodeComponent(segments[3]);
+    final basePath = 'api/v4/projects/$encodedProject';
+    final ref = treeUri.queryParameters['ref'] ?? 'main';
+    final encodedPath = Uri.encodeComponent(filePath);
+    final rawUrl =
+        '${treeUri.scheme}://${treeUri.authority}/$basePath/repository/files/$encodedPath/raw?ref=${Uri.encodeComponent(ref)}';
+    return Uri.parse(rawUrl);
   }
 
   Future<void> _createOrUpdateChannel(
@@ -2936,7 +3170,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final launchedOnTv = await _launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
-        queueSnapshot: List<Torrent>.from(filtered),
       );
       if (_watchCancelled) {
         return;
@@ -3201,7 +3434,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<bool> _launchTorboxOnAndroidTv({
     required Map<String, String> firstStream,
     required Future<Map<String, String>?> Function() requestNext,
-    required List<Torrent> queueSnapshot,
   }) async {
     if (!_isAndroidTv) {
       return false;
@@ -3728,7 +3960,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final launchedOnTv = await _launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
-        queueSnapshot: List<Torrent>.from(filtered),
       );
       if (launchedOnTv) {
         return;
@@ -4313,6 +4544,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 ),
               ),
               const Spacer(),
+              FilledButton.icon(
+                onPressed: _isBusy ? null : _handleImportChannels,
+                icon: const Icon(Icons.cloud_download_rounded),
+                label: const Text('Import Channels'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 8),
               ElevatedButton.icon(
                 onPressed: _handleAddChannel,
                 icon: const Icon(Icons.add_rounded),
@@ -4831,6 +5072,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return error.toString().replaceFirst('Exception: ', '').trim();
   }
 
+  String _formatImportError(Object error) {
+    if (error is FormatException) {
+      return error.message;
+    }
+    return error.toString().replaceFirst('Exception: ', '').trim();
+  }
+
   // ===================== Prefetcher =====================
 
   void _startPrefetch() {
@@ -4969,6 +5217,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } finally {
       _inflightInfohashes.remove(infohash);
     }
+  }
+}
+
+class _ImportChannelCandidate {
+  final String name;
+  final String path;
+
+  const _ImportChannelCandidate({required this.name, required this.path});
+
+  String get displayName {
+    if (name.toLowerCase().endsWith('.txt')) {
+      return name.substring(0, name.length - 4);
+    }
+    return name;
   }
 }
 

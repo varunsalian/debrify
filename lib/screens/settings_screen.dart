@@ -27,6 +27,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _torboxStatus = 'Not connected';
   String _torboxCaption = 'Tap to connect';
 
+  String _debrifyTvImportRepoUrl =
+      StorageService.debrifyTvImportRepoDefaultUrl;
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +98,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     }
 
+    final importRepoUrl = await StorageService.getDebrifyTvImportRepoUrl();
+
     if (!mounted) return;
 
     setState(() {
@@ -104,6 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _torboxConnected = torConnected;
       _torboxStatus = torStatus;
       _torboxCaption = torCaption;
+      _debrifyTvImportRepoUrl = importRepoUrl;
       _loading = false;
     });
   }
@@ -133,11 +139,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: _openTorboxSettings,
         ),
       ),
+      debriFyTvImportRepoUrl: _debrifyTvImportRepoUrl,
+      onEditDebrifyTvImportRepo: _editDebrifyTvImportRepo,
       onOpenTorrentSettings: _openTorrentSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
           onDangerAction: _resetAppData,
         );
+  }
+
+  Future<void> _editDebrifyTvImportRepo() async {
+    final controller = TextEditingController(text: _debrifyTvImportRepoUrl);
+    String? error;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Channel Import Repository URL'),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Enter the API endpoint that lists your channel text files. '
+                      'It should point to a Git repository tree JSON (GitLab/GitHub).',
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.url,
+                      autofillHints: const [AutofillHints.url],
+                      decoration: InputDecoration(
+                        labelText: 'Repository URL',
+                        errorText: error,
+                        hintText: StorageService.debrifyTvImportRepoDefaultUrl,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    controller.text =
+                        StorageService.debrifyTvImportRepoDefaultUrl;
+                    setDialogState(() {
+                      error = null;
+                    });
+                  },
+                  child: const Text('Reset to default'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final value = controller.text.trim();
+                    if (value.isEmpty) {
+                      setDialogState(() {
+                        error = 'Enter a repository URL';
+                      });
+                      return;
+                    }
+                    Uri? uri;
+                    try {
+                      uri = Uri.parse(value);
+                    } catch (_) {
+                      uri = null;
+                    }
+                    if (uri == null ||
+                        !(uri.scheme == 'http' || uri.scheme == 'https')) {
+                      setDialogState(() {
+                        error = 'Enter a valid http(s) URL';
+                      });
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(value);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+
+    if (result != null) {
+      await StorageService.saveDebrifyTvImportRepoUrl(result);
+      if (!mounted) return;
+      setState(() {
+        _debrifyTvImportRepoUrl = result;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Repository URL updated.')),
+      );
+    }
   }
 
   Future<void> _openTorrentSettings() async {
@@ -253,6 +356,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearAllPlaybackData();
     await StorageService.clearPlaylist();
     await StorageService.setInitialSetupComplete(false);
+    await StorageService.saveDebrifyTvImportRepoUrl(
+      StorageService.debrifyTvImportRepoDefaultUrl,
+    );
 
     if (!mounted) return;
 
@@ -278,6 +384,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _SettingsLayout extends StatelessWidget {
   final _ConnectionsSummary connections;
+  final String debriFyTvImportRepoUrl;
+  final Future<void> Function() onEditDebrifyTvImportRepo;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
@@ -285,6 +393,8 @@ class _SettingsLayout extends StatelessWidget {
 
   const _SettingsLayout({
     required this.connections,
+    required this.debriFyTvImportRepoUrl,
+    required this.onEditDebrifyTvImportRepo,
     required this.onOpenTorrentSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
@@ -311,6 +421,18 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Torrent Settings',
                 subtitle: 'Search engines, filters, and sorting',
                 onTap: onOpenTorrentSettings,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _SettingsSection(
+            title: 'Debrify TV',
+            children: [
+              _SettingsTile(
+                icon: Icons.cloud_sync_rounded,
+                title: 'Channel Import Repository',
+                subtitle: debriFyTvImportRepoUrl,
+                onTap: onEditDebrifyTvImportRepo,
               ),
             ],
           ),
