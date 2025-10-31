@@ -62,7 +62,6 @@ class _DebrifyTvChannel {
   final String id;
   final String name;
   final List<String> keywords;
-  final String provider;
   final bool startRandom;
   final int randomStartPercent;
   final bool hideSeekbar;
@@ -76,7 +75,6 @@ class _DebrifyTvChannel {
     required this.id,
     required this.name,
     required this.keywords,
-    required this.provider,
     required this.startRandom,
     required this.randomStartPercent,
     required this.hideSeekbar,
@@ -115,9 +113,6 @@ class _DebrifyTvChannel {
           ? (json['name'] as String).trim()
           : 'Unnamed Channel',
       keywords: keywords,
-      provider: (json['provider'] as String?)?.trim().isNotEmpty ?? false
-          ? (json['provider'] as String).trim()
-          : 'real_debrid',
       startRandom: json['startRandom'] is bool
           ? json['startRandom'] as bool
           : true,
@@ -146,7 +141,6 @@ class _DebrifyTvChannel {
       'id': id,
       'name': name,
       'keywords': keywords,
-      'provider': provider,
       'startRandom': startRandom,
       'randomStartPercent': randomStartPercent,
       'hideSeekbar': hideOptions,
@@ -162,7 +156,6 @@ class _DebrifyTvChannel {
     String? id,
     String? name,
     List<String>? keywords,
-    String? provider,
     bool? startRandom,
     int? randomStartPercent,
     bool? showWatermark,
@@ -176,7 +169,6 @@ class _DebrifyTvChannel {
       id: id ?? this.id,
       name: name ?? this.name,
       keywords: keywords ?? this.keywords,
-      provider: provider ?? this.provider,
       startRandom: startRandom ?? this.startRandom,
       randomStartPercent: randomStartPercent ?? this.randomStartPercent,
       hideSeekbar: nextHideOptions,
@@ -212,7 +204,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const int _keywordWarmEstimateMs = 1000;
   final TextEditingController _channelSearchController = TextEditingController();
   String _channelSearchTerm = '';
-  final Set<String> _expandedChannelIds = <String>{};
   String? _currentWatchingChannelId; // Track currently playing channel for switching
   // Advanced options
   bool _startRandom = true;
@@ -418,7 +409,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (preferred == _providerTorbox) {
         return _providerTorbox;
       }
-      return _providerTorbox;
+      return _providerRealDebrid;
     }
     if (torboxAvailable) {
       return _providerTorbox;
@@ -825,7 +816,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<void> _deleteChannel(String id) async {
     setState(() {
       _channels = _channels.where((c) => c.id != id).toList();
-      _expandedChannelIds.remove(id);
     });
     await _persistChannels();
     setState(() {
@@ -834,7 +824,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     unawaited(DebrifyTvCacheService.removeEntry(id));
   }
 
-  Future<void> _syncProviderAvailability({String? preferred}) async {
+  Future<void> _syncProviderAvailability() async {
     final rdIntegrationEnabled =
         await StorageService.getRealDebridIntegrationEnabled();
     final rdKey = await StorageService.getApiKey();
@@ -849,7 +839,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         torboxKey.isNotEmpty;
 
     final nextProvider = _determineDefaultProvider(
-      preferred ?? _provider,
+      _provider,
       rdAvailable,
       torboxAvailable,
     );
@@ -1018,6 +1008,49 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return provider == _providerTorbox ? 'Torbox' : 'Real Debrid';
   }
 
+  Widget _providerChoiceChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        Tooltip(
+          message: _rdAvailable
+              ? 'Use Real Debrid for Debrify TV'
+              : 'Enable Real Debrid and add an API key in Settings to use this option.',
+          child: ChoiceChip(
+            label: const Text('Real Debrid'),
+            selected: _provider == _providerRealDebrid,
+            disabledColor: Colors.white12,
+            onSelected: (!_rdAvailable || _isBusy)
+                ? null
+                : (selected) {
+                    if (selected) {
+                      _updateProvider(_providerRealDebrid);
+                    }
+                  },
+          ),
+        ),
+        Tooltip(
+          message: _torboxAvailable
+              ? 'Use Torbox for Debrify TV'
+              : 'Enable Torbox and add an API key in Settings to use this option.',
+          child: ChoiceChip(
+            label: const Text('Torbox'),
+            selected: _provider == _providerTorbox,
+            disabledColor: Colors.white12,
+            onSelected: (!_torboxAvailable || _isBusy)
+                ? null
+                : (selected) {
+                    if (selected) {
+                      _updateProvider(_providerTorbox);
+                    }
+                  },
+          ),
+        ),
+      ],
+    );
+  }
+
   bool _addKeywordsToList(
     String raw,
     List<String> keywordList,
@@ -1119,7 +1152,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (keywordList.length >= _maxChannelKeywords) break;
     }
     // Channel defaults - completely isolated from Quick Watch
-    String providerValue = existing?.provider ?? 'real_debrid';
     bool startRandom = existing?.startRandom ?? true;
     int randomStartPercent = existing?.randomStartPercent ?? _randomStartPercentDefault;
     randomStartPercent = _clampRandomStartPercent(randomStartPercent);
@@ -1197,24 +1229,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 });
                 return;
               }
-              if (providerValue == _providerRealDebrid && !_rdAvailable) {
-                setModalState(() {
-                  error = 'Enable Real Debrid in Settings first';
-                });
-                return;
-              }
-              if (providerValue == _providerTorbox && !_torboxAvailable) {
-                setModalState(() {
-                  error = 'Enable Torbox in Settings first';
-                });
-                return;
-              }
-
               final channel = _DebrifyTvChannel(
                 id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
                 name: name,
                 keywords: keywords,
-                provider: providerValue,
                 startRandom: startRandom,
                 randomStartPercent: randomStartPercent,
                 hideSeekbar: hideOptions,
@@ -1399,56 +1417,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        'Content provider',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          Tooltip(
-                            message: _rdAvailable
-                                ? 'Use Real Debrid for this channel'
-                                : 'Enable Real Debrid and add an API key in Settings first.',
-                            child: ChoiceChip(
-                              label: const Text('Real Debrid'),
-                              selected: providerValue == _providerRealDebrid,
-                              onSelected: (!_rdAvailable)
-                                  ? null
-                                  : (selected) {
-                                      if (selected) {
-                                        setModalState(() {
-                                          providerValue = _providerRealDebrid;
-                                        });
-                                      }
-                                    },
-                            ),
-                          ),
-                          Tooltip(
-                            message: _torboxAvailable
-                                ? 'Use Torbox for this channel'
-                                : 'Enable Torbox and add an API key in Settings first.',
-                            child: ChoiceChip(
-                              label: const Text('Torbox'),
-                              selected: providerValue == _providerTorbox,
-                              onSelected: (!_torboxAvailable)
-                                  ? null
-                                  : (selected) {
-                                      if (selected) {
-                                        setModalState(() {
-                                          providerValue = _providerTorbox;
-                                        });
-                                      }
-                                    },
-                            ),
-                          ),
-                        ],
-                      ),
                       const SizedBox(height: 20),
                       _SwitchRow(
                         title: 'Start from random timestamp',
@@ -1540,7 +1508,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _handleEditChannel(_DebrifyTvChannel channel) async {
-    await _syncProviderAvailability(preferred: channel.provider);
+    await _syncProviderAvailability();
     
     // Store current channel's NSFW setting before dialog
     final nsfwBeforeEdit = channel.avoidNsfw;
@@ -1773,7 +1741,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _channels = next;
         }
         _channelCache[channel.id] = entry;
-        _expandedChannelIds.add(channel.id);
       });
 
       await _persistChannels();
@@ -1799,12 +1766,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _showSnack('Channel has no keywords yet', color: Colors.orange);
       return;
     }
-    await _syncProviderAvailability(preferred: channel.provider);
-    final bool providerReady = channel.provider == _providerTorbox
+    await _syncProviderAvailability();
+    final bool providerReady = _provider == _providerTorbox
         ? _torboxAvailable
         : _rdAvailable;
     if (!providerReady) {
-      final providerName = _providerDisplay(channel.provider);
+      final providerName = _providerDisplay(_provider);
       _showSnack('Enable $providerName in Settings to watch this channel',
           color: Colors.orange);
       return;
@@ -1828,7 +1795,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final previousProvider = _provider;
     final previousStartRandom = _startRandom;
     final previousRandomStartPercent = _randomStartPercent;
     final previousHideSeekbar = _hideSeekbar;
@@ -1839,7 +1805,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final previousKeywords = _keywordsController.text;
 
     setState(() {
-      _provider = channel.provider;
       _startRandom = channel.startRandom;
       _randomStartPercent = channel.randomStartPercent;
       _hideSeekbar = channel.hideOptions;
@@ -1858,7 +1823,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
     final cachedTorrents =
         playbackSelection.map((cached) => cached.toTorrent()).toList();
-    if (channel.provider == _providerTorbox) {
+    if (_provider == _providerTorbox) {
       await _watchTorboxWithCachedTorrents(cachedTorrents);
     } else {
       await _watchWithCachedTorrents(cachedTorrents);
@@ -1869,7 +1834,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     setState(() {
-      _provider = previousProvider;
       _startRandom = previousStartRandom;
       _randomStartPercent = previousRandomStartPercent;
       _hideSeekbar = previousHideSeekbar;
@@ -3309,43 +3273,38 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// Handle channel switching on Android TV - cycles to next channel with looping
   Future<Map<String, dynamic>?> _requestNextChannel() async {
     debugPrint('DebrifyTV: _requestNextChannel() called');
-    
+    if (_provider != _providerRealDebrid) {
+      debugPrint('DebrifyTV: Channel switching only supported for Real-Debrid provider');
+      return null;
+    }
+
     if (_channels.isEmpty) {
       debugPrint('DebrifyTV: No channels available');
       return null;
     }
-    
+
     // Find current channel index
     int currentIndex = -1;
     if (_currentWatchingChannelId != null) {
       currentIndex = _channels.indexWhere((c) => c.id == _currentWatchingChannelId);
     }
-    
-    // Get next Real-Debrid channel (with looping)
-    // Note: Torbox channels don't support switching yet
+
+    // Get next channel (with looping)
     int nextIndex = (currentIndex + 1) % _channels.length;
     int attempts = 0;
     _DebrifyTvChannel? nextChannel;
-    
-    // Find next Real-Debrid channel (skip Torbox)
+
     while (attempts < _channels.length) {
       nextChannel = _channels[nextIndex];
-      if (nextChannel.provider == _providerRealDebrid) {
-        break;
-      }
-      nextIndex = (nextIndex + 1) % _channels.length;
-      attempts++;
+      break;
     }
-    
-    if (nextChannel == null || nextChannel.provider != _providerRealDebrid) {
-      debugPrint('DebrifyTV: No Real-Debrid channels available for switching');
-      // Restart old prefetcher if current channel is Real-Debrid
-      if (_provider == _providerRealDebrid) {
-        _startPrefetch();
-      }
+
+    if (nextChannel == null) {
+      debugPrint('DebrifyTV: Failed to locate next channel');
+      _startPrefetch();
       return null;
     }
-    
+
     // At this point, nextChannel is guaranteed to be non-null and Real-Debrid
     final targetChannel = nextChannel;
     
@@ -3401,8 +3360,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       String? videoUrl;
       String title = firstTorrent.name;
       
-      if (targetChannel.provider == _providerRealDebrid) {
-        debugPrint('DebrifyTV: Next channel uses Real-Debrid');
+      if (_provider == _providerRealDebrid) {
+        debugPrint('DebrifyTV: Next channel uses global Real-Debrid provider');
         final apiKey = await StorageService.getApiKey();
         if (apiKey == null || apiKey.isEmpty) {
           debugPrint('DebrifyTV: ❌ No Real-Debrid API key configured');
@@ -3412,7 +3371,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
           return null;
         }
-        
+
         final magnetLink = 'magnet:?xt=urn:btih:${firstTorrent.infohash}';
         final result = await DebridService.addTorrentToDebridPreferVideos(
           apiKey,
@@ -3447,29 +3406,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           final inferredTitle = Uri.decodeComponent(last);
           title = inferredTitle.isNotEmpty ? inferredTitle : firstTorrent.name;
         }
-      } else if (targetChannel.provider == _providerTorbox) {
-        // Torbox channel switching not supported yet (different flow, no prefetching)
-        debugPrint('DebrifyTV: Torbox channel switching not implemented yet');
-        // Restart old prefetcher if current channel is Real-Debrid
-        if (_provider == _providerRealDebrid) {
-          _startPrefetch();
-        }
-        return null;
-      } else {
-        debugPrint('DebrifyTV: Unsupported provider: ${targetChannel.provider}');
-        // Restart old prefetcher since we're not switching
-        if (_provider == _providerRealDebrid) {
-          _startPrefetch();
-        }
-        return null;
       }
-      
+
       // Common success path for both providers
       if (videoUrl != null && videoUrl.isNotEmpty) {
         // Update state ONLY after successfully getting the stream
         if (mounted) {
           setState(() {
-            _provider = targetChannel.provider;
             _startRandom = targetChannel.startRandom;
             _randomStartPercent = targetChannel.randomStartPercent;
             _hideSeekbar = targetChannel.hideOptions;
@@ -3488,15 +3431,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         debugPrint('DebrifyTV: Updated queue with ${_queue.length} torrents from new channel');
         
         // Start prefetcher ONLY for Real-Debrid channels (Torbox doesn't use prefetch)
-        if (targetChannel.provider == _providerRealDebrid) {
+        if (_provider == _providerRealDebrid) {
           _startPrefetch();
           debugPrint('DebrifyTV: Started Real-Debrid prefetcher for new channel');
-        } else {
-          debugPrint('DebrifyTV: Torbox channel - no prefetcher needed');
         }
-        
+
         debugPrint('DebrifyTV: Successfully got first stream from next channel: $title');
-        
+
         return {
           'channelName': targetChannel.name,
           'channelNumber': nextIndex + 1,
@@ -4154,46 +4095,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      Tooltip(
-                        message: _rdAvailable
-                            ? 'Use Real Debrid for Debrify TV'
-                            : 'Enable Real Debrid and add an API key in Settings to use this option.',
-                        child: ChoiceChip(
-                          label: const Text('Real Debrid'),
-                          selected: _provider == _providerRealDebrid,
-                          disabledColor: Colors.white12,
-                          onSelected: (!_rdAvailable || _isBusy)
-                              ? null
-                              : (selected) {
-                                  if (selected) {
-                                    _updateProvider(_providerRealDebrid);
-                                  }
-                                },
-                        ),
-                      ),
-                      Tooltip(
-                        message: _torboxAvailable
-                            ? 'Use Torbox for Debrify TV'
-                            : 'Enable Torbox and add an API key in Settings to use this option.',
-                        child: ChoiceChip(
-                          label: const Text('Torbox'),
-                          selected: _provider == _providerTorbox,
-                          disabledColor: Colors.white12,
-                          onSelected: (!_torboxAvailable || _isBusy)
-                              ? null
-                              : (selected) {
-                                  if (selected) {
-                                    _updateProvider(_providerTorbox);
-                                  }
-                                },
-                        ),
-                      ),
-                    ],
-                  ),
+                  _providerChoiceChips(),
                   const SizedBox(height: 16),
                   _SwitchRow(
                     title: 'Start from random timestamp',
@@ -4412,6 +4314,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             style: const TextStyle(color: Colors.white),
           ),
           const SizedBox(height: 16),
+          Text(
+            'Content provider',
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          _providerChoiceChips(),
+          const SizedBox(height: 16),
           Expanded(
             child: filteredChannels.isEmpty
                 ? (_channels.isEmpty
@@ -4562,7 +4474,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ),
               const SizedBox(width: 6),
               Text(
-                '${keywords.length} keyword${keywords.length == 1 ? '' : 's'} • ${_providerDisplay(channel.provider)}',
+                '${keywords.length} keyword${keywords.length == 1 ? '' : 's'}',
                 style: const TextStyle(color: Colors.white60, fontSize: 13),
               ),
             ],
