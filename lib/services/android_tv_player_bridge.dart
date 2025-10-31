@@ -9,6 +9,7 @@ import 'package:flutter/material.dart' show debugPrint;
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
+typedef ChannelSwitchProvider = Future<Map<String, dynamic>?> Function();
 
 /// Bridge helper for launching native Android TV playback using ExoPlayer.
 ///
@@ -20,6 +21,7 @@ class AndroidTvPlayerBridge {
       MethodChannel('com.debrify.app/android_tv_player');
 
   static StreamNextProvider? _streamNextProvider;
+  static ChannelSwitchProvider? _channelSwitchProvider;
   static VoidCallback? _playbackFinishedCallback;
   static bool _handlerInitialized = false;
   
@@ -52,10 +54,24 @@ class AndroidTvPlayerBridge {
               message: e.toString(),
             );
           }
+        case 'requestNextChannel':
+          final channelProvider = _channelSwitchProvider;
+          if (channelProvider == null) {
+            return null;
+          }
+          try {
+            return await channelProvider();
+          } catch (e) {
+            throw PlatformException(
+              code: 'channel_switch_failed',
+              message: e.toString(),
+            );
+          }
         case 'torboxPlaybackFinished':
         case 'realDebridPlaybackFinished':
         case 'streamPlaybackFinished':
           _streamNextProvider = null;
+          _channelSwitchProvider = null;
           final finished = _playbackFinishedCallback;
           _playbackFinishedCallback = null;
           finished?.call();
@@ -129,6 +145,7 @@ class AndroidTvPlayerBridge {
     required String initialUrl,
     required String title,
     required StreamNextProvider requestNext,
+    ChannelSwitchProvider? requestChannelSwitch,
     VoidCallback? onFinished,
     bool startFromRandom = false,
     int randomStartMaxPercent = 40,
@@ -153,6 +170,7 @@ class AndroidTvPlayerBridge {
     debugPrint('AndroidTvPlayerBridge: Initializing method channel handler');
     _ensureInitialized();
     _streamNextProvider = requestNext;
+    _channelSwitchProvider = requestChannelSwitch;
     _playbackFinishedCallback = onFinished;
 
     try {
@@ -196,17 +214,20 @@ class AndroidTvPlayerBridge {
 
     debugPrint('AndroidTvPlayerBridge: Cleaning up providers');
     _streamNextProvider = null;
+    _channelSwitchProvider = null;
     _playbackFinishedCallback = null;
     return false;
   }
 
   static void clearTorboxProvider() {
     _streamNextProvider = null;
+    _channelSwitchProvider = null;
     _playbackFinishedCallback = null;
   }
 
   static void clearStreamProvider() {
     _streamNextProvider = null;
+    _channelSwitchProvider = null;
     _playbackFinishedCallback = null;
   }
 }

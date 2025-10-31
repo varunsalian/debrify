@@ -94,10 +94,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private TextView nextSubtext;
     private View tvStaticView;
     private View tvScanlines;
+    private View channelOverlay;
+    private TextView channelNumberText;
+    private TextView channelNameText;
+    private TextView channelStatusText;
+    private View channelSlideView;
+    private View channelRgbBars;
     private SubtitleView subtitleOverlay;
     private android.animation.ValueAnimator staticAnimator;
     private Handler staticHandler = new Handler(Looper.getMainLooper());
     private final Handler keyPressHandler = new Handler(Looper.getMainLooper());
+    private final Handler channelOverlayHandler = new Handler(Looper.getMainLooper());
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
     private int resizeModeIndex = 0;
     private final int[] resizeModes = new int[] {
@@ -124,13 +131,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean finishedNotified = false;
     private boolean longPressHandled = false;
     private boolean longPressDownHandled = false;
+    private boolean longPressRightHandled = false;
     private boolean centerKeyDown = false;
     private boolean downKeyDown = false;
+    private boolean rightKeyDown = false;
     private int playedCount = 0;
+    private long lastChannelSwitchTime = 0;
+    private static final long CHANNEL_SWITCH_COOLDOWN_MS = 2000L; // 2 second cooldown
 
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
     private final Runnable hideNextOverlayRunnable = this::performHideNextOverlay;
+    private final Runnable hideChannelOverlayRunnable = this::performHideChannelOverlay;
     private final Runnable centerLongPressRunnable = new Runnable() {
         @Override
         public void run() {
@@ -150,6 +162,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
             longPressDownHandled = true;
             cycleAspectRatio();
+            hideControllerIfVisible();
+        }
+    };
+    private final Runnable rightLongPressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!rightKeyDown || longPressRightHandled) {
+                return;
+            }
+            longPressRightHandled = true;
+            requestNextChannel();
             hideControllerIfVisible();
         }
     };
@@ -187,6 +210,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         nextSubtext = findViewById(R.id.player_next_subtext);
         tvStaticView = findViewById(R.id.tv_static_view);
         tvScanlines = findViewById(R.id.tv_scanlines);
+        channelOverlay = findViewById(R.id.player_channel_overlay);
+        channelNumberText = findViewById(R.id.channel_number_text);
+        channelNameText = findViewById(R.id.channel_name_text);
+        channelStatusText = findViewById(R.id.channel_status_text);
+        channelSlideView = findViewById(R.id.channel_slide_view);
+        channelRgbBars = findViewById(R.id.channel_rgb_bars);
         // Use our custom SubtitleView that's positioned independently
         subtitleOverlay = findViewById(R.id.player_subtitles_custom);
 
@@ -954,6 +983,281 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         return str != null ? str.trim() : null;
     }
 
+    /**
+     * Request the next channel from Flutter (with looping)
+     */
+    private void requestNextChannel() {
+        android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: requestNextChannel() called");
+        
+        // Check cooldown
+        long now = System.currentTimeMillis();
+        if (now - lastChannelSwitchTime < CHANNEL_SWITCH_COOLDOWN_MS) {
+            android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Channel switch on cooldown, ignoring");
+            Toast.makeText(this, "Please wait...", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        if (requestingNext) {
+            android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Already requesting next, ignoring");
+            return;
+        }
+        
+        MethodChannel channel = MainActivity.getAndroidTvPlayerChannel();
+        if (channel == null) {
+            android.util.Log.e("DebrifyTV", "TorboxTvPlayerActivity: Method channel is null!");
+            Toast.makeText(this, "Playback bridge unavailable", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        // Show animation IMMEDIATELY before fetching
+        showChannelOverlay(null, "SWITCHING...");
+        
+        lastChannelSwitchTime = now;
+        requestingNext = true;
+        
+        android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Calling method channel: requestNextChannel");
+        
+        channel.invokeMethod("requestNextChannel", null, new MethodChannel.Result() {
+            @Override
+            public void success(@Nullable Object result) {
+                requestingNext = false;
+                
+                if (!(result instanceof Map)) {
+                    android.util.Log.e("DebrifyTV", "Channel switch failed: result is not a Map");
+                    runOnUiThread(() -> {
+                        Toast.makeText(TorboxTvPlayerActivity.this, "Channel switch failed. Check logs.", Toast.LENGTH_SHORT).show();
+                        hideChannelOverlay();
+                    });
+                    return;
+                }
+                @SuppressWarnings("unchecked")
+                Map<String, Object> payload = (Map<String, Object>) result;
+                String channelName = safeString(payload.get("channelName"));
+                Integer channelNumber = payload.get("channelNumber") instanceof Integer ? 
+                        (Integer) payload.get("channelNumber") : null;
+                String firstUrl = safeString(payload.get("firstUrl"));
+                String firstTitle = safeString(payload.get("firstTitle"));
+                
+                if (firstUrl == null || firstUrl.isEmpty()) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(TorboxTvPlayerActivity.this, "Channel has no streams", Toast.LENGTH_SHORT).show();
+                        hideChannelOverlay();
+                    });
+                    return;
+                }
+                
+                // Update the channel info (overlay already showing)
+                runOnUiThread(() -> {
+                    if (channelNumberText != null) {
+                        String displayNum = channelNumber != null ? 
+                                String.format(Locale.US, "CH %02d", channelNumber) : "CHANNEL";
+                        channelNumberText.setText(displayNum);
+                    }
+                    
+                    if (channelNameText != null) {
+                        String displayName = channelName != null && !channelName.isEmpty() ? channelName.toUpperCase() : "";
+                        channelNameText.setText(displayName);
+                        channelNameText.setVisibility(!displayName.isEmpty() ? View.VISIBLE : View.GONE);
+                    }
+                    
+                    if (channelStatusText != null) {
+                        channelStatusText.setText("⚡ LOADING VIDEO ⚡");
+                    }
+                });
+                
+                // Play the first video from the new channel after a short delay
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    playMedia(firstUrl, firstTitle);
+                    scheduleHideChannelOverlay(800L);
+                }, 200L);
+            }
+
+            @Override
+            public void error(String errorCode, @Nullable String errorMessage, @Nullable Object errorDetails) {
+                requestingNext = false;
+                String displayMsg = errorMessage != null ? errorMessage : "Failed to switch channel";
+                runOnUiThread(() -> {
+                    Toast.makeText(TorboxTvPlayerActivity.this, displayMsg, Toast.LENGTH_SHORT).show();
+                    hideChannelOverlay();
+                });
+            }
+
+            @Override
+            public void notImplemented() {
+                requestingNext = false;
+                runOnUiThread(() -> hideChannelOverlay());
+            }
+        });
+    }
+
+    private void showChannelOverlay(@Nullable Integer channelNum, @Nullable String name) {
+        if (channelOverlay == null || player == null) {
+            return;
+        }
+
+        runOnUiThread(() -> {
+            cancelScheduledChannelOverlayHide();
+
+            // Pause the current video regardless of current state to avoid race with play()
+            player.pause();
+            
+            // Set channel info
+            if (channelNumberText != null) {
+                String displayNum = channelNum != null ? 
+                        String.format(Locale.US, "CH %02d", channelNum) : "CHANNEL";
+                channelNumberText.setText(displayNum);
+            }
+            
+            if (channelNameText != null) {
+                String displayName = name != null && !name.isEmpty() ? name.toUpperCase() : "";
+                channelNameText.setText(displayName);
+                channelNameText.setVisibility(!displayName.isEmpty() ? View.VISIBLE : View.GONE);
+            }
+            
+            // Make sure overlay is fully visible immediately (no partial rendering)
+            channelOverlay.setVisibility(View.VISIBLE);
+            channelOverlay.bringToFront(); // Ensure it's on top of everything
+            channelOverlay.setTranslationX(getChannelOverlayTravelDistance());
+            channelOverlay.setAlpha(0f);
+            
+            // Start awesome channel surf animation
+            startChannelSurfAnimation();
+            
+            // Animate overlay in with horizontal slide
+            channelOverlay.animate()
+                .translationX(0f)
+                .alpha(1f)
+                .setDuration(200L)
+                .start();
+        });
+    }
+
+    private void startChannelSurfAnimation() {
+        if (channelSlideView == null || channelRgbBars == null) {
+            return;
+        }
+        
+        // Animate background color cycling (cyan -> blue -> magenta -> cyan)
+        final int[] colors = {
+            Color.rgb(0, 17, 51),   // Dark blue
+            Color.rgb(0, 34, 68),   // Lighter blue
+            Color.rgb(17, 0, 51),   // Dark magenta
+            Color.rgb(0, 17, 51)    // Back to dark blue
+        };
+        
+        final int[] currentColorIndex = {0};
+        final Handler animHandler = new Handler(Looper.getMainLooper());
+        final Runnable colorCycleRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (channelSlideView != null && channelOverlay != null && 
+                    channelOverlay.getVisibility() == View.VISIBLE) {
+                    channelSlideView.setBackgroundColor(colors[currentColorIndex[0]]);
+                    currentColorIndex[0] = (currentColorIndex[0] + 1) % colors.length;
+                    animHandler.postDelayed(this, 100); // Cycle every 100ms
+                }
+            }
+        };
+        animHandler.post(colorCycleRunnable);
+        
+        // Animate RGB bars with flicker effect
+        if (channelRgbBars != null) {
+            final Runnable rgbFlickerRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (channelRgbBars != null && channelOverlay != null && 
+                        channelOverlay.getVisibility() == View.VISIBLE) {
+                        // Random RGB color for chromatic aberration effect
+                        int r = random.nextInt(256);
+                        int g = random.nextInt(256);
+                        int b = random.nextInt(256);
+                        channelRgbBars.setBackgroundColor(Color.argb(51, r, g, b)); // 20% alpha
+                        animHandler.postDelayed(this, 70); // Flicker every 70ms
+                    }
+                }
+            };
+            animHandler.post(rgbFlickerRunnable);
+        }
+        
+        // Pulse the status text
+        if (channelStatusText != null) {
+            channelStatusText.animate()
+                .alpha(0.5f)
+                .setDuration(300)
+                .withEndAction(() -> {
+                    if (channelStatusText != null && channelOverlay != null && 
+                        channelOverlay.getVisibility() == View.VISIBLE) {
+                        channelStatusText.animate()
+                            .alpha(1f)
+                            .setDuration(300)
+                            .withEndAction(this::startChannelSurfAnimation)
+                            .start();
+                    }
+                })
+                .start();
+        }
+    }
+
+    private void scheduleHideChannelOverlay(long delayMs) {
+        if (channelOverlay == null) {
+            return;
+        }
+        cancelScheduledChannelOverlayHide();
+        channelOverlayHandler.postDelayed(hideChannelOverlayRunnable, delayMs);
+    }
+
+    private void hideChannelOverlay() {
+        cancelScheduledChannelOverlayHide();
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            performHideChannelOverlay();
+        } else {
+            channelOverlayHandler.post(hideChannelOverlayRunnable);
+        }
+    }
+
+    private void performHideChannelOverlay() {
+        if (channelOverlay == null) {
+            return;
+        }
+
+        channelOverlay.animate()
+            .translationX(-getChannelOverlayTravelDistance())
+            .alpha(0f)
+            .setDuration(200L)
+            .withEndAction(() -> {
+                if (channelOverlay != null) {
+                    channelOverlay.setVisibility(View.GONE);
+                }
+            })
+            .start();
+
+        // Resume playback only when we are no longer waiting for a channel response
+        if (player != null && !player.isPlaying() && !requestingNext) {
+            player.play();
+        }
+    }
+
+    private void cancelScheduledChannelOverlayHide() {
+        channelOverlayHandler.removeCallbacks(hideChannelOverlayRunnable);
+    }
+
+    private float getChannelOverlayTravelDistance() {
+        if (channelOverlay == null) {
+            return 0f;
+        }
+        int width = channelOverlay.getWidth();
+        if (width <= 0) {
+            View root = channelOverlay.getRootView();
+            if (root != null) {
+                width = root.getWidth();
+            }
+        }
+        if (width <= 0) {
+            width = getResources().getDisplayMetrics().widthPixels;
+        }
+        return (float) width;
+    }
+
     private void togglePlayPause() {
         if (player == null) {
             return;
@@ -1190,36 +1494,80 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         
         // Intercept down button to manage long press without waking controller
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (!downKeyDown) {
-                    downKeyDown = true;
-                    longPressDownHandled = false;
+            boolean controllerVisible = playerView != null && playerView.isControllerFullyVisible();
+
+            if (!controllerVisible) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (!downKeyDown) {
+                        downKeyDown = true;
+                        longPressDownHandled = false;
+                        keyPressHandler.removeCallbacks(downLongPressRunnable);
+                        keyPressHandler.postDelayed(downLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
+                    }
+                    return true;
+                } else if (event.getAction() == KeyEvent.ACTION_UP) {
                     keyPressHandler.removeCallbacks(downLongPressRunnable);
-                    keyPressHandler.postDelayed(downLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
+                    downKeyDown = false;
+                } else if (event.isCanceled()) {
+                    keyPressHandler.removeCallbacks(downLongPressRunnable);
+                    downKeyDown = false;
+                    longPressDownHandled = false;
+                    return true;
+                }
+            }
+        }
+        
+        // Handle Right arrow - seek OR long press for next channel
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            boolean focusInControls = isFocusInControlsOverlay();
+
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (!rightKeyDown) {
+                    boolean controllerVisible = playerView != null && playerView.isControllerFullyVisible();
+
+                    if (controllerVisible && focusInControls) {
+                        View defaultFocus = playerView != null ? playerView.getRootView().findFocus() : null;
+                        if (defaultFocus == null || defaultFocus == playerView) {
+                            hideControllerIfVisible();
+                        } else {
+                            return super.dispatchKeyEvent(event);
+                        }
+                    } else {
+                        hideControllerIfVisible();
+                    }
+
+                    // First key down - start timer and seek
+                    rightKeyDown = true;
+                    longPressRightHandled = false;
+                    keyPressHandler.removeCallbacks(rightLongPressRunnable);
+                    keyPressHandler.postDelayed(rightLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
+                    // Also seek forward on first press
+                    seekBy(SEEK_STEP_MS);
                 }
                 return true;
             } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                keyPressHandler.removeCallbacks(downLongPressRunnable);
-                downKeyDown = false;
+                keyPressHandler.removeCallbacks(rightLongPressRunnable);
+                rightKeyDown = false;
+                longPressRightHandled = false;
+                return true;
             } else if (event.isCanceled()) {
-                keyPressHandler.removeCallbacks(downLongPressRunnable);
-                downKeyDown = false;
-                longPressDownHandled = false;
+                keyPressHandler.removeCallbacks(rightLongPressRunnable);
+                rightKeyDown = false;
+                longPressRightHandled = false;
                 return true;
             }
         }
         
-        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+        // Handle Left arrow - always seek backward
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             boolean controllerVisible = playerView != null && playerView.isControllerFullyVisible();
             boolean focusInControls = isFocusInControlsOverlay();
 
             if (!controllerVisible && !focusInControls) {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (event.getRepeatCount() == 0) {
-                        // First press - seek
-                        seekBy(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? SEEK_STEP_MS : -SEEK_STEP_MS);
+                        seekBy(-SEEK_STEP_MS);
                     }
-                    // Consume all down events to prevent controls from showing
                     return true;
                 }
                 if (event.getAction() == KeyEvent.ACTION_UP) {

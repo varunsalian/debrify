@@ -145,4 +145,95 @@
 
     </FrameLayout>
 
+    <!-- Channel Surf Animation Overlay -->
+    <FrameLayout
+        android:id="@+id/player_channel_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:visibility="gone">
+
+        <!-- Animated slide/wipe effect background -->
+        <View
+            android:id="@+id/channel_slide_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#001133" />
+
+        <!-- RGB chromatic aberration bars -->
+        <View
+            android:id="@+id/channel_rgb_bars"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0.2" />
+
+        <!-- Center channel info with retro TV styling -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="48dp">
+
+            <!-- Channel number in retro style -->
+            <TextView
+                android:id="@+id/channel_number_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CH 01"
+                android:textColor="#00FFFF"
+                android:textSize="72sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:shadowColor="#003333"
+                android:shadowDx="4"
+                android:shadowDy="4"
+                android:shadowRadius="8"
+                android:letterSpacing="0.2" />
+
+            <!-- Channel name -->
+            <TextView
+                android:id="@+id/channel_name_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:textColor="#00FFFF"
+                android:textSize="24sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:maxWidth="800dp"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:shadowColor="#003333"
+                android:shadowDx="2"
+                android:shadowDy="2"
+                android:shadowRadius="4" />
+
+            <!-- "SWITCHING..." indicator -->
+            <TextView
+                android:id="@+id/channel_status_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:text="⚡ SWITCHING CHANNEL ⚡"
+                android:textColor="#FFFF00"
+                android:textSize="18sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:shadowColor="#333300"
+                android:shadowDx="2"
+                android:shadowDy="2"
+                android:shadowRadius="4" />
+
+        </LinearLayout>
+
+        <!-- Vignette effect -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/tv_vignette" />
+
+    </FrameLayout>
+
 </FrameLayout>

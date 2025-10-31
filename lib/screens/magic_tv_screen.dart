@@ -213,6 +213,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   final TextEditingController _channelSearchController = TextEditingController();
   String _channelSearchTerm = '';
   final Set<String> _expandedChannelIds = <String>{};
+  String? _currentWatchingChannelId; // Track currently playing channel for switching
   // Advanced options
   bool _startRandom = true;
   int _randomStartPercent = _randomStartPercentDefault;
@@ -1846,6 +1847,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _showVideoTitle = channel.showVideoTitle;
       _hideOptions = channel.hideOptions;
       _hideBackButton = channel.hideBackButton;
+      _currentWatchingChannelId = channel.id; // Track for channel switching
     });
     _keywordsController.text = channel.keywords.join(', ');
 
@@ -3304,6 +3306,222 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return false;
   }
 
+  /// Handle channel switching on Android TV - cycles to next channel with looping
+  Future<Map<String, dynamic>?> _requestNextChannel() async {
+    debugPrint('DebrifyTV: _requestNextChannel() called');
+    
+    if (_channels.isEmpty) {
+      debugPrint('DebrifyTV: No channels available');
+      return null;
+    }
+    
+    // Find current channel index
+    int currentIndex = -1;
+    if (_currentWatchingChannelId != null) {
+      currentIndex = _channels.indexWhere((c) => c.id == _currentWatchingChannelId);
+    }
+    
+    // Get next Real-Debrid channel (with looping)
+    // Note: Torbox channels don't support switching yet
+    int nextIndex = (currentIndex + 1) % _channels.length;
+    int attempts = 0;
+    _DebrifyTvChannel? nextChannel;
+    
+    // Find next Real-Debrid channel (skip Torbox)
+    while (attempts < _channels.length) {
+      nextChannel = _channels[nextIndex];
+      if (nextChannel.provider == _providerRealDebrid) {
+        break;
+      }
+      nextIndex = (nextIndex + 1) % _channels.length;
+      attempts++;
+    }
+    
+    if (nextChannel == null || nextChannel.provider != _providerRealDebrid) {
+      debugPrint('DebrifyTV: No Real-Debrid channels available for switching');
+      // Restart old prefetcher if current channel is Real-Debrid
+      if (_provider == _providerRealDebrid) {
+        _startPrefetch();
+      }
+      return null;
+    }
+    
+    // At this point, nextChannel is guaranteed to be non-null and Real-Debrid
+    final targetChannel = nextChannel;
+    
+    debugPrint('DebrifyTV: Switching from channel ${currentIndex + 1} to ${nextIndex + 1} (${targetChannel.name})');
+    
+    // Check if channel is ready (before stopping prefetcher)
+    final cacheEntry = _channelCache[targetChannel.id];
+    if (cacheEntry == null) {
+      debugPrint('DebrifyTV: Next channel "${targetChannel.name}" has no cache entry');
+      // Don't stop/restart prefetcher - keep current channel's prefetcher running
+      return null;
+    }
+    if (!cacheEntry.isReady) {
+      debugPrint('DebrifyTV: Next channel "${targetChannel.name}" cache not ready. Error: ${cacheEntry.errorMessage}');
+      // Don't stop/restart prefetcher - keep current channel's prefetcher running
+      return null;
+    }
+    if (cacheEntry.torrents.isEmpty) {
+      debugPrint('DebrifyTV: Next channel "${targetChannel.name}" has no torrents');
+      // Don't stop/restart prefetcher - keep current channel's prefetcher running
+      return null;
+    }
+    
+    // Stop the old prefetcher (only stopped if we're actually going to switch)
+    debugPrint('DebrifyTV: Stopping old channel prefetcher...');
+    await _stopPrefetch();
+    
+    // Clear prefetch state for clean slate
+    _seenRestrictedLinks.clear();
+    _seenLinkWithTorrentId.clear();
+    debugPrint('DebrifyTV: Cleared prefetch state');
+    
+    // Get first stream from new channel (BEFORE updating state)
+    final normalizedKeywords = _normalizedKeywords(targetChannel.keywords);
+    final playbackSelection = _selectTorrentsForPlayback(
+      cacheEntry,
+      normalizedKeywords,
+    );
+    
+    if (playbackSelection.isEmpty) {
+      debugPrint('DebrifyTV: No torrents in next channel');
+      // Restart old prefetcher since we're not switching
+      if (_provider == _providerRealDebrid) {
+        _startPrefetch();
+      }
+      return null;
+    }
+    
+    final firstTorrent = playbackSelection.first.toTorrent();
+    
+    // Get the first video stream based on provider
+    try {
+      String? videoUrl;
+      String title = firstTorrent.name;
+      
+      if (targetChannel.provider == _providerRealDebrid) {
+        debugPrint('DebrifyTV: Next channel uses Real-Debrid');
+        final apiKey = await StorageService.getApiKey();
+        if (apiKey == null || apiKey.isEmpty) {
+          debugPrint('DebrifyTV: ❌ No Real-Debrid API key configured');
+          // Restart old prefetcher only if current channel is Real-Debrid
+          if (_provider == _providerRealDebrid) {
+            _startPrefetch();
+          }
+          return null;
+        }
+        
+        final magnetLink = 'magnet:?xt=urn:btih:${firstTorrent.infohash}';
+        final result = await DebridService.addTorrentToDebridPreferVideos(
+          apiKey,
+          magnetLink,
+        );
+        
+        final List<String> rdLinks =
+            (result['links'] as List<dynamic>? ?? const [])
+                .map((link) => link?.toString() ?? '')
+                .where((link) => link.isNotEmpty)
+                .toList();
+        
+        if (rdLinks.isEmpty) {
+          debugPrint('DebrifyTV: No links from first torrent in next channel');
+          // Restart old prefetcher since we're not switching
+          if (_provider == _providerRealDebrid) {
+            _startPrefetch();
+          }
+          return null;
+        }
+        
+        final firstLink = rdLinks.first;
+        final unrestrict = await DebridService.unrestrictLink(apiKey, firstLink);
+        videoUrl = unrestrict['download'] as String?;
+        
+        // Infer title from URL
+        if (videoUrl != null && videoUrl.isNotEmpty) {
+          final uri = Uri.tryParse(videoUrl);
+          final last = (uri != null && uri.pathSegments.isNotEmpty)
+              ? uri.pathSegments.last
+              : videoUrl;
+          final inferredTitle = Uri.decodeComponent(last);
+          title = inferredTitle.isNotEmpty ? inferredTitle : firstTorrent.name;
+        }
+      } else if (targetChannel.provider == _providerTorbox) {
+        // Torbox channel switching not supported yet (different flow, no prefetching)
+        debugPrint('DebrifyTV: Torbox channel switching not implemented yet');
+        // Restart old prefetcher if current channel is Real-Debrid
+        if (_provider == _providerRealDebrid) {
+          _startPrefetch();
+        }
+        return null;
+      } else {
+        debugPrint('DebrifyTV: Unsupported provider: ${targetChannel.provider}');
+        // Restart old prefetcher since we're not switching
+        if (_provider == _providerRealDebrid) {
+          _startPrefetch();
+        }
+        return null;
+      }
+      
+      // Common success path for both providers
+      if (videoUrl != null && videoUrl.isNotEmpty) {
+        // Update state ONLY after successfully getting the stream
+        if (mounted) {
+          setState(() {
+            _provider = targetChannel.provider;
+            _startRandom = targetChannel.startRandom;
+            _randomStartPercent = targetChannel.randomStartPercent;
+            _hideSeekbar = targetChannel.hideOptions;
+            _showWatermark = targetChannel.showWatermark;
+            _showVideoTitle = targetChannel.showVideoTitle;
+            _hideOptions = targetChannel.hideOptions;
+            _hideBackButton = targetChannel.hideBackButton;
+            _currentWatchingChannelId = targetChannel.id; // Update ONLY on success
+          });
+        }
+        
+        // Update queue with new channel's torrents
+        _queue.clear();
+        _queue.addAll(playbackSelection.skip(1).map((c) => c.toTorrent()).toList());
+        
+        debugPrint('DebrifyTV: Updated queue with ${_queue.length} torrents from new channel');
+        
+        // Start prefetcher ONLY for Real-Debrid channels (Torbox doesn't use prefetch)
+        if (targetChannel.provider == _providerRealDebrid) {
+          _startPrefetch();
+          debugPrint('DebrifyTV: Started Real-Debrid prefetcher for new channel');
+        } else {
+          debugPrint('DebrifyTV: Torbox channel - no prefetcher needed');
+        }
+        
+        debugPrint('DebrifyTV: Successfully got first stream from next channel: $title');
+        
+        return {
+          'channelName': targetChannel.name,
+          'channelNumber': nextIndex + 1,
+          'firstUrl': videoUrl,
+          'firstTitle': title,
+        };
+      }
+    } catch (e) {
+      debugPrint('DebrifyTV: Error getting first stream from next channel: $e');
+      // Restart prefetcher for CURRENT channel since switch failed (only if Real-Debrid)
+      if (_provider == _providerRealDebrid) {
+        _startPrefetch();
+        debugPrint('DebrifyTV: Restarted Real-Debrid prefetcher for current channel');
+      }
+    }
+    
+    // If we reach here, channel switch failed - restart prefetcher for current channel (only if Real-Debrid)
+    debugPrint('DebrifyTV: Channel switch failed');
+    if (_provider == _providerRealDebrid) {
+      _startPrefetch();
+      debugPrint('DebrifyTV: Restarted Real-Debrid prefetcher for current channel');
+    }
+    return null;
+  }
+
   Future<bool> _launchRealDebridOnAndroidTv({
     required Map<String, String> firstStream,
     required Future<Map<String, String>?> Function() requestNext,
@@ -3333,9 +3551,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         initialUrl: initialUrl,
         title: title.isEmpty ? 'Debrify TV' : title,
         requestNext: requestNext,
-        onFinished: () {
+        requestChannelSwitch: _currentWatchingChannelId != null && 
+                               _channels.length > 1 &&
+                               _provider == _providerRealDebrid // Only Real-Debrid channels support switching for now
+            ? _requestNextChannel
+            : null, // Only enable channel switching if watching a RD channel and multiple channels exist
+        onFinished: () async {
           debugPrint('DebrifyTV: Android TV playback finished callback');
+          
+          // Stop prefetcher when exiting player
+          await _stopPrefetch();
+          debugPrint('DebrifyTV: Stopped prefetcher on player exit');
+          
           AndroidTvPlayerBridge.clearStreamProvider();
+          _currentWatchingChannelId = null; // Clear channel tracking
           if (!mounted) return;
           setState(() {
             _status = _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
