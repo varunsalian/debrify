@@ -66,9 +66,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     
     private static final long SEEK_STEP_MS = 10_000L;
     private static final long DEFAULT_TARGET_BUFFER_MS = 12_000L;
-    private static final long HIGH_TARGET_BUFFER_MS = 22_000L;
-    private static final long MAX_TARGET_BUFFER_MS = 32_000L;
-    private static final long BACK_BUFFER_MS = 15_000L;
+    private static final long HIGH_TARGET_BUFFER_MS = 20_000L;
+    private static final long MAX_TARGET_BUFFER_MS = 20_000L;
+    private static final long LONG_PRESS_TIMEOUT_MS = 450L;
     private static final long TITLE_FADE_DELAY_MS = 4000L;
     private static final long TITLE_FADE_DURATION_MS = 220L;
 
@@ -97,6 +97,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private SubtitleView subtitleOverlay;
     private android.animation.ValueAnimator staticAnimator;
     private Handler staticHandler = new Handler(Looper.getMainLooper());
+    private final Handler keyPressHandler = new Handler(Looper.getMainLooper());
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
     private int resizeModeIndex = 0;
     private final int[] resizeModes = new int[] {
@@ -123,11 +124,35 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean finishedNotified = false;
     private boolean longPressHandled = false;
     private boolean longPressDownHandled = false;
+    private boolean centerKeyDown = false;
+    private boolean downKeyDown = false;
     private int playedCount = 0;
 
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
     private final Runnable hideNextOverlayRunnable = this::performHideNextOverlay;
+    private final Runnable centerLongPressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!centerKeyDown || longPressHandled) {
+                return;
+            }
+            longPressHandled = true;
+            requestNextStream();
+            hideControllerIfVisible();
+        }
+    };
+    private final Runnable downLongPressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!downKeyDown || longPressDownHandled) {
+                return;
+            }
+            longPressDownHandled = true;
+            cycleAspectRatio();
+            hideControllerIfVisible();
+        }
+    };
     private final Player.Listener playbackListener = new Player.Listener() {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
@@ -294,7 +319,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         currentTargetBufferMs = targetBufferMs;
         return new DefaultLoadControl.Builder()
                 .setBufferDurationsMs((int) minBufferMs, (int) targetBufferMs, 1_000, 2_000)
-                .setBackBuffer((int) BACK_BUFFER_MS, true)
+                .setBackBuffer(0, false)
                 .build();
     }
 
@@ -1120,14 +1145,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             if (!longPressHandled) {
+                if (playerView != null) {
+                    playerView.showController();
+                }
                 togglePlayPause();
             }
             longPressHandled = false;
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            // Reset long press flag
+            boolean wasLongPress = longPressDownHandled;
             longPressDownHandled = false;
+            if (!wasLongPress && playerView != null && event.getAction() == KeyEvent.ACTION_UP) {
+                playerView.showController();
+            }
         }
         return super.onKeyUp(keyCode, event);
     }
@@ -1136,58 +1167,91 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         
-        // Intercept center/enter button to prevent controls from showing during long press
+        // Intercept center/enter button to manage long press without waking controller
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                // Trigger long press action at repeatCount >= 2
-                if (event.getRepeatCount() >= 2) {
-                    if (!longPressHandled) {
-                        longPressHandled = true;
-                        requestNextStream();
-                    }
-                    return true;
+                if (!centerKeyDown) {
+                    centerKeyDown = true;
+                    longPressHandled = false;
+                    keyPressHandler.removeCallbacks(centerLongPressRunnable);
+                    keyPressHandler.postDelayed(centerLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
                 }
-                // Consume repeating events to prevent controls from showing
-                if (event.getRepeatCount() >= 1) {
-                    return true;
-                }
+                return true;
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                keyPressHandler.removeCallbacks(centerLongPressRunnable);
+                centerKeyDown = false;
+            } else if (event.isCanceled()) {
+                keyPressHandler.removeCallbacks(centerLongPressRunnable);
+                centerKeyDown = false;
+                longPressHandled = false;
+                return true;
             }
         }
         
-        // Intercept down button to prevent controls from showing during long press
+        // Intercept down button to manage long press without waking controller
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                // Trigger long press action at repeatCount >= 2
-                if (event.getRepeatCount() >= 2) {
-                    if (!longPressDownHandled) {
-                        longPressDownHandled = true;
-                        cycleAspectRatio();
-                    }
-                    return true;
+                if (!downKeyDown) {
+                    downKeyDown = true;
+                    longPressDownHandled = false;
+                    keyPressHandler.removeCallbacks(downLongPressRunnable);
+                    keyPressHandler.postDelayed(downLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
                 }
-                // Consume repeating events to prevent controls from showing
-                if (event.getRepeatCount() >= 1) {
-                    return true;
-                }
+                return true;
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                keyPressHandler.removeCallbacks(downLongPressRunnable);
+                downKeyDown = false;
+            } else if (event.isCanceled()) {
+                keyPressHandler.removeCallbacks(downLongPressRunnable);
+                downKeyDown = false;
+                longPressDownHandled = false;
+                return true;
             }
         }
         
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            // Left/Right arrows ALWAYS seek (regardless of menu visibility)
-            // Use Down arrow to navigate into menu, then use left/right within menu
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (event.getRepeatCount() == 0) {
-                    // First press - seek
-                    seekBy(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? SEEK_STEP_MS : -SEEK_STEP_MS);
+            boolean controllerVisible = playerView != null && playerView.isControllerFullyVisible();
+            boolean focusInControls = isFocusInControlsOverlay();
+
+            if (!controllerVisible && !focusInControls) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (event.getRepeatCount() == 0) {
+                        // First press - seek
+                        seekBy(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? SEEK_STEP_MS : -SEEK_STEP_MS);
+                    }
+                    // Consume all down events to prevent controls from showing
+                    return true;
                 }
-                // Consume all down events to prevent controls from showing
-                return true;
-            }
-            if (event.getAction() == KeyEvent.ACTION_UP) {
-                return true;
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    return true;
+                }
             }
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    private boolean isFocusInControlsOverlay() {
+        if (controlsOverlay == null) {
+            return false;
+        }
+        View current = getCurrentFocus();
+        while (current instanceof View) {
+            if (current == controlsOverlay) {
+                return true;
+            }
+            android.view.ViewParent parent = current.getParent();
+            if (!(parent instanceof View)) {
+                break;
+            }
+            current = (View) parent;
+        }
+        return false;
+    }
+
+    private void hideControllerIfVisible() {
+        if (playerView != null && playerView.isControllerFullyVisible()) {
+            playerView.hideController();
+        }
     }
 
     @Override
@@ -1215,6 +1279,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         hideNextOverlay();
         cancelTitleFade();
         notifyFlutterPlaybackFinished();
+        keyPressHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
 
