@@ -244,6 +244,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _launchedPlayer = false;
   bool _watchCancelled = false;
   int? _originalMaxCap;
+  DateTime? _lastChannelImportAt;
 
   @override
   void initState() {
@@ -1514,6 +1515,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
+    final now = DateTime.now();
+    if (_lastChannelImportAt != null) {
+      final elapsed = now.difference(_lastChannelImportAt!);
+      const cooldown = Duration(seconds: 30);
+      if (elapsed < cooldown) {
+        final remaining = cooldown - elapsed;
+        final seconds = remaining.inSeconds + (remaining.inMilliseconds % 1000 > 0 ? 1 : 0);
+        _showSnack(
+          'Please wait $seconds second${seconds == 1 ? '' : 's'} before importing again.',
+          color: Colors.orange,
+        );
+        return;
+      }
+    }
+
     String repoUrl =
         (await StorageService.getDebrifyTvImportRepoUrl()).trim();
     if (repoUrl.isEmpty) {
@@ -1607,6 +1623,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     try {
       await _importChannelCandidate(selected, treeUri);
+      _lastChannelImportAt = DateTime.now();
     } catch (e) {
       _showSnack('Import failed: ${_formatImportError(e)}', color: Colors.red);
     } finally {
