@@ -8,11 +8,13 @@ import '../models/torrent.dart';
 import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
 import '../models/torbox_torrent.dart';
+import '../models/debrify_tv_channel_record.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../services/debrify_tv_cache_service.dart';
+import '../services/debrify_tv_repository.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_service.dart';
 import '../services/torrents_csv_engine.dart';
@@ -67,12 +69,16 @@ class _DebrifyTvChannel {
   final String name;
   final List<String> keywords;
   final bool avoidNsfw; // Per-channel NSFW filter setting
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
   const _DebrifyTvChannel({
     required this.id,
     required this.name,
     required this.keywords,
     required this.avoidNsfw,
+    required this.createdAt,
+    required this.updatedAt,
   });
 
   factory _DebrifyTvChannel.fromJson(Map<String, dynamic> json) {
@@ -103,6 +109,23 @@ class _DebrifyTvChannel {
       avoidNsfw: json['avoidNsfw'] is bool
           ? json['avoidNsfw'] as bool
           : true, // Default to enabled for backward compatibility
+      createdAt: json['createdAt'] is int
+          ? DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int)
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] is int
+          ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
+          : DateTime.now(),
+    );
+  }
+
+  factory _DebrifyTvChannel.fromRecord(DebrifyTvChannelRecord record) {
+    return _DebrifyTvChannel(
+      id: record.channelId,
+      name: record.name,
+      keywords: record.keywords,
+      avoidNsfw: record.avoidNsfw,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
     );
   }
 
@@ -112,6 +135,8 @@ class _DebrifyTvChannel {
       'name': name,
       'keywords': keywords,
       'avoidNsfw': avoidNsfw,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'updatedAt': updatedAt.millisecondsSinceEpoch,
     };
   }
 
@@ -120,12 +145,27 @@ class _DebrifyTvChannel {
     String? name,
     List<String>? keywords,
     bool? avoidNsfw,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return _DebrifyTvChannel(
       id: id ?? this.id,
       name: name ?? this.name,
       keywords: keywords ?? this.keywords,
       avoidNsfw: avoidNsfw ?? this.avoidNsfw,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  DebrifyTvChannelRecord toRecord() {
+    return DebrifyTvChannelRecord(
+      channelId: id,
+      name: name,
+      keywords: keywords,
+      avoidNsfw: avoidNsfw,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
     );
   }
 }
@@ -464,16 +504,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _loadChannels() async {
-    final raw = await StorageService.getDebrifyTvChannels();
-    final parsed = <_DebrifyTvChannel>[];
-    for (final entry in raw) {
-      try {
-        parsed.add(_DebrifyTvChannel.fromJson(entry));
-      } catch (_) {}
-    }
+    final records = await DebrifyTvRepository.instance.fetchAllChannels();
     if (!mounted) return;
     setState(() {
-      _channels = parsed;
+      _channels = records
+          .map(_DebrifyTvChannel.fromRecord)
+          .toList(growable: false);
     });
   }
 
@@ -744,21 +780,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<void> _persistChannels() async {
-    await StorageService.saveDebrifyTvChannels(
-      _channels.map((c) => c.toJson()).toList(),
-    );
-  }
-
   Future<void> _deleteChannel(String id) async {
     setState(() {
       _channels = _channels.where((c) => c.id != id).toList();
     });
-    await _persistChannels();
+    await DebrifyTvRepository.instance.deleteChannel(id);
     setState(() {
       _channelCache.remove(id);
     });
-    unawaited(DebrifyTvCacheService.removeEntry(id));
   }
 
   Future<void> _syncProviderAvailability() async {
@@ -1195,6 +1224,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   });
                   return;
                 }
+                final now = DateTime.now();
                 final channel = _DebrifyTvChannel(
                   id:
                       existing?.id ??
@@ -1202,6 +1232,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   name: name,
                   keywords: keywords,
                   avoidNsfw: avoidNsfw, // Channel's own NSFW setting
+                  createdAt: existing?.createdAt ?? now,
+                  updatedAt: now,
                 );
                 Navigator.of(dialogContext).pop(channel);
               }
@@ -1713,11 +1745,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       suffix++;
     }
 
+    final now = DateTime.now();
     final channel = _DebrifyTvChannel(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       name: channelName,
       keywords: keywords,
       avoidNsfw: true,
+      createdAt: now,
+      updatedAt: now,
     );
 
     await _createOrUpdateChannel(channel, isEdit: false);
@@ -1913,24 +1948,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
+      final updatedChannel = channel.copyWith(
+        updatedAt: DateTime.now(),
+      );
+
       setState(() {
-        final index = _channels.indexWhere((c) => c.id == channel.id);
+        final index = _channels.indexWhere((c) => c.id == updatedChannel.id);
         if (index == -1) {
-          _channels = <_DebrifyTvChannel>[..._channels, channel];
+          _channels = <_DebrifyTvChannel>[..._channels, updatedChannel];
         } else {
           final next = List<_DebrifyTvChannel>.from(_channels);
-          next[index] = channel;
+          next[index] = updatedChannel;
           _channels = next;
         }
-        _channelCache[channel.id] = entry;
+        _channelCache[updatedChannel.id] = entry;
       });
 
-      await _persistChannels();
+      await DebrifyTvRepository.instance
+          .upsertChannel(updatedChannel.toRecord());
       await DebrifyTvCacheService.saveEntry(entry);
 
       final successMsg = isEdit
-          ? 'Channel "${channel.name}" updated'
-          : 'Channel "${channel.name}" saved';
+          ? 'Channel "${updatedChannel.name}" updated'
+          : 'Channel "${updatedChannel.name}" saved';
       _showSnack(successMsg, color: Colors.green);
       debugPrint(
         'DebrifyTV: $successMsg (torrents cached: ${entry.torrents.length})',

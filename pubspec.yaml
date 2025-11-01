@@ -39,6 +39,8 @@ dependencies:
   background_downloader: ^9.2.3
   permission_handler: ^11.3.1
   path_provider: ^2.1.4
+  path: ^1.9.0
+  sqflite: ^2.3.3
   file_picker: ^10.2.3
   saf_stream: ^0.12.0
   connectivity_plus: ^6.0.3

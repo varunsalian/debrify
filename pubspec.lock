@@ -489,7 +489,7 @@ packages:
     source: hosted
     version: "3.2.1"
   path:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path
       sha256: "75cca69d1490965be98c73ceaea117e8a04dd21217b37b292c9ddbec0d955bc5"
@@ -798,7 +798,7 @@ packages:
     source: hosted
     version: "7.0.0"
   sqflite:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: sqflite
       sha256: e2297b1da52f127bc7a3da11439985d9b536f75070f3325e62ada69a5c585d03
