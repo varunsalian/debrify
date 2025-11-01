@@ -206,7 +206,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _startRandom = true;
   int _randomStartPercent = _randomStartPercentDefault;
   bool _hideSeekbar = true;
-  bool _showWatermark = true;
+  bool _showChannelName = true;
   bool _showVideoTitle = false;
   bool _hideOptions = true;
   bool _hideBackButton = true;
@@ -216,7 +216,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _quickStartRandom = true;
   int _quickRandomStartPercent = _randomStartPercentDefault;
   bool _quickHideSeekbar = true;
-  bool _quickShowWatermark = true;
+  bool _quickShowChannelName = true;
   bool _quickShowVideoTitle = false;
   bool _quickHideOptions = true;
   bool _quickHideBackButton = true;
@@ -421,7 +421,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final randomStartPercent =
         await StorageService.getDebrifyTvRandomStartPercent();
     final hideOptions = await StorageService.getDebrifyTvHideOptions();
-    final showWatermark = await StorageService.getDebrifyTvShowWatermark();
+    final showChannelName = await StorageService.getDebrifyTvShowChannelName();
     final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
     final hideBackButton = await StorageService.getDebrifyTvHideBackButton();
     final avoidNsfw = await StorageService.getDebrifyTvAvoidNsfw();
@@ -450,7 +450,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _startRandom = startRandom;
         _randomStartPercent = _clampRandomStartPercent(randomStartPercent);
         _hideSeekbar = hideOptions;
-        _showWatermark = showWatermark;
+        _showChannelName = showChannelName;
         _showVideoTitle = showVideoTitle;
         _hideOptions = hideOptions;
         _hideBackButton = hideBackButton;
@@ -463,7 +463,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _quickRandomStartPercent =
             _clampRandomStartPercent(randomStartPercent);
         _quickHideSeekbar = hideOptions;
-        _quickShowWatermark = showWatermark;
+        _quickShowChannelName = showChannelName;
         _quickShowVideoTitle = showVideoTitle;
         _quickHideOptions = hideOptions;
         _quickHideBackButton = hideBackButton;
@@ -2724,11 +2724,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .map((cached) => cached.toTorrent())
         .toList();
     if (_provider == _providerTorbox) {
-      await _watchTorboxWithCachedTorrents(cachedTorrents);
+      await _watchTorboxWithCachedTorrents(
+        cachedTorrents,
+        channelName: channel.name,
+      );
     } else {
       await _watchWithCachedTorrents(
         cachedTorrents,
         applyNsfwFilter: channel.avoidNsfw,
+        channelName: channel.name,
       );
     }
 
@@ -3327,6 +3331,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   final launchedOnTv = await _launchRealDebridOnAndroidTv(
                     firstStream: first,
                     requestNext: requestMagicNext,
+                    showChannelNameOverride: _quickShowChannelName,
                   );
 
                   if (launchedOnTv) {
@@ -3347,7 +3352,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         startFromRandom: _quickStartRandom,
                         randomStartMaxPercent: _quickRandomStartPercent,
                         hideSeekbar: _quickHideSeekbar,
-                        showWatermark: _quickShowWatermark,
+                        showChannelName: _quickShowChannelName,
+                        channelName: null,
                         showVideoTitle: _quickShowVideoTitle,
                         hideOptions: _quickHideOptions,
                         hideBackButton: _quickHideBackButton,
@@ -3622,6 +3628,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
+        showChannelNameOverride: _quickShowChannelName,
       );
 
       if (launchedOnTv) {
@@ -3640,7 +3647,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             startFromRandom: _quickStartRandom,
             randomStartMaxPercent: _quickRandomStartPercent,
             hideSeekbar: _quickHideSeekbar,
-            showWatermark: _quickShowWatermark,
+            showChannelName: _quickShowChannelName,
+            channelName: null,
             showVideoTitle: _quickShowVideoTitle,
             hideOptions: _quickHideOptions,
             hideBackButton: _quickHideBackButton,
@@ -3953,6 +3961,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final launchedOnTv = await _launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
+        showChannelNameOverride: _quickShowChannelName,
+        channelName: null,
       );
       if (_watchCancelled) {
         return;
@@ -3964,18 +3974,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!_watchCancelled) {
         await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => VideoPlayerScreen(
-              videoUrl: first['url'] ?? '',
-              title: first['title'] ?? 'Debrify TV',
-              startFromRandom: _startRandom,
-              randomStartMaxPercent: _randomStartPercent,
-              hideSeekbar: _hideSeekbar,
-              showWatermark: _showWatermark,
-              showVideoTitle: _showVideoTitle,
-              hideOptions: _hideOptions,
-              hideBackButton: _hideBackButton,
-              requestMagicNext: requestTorboxNext,
-            ),
+          builder: (_) => VideoPlayerScreen(
+            videoUrl: first['url'] ?? '',
+            title: first['title'] ?? 'Debrify TV',
+            startFromRandom: _startRandom,
+            randomStartMaxPercent: _randomStartPercent,
+            hideSeekbar: _hideSeekbar,
+            showChannelName: _showChannelName,
+            channelName: null,
+            showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            hideBackButton: _hideBackButton,
+            requestMagicNext: requestTorboxNext,
+          ),
           ),
         );
       }
@@ -4001,6 +4012,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<void> _watchWithCachedTorrents(
     List<Torrent> cachedTorrents, {
     required bool applyNsfwFilter,
+    String? channelName,
   }) async {
     if (cachedTorrents.isEmpty) {
       _showSnack(
@@ -4197,6 +4209,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
+        channelName: channelName,
       );
 
       if (launchedOnTv) {
@@ -4217,7 +4230,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             startFromRandom: _startRandom,
             randomStartMaxPercent: _randomStartPercent,
             hideSeekbar: _hideSeekbar,
-            showWatermark: _showWatermark,
+            showChannelName: _showChannelName,
+            channelName: channelName,
             showVideoTitle: _showVideoTitle,
             hideOptions: _hideOptions,
             hideBackButton: _hideBackButton,
@@ -4240,6 +4254,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<bool> _launchTorboxOnAndroidTv({
     required Map<String, String> firstStream,
     required Future<Map<String, String>?> Function() requestNext,
+    String? channelName,
+    bool? showChannelNameOverride,
   }) async {
     if (!_isAndroidTv) {
       return false;
@@ -4277,7 +4293,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         hideSeekbar: _hideSeekbar,
         hideOptions: _hideOptions,
         showVideoTitle: _showVideoTitle,
-        showWatermark: _showWatermark,
+        showChannelName: showChannelNameOverride ?? _showChannelName,
+        channelName: channelName,
         hideBackButton: _hideBackButton,
       );
       if (launched) {
@@ -4605,6 +4622,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<bool> _launchRealDebridOnAndroidTv({
     required Map<String, String> firstStream,
     required Future<Map<String, String>?> Function() requestNext,
+    String? channelName,
+    bool? showChannelNameOverride,
   }) async {
     debugPrint('DebrifyTV: _launchRealDebridOnAndroidTv() called');
     debugPrint('DebrifyTV: _isAndroidTv=$_isAndroidTv');
@@ -4634,6 +4653,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final launched = await AndroidTvPlayerBridge.launchRealDebridPlayback(
         initialUrl: initialUrl,
         title: title.isEmpty ? 'Debrify TV' : title,
+        channelName: channelName,
         requestNext: requestNext,
         requestChannelSwitch:
             _currentWatchingChannelId != null &&
@@ -4663,7 +4683,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         hideSeekbar: _hideSeekbar,
         hideOptions: _hideOptions,
         showVideoTitle: _showVideoTitle,
-        showWatermark: _showWatermark,
+        showChannelName: showChannelNameOverride ?? _showChannelName,
         hideBackButton: _hideBackButton,
       );
 
@@ -4697,8 +4717,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _watchTorboxWithCachedTorrents(
-    List<Torrent> cachedTorrents,
-  ) async {
+    List<Torrent> cachedTorrents, {
+    String? channelName,
+  }) async {
     if (cachedTorrents.isEmpty) {
       _showSnack(
         'Cached channel has no torrents yet. Please wait a moment.',
@@ -4848,6 +4869,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final launchedOnTv = await _launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
+        channelName: channelName,
       );
       if (launchedOnTv) {
         return;
@@ -4861,7 +4883,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             startFromRandom: _startRandom,
             randomStartMaxPercent: _randomStartPercent,
             hideSeekbar: _hideSeekbar,
-            showWatermark: _showWatermark,
+            showChannelName: _showChannelName,
+            channelName: channelName,
             showVideoTitle: _showVideoTitle,
             hideOptions: _hideOptions,
             hideBackButton: _hideBackButton,
@@ -5002,7 +5025,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   startFromRandom: _quickStartRandom,
                   randomStartMaxPercent: _quickRandomStartPercent,
                   hideSeekbar: _quickHideSeekbar,
-                  showWatermark: _quickShowWatermark,
+                  showChannelName: _quickShowChannelName,
+                  channelName: null,
                   showVideoTitle: _quickShowVideoTitle,
                   hideOptions: _quickHideOptions,
                   hideBackButton: _quickHideBackButton,
@@ -5098,20 +5122,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
 
-    final bool showWatermark = isQuickScope
-        ? _quickShowWatermark
-        : _showWatermark;
-    void setShowWatermark(bool value) {
+    final bool showChannelName = isQuickScope
+        ? _quickShowChannelName
+        : _showChannelName;
+    void setShowChannelName(bool value) {
       setState(() {
         if (isQuickScope) {
-          _quickShowWatermark = value;
+          _quickShowChannelName = value;
         } else {
-          _showWatermark = value;
+          _showChannelName = value;
         }
       });
       dialogSetState?.call(() {});
       if (!isQuickScope) {
-        unawaited(StorageService.saveDebrifyTvShowWatermark(value));
+        unawaited(StorageService.saveDebrifyTvShowChannelName(value));
       }
     }
 
@@ -5226,10 +5250,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ],
             const SizedBox(height: 8),
             _SwitchRow(
-              title: 'Show DebrifyTV watermark',
-              subtitle: 'Display a subtle DebrifyTV tag on the video',
-              value: showWatermark,
-              onChanged: (v) => setShowWatermark(v),
+              title: 'Show channel name',
+              subtitle: 'Display the active channel in the player corner',
+              value: showChannelName,
+              onChanged: (v) => setShowChannelName(v),
             ),
             const SizedBox(height: 8),
             _SwitchRow(
@@ -5285,7 +5309,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _quickStartRandom = true;
                       _quickRandomStartPercent = _randomStartPercentDefault;
                       _quickHideSeekbar = true;
-                      _quickShowWatermark = true;
+                      _quickShowChannelName = true;
                       _quickShowVideoTitle = false;
                       _quickHideOptions = true;
                       _quickHideBackButton = true;
@@ -5295,7 +5319,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _startRandom = true;
                       _randomStartPercent = _randomStartPercentDefault;
                       _hideSeekbar = true;
-                      _showWatermark = true;
+                      _showChannelName = true;
                       _showVideoTitle = false;
                       _hideOptions = true;
                       _hideBackButton = true;
@@ -5307,7 +5331,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   if (!isQuickScope) {
                     await StorageService.saveDebrifyTvStartRandom(true);
                     await StorageService.saveDebrifyTvHideSeekbar(true);
-                    await StorageService.saveDebrifyTvShowWatermark(true);
+                    await StorageService.saveDebrifyTvShowChannelName(true);
                     await StorageService.saveDebrifyTvShowVideoTitle(false);
                     await StorageService.saveDebrifyTvHideOptions(true);
                     await StorageService.saveDebrifyTvHideBackButton(true);
@@ -5569,7 +5593,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _quickStartRandom = _startRandom;
                         _quickRandomStartPercent = _randomStartPercent;
                         _quickHideSeekbar = _hideSeekbar;
-                        _quickShowWatermark = _showWatermark;
+                      _quickShowChannelName = _showChannelName;
                         _quickShowVideoTitle = _showVideoTitle;
                         _quickHideOptions = _hideOptions;
                         _quickHideBackButton = _hideBackButton;

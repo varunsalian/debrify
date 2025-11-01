@@ -26,7 +26,7 @@ class StorageService {
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
-  static const String _debrifyTvShowWatermarkKey = 'debrify_tv_show_watermark';
+  static const String _debrifyTvShowChannelNameKey = 'debrify_tv_show_watermark';
   static const String _debrifyTvShowVideoTitleKey =
       'debrify_tv_show_video_title';
   static const String _debrifyTvHideOptionsKey = 'debrify_tv_hide_options';
@@ -733,14 +733,14 @@ class StorageService {
     await prefs.setBool(_debrifyTvHideSeekbarKey, value);
   }
 
-  static Future<bool> getDebrifyTvShowWatermark() async {
+  static Future<bool> getDebrifyTvShowChannelName() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvShowWatermarkKey) ?? true;
+    return prefs.getBool(_debrifyTvShowChannelNameKey) ?? true;
   }
 
-  static Future<void> saveDebrifyTvShowWatermark(bool value) async {
+  static Future<void> saveDebrifyTvShowChannelName(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_debrifyTvShowWatermarkKey, value);
+    await prefs.setBool(_debrifyTvShowChannelNameKey, value);
   }
 
   static Future<bool> getDebrifyTvShowVideoTitle() async {

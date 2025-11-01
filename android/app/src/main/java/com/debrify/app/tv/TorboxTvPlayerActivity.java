@@ -81,7 +81,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private long currentTargetBufferMs = DEFAULT_TARGET_BUFFER_MS;
     private TextView titleView;
     private TextView hintView;
-    private TextView watermarkView;
+    private TextView channelBadgeView;
     private View controlsOverlay;
     private View timeContainer;
     private View buttonsRow;
@@ -123,7 +123,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean hideSeekbar;
     private boolean hideOptions;
     private boolean showVideoTitle;
-    private boolean showWatermark;
+    private boolean showChannelName;
+    private String currentChannelName = "";
     private boolean hideBackButton;
 
     private boolean randomApplied = false;
@@ -204,7 +205,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         playerView = findViewById(R.id.player_view);
         titleView = findViewById(R.id.player_title);
         hintView = findViewById(R.id.player_hint);
-        watermarkView = findViewById(R.id.player_watermark);
+        channelBadgeView = findViewById(R.id.player_channel_badge);
         nextOverlay = findViewById(R.id.player_next_overlay);
         nextText = findViewById(R.id.player_next_text);
         nextSubtext = findViewById(R.id.player_next_subtext);
@@ -254,7 +255,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         hideSeekbar = intent.getBooleanExtra("hideSeekbar", false);
         hideOptions = intent.getBooleanExtra("hideOptions", false);
         showVideoTitle = intent.getBooleanExtra("showVideoTitle", true);
-        showWatermark = intent.getBooleanExtra("showWatermark", false);
+        showChannelName = intent.getBooleanExtra("showChannelName", false);
+        String initialChannelName = intent.getStringExtra("channelName");
+        if (initialChannelName != null) {
+            currentChannelName = initialChannelName;
+        }
         hideBackButton = intent.getBooleanExtra("hideBackButton", false);
 
         if (initialUrl == null || initialUrl.isEmpty()) {
@@ -388,11 +393,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             titleView.setVisibility(View.GONE);
         }
 
-        if (showWatermark) {
-            watermarkView.setVisibility(View.VISIBLE);
-        } else {
-            watermarkView.setVisibility(View.GONE);
-        }
+        updateChannelBadge(currentChannelName);
 
         if (hintView != null) {
             hintView.setVisibility(View.GONE);
@@ -1037,6 +1038,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         (Integer) payload.get("channelNumber") : null;
                 String firstUrl = safeString(payload.get("firstUrl"));
                 String firstTitle = safeString(payload.get("firstTitle"));
+
+                if (channelName != null && !channelName.isEmpty()) {
+                    currentChannelName = channelName;
+                }
+                runOnUiThread(() -> updateChannelBadge(currentChannelName));
                 
                 if (firstUrl == null || firstUrl.isEmpty()) {
                     runOnUiThread(() -> {
@@ -1648,6 +1654,21 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 channel.invokeMethod(methodName, null);
             } catch (Exception ignored) {
             }
+        }
+    }
+
+    private void updateChannelBadge(@Nullable String name) {
+        if (channelBadgeView == null) {
+            return;
+        }
+
+        String display = name != null ? name.trim() : null;
+
+        if (showChannelName && display != null && !display.isEmpty()) {
+            channelBadgeView.setText(display.toUpperCase(Locale.US));
+            channelBadgeView.setVisibility(View.VISIBLE);
+        } else {
+            channelBadgeView.setVisibility(View.GONE);
         }
     }
 }

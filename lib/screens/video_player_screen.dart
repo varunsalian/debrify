@@ -45,8 +45,9 @@ class VideoPlayerScreen extends StatefulWidget {
   final int randomStartMaxPercent;
   // Advanced: hide seekbar (double-tap seek still enabled)
   final bool hideSeekbar;
-  // Watermark: show DebrifyTV tag overlay
-  final bool showWatermark;
+  // Channel name badge overlay
+  final bool showChannelName;
+  final String? channelName;
   // Show video title in player controls
   final bool showVideoTitle;
   // Hide all bottom options (next, audio, etc.) - back button stays
@@ -66,7 +67,8 @@ class VideoPlayerScreen extends StatefulWidget {
     this.startFromRandom = false,
     this.randomStartMaxPercent = 40,
     this.hideSeekbar = false,
-    this.showWatermark = false,
+    this.showChannelName = false,
+    this.channelName,
     this.showVideoTitle = true,
     this.hideOptions = false,
     this.hideBackButton = false,
@@ -2538,94 +2540,25 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                 ),
               // Transition overlay above video
               if (_rainbowActive) _buildTransitionOverlay(),
-              // DebrifyTV watermark (non-interactive) - Premium luxury design
-              if (widget.showWatermark)
+              if (widget.showChannelName &&
+                  widget.channelName != null &&
+                  widget.channelName!.isNotEmpty)
                 Positioned(
-                  top: 8,
-                  right: 8,
+                  bottom: 22,
+                  right: 22,
                   child: IgnorePointer(
                     ignoring: true,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Premium icon with glow effect
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFF6366F1),
-                                  Color(0xFF8B5CF6),
-                                  Color(0xFFEC4899),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(6),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF6366F1,
-                                  ).withOpacity(0.4),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.play_circle_fill_rounded,
-                              color: Colors.white,
-                              size: 14,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Premium typography with better hierarchy
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'DEBRIFY',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.98),
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 2.0,
-                                  fontSize: 13,
-                                  height: 1.0,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 1),
-                              Text(
-                                'TV',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.75),
-                                  fontWeight: FontWeight.w400,
-                                  letterSpacing: 3.0,
-                                  fontSize: 9,
-                                  height: 1.0,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black.withOpacity(0.2),
-                                      blurRadius: 2,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                    child: Text(
+                      widget.channelName!.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.8,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
                           ),
                         ],
                       ),

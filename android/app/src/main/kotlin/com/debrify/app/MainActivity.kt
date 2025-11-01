@@ -12,7 +12,6 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.ArrayList
-import com.debrify.app.tv.TorboxTvPlayerActivity
 
 class MainActivity : FlutterActivity() {
 	private val CHANNEL = "com.debrify.app/downloader"
@@ -228,10 +227,12 @@ class MainActivity : FlutterActivity() {
         android.util.Log.d("DebrifyTV", "MainActivity: config=$config")
         
         android.util.Log.d("DebrifyTV", "MainActivity: Creating intent for TorboxTvPlayerActivity")
-        val intent = Intent(this, TorboxTvPlayerActivity::class.java).apply {
+        val intent = Intent().apply {
+            setClassName(this@MainActivity, "com.debrify.app.tv.TorboxTvPlayerActivity")
             putExtra("initialUrl", initialUrl)
             putExtra("initialTitle", initialTitle)
             putExtra("provider", provider)
+            putExtra("channelName", (args["channelName"] as? String)?.trim())
             
             // For Torbox: magnets are required. For Real-Debrid: magnets are optional
             @Suppress("UNCHECKED_CAST")
@@ -264,7 +265,7 @@ class MainActivity : FlutterActivity() {
             putExtra("hideSeekbar", config?.get("hideSeekbar") as? Boolean ?: false)
             putExtra("hideOptions", config?.get("hideOptions") as? Boolean ?: false)
             putExtra("showVideoTitle", config?.get("showVideoTitle") as? Boolean ?: true)
-            putExtra("showWatermark", config?.get("showWatermark") as? Boolean ?: false)
+            putExtra("showChannelName", config?.get("showChannelName") as? Boolean ?: false)
             putExtra("hideBackButton", config?.get("hideBackButton") as? Boolean ?: false)
         }
 

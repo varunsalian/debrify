@@ -104,7 +104,8 @@ class AndroidTvPlayerBridge {
     bool hideSeekbar = false,
     bool hideOptions = false,
     bool showVideoTitle = true,
-    bool showWatermark = false,
+    bool showChannelName = false,
+    String? channelName,
     bool hideBackButton = false,
   }) async {
     if (!Platform.isAndroid) {
@@ -126,13 +127,14 @@ class AndroidTvPlayerBridge {
           'initialUrl': initialUrl,
           'initialTitle': title,
           'magnets': magnets,
+          'channelName': channelName,
           'config': {
             'startFromRandom': startFromRandom,
             'randomStartMaxPercent': randomStartMaxPercent,
             'hideSeekbar': hideSeekbar,
             'hideOptions': hideOptions,
             'showVideoTitle': showVideoTitle,
-            'showWatermark': showWatermark,
+            'showChannelName': showChannelName,
             'hideBackButton': hideBackButton,
           },
         },
@@ -153,6 +155,7 @@ class AndroidTvPlayerBridge {
   static Future<bool> launchRealDebridPlayback({
     required String initialUrl,
     required String title,
+    String? channelName,
     required StreamNextProvider requestNext,
     ChannelSwitchProvider? requestChannelSwitch,
     PlaybackFinishedCallback? onFinished,
@@ -161,7 +164,7 @@ class AndroidTvPlayerBridge {
     bool hideSeekbar = false,
     bool hideOptions = false,
     bool showVideoTitle = true,
-    bool showWatermark = false,
+    bool showChannelName = false,
     bool hideBackButton = false,
   }) async {
     debugPrint('AndroidTvPlayerBridge: launchRealDebridPlayback() called');
@@ -194,13 +197,14 @@ class AndroidTvPlayerBridge {
           'initialUrl': initialUrl,
           'initialTitle': title,
           'provider': 'real_debrid',
+          'channelName': channelName,
           'config': {
             'startFromRandom': startFromRandom,
             'randomStartMaxPercent': randomStartMaxPercent,
             'hideSeekbar': hideSeekbar,
             'hideOptions': hideOptions,
             'showVideoTitle': showVideoTitle,
-            'showWatermark': showWatermark,
+            'showChannelName': showChannelName,
             'hideBackButton': hideBackButton,
           },
         },

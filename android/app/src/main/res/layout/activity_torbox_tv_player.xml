@@ -13,7 +13,8 @@
         app:use_controller="true"
         app:resize_mode="fit"
         app:controller_layout_id="@layout/view_debrify_tv_controls"
-        app:show_timeout="5000" />
+        app:show_timeout="5000"
+        app:surface_type="texture_view" />
 
     <LinearLayout
         android:id="@+id/player_header_container"
@@ -48,15 +49,23 @@
     </LinearLayout>
 
     <TextView
-        android:id="@+id/player_watermark"
+        android:id="@+id/player_channel_badge"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="24dp"
-        android:text="DebrifyTV"
-        android:textColor="#80FFFFFF"
-        android:textSize="14sp"
-        android:textStyle="bold" />
+        android:textColor="#FFFFFFFF"
+        android:textSize="18sp"
+        android:fontFamily="sans-serif-medium"
+        android:shadowColor="#80000000"
+        android:shadowDx="2"
+        android:shadowDy="2"
+        android:shadowRadius="6"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:letterSpacing="0.1"
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <!-- Custom SubtitleView - positioned independently of video -->
     <androidx.media3.ui.SubtitleView
