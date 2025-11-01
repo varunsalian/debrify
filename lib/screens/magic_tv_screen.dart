@@ -53,6 +53,8 @@ int _parseRandomStartPercent(dynamic value) {
   return _randomStartPercentDefault;
 }
 
+enum _SettingsScope { quickPlay, channels }
+
 class DebrifyTVScreen extends StatefulWidget {
   const DebrifyTVScreen({super.key});
 
@@ -64,33 +66,16 @@ class _DebrifyTvChannel {
   final String id;
   final String name;
   final List<String> keywords;
-  final bool startRandom;
-  final int randomStartPercent;
-  final bool hideSeekbar;
-  final bool showWatermark;
-  final bool showVideoTitle;
-  final bool hideOptions;
-  final bool hideBackButton;
   final bool avoidNsfw; // Per-channel NSFW filter setting
 
   const _DebrifyTvChannel({
     required this.id,
     required this.name,
     required this.keywords,
-    required this.startRandom,
-    required this.randomStartPercent,
-    required this.hideSeekbar,
-    required this.showWatermark,
-    required this.showVideoTitle,
-    required this.hideOptions,
-    required this.hideBackButton,
     required this.avoidNsfw,
   });
 
   factory _DebrifyTvChannel.fromJson(Map<String, dynamic> json) {
-    final hideOptions = json['hideOptions'] is bool
-        ? json['hideOptions'] as bool
-        : true;
     final dynamic keywordsRaw = json['keywords'];
     final List<String> keywords;
     if (keywordsRaw is List) {
@@ -115,23 +100,6 @@ class _DebrifyTvChannel {
           ? (json['name'] as String).trim()
           : 'Unnamed Channel',
       keywords: keywords,
-      startRandom: json['startRandom'] is bool
-          ? json['startRandom'] as bool
-          : true,
-      randomStartPercent: _parseRandomStartPercent(
-        json['randomStartPercent'],
-      ),
-      hideSeekbar: hideOptions,
-      showWatermark: json['showWatermark'] is bool
-          ? json['showWatermark'] as bool
-          : true,
-      showVideoTitle: json['showVideoTitle'] is bool
-          ? json['showVideoTitle'] as bool
-          : false,
-      hideOptions: hideOptions,
-      hideBackButton: json['hideBackButton'] is bool
-          ? json['hideBackButton'] as bool
-          : true,
       avoidNsfw: json['avoidNsfw'] is bool
           ? json['avoidNsfw'] as bool
           : true, // Default to enabled for backward compatibility
@@ -143,13 +111,6 @@ class _DebrifyTvChannel {
       'id': id,
       'name': name,
       'keywords': keywords,
-      'startRandom': startRandom,
-      'randomStartPercent': randomStartPercent,
-      'hideSeekbar': hideOptions,
-      'showWatermark': showWatermark,
-      'showVideoTitle': showVideoTitle,
-      'hideOptions': hideOptions,
-      'hideBackButton': hideBackButton,
       'avoidNsfw': avoidNsfw,
     };
   }
@@ -158,26 +119,12 @@ class _DebrifyTvChannel {
     String? id,
     String? name,
     List<String>? keywords,
-    bool? startRandom,
-    int? randomStartPercent,
-    bool? showWatermark,
-    bool? showVideoTitle,
-    bool? hideOptions,
-    bool? hideBackButton,
     bool? avoidNsfw,
   }) {
-    final nextHideOptions = hideOptions ?? this.hideOptions;
     return _DebrifyTvChannel(
       id: id ?? this.id,
       name: name ?? this.name,
       keywords: keywords ?? this.keywords,
-      startRandom: startRandom ?? this.startRandom,
-      randomStartPercent: randomStartPercent ?? this.randomStartPercent,
-      hideSeekbar: nextHideOptions,
-      showWatermark: showWatermark ?? this.showWatermark,
-      showVideoTitle: showVideoTitle ?? this.showVideoTitle,
-      hideOptions: nextHideOptions,
-      hideBackButton: hideBackButton ?? this.hideBackButton,
       avoidNsfw: avoidNsfw ?? this.avoidNsfw,
     );
   }
@@ -187,7 +134,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const String _providerRealDebrid = 'real_debrid';
   static const String _providerTorbox = 'torbox';
   static const String _torboxFileEntryType = 'torbox_file';
-  static const int _torboxMinVideoSizeBytes = 50 * 1024 * 1024; // 50 MB filter threshold
+  static const int _torboxMinVideoSizeBytes =
+      50 * 1024 * 1024; // 50 MB filter threshold
 
   final TextEditingController _keywordsController = TextEditingController();
   // Mixed queue: can contain Torrent items or RD-restricted link maps
@@ -204,9 +152,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const int _minimumTorrentsForChannel = 5;
   static const int _maxChannelKeywords = 1000;
   static const int _keywordWarmEstimateMs = 1000;
-  final TextEditingController _channelSearchController = TextEditingController();
+  final TextEditingController _channelSearchController =
+      TextEditingController();
   String _channelSearchTerm = '';
-  String? _currentWatchingChannelId; // Track currently playing channel for switching
+  String?
+  _currentWatchingChannelId; // Track currently playing channel for switching
   // Advanced options
   bool _startRandom = true;
   int _randomStartPercent = _randomStartPercentDefault;
@@ -215,8 +165,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _showVideoTitle = false;
   bool _hideOptions = true;
   bool _hideBackButton = true;
-  bool _avoidNsfw = true; // Default enabled for content filtering
   String _provider = _providerRealDebrid;
+
+  // Quick play options
+  bool _quickStartRandom = true;
+  int _quickRandomStartPercent = _randomStartPercentDefault;
+  bool _quickHideSeekbar = true;
+  bool _quickShowWatermark = true;
+  bool _quickShowVideoTitle = false;
+  bool _quickHideOptions = true;
+  bool _quickHideBackButton = true;
+  bool _quickAvoidNsfw = true;
+  String _quickProvider = _providerRealDebrid;
+
   bool _rdAvailable = false;
   bool _torboxAvailable = false;
   // De-dupe sets for RD-restricted entries
@@ -231,8 +192,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   String? _activeApiKey;
   final Set<String> _inflightInfohashes = {};
   bool _isAndroidTv = false;
-  late final FocusNode _keywordsFocusNode;
-  late final FocusNode _watchButtonFocusNode;
   late final FocusNode _channelSearchFocusNode;
 
   // Progress UI state
@@ -249,11 +208,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   @override
   void initState() {
     super.initState();
-    _keywordsFocusNode = FocusNode(
-      debugLabel: 'DebrifyTVKeywords',
-      onKeyEvent: _handleKeywordsKeyEvent,
-    );
-    _watchButtonFocusNode = FocusNode(debugLabel: 'DebrifyTVWatchButton');
     _channelSearchFocusNode = FocusNode(
       debugLabel: 'DebrifyTVChannelSearch',
       onKeyEvent: _handleChannelSearchKeyEvent,
@@ -271,37 +225,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _progress.dispose();
     _keywordsController.dispose();
     _channelSearchController.dispose();
-    _keywordsFocusNode.dispose();
-    _watchButtonFocusNode.dispose();
     _channelSearchFocusNode.dispose();
     AndroidTvPlayerBridge.clearTorboxProvider();
     super.dispose();
   }
 
-  KeyEventResult _handleKeywordsKeyEvent(FocusNode node, KeyEvent event) {
-    if (!_isAndroidTv) {
-      return KeyEventResult.ignored;
-    }
-    if (event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowDown) {
-      _watchButtonFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      final ctx = node.context;
-      if (ctx != null) {
-        FocusScope.of(ctx).previousFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
-  KeyEventResult _handleChannelSearchKeyEvent(
-      FocusNode node, KeyEvent event) {
+  KeyEventResult _handleChannelSearchKeyEvent(FocusNode node, KeyEvent event) {
     if (!_isAndroidTv) {
       return KeyEventResult.ignored;
     }
@@ -324,17 +253,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
     return KeyEventResult.ignored;
-  }
-
-  Future<void> _updateProvider(String value) async {
-    if (!_isProviderSelectable(value)) {
-      return;
-    }
-    if (_provider == value) return;
-    setState(() {
-      _provider = value;
-    });
-    await StorageService.saveDebrifyTvProvider(value);
   }
 
   void _closeProgressDialog() {
@@ -367,7 +285,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     });
   }
 
-  void _cancelActiveWatch({BuildContext? dialogContext, bool clearQueue = true}) {
+  void _cancelActiveWatch({
+    BuildContext? dialogContext,
+    bool clearQueue = true,
+  }) {
     if (_watchCancelled) {
       if (dialogContext != null) {
         try {
@@ -453,16 +374,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final rdAvailable =
         rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
-    final torboxAvailable = torboxIntegrationEnabled &&
-        torboxKey != null &&
-        torboxKey.isNotEmpty;
+    final torboxAvailable =
+        torboxIntegrationEnabled && torboxKey != null && torboxKey.isNotEmpty;
     final defaultProvider = _determineDefaultProvider(
       hasStoredProvider ? storedProvider : null,
       rdAvailable,
       torboxAvailable,
     );
     final isTv = await AndroidNativeDownloader.isTelevision();
-    
+
     if (mounted) {
       setState(() {
         _startRandom = startRandom;
@@ -472,11 +392,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _showVideoTitle = showVideoTitle;
         _hideOptions = hideOptions;
         _hideBackButton = hideBackButton;
-        _avoidNsfw = avoidNsfw;
         _rdAvailable = rdAvailable;
         _torboxAvailable = torboxAvailable;
         _provider = defaultProvider;
         _isAndroidTv = isTv;
+
+        _quickStartRandom = startRandom;
+        _quickRandomStartPercent =
+            _clampRandomStartPercent(randomStartPercent);
+        _quickHideSeekbar = hideOptions;
+        _quickShowWatermark = showWatermark;
+        _quickShowVideoTitle = showVideoTitle;
+        _quickHideOptions = hideOptions;
+        _quickHideBackButton = hideBackButton;
+        _quickAvoidNsfw = avoidNsfw;
+        _quickProvider = defaultProvider;
       });
     }
 
@@ -694,12 +624,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
     } catch (e) {
       debugPrint(
-          'DebrifyTV: Cache warm Torrents CSV failed for "$keyword": $e');
+        'DebrifyTV: Cache warm Torrents CSV failed for "$keyword": $e',
+      );
       csvResult = TorrentsCsvSearchResult(
         torrents: const <Torrent>[],
         pagesPulled: 0,
       );
-      csvFailure = 'Torrents CSV is unavailable right now. Please try again later.';
+      csvFailure =
+          'Torrents CSV is unavailable right now. Please try again later.';
       return _KeywordWarmResult(
         keyword: keyword,
         addedHashes: const <String>{},
@@ -720,15 +652,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         pirateResult = await pirateFuture;
       }
     } catch (e) {
-      debugPrint(
-          'DebrifyTV: Cache warm Pirate Bay failed for "$keyword": $e');
-      pirateFailure = 'The Pirate Bay search failed. Some torrents may be missing.';
+      debugPrint('DebrifyTV: Cache warm Pirate Bay failed for "$keyword": $e');
+      pirateFailure =
+          'The Pirate Bay search failed. Some torrents may be missing.';
     }
 
     // Apply NSFW filter to search results before caching
     List<Torrent> csvTorrents = csvResult.torrents;
     List<Torrent> pirateTorrents = pirateResult;
-    
+
     if (avoidNsfw) {
       final csvBefore = csvTorrents.length;
       csvTorrents = csvTorrents.where((torrent) {
@@ -737,7 +669,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
         return true;
       }).toList();
-      
+
       final pirateBefore = pirateTorrents.length;
       pirateTorrents = pirateTorrents.where((torrent) {
         if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -745,45 +677,47 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
         return true;
       }).toList();
-      
+
       final totalBefore = csvBefore + pirateBefore;
       final totalAfter = csvTorrents.length + pirateTorrents.length;
       if (totalBefore != totalAfter) {
-        debugPrint('DebrifyTV: Cache NSFW filter for "$keyword": $totalBefore → $totalAfter torrents');
+        debugPrint(
+          'DebrifyTV: Cache NSFW filter for "$keyword": $totalBefore → $totalAfter torrents',
+        );
       }
     }
-    
+
     final keywordHashes = <String>{};
 
-      for (final torrent in csvTorrents) {
-        final hash = _normalizeInfohash(torrent.infohash);
-        if (hash.isEmpty) {
-          continue;
-        }
-        keywordHashes.add(hash);
-        _accumulateCachedTorrent(
-          accumulator: accumulator,
-          infohash: hash,
-          torrent: torrent,
-          keyword: keyword,
-          source: 'torrents_csv',
-        );
+    for (final torrent in csvTorrents) {
+      final hash = _normalizeInfohash(torrent.infohash);
+      if (hash.isEmpty) {
+        continue;
       }
+      keywordHashes.add(hash);
+      _accumulateCachedTorrent(
+        accumulator: accumulator,
+        infohash: hash,
+        torrent: torrent,
+        keyword: keyword,
+        source: 'torrents_csv',
+      );
+    }
 
-      for (final torrent in pirateTorrents) {
-        final hash = _normalizeInfohash(torrent.infohash);
-        if (hash.isEmpty) {
-          continue;
-        }
-        keywordHashes.add(hash);
-        _accumulateCachedTorrent(
-          accumulator: accumulator,
-          infohash: hash,
-          torrent: torrent,
-          keyword: keyword,
-          source: 'pirate_bay',
-        );
+    for (final torrent in pirateTorrents) {
+      final hash = _normalizeInfohash(torrent.infohash);
+      if (hash.isEmpty) {
+        continue;
       }
+      keywordHashes.add(hash);
+      _accumulateCachedTorrent(
+        accumulator: accumulator,
+        infohash: hash,
+        torrent: torrent,
+        keyword: keyword,
+        source: 'pirate_bay',
+      );
+    }
 
     final updatedStats = stats[keyword] ?? KeywordStat.initial();
     final stat = updatedStats.copyWith(
@@ -837,26 +771,31 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final rdAvailable =
         rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
-    final torboxAvailable = torboxIntegrationEnabled &&
-        torboxKey != null &&
-        torboxKey.isNotEmpty;
+    final torboxAvailable =
+        torboxIntegrationEnabled && torboxKey != null && torboxKey.isNotEmpty;
 
-    final nextProvider = _determineDefaultProvider(
+    final nextChannelProvider = _determineDefaultProvider(
       _provider,
+      rdAvailable,
+      torboxAvailable,
+    );
+    final nextQuickProvider = _determineDefaultProvider(
+      _quickProvider,
       rdAvailable,
       torboxAvailable,
     );
 
     if (!mounted) return;
-    final providerChanged = nextProvider != _provider;
+    final providerChanged = nextChannelProvider != _provider;
     setState(() {
       _rdAvailable = rdAvailable;
       _torboxAvailable = torboxAvailable;
-      _provider = nextProvider;
+      _provider = nextChannelProvider;
+      _quickProvider = nextQuickProvider;
     });
 
     if (providerChanged) {
-      await StorageService.saveDebrifyTvProvider(nextProvider);
+      await StorageService.saveDebrifyTvProvider(nextChannelProvider);
     }
   }
 
@@ -1011,7 +950,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return provider == _providerTorbox ? 'Torbox' : 'Real Debrid';
   }
 
-  Widget _providerChoiceChips() {
+  Widget _providerChoiceChips(
+    _SettingsScope scope, {
+    StateSetter? dialogSetState,
+  }) {
+    final bool isQuickScope = scope == _SettingsScope.quickPlay;
+    final String currentProvider =
+        isQuickScope ? _quickProvider : _provider;
+
+    void handleSelection(String value) {
+      if (!_isProviderSelectable(value)) {
+        return;
+      }
+      if (isQuickScope) {
+        if (_quickProvider == value) {
+          return;
+        }
+        setState(() {
+          _quickProvider = value;
+        });
+        dialogSetState?.call(() {});
+        return;
+      }
+
+      if (_provider == value) {
+        return;
+      }
+      setState(() {
+        _provider = value;
+      });
+      dialogSetState?.call(() {});
+      unawaited(StorageService.saveDebrifyTvProvider(value));
+    }
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -1022,13 +993,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Enable Real Debrid and add an API key in Settings to use this option.',
           child: ChoiceChip(
             label: const Text('Real Debrid'),
-            selected: _provider == _providerRealDebrid,
+            selected: currentProvider == _providerRealDebrid,
             disabledColor: Colors.white12,
             onSelected: (!_rdAvailable || _isBusy)
                 ? null
                 : (selected) {
                     if (selected) {
-                      _updateProvider(_providerRealDebrid);
+                      handleSelection(_providerRealDebrid);
                     }
                   },
           ),
@@ -1039,13 +1010,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Enable Torbox and add an API key in Settings to use this option.',
           child: ChoiceChip(
             label: const Text('Torbox'),
-            selected: _provider == _providerTorbox,
+            selected: currentProvider == _providerTorbox,
             disabledColor: Colors.white12,
             onSelected: (!_torboxAvailable || _isBusy)
                 ? null
                 : (selected) {
                     if (selected) {
-                      _updateProvider(_providerTorbox);
+                      handleSelection(_providerTorbox);
                     }
                   },
           ),
@@ -1154,16 +1125,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       keywordList.add(trimmed);
       if (keywordList.length >= _maxChannelKeywords) break;
     }
-    // Channel defaults - completely isolated from Quick Watch
-    bool startRandom = existing?.startRandom ?? true;
-    int randomStartPercent = existing?.randomStartPercent ?? _randomStartPercentDefault;
-    randomStartPercent = _clampRandomStartPercent(randomStartPercent);
-    bool hideOptions = existing?.hideOptions ?? true;
-    bool showWatermark = existing?.showWatermark ?? true;
-    bool showVideoTitle = existing?.showVideoTitle ?? false;
-    bool hideBackButton = existing?.hideBackButton ?? true;
+    // Channel defaults - keep NSFW preference per channel only
     bool avoidNsfw = existing?.avoidNsfw ?? true;
-    final bool originalAvoidNsfw = avoidNsfw; // Track original value
     String? error;
 
     _DebrifyTvChannel? result;
@@ -1173,200 +1136,178 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         barrierDismissible: false,
         builder: (dialogContext) {
           return StatefulBuilder(
-          builder: (context, setModalState) {
-            Future<void> submit() async {
-              final pendingRaw = keywordInputController.text.trim();
-              if (pendingRaw.isNotEmpty) {
-                final pendingKeywords = _parseKeywords(pendingRaw);
-                for (final rawKw in pendingKeywords) {
-                  final trimmedKw = rawKw.trim();
-                  if (trimmedKw.isEmpty) {
-                    continue;
+            builder: (context, setModalState) {
+              Future<void> submit() async {
+                final pendingRaw = keywordInputController.text.trim();
+                if (pendingRaw.isNotEmpty) {
+                  final pendingKeywords = _parseKeywords(pendingRaw);
+                  for (final rawKw in pendingKeywords) {
+                    final trimmedKw = rawKw.trim();
+                    if (trimmedKw.isEmpty) {
+                      continue;
+                    }
+                    final alreadyPresent = keywordList.any(
+                      (existing) =>
+                          existing.toLowerCase() == trimmedKw.toLowerCase(),
+                    );
+                    if (alreadyPresent) {
+                      continue;
+                    }
+                    if (keywordList.length >= _maxChannelKeywords) {
+                      setModalState(() {
+                        error =
+                            'You can add up to $_maxChannelKeywords keywords per channel.';
+                      });
+                      return;
+                    }
+                    keywordList.add(trimmedKw);
                   }
-                  final alreadyPresent = keywordList.any(
-                    (existing) =>
-                        existing.toLowerCase() == trimmedKw.toLowerCase(),
-                  );
-                  if (alreadyPresent) {
-                    continue;
-                  }
-                  if (keywordList.length >= _maxChannelKeywords) {
-                    setModalState(() {
-                      error =
-                          'You can add up to $_maxChannelKeywords keywords per channel.';
-                    });
-                    return;
-                  }
-                  keywordList.add(trimmedKw);
+                  keywordInputController.clear();
                 }
-                keywordInputController.clear();
+
+                final name = nameController.text.trim();
+                final keywords = <String>[];
+                final seen = <String>{};
+                for (final raw in keywordList) {
+                  final trimmed = raw.trim();
+                  if (trimmed.isEmpty) continue;
+                  final lower = trimmed.toLowerCase();
+                  if (seen.contains(lower)) continue;
+                  seen.add(lower);
+                  keywords.add(trimmed);
+                }
+                if (name.isEmpty) {
+                  setModalState(() {
+                    error = 'Give the channel a name';
+                  });
+                  return;
+                }
+                if (keywords.isEmpty) {
+                  setModalState(() {
+                    error = 'Add at least one keyword';
+                  });
+                  return;
+                }
+                if (keywords.length > _maxChannelKeywords) {
+                  setModalState(() {
+                    error =
+                        'You can add up to $_maxChannelKeywords keywords per channel.';
+                  });
+                  return;
+                }
+                final channel = _DebrifyTvChannel(
+                  id:
+                      existing?.id ??
+                      DateTime.now().microsecondsSinceEpoch.toString(),
+                  name: name,
+                  keywords: keywords,
+                  avoidNsfw: avoidNsfw, // Channel's own NSFW setting
+                );
+                Navigator.of(dialogContext).pop(channel);
               }
 
-              final name = nameController.text.trim();
-              final keywords = <String>[];
-              final seen = <String>{};
-              for (final raw in keywordList) {
-                final trimmed = raw.trim();
-                if (trimmed.isEmpty) continue;
-                final lower = trimmed.toLowerCase();
-                if (seen.contains(lower)) continue;
-                seen.add(lower);
-                keywords.add(trimmed);
-              }
-              if (name.isEmpty) {
-                setModalState(() {
-                  error = 'Give the channel a name';
-                });
-                return;
-              }
-              if (keywords.isEmpty) {
-                setModalState(() {
-                  error = 'Add at least one keyword';
-                });
-                return;
-              }
-              if (keywords.length > _maxChannelKeywords) {
-                setModalState(() {
-                  error =
-                      'You can add up to $_maxChannelKeywords keywords per channel.';
-                });
-                return;
-              }
-              final channel = _DebrifyTvChannel(
-                id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-                name: name,
-                keywords: keywords,
-                startRandom: startRandom,
-                randomStartPercent: randomStartPercent,
-                hideSeekbar: hideOptions,
-                showWatermark: showWatermark,
-                showVideoTitle: showVideoTitle,
-                hideOptions: hideOptions,
-                hideBackButton: hideBackButton,
-                avoidNsfw: avoidNsfw, // Channel's own NSFW setting
-              );
-              Navigator.of(dialogContext).pop(channel);
-            }
-
-            return Dialog(
-              backgroundColor: const Color(0xFF0F0F0F),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520, minWidth: 320),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE50914).withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.tv_rounded,
-                              color: Color(0xFFE50914),
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            existing == null ? 'Create Channel' : 'Edit Channel',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: nameController,
-                        focusNode: channelNameFocus,
-                        autofocus: _isAndroidTv,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(
-                          labelText: 'Channel name',
-                          prefixIcon: Icon(Icons.label_rounded),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Keywords (${keywordList.length}/$_maxChannelKeywords)',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Tip: type a keyword and press Enter. Add multiples by separating with commas.',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ...keywordList.map(
-                            (keyword) => InputChip(
-                              label: Text(keyword),
-                              onDeleted: () {
-                                setModalState(() {
-                                  keywordList.remove(keyword);
-                                  if (error != null &&
-                                      error!
-                                          .contains('$_maxChannelKeywords keywords') &&
-                                      keywordList.length < _maxChannelKeywords) {
-                                    error = null;
-                                  }
-                                });
-                              },
-                            ),
-                          ),
-                          SizedBox(
-                            width: 200,
-                            child: TextField(
-                              controller: keywordInputController,
-                              focusNode: channelKeywordFocus,
-                              decoration: const InputDecoration(
-                                hintText: 'Add keyword',
-                                prefixIcon: Icon(Icons.add_rounded),
+              return Dialog(
+                backgroundColor: const Color(0xFF0F0F0F),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 520,
+                    minWidth: 320,
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE50914).withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              style: const TextStyle(color: Colors.white),
-                              onSubmitted: (value) {
-                                final limitReached = _addKeywordsToList(
-                                  value,
-                                  keywordList,
-                                  setModalState,
-                                );
-                                keywordInputController.clear();
-                                if (limitReached) {
+                              child: const Icon(
+                                Icons.tv_rounded,
+                                color: Color(0xFFE50914),
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              existing == null
+                                  ? 'Create Channel'
+                                  : 'Edit Channel',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: nameController,
+                          focusNode: channelNameFocus,
+                          autofocus: _isAndroidTv,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Channel name',
+                            prefixIcon: Icon(Icons.label_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Keywords (${keywordList.length}/$_maxChannelKeywords)',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Tip: type a keyword and press Enter. Add multiples by separating with commas.',
+                          style: TextStyle(color: Colors.white54, fontSize: 11),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ...keywordList.map(
+                              (keyword) => InputChip(
+                                label: Text(keyword),
+                                onDeleted: () {
                                   setModalState(() {
-                                    error =
-                                        'You can add up to $_maxChannelKeywords keywords per channel.';
+                                    keywordList.remove(keyword);
+                                    if (error != null &&
+                                        error!.contains(
+                                          '$_maxChannelKeywords keywords',
+                                        ) &&
+                                        keywordList.length <
+                                            _maxChannelKeywords) {
+                                      error = null;
+                                    }
                                   });
-                                } else if (error != null &&
-                                    error!
-                                        .contains('$_maxChannelKeywords keywords')) {
-                                  setModalState(() {
-                                    error = null;
-                                  });
-                                }
-                              },
-                              onChanged: (value) {
-                                if (value.contains(',')) {
+                                },
+                              ),
+                            ),
+                            SizedBox(
+                              width: 200,
+                              child: TextField(
+                                controller: keywordInputController,
+                                focusNode: channelKeywordFocus,
+                                decoration: const InputDecoration(
+                                  hintText: 'Add keyword',
+                                  prefixIcon: Icon(Icons.add_rounded),
+                                ),
+                                style: const TextStyle(color: Colors.white),
+                                onSubmitted: (value) {
                                   final limitReached = _addKeywordsToList(
                                     value,
                                     keywordList,
@@ -1379,117 +1320,95 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                           'You can add up to $_maxChannelKeywords keywords per channel.';
                                     });
                                   } else if (error != null &&
-                                      error!
-                                          .contains('$_maxChannelKeywords keywords')) {
+                                      error!.contains(
+                                        '$_maxChannelKeywords keywords',
+                                      )) {
                                     setModalState(() {
                                       error = null;
                                     });
                                   }
-                                }
-                              },
+                                },
+                                onChanged: (value) {
+                                  if (value.contains(',')) {
+                                    final limitReached = _addKeywordsToList(
+                                      value,
+                                      keywordList,
+                                      setModalState,
+                                    );
+                                    keywordInputController.clear();
+                                    if (limitReached) {
+                                      setModalState(() {
+                                        error =
+                                            'You can add up to $_maxChannelKeywords keywords per channel.';
+                                      });
+                                    } else if (error != null &&
+                                        error!.contains(
+                                          '$_maxChannelKeywords keywords',
+                                        )) {
+                                      setModalState(() {
+                                        error = null;
+                                      });
+                                    }
+                                  }
+                                },
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            onPressed: submit,
-                            icon: const Icon(Icons.save_rounded, size: 18),
-                            label: const Text('Save Channel'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE50914),
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Channel settings',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 12),
-                      const SizedBox(height: 20),
-                      _SwitchRow(
-                        title: 'Start from random timestamp',
-                        subtitle: 'Each video starts at a random point',
-                        value: startRandom,
-                        onChanged: (v) => setModalState(() => startRandom = v),
-                      ),
-                      if (startRandom) ...[
-                        const SizedBox(height: 8),
-                        _RandomStartSlider(
-                          value: randomStartPercent,
-                          isAndroidTv: _isAndroidTv,
-                          onChanged: (next) => setModalState(
-                            () => randomStartPercent = next,
-                          ),
+                          ],
                         ),
-                      ],
-                      const SizedBox(height: 8),
-                      _SwitchRow(
-                        title: 'Show DebrifyTV watermark',
-                        subtitle: 'Display watermark in the player',
-                        value: showWatermark,
-                        onChanged: (v) => setModalState(() => showWatermark = v),
-                      ),
-                      const SizedBox(height: 8),
-                      _SwitchRow(
-                        title: 'Show video title',
-                        subtitle: 'Display title in player controls',
-                        value: showVideoTitle,
-                        onChanged: (v) => setModalState(() => showVideoTitle = v),
-                      ),
-                      const SizedBox(height: 8),
-                      _SwitchRow(
-                        title: 'Hide all options',
-                        subtitle: 'Hide bottom controls inside the player',
-                        value: hideOptions,
-                        onChanged: (v) => setModalState(() => hideOptions = v),
-                      ),
-                      const SizedBox(height: 8),
-                      _SwitchRow(
-                        title: 'Hide back button',
-                        subtitle: 'Require device gesture or escape key to exit',
-                        value: hideBackButton,
-                        onChanged: (v) => setModalState(() => hideBackButton = v),
-                      ),
-                      const SizedBox(height: 8),
-                      _SwitchRow(
-                        title: 'Avoid NSFW content',
-                        subtitle: 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
-                        value: avoidNsfw,
-                        onChanged: (v) {
-                          setModalState(() {
-                            avoidNsfw = v; // Only update local channel setting
-                          });
-                        },
-                      ),
-                      if (error != null) ...[
                         const SizedBox(height: 16),
-                        Text(
-                          error!,
-                          style: const TextStyle(color: Colors.redAccent),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              onPressed: submit,
+                              icon: const Icon(Icons.save_rounded, size: 18),
+                              label: const Text('Save Channel'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFE50914),
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Channel settings',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 12),
+                        _SwitchRow(
+                          title: 'Avoid NSFW content',
+                          subtitle:
+                              'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
+                          value: avoidNsfw,
+                          onChanged: (v) {
+                            setModalState(() {
+                              avoidNsfw =
+                                  v; // Only update local channel setting
+                            });
+                          },
+                        ),
+                        if (error != null) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            error!,
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        );
+              );
+            },
+          );
         },
       );
     } finally {
@@ -1521,7 +1440,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       const cooldown = Duration(seconds: 30);
       if (elapsed < cooldown) {
         final remaining = cooldown - elapsed;
-        final seconds = remaining.inSeconds + (remaining.inMilliseconds % 1000 > 0 ? 1 : 0);
+        final seconds =
+            remaining.inSeconds + (remaining.inMilliseconds % 1000 > 0 ? 1 : 0);
         _showSnack(
           'Please wait $seconds second${seconds == 1 ? '' : 's'} before importing again.',
           color: Colors.orange,
@@ -1530,8 +1450,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
 
-    String repoUrl =
-        (await StorageService.getDebrifyTvImportRepoUrl()).trim();
+    String repoUrl = (await StorageService.getDebrifyTvImportRepoUrl()).trim();
     if (repoUrl.isEmpty) {
       _showSnack(
         'Set a channel repository URL in Settings before importing.',
@@ -1590,8 +1509,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 final candidate = candidates[index];
                 return ListTile(
                   title: Text(candidate.displayName),
-                  subtitle: Text(candidate.name,
-                      style: const TextStyle(fontSize: 12)),
+                  subtitle: Text(
+                    candidate.name,
+                    style: const TextStyle(fontSize: 12),
+                  ),
                   trailing: FilledButton(
                     onPressed: () {
                       Navigator.of(dialogContext).pop(candidate);
@@ -1640,23 +1561,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Store current channel's NSFW setting before dialog
     final nsfwBeforeEdit = channel.avoidNsfw;
-    
+
     final updated = await _openChannelDialog(existing: channel);
     if (updated != null) {
       // Check if channel's NSFW setting changed
       final nsfwAfterEdit = updated.avoidNsfw;
       final nsfwChanged = nsfwBeforeEdit != nsfwAfterEdit;
-      
+
       if (nsfwChanged) {
         // NSFW setting changed for this channel - rebuild cache with new filter
-        debugPrint('DebrifyTV: Channel NSFW filter changed. Forcing full cache rebuild...');
-        
+        debugPrint(
+          'DebrifyTV: Channel NSFW filter changed. Forcing full cache rebuild...',
+        );
+
         // Clear existing cache to force full rebuild
         _channelCache.remove(updated.id);
-        
+
         // Rebuild cache with new NSFW filter setting (isEdit: false forces full rebuild)
         await _createOrUpdateChannel(updated, isEdit: false);
-        
+
         _showSnack(
           'Channel cache rebuilt with updated NSFW filter.',
           color: Colors.green,
@@ -1674,9 +1597,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       builder: (ctx) {
         return AlertDialog(
           title: const Text('Delete channel?'),
-          content: Text(
-            'Remove "${channel.name}" and its saved keywords?',
-          ),
+          content: Text('Remove "${channel.name}" and its saved keywords?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -1698,12 +1619,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<List<_ImportChannelCandidate>> _fetchImportChannelCandidates(
-      Uri treeUri) async {
+    Uri treeUri,
+  ) async {
     debugPrint('DebrifyTV: Import - fetching tree ${treeUri.toString()}');
     final response = await http.get(treeUri);
     if (response.statusCode != 200) {
       debugPrint(
-          'DebrifyTV: Import - tree request failed [${response.statusCode}] ${response.reasonPhrase}');
+        'DebrifyTV: Import - tree request failed [${response.statusCode}] ${response.reasonPhrase}',
+      );
       throw Exception('HTTP ${response.statusCode}');
     }
     final decoded = jsonDecode(response.body);
@@ -1725,9 +1648,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       candidates.add(_ImportChannelCandidate(name: name, path: path));
     }
     candidates.sort(
-      (a, b) => a.displayName.toLowerCase().compareTo(
-            b.displayName.toLowerCase(),
-          ),
+      (a, b) =>
+          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
     );
     return candidates;
   }
@@ -1741,7 +1663,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final response = await http.get(rawUri);
     if (response.statusCode != 200) {
       debugPrint(
-          'DebrifyTV: Import - raw request failed [${response.statusCode}] ${response.reasonPhrase}');
+        'DebrifyTV: Import - raw request failed [${response.statusCode}] ${response.reasonPhrase}',
+      );
       throw Exception('HTTP ${response.statusCode}');
     }
 
@@ -1758,9 +1681,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
         if (trimmed.length > 120) {
           debugPrint(
-              'DebrifyTV: Import - keyword too long (${trimmed.length} chars): $trimmed');
+            'DebrifyTV: Import - keyword too long (${trimmed.length} chars): $trimmed',
+          );
           throw FormatException(
-              'Keyword exceeds 120 characters: "${trimmed.substring(0, trimmed.length > 40 ? 40 : trimmed.length)}${trimmed.length > 40 ? '…' : ''}"');
+            'Keyword exceeds 120 characters: "${trimmed.substring(0, trimmed.length > 40 ? 40 : trimmed.length)}${trimmed.length > 40 ? '…' : ''}"',
+          );
         }
         final lower = trimmed.toLowerCase();
         if (seen.add(lower)) {
@@ -1775,14 +1700,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     if (keywords.length > 500) {
       throw const FormatException(
-          'Channel files must contain 500 keywords or fewer.');
+        'Channel files must contain 500 keywords or fewer.',
+      );
     }
 
     final String baseName = candidate.displayName;
     String channelName = baseName;
     int suffix = 2;
-    final lowerExisting =
-        _channels.map((c) => c.name.toLowerCase()).toSet();
+    final lowerExisting = _channels.map((c) => c.name.toLowerCase()).toSet();
     while (lowerExisting.contains(channelName.toLowerCase())) {
       channelName = '$baseName ($suffix)';
       suffix++;
@@ -1792,14 +1717,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       name: channelName,
       keywords: keywords,
-      startRandom: _startRandom,
-      randomStartPercent: _randomStartPercent,
-      hideSeekbar: _hideOptions,
-      showWatermark: _showWatermark,
-      showVideoTitle: _showVideoTitle,
-      hideOptions: _hideOptions,
-      hideBackButton: _hideBackButton,
-      avoidNsfw: _avoidNsfw,
+      avoidNsfw: true,
     );
 
     await _createOrUpdateChannel(channel, isEdit: false);
@@ -1809,7 +1727,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Uri _buildRawFileUri(Uri treeUri, String filePath) {
     final List<String> segments = treeUri.pathSegments;
     if (segments.length < 4) {
-      throw const FormatException('Repository URL is not a GitLab tree API endpoint.');
+      throw const FormatException(
+        'Repository URL is not a GitLab tree API endpoint.',
+      );
     }
     final encodedProject = Uri.encodeComponent(segments[3]);
     final basePath = 'api/v4/projects/$encodedProject';
@@ -1826,8 +1746,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     final normalizedKeywords = _normalizedKeywords(channel.keywords);
     if (normalizedKeywords.isEmpty) {
-      _showSnack('Add at least one keyword before saving.',
-          color: Colors.orange);
+      _showSnack(
+        'Add at least one keyword before saving.',
+        color: Colors.orange,
+      );
       return;
     }
 
@@ -1884,8 +1806,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             return torrentKeywords.intersection(removedKeywords).isEmpty;
           }).toList();
 
-          final filteredStats = Map<String, KeywordStat>.from(baseline.keywordStats)
-            ..removeWhere((key, _) => removedKeywords.contains(key));
+          final filteredStats = Map<String, KeywordStat>.from(
+            baseline.keywordStats,
+          )..removeWhere((key, _) => removedKeywords.contains(key));
 
           final newStatus = filteredTorrents.isNotEmpty
               ? DebrifyTvCacheStatus.ready
@@ -1902,8 +1825,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           debugPrint(
             'DebrifyTV: Pruned ${baseline.torrents.length - filteredTorrents.length} torrent(s) after removing keywords. Remaining: ${filteredTorrents.length}.',
           );
-        } else if (baseline.normalizedKeywords.length != normalizedKeywords.length) {
-          workingEntry = baseline.copyWith(normalizedKeywords: normalizedKeywords);
+        } else if (baseline.normalizedKeywords.length !=
+            normalizedKeywords.length) {
+          workingEntry = baseline.copyWith(
+            normalizedKeywords: normalizedKeywords,
+          );
         }
 
         if (addedKeywords.isNotEmpty) {
@@ -1931,7 +1857,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           debugPrint(
             'DebrifyTV: No keyword changes for "${channel.name}" – reusing existing cache.',
           );
-          workingEntry = baseline.copyWith(normalizedKeywords: normalizedKeywords);
+          workingEntry = baseline.copyWith(
+            normalizedKeywords: normalizedKeywords,
+          );
         }
       } else {
         ensureProgressDialog();
@@ -1947,8 +1875,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       final entry = workingEntry;
       if (entry == null) {
-        _showSnack('Failed to build channel cache. Please try again.',
-            color: Colors.red);
+        _showSnack(
+          'Failed to build channel cache. Please try again.',
+          color: Colors.red,
+        );
         return;
       }
 
@@ -1956,11 +1886,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      if (!entry.isReady || entry.torrents.length < _minimumTorrentsForChannel) {
+      if (!entry.isReady ||
+          entry.torrents.length < _minimumTorrentsForChannel) {
         final message = entry.isReady
             ? 'Need at least $_minimumTorrentsForChannel torrents to save this channel. Try different keywords.'
             : (entry.errorMessage ??
-                'Unable to find torrents for these keywords. Try again later.');
+                  'Unable to find torrents for these keywords. Try again later.');
 
         debugPrint(
           'DebrifyTV: Cache validation failed for "${channel.name}" – ready=${entry.isReady}, torrents=${entry.torrents.length}.',
@@ -1997,14 +1928,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await _persistChannels();
       await DebrifyTvCacheService.saveEntry(entry);
 
-      final successMsg =
-          isEdit ? 'Channel "${channel.name}" updated' : 'Channel "${channel.name}" saved';
+      final successMsg = isEdit
+          ? 'Channel "${channel.name}" updated'
+          : 'Channel "${channel.name}" saved';
       _showSnack(successMsg, color: Colors.green);
-      debugPrint('DebrifyTV: $successMsg (torrents cached: ${entry.torrents.length})');
+      debugPrint(
+        'DebrifyTV: $successMsg (torrents cached: ${entry.torrents.length})',
+      );
     } catch (e) {
       debugPrint('DebrifyTV: Channel creation failed for ${channel.name}: $e');
-      _showSnack('Failed to build channel cache. Please try again.',
-          color: Colors.red);
+      _showSnack(
+        'Failed to build channel cache. Please try again.',
+        color: Colors.red,
+      );
     } finally {
       if (progressShown) {
         _closeProgressDialog();
@@ -2023,46 +1959,39 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         : _rdAvailable;
     if (!providerReady) {
       final providerName = _providerDisplay(_provider);
-      _showSnack('Enable $providerName in Settings to watch this channel',
-          color: Colors.orange);
+      _showSnack(
+        'Enable $providerName in Settings to watch this channel',
+        color: Colors.orange,
+      );
       return;
     }
 
     final cacheEntry = _channelCache[channel.id];
     if (cacheEntry == null) {
-      _showSnack('Channel cache not found. Edit the channel to rebuild it.',
-          color: Colors.orange);
+      _showSnack(
+        'Channel cache not found. Edit the channel to rebuild it.',
+        color: Colors.orange,
+      );
       return;
     }
     if (!cacheEntry.isReady) {
-      final message = cacheEntry.errorMessage ??
+      final message =
+          cacheEntry.errorMessage ??
           'Channel cache failed to build. Try editing and saving again.';
       _showSnack(message, color: Colors.orange);
       return;
     }
     if (cacheEntry.torrents.isEmpty) {
-      _showSnack('No torrents cached yet. Try editing the channel keywords.',
-          color: Colors.orange);
+      _showSnack(
+        'No torrents cached yet. Try editing the channel keywords.',
+        color: Colors.orange,
+      );
       return;
     }
 
-    final previousStartRandom = _startRandom;
-    final previousRandomStartPercent = _randomStartPercent;
-    final previousHideSeekbar = _hideSeekbar;
-    final previousShowWatermark = _showWatermark;
-    final previousShowVideoTitle = _showVideoTitle;
-    final previousHideOptions = _hideOptions;
-    final previousHideBackButton = _hideBackButton;
     final previousKeywords = _keywordsController.text;
 
     setState(() {
-      _startRandom = channel.startRandom;
-      _randomStartPercent = channel.randomStartPercent;
-      _hideSeekbar = channel.hideOptions;
-      _showWatermark = channel.showWatermark;
-      _showVideoTitle = channel.showVideoTitle;
-      _hideOptions = channel.hideOptions;
-      _hideBackButton = channel.hideBackButton;
       _currentWatchingChannelId = channel.id; // Track for channel switching
     });
     _keywordsController.text = channel.keywords.join(', ');
@@ -2072,27 +2001,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       cacheEntry,
       normalizedKeywords,
     );
-    final cachedTorrents =
-        playbackSelection.map((cached) => cached.toTorrent()).toList();
+    final cachedTorrents = playbackSelection
+        .map((cached) => cached.toTorrent())
+        .toList();
     if (_provider == _providerTorbox) {
       await _watchTorboxWithCachedTorrents(cachedTorrents);
     } else {
-      await _watchWithCachedTorrents(cachedTorrents);
+      await _watchWithCachedTorrents(
+        cachedTorrents,
+        applyNsfwFilter: channel.avoidNsfw,
+      );
     }
 
     if (!mounted) {
       return;
     }
 
-    setState(() {
-      _startRandom = previousStartRandom;
-      _randomStartPercent = previousRandomStartPercent;
-      _hideSeekbar = previousHideSeekbar;
-      _showWatermark = previousShowWatermark;
-      _showVideoTitle = previousShowVideoTitle;
-      _hideOptions = previousHideOptions;
-      _hideBackButton = previousHideBackButton;
-    });
     _keywordsController.text = previousKeywords;
   }
 
@@ -2107,6 +2031,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _progress.value = copy;
       debugPrint('DebrifyTV: ' + m);
     }
+
     await _syncProviderAvailability();
     if (!_rdAvailable && !_torboxAvailable) {
       if (mounted) {
@@ -2132,23 +2057,30 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final keywords = _parseKeywords(text);
-    debugPrint('DebrifyTV: Parsed ${keywords.length} keyword(s): ${keywords.join(' | ')}');
+    debugPrint(
+      'DebrifyTV: Parsed ${keywords.length} keyword(s): ${keywords.join(' | ')}',
+    );
     if (keywords.isEmpty) {
       setState(() {
         _status = 'Enter valid keywords';
       });
-      debugPrint('DebrifyTV: Aborting. Parsed keywords became empty after trimming.');
+      debugPrint(
+        'DebrifyTV: Aborting. Parsed keywords became empty after trimming.',
+      );
       return;
     }
     if (keywords.length > 5) {
       setState(() {
-        _status = 'Quick Play supports up to 5 keywords. Create a channel for larger sets.';
+        _status =
+            'Quick Play supports up to 5 keywords. Create a channel for larger sets.';
       });
       _showSnack(
         'Quick Play supports up to 5 keywords. Create a channel for bigger combos.',
         color: Colors.orange,
       );
-      debugPrint('DebrifyTV: Aborting. Too many keywords for Quick Play (${keywords.length}).');
+      debugPrint(
+        'DebrifyTV: Aborting. Too many keywords for Quick Play (${keywords.length}).',
+      );
       return;
     }
 
@@ -2161,8 +2093,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // show non-dismissible loading modal
     _progress.value = [];
     _progressOpen = true;
-    final providerLabel =
-        _provider == _providerTorbox ? 'Torbox' : 'Real Debrid';
+    final providerLabel = _quickProvider == _providerTorbox
+        ? 'Torbox'
+        : 'Real Debrid';
     // ignore: unawaited_futures
     showDialog(
       context: context,
@@ -2188,159 +2121,171 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                    // Compact header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFE50914), Color(0xFFB71C1C)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFE50914).withOpacity(0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(Icons.tv_rounded, color: Colors.white, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Debrify TV', 
-                          style: TextStyle(
-                            color: Colors.white, 
-                            fontWeight: FontWeight.w800, 
-                            fontSize: 18
-                          )
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Provider: $providerLabel',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Smaller loading animation
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFE50914).withOpacity(0.4),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Center(
-                        child: SizedBox(
-                          width: 30,
-                          height: 30,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    // Compact message
-                    const Text(
-                      'Debrify TV is working its magic...',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Compact timing information
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.blue.withOpacity(0.2)),
-                      ),
-                      child: Column(
+                      // Compact header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.access_time_rounded, color: Colors.blue[300], size: 14),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Usually takes 20-30 seconds',
-                                style: TextStyle(
-                                  color: Colors.blue[200],
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFE50914), Color(0xFFB71C1C)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Rare keywords may take longer',
-                            style: TextStyle(
-                              color: Colors.blue[300],
-                              fontSize: 10,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFFE50914,
+                                  ).withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            textAlign: TextAlign.center,
+                            child: const Icon(
+                              Icons.tv_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Debrify TV',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Compact cancel button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _cancelActiveWatch(dialogContext: context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withOpacity(0.1),
-                          foregroundColor: Colors.white70,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
-                          ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Provider: $providerLabel',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Smaller loading animation
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFE50914).withOpacity(0.4),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 30,
+                            height: 30,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+
+                      // Compact message
+                      const Text(
+                        'Debrify TV is working its magic...',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Compact timing information
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.blue.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.access_time_rounded,
+                                  color: Colors.blue[300],
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Usually takes 20-30 seconds',
+                                  style: TextStyle(
+                                    color: Colors.blue[200],
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Rare keywords may take longer',
+                              style: TextStyle(
+                                color: Colors.blue[300],
+                                fontSize: 10,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Compact cancel button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            _cancelActiveWatch(dialogContext: context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.1),
+                            foregroundColor: Colors.white70,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   );
 
                   content = Padding(
@@ -2350,7 +2295,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
                   return SingleChildScrollView(
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
                       child: content,
                     ),
                   );
@@ -2360,9 +2307,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ),
         );
       },
-    ).whenComplete(() { _progressOpen = false; _progressSheetContext = null; });
+    ).whenComplete(() {
+      _progressOpen = false;
+      _progressSheetContext = null;
+    });
 
-    if (_provider == _providerTorbox) {
+    if (_quickProvider == _providerTorbox) {
       await _watchWithTorbox(keywords, _log);
       return;
     }
@@ -2374,7 +2324,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _originalMaxCap = await StorageService.getMaxTorrentsCsvResults();
     if (_originalMaxCap != initialMaxResults) {
       debugPrint(
-          'DebrifyTV: Temporarily setting Torrents CSV max from $_originalMaxCap to $initialMaxResults for Real Debrid search');
+        'DebrifyTV: Temporarily setting Torrents CSV max from $_originalMaxCap to $initialMaxResults for Real Debrid search',
+      );
     }
     try {
       await StorageService.setMaxTorrentsCsvResults(initialMaxResults);
@@ -2385,7 +2336,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (!mounted) return;
         _log('❌ Real Debrid API key not found - please add it in Settings');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please add your Real Debrid API key in Settings first!')),
+          const SnackBar(
+            content: Text(
+              'Please add your Real Debrid API key in Settings first!',
+            ),
+          ),
         );
         debugPrint('DebrifyTV: Missing Real Debrid API key.');
         return;
@@ -2407,7 +2362,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (_watchCancelled) {
           return null;
         }
-        debugPrint('DebrifyTV: requestMagicNext() called. queueSize=${_queue.length}');
+        debugPrint(
+          'DebrifyTV: requestMagicNext() called. queueSize=${_queue.length}',
+        );
         while (_queue.isNotEmpty && !_watchCancelled) {
           final item = _queue.removeAt(0);
           if (_watchCancelled) {
@@ -2417,21 +2374,30 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (item is Map && item['type'] == 'rd_restricted') {
             final String link = item['restrictedLink'] as String? ?? '';
             final String rdTid = item['torrentId'] as String? ?? '';
-            debugPrint('DebrifyTV: Trying RD link from queue: torrentId=$rdTid');
+            debugPrint(
+              'DebrifyTV: Trying RD link from queue: torrentId=$rdTid',
+            );
             if (link.isEmpty) continue;
             try {
               final started = DateTime.now();
-              final unrestrict = await DebridService.unrestrictLink(apiKeyEarly, link);
+              final unrestrict = await DebridService.unrestrictLink(
+                apiKeyEarly,
+                link,
+              );
               if (_watchCancelled) {
                 return null;
               }
               final elapsed = DateTime.now().difference(started).inSeconds;
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
-                debugPrint('DebrifyTV: Success (RD link). Unrestricted in ${elapsed}s');
+                debugPrint(
+                  'DebrifyTV: Success (RD link). Unrestricted in ${elapsed}s',
+                );
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
                 final display = (item['displayName'] as String?)?.trim();
-                final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
+                final chosenTitle = inferred.isNotEmpty
+                    ? inferred
+                    : (display ?? 'Debrify TV');
                 firstTitle = chosenTitle;
                 if (_watchCancelled) {
                   return null;
@@ -2446,20 +2412,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           // Case 2: Torrent entry
           if (item is Torrent) {
-            debugPrint('DebrifyTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
+            debugPrint(
+              'DebrifyTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}',
+            );
             final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
             try {
               final started = DateTime.now();
-              final result = await DebridService.addTorrentToDebridPreferVideos(apiKeyEarly, magnetLink);
+              final result = await DebridService.addTorrentToDebridPreferVideos(
+                apiKeyEarly,
+                magnetLink,
+              );
               if (_watchCancelled) {
                 return null;
               }
               final elapsed = DateTime.now().difference(started).inSeconds;
               final String torrentId = result['torrentId'] as String? ?? '';
-              final List<String> rdLinks = (result['links'] as List<dynamic>? ?? const [])
-                  .map((link) => link?.toString() ?? '')
-                  .where((link) => link.isNotEmpty)
-                  .toList();
+              final List<String> rdLinks =
+                  (result['links'] as List<dynamic>? ?? const [])
+                      .map((link) => link?.toString() ?? '')
+                      .where((link) => link.isNotEmpty)
+                      .toList();
               if (rdLinks.isEmpty) {
                 continue;
               }
@@ -2476,13 +2448,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               _seenRestrictedLinks.add(selectedLink);
               _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
 
-              final unrestrict = await DebridService.unrestrictLink(apiKeyEarly, selectedLink);
+              final unrestrict = await DebridService.unrestrictLink(
+                apiKeyEarly,
+                selectedLink,
+              );
               if (_watchCancelled) {
                 return null;
               }
               final videoUrl = unrestrict['download'] as String?;
               if (videoUrl != null && videoUrl.isNotEmpty) {
-                debugPrint('DebrifyTV: Success. Got unrestricted URL in ${elapsed}s');
+                debugPrint(
+                  'DebrifyTV: Success. Got unrestricted URL in ${elapsed}s',
+                );
                 final inferred = _inferTitleFromUrl(videoUrl).trim();
                 final chosenTitle = inferred.isNotEmpty
                     ? inferred
@@ -2499,7 +2476,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 return {'url': videoUrl, 'title': chosenTitle};
               }
             } catch (e) {
-              debugPrint('DebrifyTV: Debrid add failed for ${item.infohash}: $e');
+              debugPrint(
+                'DebrifyTV: Debrid add failed for ${item.infohash}: $e',
+              );
             }
           }
         }
@@ -2516,15 +2495,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         pendingKeywords = pendingKeywords.skip(batch.length).toList();
 
         final futures = batch.map((kw) {
-        debugPrint('DebrifyTV: Searching engines for "$kw"...');
+          debugPrint('DebrifyTV: Searching engines for "$kw"...');
           return TorrentService.searchAllEngines(
             kw,
             useTorrentsCsv: true,
             usePirateBay: true,
           );
-      }).toList();
+        }).toList();
 
-      await for (final result in Stream.fromFutures(futures)) {
+        await for (final result in Stream.fromFutures(futures)) {
           if (_watchCancelled) {
             break;
           }
@@ -2533,109 +2512,119 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           final engineCounts =
               (result['engineCounts'] as Map<String, int>?) ?? const {};
           debugPrint(
-              'DebrifyTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts');
-        
-        // Apply NSFW filter if enabled
-        List<Torrent> torrentsToProcess = torrents;
-        if (_avoidNsfw) {
-          final beforeCount = torrents.length;
-          torrentsToProcess = torrents.where((torrent) {
-            if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
-              debugPrint('DebrifyTV: Filtered NSFW torrent: ${torrent.name}');
-              return false;
+            'DebrifyTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts',
+          );
+
+          // Apply NSFW filter if enabled
+          List<Torrent> torrentsToProcess = torrents;
+          if (_quickAvoidNsfw) {
+            final beforeCount = torrents.length;
+            torrentsToProcess = torrents.where((torrent) {
+              if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+                debugPrint('DebrifyTV: Filtered NSFW torrent: ${torrent.name}');
+                return false;
+              }
+              return true;
+            }).toList();
+            if (beforeCount != torrentsToProcess.length) {
+              debugPrint(
+                'DebrifyTV: NSFW filter: $beforeCount → ${torrentsToProcess.length} torrents',
+              );
             }
-            return true;
-          }).toList();
-          if (beforeCount != torrentsToProcess.length) {
-            debugPrint('DebrifyTV: NSFW filter: $beforeCount → ${torrentsToProcess.length} torrents');
           }
-        }
-        
-        int added = 0;
-        for (final t in torrentsToProcess) {
-          if (!dedupByInfohash.containsKey(t.infohash)) {
-            dedupByInfohash[t.infohash] = t;
-            added++;
+
+          int added = 0;
+          for (final t in torrentsToProcess) {
+            if (!dedupByInfohash.containsKey(t.infohash)) {
+              dedupByInfohash[t.infohash] = t;
+              added++;
+            }
           }
-        }
-        if (added > 0) {
+          if (added > 0) {
             if (_watchCancelled) {
               break;
             }
-          final combined = dedupByInfohash.values.toList();
-          combined.shuffle(Random());
-          _queue
-            ..clear()
-            ..addAll(combined);
-          _lastQueueSize = _queue.length;
-          _lastSearchAt = DateTime.now();
-          // Silent approach - no progress logging needed
+            final combined = dedupByInfohash.values.toList();
+            combined.shuffle(Random());
+            _queue
+              ..clear()
+              ..addAll(combined);
+            _lastQueueSize = _queue.length;
+            _lastSearchAt = DateTime.now();
+            // Silent approach - no progress logging needed
             if (mounted && !_watchCancelled) {
-          setState(() {
-            _status = 'Preparing your content...';
-          });
+              setState(() {
+                _status = 'Preparing your content...';
+              });
             }
 
-          // Do not start prefetch until player launches
+            // Do not start prefetch until player launches
 
-          // Try to launch player as soon as a playable stream is available
+            // Try to launch player as soon as a playable stream is available
             if (!_launchedPlayer && !_watchCancelled) {
-            final first = await requestMagicNext();
+              final first = await requestMagicNext();
               if (_watchCancelled) {
                 break;
               }
-              if (first != null && mounted && !_launchedPlayer && !_watchCancelled) {
-              _launchedPlayer = true;
-              final firstUrl = first['url'] ?? '';
-                final firstTitleResolved = (first['title'] ?? firstTitle)
-                        .trim()
-                        .isNotEmpty
+              if (first != null &&
+                  mounted &&
+                  !_launchedPlayer &&
+                  !_watchCancelled) {
+                _launchedPlayer = true;
+                final firstUrl = first['url'] ?? '';
+                final firstTitleResolved =
+                    (first['title'] ?? firstTitle).trim().isNotEmpty
                     ? (first['title'] ?? firstTitle)
                     : firstTitle;
-                if (!_watchCancelled && _progressOpen && _progressSheetContext != null) {
-                Navigator.of(_progressSheetContext!).pop();
-              }
-                debugPrint(
-                    'DebrifyTV: Launching player early. Remaining queue=${_queue.length}');
-
-              // Start background prefetch only while player is active
-                if (!_watchCancelled) {
-                _activeApiKey = apiKeyEarly;
-                _startPrefetch();
-
-                // Try to launch on Android TV first (early launch path)
-                final launchedOnTv = await _launchRealDebridOnAndroidTv(
-                  firstStream: first,
-                  requestNext: requestMagicNext,
-                );
-                
-                if (launchedOnTv) {
-                  // Successfully launched on Android TV
-                  debugPrint('DebrifyTV: Early launch - Real-Debrid playback started on Android TV');
-                  // Prefetch will continue in background while TV player is active
-                  break; // Exit the search loop
+                if (!_watchCancelled &&
+                    _progressOpen &&
+                    _progressSheetContext != null) {
+                  Navigator.of(_progressSheetContext!).pop();
                 }
+                debugPrint(
+                  'DebrifyTV: Launching player early. Remaining queue=${_queue.length}',
+                );
 
-                // Fall back to Flutter video player
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => VideoPlayerScreen(
-                    videoUrl: firstUrl,
-                    title: firstTitleResolved,
-                    startFromRandom: _startRandom,
-                        randomStartMaxPercent: _randomStartPercent,
-                    hideSeekbar: _hideSeekbar,
-                    showWatermark: _showWatermark,
-                    showVideoTitle: _showVideoTitle,
-                    hideOptions: _hideOptions,
-                    hideBackButton: _hideBackButton,
-                    requestMagicNext: requestMagicNext,
-                  ),
-                ),
-              );
+                // Start background prefetch only while player is active
+                if (!_watchCancelled) {
+                  _activeApiKey = apiKeyEarly;
+                  _startPrefetch();
 
-              // Stop prefetch when player exits
-              await _stopPrefetch();
+                  // Try to launch on Android TV first (early launch path)
+                  final launchedOnTv = await _launchRealDebridOnAndroidTv(
+                    firstStream: first,
+                    requestNext: requestMagicNext,
+                  );
+
+                  if (launchedOnTv) {
+                    // Successfully launched on Android TV
+                    debugPrint(
+                      'DebrifyTV: Early launch - Real-Debrid playback started on Android TV',
+                    );
+                    // Prefetch will continue in background while TV player is active
+                    break; // Exit the search loop
+                  }
+
+                  // Fall back to Flutter video player
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VideoPlayerScreen(
+                        videoUrl: firstUrl,
+                        title: firstTitleResolved,
+                        startFromRandom: _quickStartRandom,
+                        randomStartMaxPercent: _quickRandomStartPercent,
+                        hideSeekbar: _quickHideSeekbar,
+                        showWatermark: _quickShowWatermark,
+                        showVideoTitle: _quickShowVideoTitle,
+                        hideOptions: _quickHideOptions,
+                        hideBackButton: _quickHideBackButton,
+                        requestMagicNext: requestMagicNext,
+                      ),
+                    ),
+                  );
+
+                  // Stop prefetch when player exits
+                  await _stopPrefetch();
                 }
               }
             }
@@ -2658,10 +2647,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       debugPrint('DebrifyTV: Search failed: $e');
     } finally {
-        final restoreTo = _originalMaxCap ?? 50;
-        await StorageService.setMaxTorrentsCsvResults(restoreTo);
+      final restoreTo = _originalMaxCap ?? 50;
+      await StorageService.setMaxTorrentsCsvResults(restoreTo);
       if (restoreTo != initialMaxResults) {
-        debugPrint('DebrifyTV: Restored Torrents CSV max to $restoreTo after Real Debrid search');
+        debugPrint(
+          'DebrifyTV: Restored Torrents CSV max to $restoreTo after Real Debrid search',
+        );
       }
       if (mounted) {
         setState(() {
@@ -2683,14 +2674,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       debugPrint('DebrifyTV: No results found after combining.');
       _log('❌ No results found - trying different search strategies');
-      
+
       // Close popup and show user-friendly message
       if (_progressOpen && _progressSheetContext != null) {
         Navigator.of(_progressSheetContext!).pop();
         _progressOpen = false;
         _progressSheetContext = null;
       }
-      
+
       if (mounted) {
         setState(() {
           _isBusy = false;
@@ -2698,7 +2689,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No results found. Try different keywords or check your internet connection.'),
+            content: Text(
+              'No results found. Try different keywords or check your internet connection.',
+            ),
             backgroundColor: Colors.red,
             duration: Duration(seconds: 4),
           ),
@@ -2730,7 +2723,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add your Real Debrid API key in Settings first!')),
+        const SnackBar(
+          content: Text(
+            'Please add your Real Debrid API key in Settings first!',
+          ),
+        ),
       );
       debugPrint('MagicTV: Missing Real Debrid API key.');
       return;
@@ -2739,7 +2736,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     String firstTitle = 'Debrify TV';
 
     Future<Map<String, String>?> requestMagicNext() async {
-      debugPrint('MagicTV: requestMagicNext() called. queueSize=${_queue.length}');
+      debugPrint(
+        'MagicTV: requestMagicNext() called. queueSize=${_queue.length}',
+      );
       while (_queue.isNotEmpty) {
         final item = _queue.removeAt(0);
         // Case 1: RD-restricted entry (append-only items)
@@ -2754,11 +2753,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             final elapsed = DateTime.now().difference(started).inSeconds;
             final videoUrl = unrestrict['download'] as String?;
             if (videoUrl != null && videoUrl.isNotEmpty) {
-              debugPrint('MagicTV: Success (RD link). Unrestricted in ${elapsed}s');
+              debugPrint(
+                'MagicTV: Success (RD link). Unrestricted in ${elapsed}s',
+              );
               // Prefer filename inferred from URL; fallback to any stored displayName
               final inferred = _inferTitleFromUrl(videoUrl).trim();
               final display = (item['displayName'] as String?)?.trim();
-              final chosenTitle = inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
+              final chosenTitle = inferred.isNotEmpty
+                  ? inferred
+                  : (display ?? 'Debrify TV');
               firstTitle = chosenTitle;
               return {'url': videoUrl, 'title': chosenTitle};
             }
@@ -2770,23 +2773,30 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         // Case 2: Torrent entry
         if (item is Torrent) {
-          debugPrint('MagicTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}');
+          debugPrint(
+            'MagicTV: Trying torrent: name="${item.name}", hash=${item.infohash}, size=${item.sizeBytes}, seeders=${item.seeders}',
+          );
           final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
           try {
             final started = DateTime.now();
-            final result = await DebridService.addTorrentToDebridPreferVideos(apiKey, magnetLink);
+            final result = await DebridService.addTorrentToDebridPreferVideos(
+              apiKey,
+              magnetLink,
+            );
             final elapsed = DateTime.now().difference(started).inSeconds;
             final videoUrl = result['downloadLink'] as String?;
             // Append other RD-restricted links from this torrent to the END of the queue
             final String torrentId = result['torrentId'] as String? ?? '';
-            final List<dynamic> rdLinks = (result['links'] as List<dynamic>? ?? const []);
+            final List<dynamic> rdLinks =
+                (result['links'] as List<dynamic>? ?? const []);
             if (rdLinks.isNotEmpty) {
               // We assume we used rdLinks[0] to play; enqueue remaining
               for (int i = 1; i < rdLinks.length; i++) {
                 final String link = rdLinks[i]?.toString() ?? '';
                 if (link.isEmpty) continue;
                 final String combined = '$torrentId|$link';
-                if (_seenRestrictedLinks.contains(link) || _seenLinkWithTorrentId.contains(combined)) {
+                if (_seenRestrictedLinks.contains(link) ||
+                    _seenLinkWithTorrentId.contains(combined)) {
                   continue;
                 }
                 _seenRestrictedLinks.add(link);
@@ -2799,14 +2809,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 });
               }
               if (rdLinks.length > 1) {
-                debugPrint('MagicTV: Enqueued ${rdLinks.length - 1} additional RD links to tail. New queueSize=${_queue.length}');
+                debugPrint(
+                  'MagicTV: Enqueued ${rdLinks.length - 1} additional RD links to tail. New queueSize=${_queue.length}',
+                );
               }
             }
             if (videoUrl != null && videoUrl.isNotEmpty) {
-              debugPrint('MagicTV: Success. Got unrestricted URL in ${elapsed}s');
+              debugPrint(
+                'MagicTV: Success. Got unrestricted URL in ${elapsed}s',
+              );
               // Prefer filename inferred from URL; fallback to torrent name
               final inferred = _inferTitleFromUrl(videoUrl).trim();
-              final chosenTitle = inferred.isNotEmpty ? inferred : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
+              final chosenTitle = inferred.isNotEmpty
+                  ? inferred
+                  : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
               firstTitle = chosenTitle;
               return {'url': videoUrl, 'title': chosenTitle};
             }
@@ -2834,7 +2850,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _progressOpen = false;
           _progressSheetContext = null;
         }
-        
+
         if (mounted) {
           setState(() {
             _isBusy = false;
@@ -2842,7 +2858,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('No playable streams found. Try different keywords or check your internet connection.'),
+              content: Text(
+                'No playable streams found. Try different keywords or check your internet connection.',
+              ),
               backgroundColor: Colors.red,
               duration: Duration(seconds: 4),
             ),
@@ -2852,45 +2870,47 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
       final firstUrl = first['url'] ?? '';
-      firstTitle = (first['title'] ?? firstTitle).trim().isNotEmpty ? (first['title'] ?? firstTitle) : firstTitle;
-      
+      firstTitle = (first['title'] ?? firstTitle).trim().isNotEmpty
+          ? (first['title'] ?? firstTitle)
+          : firstTitle;
+
       if (!mounted) return;
       debugPrint('MagicTV: Launching player. Remaining queue=${_queue.length}');
-      
+
       // Start background prefetch while player is active
       _activeApiKey = apiKey;
       _startPrefetch();
-      
+
       if (_progressOpen && _progressSheetContext != null) {
         Navigator.of(_progressSheetContext!).pop();
       }
-      
+
       // Try to launch on Android TV first
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
       );
-      
+
       if (launchedOnTv) {
         // Successfully launched on Android TV
         debugPrint('MagicTV: Real-Debrid playback started on Android TV');
         // Prefetch will continue in background while TV player is active
         return;
       }
-      
+
       // Fall back to Flutter video player
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
             title: firstTitle,
-            startFromRandom: _startRandom,
-            randomStartMaxPercent: _randomStartPercent,
-            hideSeekbar: _hideSeekbar,
-            showWatermark: _showWatermark,
-            showVideoTitle: _showVideoTitle,
-            hideOptions: _hideOptions,
-            hideBackButton: _hideBackButton,
+            startFromRandom: _quickStartRandom,
+            randomStartMaxPercent: _quickRandomStartPercent,
+            hideSeekbar: _quickHideSeekbar,
+            showWatermark: _quickShowWatermark,
+            showVideoTitle: _quickShowVideoTitle,
+            hideOptions: _quickHideOptions,
+            hideBackButton: _quickHideBackButton,
             requestMagicNext: requestMagicNext,
           ),
         ),
@@ -2963,10 +2983,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await for (final result in Stream.fromFutures(futures)) {
         final torrents =
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
-        
+
         // Apply NSFW filter if enabled
         List<Torrent> torrentsToProcess = torrents;
-        if (_avoidNsfw) {
+        if (_quickAvoidNsfw) {
           final beforeCount = torrents.length;
           torrentsToProcess = torrents.where((torrent) {
             if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -2976,10 +2996,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             return true;
           }).toList();
           if (beforeCount != torrentsToProcess.length) {
-            debugPrint('Torbox: NSFW filter: $beforeCount → ${torrentsToProcess.length} torrents');
+            debugPrint(
+              'Torbox: NSFW filter: $beforeCount → ${torrentsToProcess.length} torrents',
+            );
           }
         }
-        
+
         int added = 0;
         for (final torrent in torrentsToProcess) {
           final normalizedHash = _normalizeInfohash(torrent.infohash);
@@ -2998,7 +3020,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _lastQueueSize = _queue.length;
           _lastSearchAt = DateTime.now();
           if (mounted) {
-    setState(() {
+            setState(() {
               _status = 'Checking Torbox cache...';
             });
           }
@@ -3113,8 +3135,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             if (resolved != null) {
               if (mounted && !_watchCancelled) {
                 setState(() {
-                  _status =
-                      _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+                  _status = _queue.isEmpty
+                      ? ''
+                      : 'Queue has ${_queue.length} remaining';
                 });
               }
               if (_watchCancelled) {
@@ -3148,10 +3171,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               if (_watchCancelled) {
                 return null;
               }
-              return {
-                'url': result.streamUrl,
-                'title': result.title,
-              };
+              return {'url': result.streamUrl, 'title': result.title};
             }
           }
         }
@@ -3170,8 +3190,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (first == null) {
         _closeProgressDialog();
         if (mounted && !_watchCancelled) {
-        setState(() {
-            _status = 'No playable Torbox streams found. Try different keywords.';
+          setState(() {
+            _status =
+                'No playable Torbox streams found. Try different keywords.';
           });
           _showSnack(
             'No playable Torbox streams found. Try different keywords.',
@@ -3182,7 +3203,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       _closeProgressDialog();
-        if (!mounted) return;
+      if (!mounted) return;
 
       final launchedOnTv = await _launchTorboxOnAndroidTv(
         firstStream: first,
@@ -3216,7 +3237,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (mounted && !_watchCancelled) {
         setState(() {
-          _status = _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+          _status = _queue.isEmpty
+              ? ''
+              : 'Queue has ${_queue.length} remaining';
         });
       }
     } finally {
@@ -3230,12 +3253,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _watchWithCachedTorrents(List<Torrent> cachedTorrents) async {
+  Future<void> _watchWithCachedTorrents(
+    List<Torrent> cachedTorrents, {
+    required bool applyNsfwFilter,
+  }) async {
     if (cachedTorrents.isEmpty) {
-      _showSnack('Cached channel has no torrents yet. Please wait a moment.',
-          color: Colors.orange);
-        return;
-      }
+      _showSnack(
+        'Cached channel has no torrents yet. Please wait a moment.',
+        color: Colors.orange,
+      );
+      return;
+    }
 
     _launchedPlayer = false;
     await _stopPrefetch();
@@ -3247,8 +3275,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
-      _showSnack('Please add your Real Debrid API key in Settings first!',
-          color: Colors.orange);
+      _showSnack(
+        'Please add your Real Debrid API key in Settings first!',
+        color: Colors.orange,
+      );
       return;
     }
 
@@ -3256,17 +3286,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Apply NSFW filter to cached torrents if enabled
     List<Torrent> torrentsToUse = cachedTorrents;
-    if (_avoidNsfw) {
+    if (applyNsfwFilter) {
       final beforeCount = cachedTorrents.length;
       torrentsToUse = cachedTorrents.where((torrent) {
         if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
-          debugPrint('DebrifyTV: Filtered cached NSFW torrent: ${torrent.name}');
+          debugPrint(
+            'DebrifyTV: Filtered cached NSFW torrent: ${torrent.name}',
+          );
           return false;
         }
         return true;
       }).toList();
       if (beforeCount != torrentsToUse.length) {
-        debugPrint('DebrifyTV: NSFW filter on cached: $beforeCount → ${torrentsToUse.length} torrents');
+        debugPrint(
+          'DebrifyTV: NSFW filter on cached: $beforeCount → ${torrentsToUse.length} torrents',
+        );
       }
     }
 
@@ -3287,7 +3321,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     String firstTitle = 'Debrify TV';
 
     Future<Map<String, String>?> requestMagicNext() async {
-      debugPrint('DebrifyTV: Cached requestMagicNext() queueSize=${_queue.length}');
+      debugPrint(
+        'DebrifyTV: Cached requestMagicNext() queueSize=${_queue.length}',
+      );
       while (_queue.isNotEmpty) {
         final item = _queue.removeAt(0);
         if (item is Map && item['type'] == 'rd_restricted') {
@@ -3304,8 +3340,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               debugPrint('DebrifyTV: Cached success (RD link) in ${elapsed}s');
               final inferred = _inferTitleFromUrl(videoUrl).trim();
               final display = (item['displayName'] as String?)?.trim();
-              final chosenTitle =
-                  inferred.isNotEmpty ? inferred : (display ?? 'Debrify TV');
+              final chosenTitle = inferred.isNotEmpty
+                  ? inferred
+                  : (display ?? 'Debrify TV');
               firstTitle = chosenTitle;
               return {'url': videoUrl, 'title': chosenTitle};
             }
@@ -3317,7 +3354,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         if (item is Torrent) {
           debugPrint(
-              'DebrifyTV: Cached trying torrent name="${item.name}" hash=${item.infohash}');
+            'DebrifyTV: Cached trying torrent name="${item.name}" hash=${item.infohash}',
+          );
           final magnetLink = 'magnet:?xt=urn:btih:${item.infohash}';
           try {
             final started = DateTime.now();
@@ -3348,11 +3386,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             _seenRestrictedLinks.add(selectedLink);
             _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
 
-            final unrestrict =
-                await DebridService.unrestrictLink(apiKey, selectedLink);
+            final unrestrict = await DebridService.unrestrictLink(
+              apiKey,
+              selectedLink,
+            );
             final videoUrl = unrestrict['download'] as String?;
             if (videoUrl != null && videoUrl.isNotEmpty) {
-              debugPrint('DebrifyTV: Cached success: unrestricted in ${elapsed}s');
+              debugPrint(
+                'DebrifyTV: Cached success: unrestricted in ${elapsed}s',
+              );
               final inferred = _inferTitleFromUrl(videoUrl).trim();
               final chosenTitle = inferred.isNotEmpty
                   ? inferred
@@ -3383,7 +3425,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final first = await requestMagicNext();
       if (first == null) {
         _closeProgressDialog();
-      if (!mounted) return;
+        if (!mounted) return;
         setState(() {
           _isBusy = false;
           _status =
@@ -3405,20 +3447,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _activeApiKey = apiKey;
       _startPrefetch();
       _closeProgressDialog();
-      
+
       // Try to launch on Android TV first (for cached flow)
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
       );
-      
+
       if (launchedOnTv) {
         // Successfully launched on Android TV
-        debugPrint('DebrifyTV: Cached flow - Real-Debrid playback started on Android TV');
+        debugPrint(
+          'DebrifyTV: Cached flow - Real-Debrid playback started on Android TV',
+        );
         // Prefetch will continue in background while TV player is active
         return;
       }
-      
+
       // Fall back to Flutter video player
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -3471,16 +3515,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         title: title.isEmpty ? 'Debrify TV' : title,
         magnets: magnets,
         requestNext: requestNext,
-        requestChannelSwitch:
-            _channels.length > 1 ? _requestNextChannel : null,
+        requestChannelSwitch: _channels.length > 1 ? _requestNextChannel : null,
         onFinished: () async {
           AndroidTvPlayerBridge.clearTorboxProvider();
           if (!mounted) {
             return;
           }
           setState(() {
-            _status =
-                _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+            _status = _queue.isEmpty
+                ? ''
+                : 'Queue has ${_queue.length} remaining';
           });
         },
         startFromRandom: _startRandom,
@@ -3518,25 +3562,35 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     int currentIndex = -1;
     if (_currentWatchingChannelId != null) {
-      currentIndex = _channels.indexWhere((c) => c.id == _currentWatchingChannelId);
+      currentIndex = _channels.indexWhere(
+        (c) => c.id == _currentWatchingChannelId,
+      );
     }
 
     final int nextIndex = (currentIndex + 1) % _channels.length;
     final _DebrifyTvChannel targetChannel = _channels[nextIndex];
 
-    debugPrint('DebrifyTV: Switching from channel ${currentIndex + 1} to ${nextIndex + 1} (${targetChannel.name})');
+    debugPrint(
+      'DebrifyTV: Switching from channel ${currentIndex + 1} to ${nextIndex + 1} (${targetChannel.name})',
+    );
 
     final cacheEntry = _channelCache[targetChannel.id];
     if (cacheEntry == null) {
-      debugPrint('DebrifyTV: Next channel "${targetChannel.name}" has no cache entry');
+      debugPrint(
+        'DebrifyTV: Next channel "${targetChannel.name}" has no cache entry',
+      );
       return null;
     }
     if (!cacheEntry.isReady) {
-      debugPrint('DebrifyTV: Next channel "${targetChannel.name}" cache not ready. Error: ${cacheEntry.errorMessage}');
+      debugPrint(
+        'DebrifyTV: Next channel "${targetChannel.name}" cache not ready. Error: ${cacheEntry.errorMessage}',
+      );
       return null;
     }
     if (cacheEntry.torrents.isEmpty) {
-      debugPrint('DebrifyTV: Next channel "${targetChannel.name}" has no torrents');
+      debugPrint(
+        'DebrifyTV: Next channel "${targetChannel.name}" has no torrents',
+      );
       return null;
     }
 
@@ -3561,8 +3615,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return null;
     }
 
-    final List<Torrent> allTorrents =
-        playbackSelection.map((cached) => cached.toTorrent()).toList();
+    final List<Torrent> allTorrents = playbackSelection
+        .map((cached) => cached.toTorrent())
+        .toList();
     if (allTorrents.isEmpty) {
       debugPrint('DebrifyTV: No playable torrents resolved for next channel');
       if (_provider == _providerRealDebrid) {
@@ -3597,18 +3652,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         );
 
         filteredTorrents = filteredTorrents
-            .where((torrent) =>
-                cachedHashes.contains(
-                    _normalizeInfohash(torrent.infohash)))
+            .where(
+              (torrent) =>
+                  cachedHashes.contains(_normalizeInfohash(torrent.infohash)),
+            )
             .toList();
       } catch (e) {
         debugPrint(
-            'DebrifyTV: Torbox cache check failed during channel switch: $e');
+          'DebrifyTV: Torbox cache check failed during channel switch: $e',
+        );
         return null;
       }
 
       if (filteredTorrents.isEmpty) {
-        debugPrint('DebrifyTV: Torbox channel has no cached torrents available');
+        debugPrint(
+          'DebrifyTV: Torbox channel has no cached torrents available',
+        );
         return null;
       }
     }
@@ -3643,7 +3702,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
 
         final firstLink = rdLinks.first;
-        final unrestrict = await DebridService.unrestrictLink(apiKey, firstLink);
+        final unrestrict = await DebridService.unrestrictLink(
+          apiKey,
+          firstLink,
+        );
         final String? videoUrl = unrestrict['download'] as String?;
 
         if (videoUrl == null || videoUrl.isEmpty) {
@@ -3662,24 +3724,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         if (mounted) {
           setState(() {
-            _startRandom = targetChannel.startRandom;
-            _randomStartPercent = targetChannel.randomStartPercent;
-            _hideSeekbar = targetChannel.hideOptions;
-            _showWatermark = targetChannel.showWatermark;
-            _showVideoTitle = targetChannel.showVideoTitle;
-            _hideOptions = targetChannel.hideOptions;
-            _hideBackButton = targetChannel.hideBackButton;
             _currentWatchingChannelId = targetChannel.id;
-            _keywordsController.text = targetChannel.keywords.join(', ');
             _queue
               ..clear()
               ..addAll(remainder);
           });
+          _keywordsController.text = targetChannel.keywords.join(', ');
         }
 
         _startPrefetch();
         debugPrint('DebrifyTV: Started Real-Debrid prefetcher for new channel');
-        debugPrint('DebrifyTV: Successfully got first stream from next channel: $title');
+        debugPrint(
+          'DebrifyTV: Successfully got first stream from next channel: $title',
+        );
 
         return {
           'channelName': targetChannel.name,
@@ -3709,15 +3766,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         if (mounted) {
           setState(() {
-            _startRandom = targetChannel.startRandom;
-            _randomStartPercent = targetChannel.randomStartPercent;
-            _hideSeekbar = targetChannel.hideOptions;
-            _showWatermark = targetChannel.showWatermark;
-            _showVideoTitle = targetChannel.showVideoTitle;
-            _hideOptions = targetChannel.hideOptions;
-            _hideBackButton = targetChannel.hideBackButton;
             _currentWatchingChannelId = targetChannel.id;
-            _keywordsController.text = targetChannel.keywords.join(', ');
             _queue
               ..clear()
               ..addAll(remainder);
@@ -3725,9 +3774,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               _queue.add(firstTorrent);
             }
           });
+          _keywordsController.text = targetChannel.keywords.join(', ');
         }
 
-        debugPrint('DebrifyTV: Torbox channel switch ready with stream ${prepared.title}');
+        debugPrint(
+          'DebrifyTV: Torbox channel switch ready with stream ${prepared.title}',
+        );
         return {
           'channelName': targetChannel.name,
           'channelNumber': nextIndex + 1,
@@ -3736,7 +3788,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         };
       }
 
-      debugPrint('DebrifyTV: Unsupported provider for channel switching: $_provider');
+      debugPrint(
+        'DebrifyTV: Unsupported provider for channel switching: $_provider',
+      );
       return null;
     } catch (e) {
       debugPrint('DebrifyTV: Error getting first stream from next channel: $e');
@@ -3745,7 +3799,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     debugPrint('DebrifyTV: Channel switch failed');
     if (_provider == _providerRealDebrid) {
       _startPrefetch();
-      debugPrint('DebrifyTV: Restarted Real-Debrid prefetcher for current channel');
+      debugPrint(
+        'DebrifyTV: Restarted Real-Debrid prefetcher for current channel',
+      );
     }
     return null;
   }
@@ -3756,46 +3812,54 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }) async {
     debugPrint('DebrifyTV: _launchRealDebridOnAndroidTv() called');
     debugPrint('DebrifyTV: _isAndroidTv=$_isAndroidTv');
-    
+
     if (!_isAndroidTv) {
       debugPrint('DebrifyTV: Not Android TV, skipping native launch');
       return false;
     }
-    
+
     final initialUrl = firstStream['url'] ?? '';
-    debugPrint('DebrifyTV: initialUrl=${initialUrl.substring(0, initialUrl.length > 50 ? 50 : initialUrl.length)}...');
-    
+    debugPrint(
+      'DebrifyTV: initialUrl=${initialUrl.substring(0, initialUrl.length > 50 ? 50 : initialUrl.length)}...',
+    );
+
     if (initialUrl.isEmpty) {
       debugPrint('DebrifyTV: Initial URL is empty, cannot launch');
       return false;
     }
-    
+
     final title = (firstStream['title'] ?? '').trim();
     debugPrint('DebrifyTV: title="$title"');
-    debugPrint('DebrifyTV: Calling AndroidTvPlayerBridge.launchRealDebridPlayback()...');
+    debugPrint(
+      'DebrifyTV: Calling AndroidTvPlayerBridge.launchRealDebridPlayback()...',
+    );
 
     try {
       final launched = await AndroidTvPlayerBridge.launchRealDebridPlayback(
         initialUrl: initialUrl,
         title: title.isEmpty ? 'Debrify TV' : title,
         requestNext: requestNext,
-        requestChannelSwitch: _currentWatchingChannelId != null && 
-                               _channels.length > 1 &&
-                               _provider == _providerRealDebrid // Only Real-Debrid channels support switching for now
+        requestChannelSwitch:
+            _currentWatchingChannelId != null &&
+                _channels.length > 1 &&
+                _provider ==
+                    _providerRealDebrid // Only Real-Debrid channels support switching for now
             ? _requestNextChannel
             : null, // Only enable channel switching if watching a RD channel and multiple channels exist
         onFinished: () async {
           debugPrint('DebrifyTV: Android TV playback finished callback');
-          
+
           // Stop prefetcher when exiting player
           await _stopPrefetch();
           debugPrint('DebrifyTV: Stopped prefetcher on player exit');
-          
+
           AndroidTvPlayerBridge.clearStreamProvider();
           _currentWatchingChannelId = null; // Clear channel tracking
           if (!mounted) return;
           setState(() {
-            _status = _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+            _status = _queue.isEmpty
+                ? ''
+                : 'Queue has ${_queue.length} remaining';
           });
         },
         startFromRandom: _startRandom,
@@ -3806,25 +3870,31 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         showWatermark: _showWatermark,
         hideBackButton: _hideBackButton,
       );
-      
-      debugPrint('DebrifyTV: AndroidTvPlayerBridge.launchRealDebridPlayback() returned: $launched');
-      
+
+      debugPrint(
+        'DebrifyTV: AndroidTvPlayerBridge.launchRealDebridPlayback() returned: $launched',
+      );
+
       if (launched) {
         if (mounted) {
           setState(() {
             _status = 'Playing via Android TV';
           });
         }
-        debugPrint('DebrifyTV: ✅ Successfully launched Real-Debrid on Android TV');
+        debugPrint(
+          'DebrifyTV: ✅ Successfully launched Real-Debrid on Android TV',
+        );
         return true;
       } else {
-        debugPrint('DebrifyTV: ❌ AndroidTvPlayerBridge returned false - launch failed');
+        debugPrint(
+          'DebrifyTV: ❌ AndroidTvPlayerBridge returned false - launch failed',
+        );
       }
     } catch (e, stackTrace) {
       debugPrint('DebrifyTV: ❌ Exception during Android TV launch: $e');
       debugPrint('DebrifyTV: Stack trace: $stackTrace');
     }
-    
+
     AndroidTvPlayerBridge.clearStreamProvider();
     debugPrint('DebrifyTV: Falling back to Flutter player');
     return false;
@@ -3834,8 +3904,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     List<Torrent> cachedTorrents,
   ) async {
     if (cachedTorrents.isEmpty) {
-      _showSnack('Cached channel has no torrents yet. Please wait a moment.',
-          color: Colors.orange);
+      _showSnack(
+        'Cached channel has no torrents yet. Please wait a moment.',
+        color: Colors.orange,
+      );
       return;
     }
 
@@ -3846,15 +3918,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final integrationEnabled =
         await StorageService.getTorboxIntegrationEnabled();
     if (!integrationEnabled) {
-      _showSnack('Enable Torbox in Settings to use this provider.',
-          color: Colors.orange);
+      _showSnack(
+        'Enable Torbox in Settings to use this provider.',
+        color: Colors.orange,
+      );
       return;
     }
 
     final apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
-      _showSnack('Please add your Torbox API key in Settings first!',
-          color: Colors.orange);
+      _showSnack(
+        'Please add your Torbox API key in Settings first!',
+        color: Colors.orange,
+      );
       return;
     }
 
@@ -3864,8 +3940,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .toSet();
 
     if (uniqueHashes.isEmpty) {
-      _showSnack('Cached torrents look invalid. Try refreshing the channel.',
-          color: Colors.orange);
+      _showSnack(
+        'Cached torrents look invalid. Try refreshing the channel.',
+        color: Colors.orange,
+      );
       return;
     }
 
@@ -3947,10 +4025,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (prepared.hasMore) {
           _queue.add(next);
         }
-        return {
-          'url': prepared.streamUrl,
-          'title': prepared.title,
-        };
+        return {'url': prepared.streamUrl, 'title': prepared.title};
       }
       return null;
     }
@@ -4014,10 +4089,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  void _showChannelCreationDialog(
-    String channelName, {
-    int? countdownSeconds,
-  }) {
+  void _showChannelCreationDialog(String channelName, {int? countdownSeconds}) {
     if (_progressOpen || !mounted) {
       return;
     }
@@ -4042,13 +4114,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           );
         },
         transitionBuilder: (ctx, animation, secondary, child) {
-          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutBack,
+          );
           return FadeTransition(
             opacity: animation,
-            child: ScaleTransition(
-              scale: curved,
-              child: child,
-            ),
+            child: ScaleTransition(scale: curved, child: child),
           );
         },
       );
@@ -4078,13 +4150,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           );
         },
         transitionBuilder: (ctx, animation, secondary, child) {
-          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutBack,
+          );
           return FadeTransition(
             opacity: animation,
-            child: ScaleTransition(
-              scale: curved,
-              child: child,
-            ),
+            child: ScaleTransition(scale: curved, child: child),
           );
         },
       );
@@ -4097,7 +4169,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add your Real Debrid API key in Settings first!')),
+        const SnackBar(
+          content: Text(
+            'Please add your Real Debrid API key in Settings first!',
+          ),
+        ),
       );
       return;
     }
@@ -4112,7 +4188,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         final next = _queue.removeAt(0);
         final magnetLink = 'magnet:?xt=urn:btih:${next.infohash}';
         try {
-          final result = await DebridService.addTorrentToDebridPreferVideos(apiKey, magnetLink);
+          final result = await DebridService.addTorrentToDebridPreferVideos(
+            apiKey,
+            magnetLink,
+          );
           final videoUrl = result['downloadLink'] as String?;
           if (videoUrl != null && videoUrl.isNotEmpty) {
             if (!mounted) return;
@@ -4124,13 +4203,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 builder: (_) => VideoPlayerScreen(
                   videoUrl: videoUrl,
                   title: next.name,
-                  startFromRandom: _startRandom,
-                  randomStartMaxPercent: _randomStartPercent,
-                  hideSeekbar: _hideSeekbar,
-                  showWatermark: _showWatermark,
-                  showVideoTitle: _showVideoTitle,
-                  hideOptions: _hideOptions,
-                  hideBackButton: _hideBackButton,
+                  startFromRandom: _quickStartRandom,
+                  randomStartMaxPercent: _quickRandomStartPercent,
+                  hideSeekbar: _quickHideSeekbar,
+                  showWatermark: _quickShowWatermark,
+                  showVideoTitle: _quickShowVideoTitle,
+                  hideOptions: _quickHideOptions,
+                  hideBackButton: _quickHideBackButton,
                 ),
               ),
             );
@@ -4149,7 +4228,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _progressOpen = false;
           _progressSheetContext = null;
         }
-        
+
         if (mounted) {
           setState(() {
             _isBusy = false;
@@ -4157,7 +4236,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('All torrents failed to process. Try different keywords or check your internet connection.'),
+              content: Text(
+                'All torrents failed to process. Try different keywords or check your internet connection.',
+              ),
               backgroundColor: Colors.red,
               duration: Duration(seconds: 4),
             ),
@@ -4178,359 +4259,291 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DefaultTabController(
-      length: 2,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: bottomInset),
-      child: Column(
+    return _buildChannelsTab(bottomInset);
+  }
+
+  Widget _buildSettingsCard({
+    required _SettingsScope scope,
+    required bool includeNsfwToggle,
+    required String title,
+    StateSetter? dialogSetState,
+  }) {
+    final bool isQuickScope = scope == _SettingsScope.quickPlay;
+
+    final bool startRandom = isQuickScope ? _quickStartRandom : _startRandom;
+    void setStartRandom(bool value) {
+      setState(() {
+        if (isQuickScope) {
+          _quickStartRandom = value;
+        } else {
+          _startRandom = value;
+        }
+      });
+      dialogSetState?.call(() {});
+      if (!isQuickScope) {
+        unawaited(StorageService.saveDebrifyTvStartRandom(value));
+      }
+    }
+
+    final int randomStartPercent = isQuickScope
+        ? _quickRandomStartPercent
+        : _randomStartPercent;
+    void setRandomStartPercent(int value) {
+      setState(() {
+        if (isQuickScope) {
+          _quickRandomStartPercent = value;
+        } else {
+          _randomStartPercent = value;
+        }
+      });
+      dialogSetState?.call(() {});
+      if (!isQuickScope) {
+        unawaited(StorageService.saveDebrifyTvRandomStartPercent(value));
+      }
+    }
+
+    final bool showWatermark = isQuickScope
+        ? _quickShowWatermark
+        : _showWatermark;
+    void setShowWatermark(bool value) {
+      setState(() {
+        if (isQuickScope) {
+          _quickShowWatermark = value;
+        } else {
+          _showWatermark = value;
+        }
+      });
+      dialogSetState?.call(() {});
+      if (!isQuickScope) {
+        unawaited(StorageService.saveDebrifyTvShowWatermark(value));
+      }
+    }
+
+    final bool showVideoTitle = isQuickScope
+        ? _quickShowVideoTitle
+        : _showVideoTitle;
+    void setShowVideoTitle(bool value) {
+      setState(() {
+        if (isQuickScope) {
+          _quickShowVideoTitle = value;
+        } else {
+          _showVideoTitle = value;
+        }
+      });
+      dialogSetState?.call(() {});
+      if (!isQuickScope) {
+        unawaited(StorageService.saveDebrifyTvShowVideoTitle(value));
+      }
+    }
+
+    final bool hideOptions = isQuickScope ? _quickHideOptions : _hideOptions;
+    void setHideOptions(bool value) {
+      setState(() {
+        if (isQuickScope) {
+          _quickHideOptions = value;
+          _quickHideSeekbar = value;
+        } else {
+          _hideOptions = value;
+          _hideSeekbar = value;
+        }
+      });
+      dialogSetState?.call(() {});
+      if (!isQuickScope) {
+        unawaited(StorageService.saveDebrifyTvHideOptions(value));
+        unawaited(StorageService.saveDebrifyTvHideSeekbar(value));
+      }
+    }
+
+    final bool hideBackButton = isQuickScope
+        ? _quickHideBackButton
+        : _hideBackButton;
+    void setHideBackButton(bool value) {
+      setState(() {
+        if (isQuickScope) {
+          _quickHideBackButton = value;
+        } else {
+          _hideBackButton = value;
+        }
+      });
+      dialogSetState?.call(() {});
+      if (!isQuickScope) {
+        unawaited(StorageService.saveDebrifyTvHideBackButton(value));
+      }
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 900),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F0F0F).withOpacity(0.8),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12, width: 1),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-            const SizedBox(height: 24),
-          const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.04),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white12, width: 1),
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.settings_rounded,
+                  color: Colors.white70,
+                  size: 18,
                 ),
-                child: TabBar(
-                  indicator: BoxDecoration(
-                    color: const Color(0xFFE50914).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700,
                   ),
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicatorPadding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
-                  ),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white70,
-                  tabs: const [
-                    Tab(text: 'Quick Play'),
-                    Tab(text: 'Channels'),
-                  ],
                 ),
-              ),
+              ],
             ),
+            const SizedBox(height: 10),
+            Text(
+              'Content provider',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            _providerChoiceChips(scope, dialogSetState: dialogSetState),
             const SizedBox(height: 16),
-            Expanded(
-              child: TabBarView(
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  _buildQuickPlayTab(bottomInset),
-                  _buildChannelsTab(bottomInset),
-                ],
+            _SwitchRow(
+              title: 'Start from random timestamp',
+              subtitle: 'Each Debrify TV video starts at a random point',
+              value: startRandom,
+              onChanged: (v) => setStartRandom(v),
+            ),
+            if (startRandom) ...[
+              const SizedBox(height: 8),
+              _RandomStartSlider(
+                value: randomStartPercent,
+                isAndroidTv: _isAndroidTv,
+                onChanged: (next) => setRandomStartPercent(next),
+                onChangeEnd: isQuickScope
+                    ? null
+                    : (next) =>
+                          StorageService.saveDebrifyTvRandomStartPercent(next),
+              ),
+            ],
+            const SizedBox(height: 8),
+            _SwitchRow(
+              title: 'Show DebrifyTV watermark',
+              subtitle: 'Display a subtle DebrifyTV tag on the video',
+              value: showWatermark,
+              onChanged: (v) => setShowWatermark(v),
+            ),
+            const SizedBox(height: 8),
+            _SwitchRow(
+              title: 'Show video title',
+              subtitle: 'Display video title and subtitle in player controls',
+              value: showVideoTitle,
+              onChanged: (v) => setShowVideoTitle(v),
+            ),
+            const SizedBox(height: 8),
+            _SwitchRow(
+              title: 'Hide all options',
+              subtitle:
+                  'Hide all bottom controls (next, audio, etc.) - back button stays',
+              value: hideOptions,
+              onChanged: (v) => setHideOptions(v),
+            ),
+            const SizedBox(height: 8),
+            _SwitchRow(
+              title: 'Hide back button',
+              subtitle:
+                  'Hide back button - use device back gesture or escape key',
+              value: hideBackButton,
+              onChanged: (v) => setHideBackButton(v),
+            ),
+            if (includeNsfwToggle && isQuickScope) ...[
+              const SizedBox(height: 8),
+              _SwitchRow(
+                title: 'Avoid NSFW content',
+                subtitle:
+                    'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
+                value: _quickAvoidNsfw,
+                onChanged: (v) {
+                  setState(() {
+                    _quickAvoidNsfw = v;
+                  });
+                  dialogSetState?.call(() {});
+                },
+              ),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final defaultProvider = _determineDefaultProvider(
+                    null,
+                    _rdAvailable,
+                    _torboxAvailable,
+                  );
+
+                  setState(() {
+                    if (isQuickScope) {
+                      _quickStartRandom = true;
+                      _quickRandomStartPercent = _randomStartPercentDefault;
+                      _quickHideSeekbar = true;
+                      _quickShowWatermark = true;
+                      _quickShowVideoTitle = false;
+                      _quickHideOptions = true;
+                      _quickHideBackButton = true;
+                      _quickAvoidNsfw = true;
+                      _quickProvider = defaultProvider;
+                    } else {
+                      _startRandom = true;
+                      _randomStartPercent = _randomStartPercentDefault;
+                      _hideSeekbar = true;
+                      _showWatermark = true;
+                      _showVideoTitle = false;
+                      _hideOptions = true;
+                      _hideBackButton = true;
+                      _provider = defaultProvider;
+                    }
+                  });
+                  dialogSetState?.call(() {});
+
+                  if (!isQuickScope) {
+                    await StorageService.saveDebrifyTvStartRandom(true);
+                    await StorageService.saveDebrifyTvHideSeekbar(true);
+                    await StorageService.saveDebrifyTvShowWatermark(true);
+                    await StorageService.saveDebrifyTvShowVideoTitle(false);
+                    await StorageService.saveDebrifyTvHideOptions(true);
+                    await StorageService.saveDebrifyTvHideBackButton(true);
+                    await StorageService.saveDebrifyTvProvider(defaultProvider);
+                  }
+
+                  if (!mounted) {
+                    return;
+                  }
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Reset to defaults successful'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.restore_rounded, size: 18),
+                label: const Text('Reset to Defaults'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white.withOpacity(0.1),
+                  foregroundColor: Colors.white70,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildQuickPlayTab(double bottomInset) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0x221E3A8A), Color(0x2214B8A6)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white12, width: 1),
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _keywordsController,
-                    focusNode: _keywordsFocusNode,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => _watch(),
-                    decoration: InputDecoration(
-                      hintText: 'Comma separated keywords',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.clear_rounded),
-                        onPressed: _isBusy
-                            ? null
-                            : () {
-                          _keywordsController.clear();
-                        },
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 44,
-                    child: ElevatedButton.icon(
-                      focusNode: _watchButtonFocusNode,
-                      onPressed: _isBusy ? null : _watch,
-                      icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
-                      label: const Text(
-                        'Watch',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE50914),
-                        disabledBackgroundColor: const Color(0x66E50914),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.lightbulb_outline_rounded,
-                                color: Colors.amber[300], size: 16),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Quick Tips',
-                              style: TextStyle(
-                                color: Colors.amber[200],
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Next Video: Android double tap far right, Mac/Windows press \'N\'',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Quit: Mac/Windows press ESC, Android use back button',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F0F0F).withOpacity(0.8),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white12, width: 1),
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(Icons.settings_rounded, color: Colors.white70, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        'Advanced options',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Content provider',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  _providerChoiceChips(),
-                  const SizedBox(height: 16),
-                  _SwitchRow(
-                    title: 'Start from random timestamp',
-                    subtitle: 'Each Debrify TV video starts at a random point',
-                    value: _startRandom,
-                    onChanged: (v) async {
-                      setState(() => _startRandom = v);
-                      await StorageService.saveDebrifyTvStartRandom(v);
-                    },
-                  ),
-                  if (_startRandom) ...[
-                  const SizedBox(height: 8),
-                    _RandomStartSlider(
-                      value: _randomStartPercent,
-                      isAndroidTv: _isAndroidTv,
-                      onChanged: (next) {
-                        setState(() => _randomStartPercent = next);
-                      },
-                      onChangeEnd: (next) {
-                        StorageService.saveDebrifyTvRandomStartPercent(next);
-                      },
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  _SwitchRow(
-                    title: 'Show DebrifyTV watermark',
-                    subtitle: 'Display a subtle DebrifyTV tag on the video',
-                    value: _showWatermark,
-                    onChanged: (v) async {
-                      setState(() => _showWatermark = v);
-                      await StorageService.saveDebrifyTvShowWatermark(v);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _SwitchRow(
-                    title: 'Show video title',
-                    subtitle: 'Display video title and subtitle in player controls',
-                    value: _showVideoTitle,
-                    onChanged: (v) async {
-                      setState(() => _showVideoTitle = v);
-                      await StorageService.saveDebrifyTvShowVideoTitle(v);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _SwitchRow(
-                    title: 'Hide all options',
-                    subtitle: 'Hide all bottom controls (next, audio, etc.) - back button stays',
-                    value: _hideOptions,
-                    onChanged: (v) async {
-                      setState(() {
-                        _hideOptions = v;
-                        _hideSeekbar = v;
-                      });
-                      await StorageService.saveDebrifyTvHideOptions(v);
-                      await StorageService.saveDebrifyTvHideSeekbar(v);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _SwitchRow(
-                    title: 'Hide back button',
-                    subtitle: 'Hide back button - use device back gesture or escape key',
-                    value: _hideBackButton,
-                    onChanged: (v) async {
-                      setState(() => _hideBackButton = v);
-                      await StorageService.saveDebrifyTvHideBackButton(v);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _SwitchRow(
-                    title: 'Avoid NSFW content',
-                    subtitle: 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
-                    value: _avoidNsfw,
-                    onChanged: (v) async {
-                      setState(() => _avoidNsfw = v);
-                      await StorageService.saveDebrifyTvAvoidNsfw(v);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        final defaultProvider = _determineDefaultProvider(
-                          null,
-                          _rdAvailable,
-                          _torboxAvailable,
-                        );
-                        setState(() {
-                          _startRandom = true;
-                          _hideSeekbar = true;
-                          _showWatermark = true;
-                          _showVideoTitle = false;
-                          _hideOptions = true;
-                          _hideBackButton = true;
-                          _provider = defaultProvider;
-                        });
-                        
-                        await StorageService.saveDebrifyTvStartRandom(true);
-                        await StorageService.saveDebrifyTvHideSeekbar(true);
-                        await StorageService.saveDebrifyTvShowWatermark(true);
-                        await StorageService.saveDebrifyTvShowVideoTitle(false);
-                        await StorageService.saveDebrifyTvHideOptions(true);
-                        await StorageService.saveDebrifyTvHideBackButton(true);
-                        await StorageService.saveDebrifyTvProvider(
-                          defaultProvider,
-                        );
-
-                        if (!mounted) {
-                          return;
-                        }
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Reset to defaults successful'),
-                            backgroundColor: Colors.green,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.restore_rounded, size: 18),
-                      label: const Text('Reset to Defaults'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.1),
-                        foregroundColor: Colors.white70,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (_status.isNotEmpty)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _status,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
-                ),
-              ),
-            ),
-          const SizedBox(height: 16),
-        ],
       ),
     );
   }
@@ -4540,24 +4553,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final filteredChannels = searchTerm.isEmpty
         ? _channels
         : _channels
-            .where(
-              (channel) => channel.name.toLowerCase().contains(searchTerm),
-            )
-            .toList();
+              .where(
+                (channel) => channel.name.toLowerCase().contains(searchTerm),
+              )
+              .toList();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SizedBox(height: 24),
           Row(
             children: [
-              const Text(
-                'Saved Channels',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
+              FilledButton.icon(
+                onPressed: _isBusy ? null : _showQuickPlayDialog,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Quick Play'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFE50914),
+                  foregroundColor: Colors.white,
                 ),
               ),
               const Spacer(),
@@ -4576,13 +4591,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Add Channel'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE50914),
+                  backgroundColor: Colors.white.withOpacity(0.08),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Global settings',
+                onPressed: _showGlobalSettingsDialog,
+                icon: const Icon(Icons.settings_rounded),
+                color: Colors.white70,
               ),
             ],
           ),
@@ -4598,8 +4623,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             decoration: InputDecoration(
               hintText: 'Search channels...',
               hintStyle: const TextStyle(color: Colors.white54),
-              prefixIcon:
-                  const Icon(Icons.search_rounded, color: Colors.white60),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: Colors.white60,
+              ),
               filled: true,
               fillColor: Colors.white.withOpacity(0.08),
               border: OutlineInputBorder(
@@ -4609,22 +4636,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
             style: const TextStyle(color: Colors.white),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Content provider',
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          _providerChoiceChips(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           Expanded(
             child: filteredChannels.isEmpty
                 ? (_channels.isEmpty
-                    ? _buildEmptyChannelsState()
-                    : _buildNoChannelResultsState())
+                      ? _buildEmptyChannelsState()
+                      : _buildNoChannelResultsState())
                 : ListView.separated(
                     padding: EdgeInsets.zero,
                     itemCount: filteredChannels.length,
@@ -4637,6 +4654,140 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showQuickPlayDialog() async {
+    if (_isBusy) {
+      return;
+    }
+
+    bool avoidNsfw = true;
+    String? error;
+    final TextEditingController controller = _keywordsController;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F0F0F),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text('Quick Play'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      textInputAction: TextInputAction.search,
+                      decoration: const InputDecoration(
+                        labelText: 'Keywords',
+                        hintText: 'Comma separated keywords',
+                      ),
+                      onChanged: (_) {
+                        if (error != null) {
+                          setDialogState(() => error = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: const Color(0xFFE50914),
+                      title: const Text('Avoid NSFW content'),
+                      subtitle: const Text(
+                        'Applies a best-effort filter while searching',
+                      ),
+                      value: avoidNsfw,
+                      onChanged: (value) {
+                        setDialogState(() => avoidNsfw = value);
+                      },
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final keywords = controller.text.trim();
+                    if (keywords.isEmpty) {
+                      setDialogState(
+                        () => error = 'Enter one or more keywords to continue.',
+                      );
+                      return;
+                    }
+
+                    if (mounted) {
+                      setState(() {
+                        _quickStartRandom = _startRandom;
+                        _quickRandomStartPercent = _randomStartPercent;
+                        _quickHideSeekbar = _hideSeekbar;
+                        _quickShowWatermark = _showWatermark;
+                        _quickShowVideoTitle = _showVideoTitle;
+                        _quickHideOptions = _hideOptions;
+                        _quickHideBackButton = _hideBackButton;
+                        _quickAvoidNsfw = avoidNsfw;
+                        _quickProvider = _provider;
+                      });
+                    }
+
+                    Navigator.of(dialogContext).pop();
+                    await _watch();
+                  },
+                  child: const Text('Play'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showGlobalSettingsDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF0F0F0F),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: _buildSettingsCard(
+                  scope: _SettingsScope.channels,
+                  includeNsfwToggle: false,
+                  title: 'Global settings',
+                  dialogSetState: setDialogState,
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -4740,8 +4891,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFE50914),
                   foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -4755,8 +4908,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               IconButton(
                 tooltip: 'Delete channel',
                 onPressed: () => _handleDeleteChannel(channel),
-                icon: const Icon(Icons.delete_outline_rounded,
-                    color: Colors.redAccent),
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.redAccent,
+                ),
               ),
             ],
           ),
@@ -4795,7 +4950,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       cachedCount > 0
                           ? '$cachedCount cached torrent${cachedCount == 1 ? '' : 's'} ready'
                           : 'Cache will refresh on edit.',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -4871,10 +5029,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       final resolvedTitle = title ?? _torboxDisplayName(file);
       log('➡️ Torbox: streaming $resolvedTitle');
-      return {
-        'url': streamUrl,
-        'title': resolvedTitle,
-      };
+      return {'url': streamUrl, 'title': resolvedTitle};
     } catch (e) {
       log('❌ Torbox stream failed: $e');
       return null;
@@ -4954,8 +5109,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final random = Random();
     final filteredEntries = playableEntries
-        .where((entry) => !_seenLinkWithTorrentId
-            .contains('${currentTorrent.id}|${entry.file.id}'))
+        .where(
+          (entry) => !_seenLinkWithTorrentId.contains(
+            '${currentTorrent.id}|${entry.file.id}',
+          ),
+        )
         .toList();
     if (filteredEntries.isEmpty) {
       log('⚠️ Torbox torrent has no unseen playable files ${candidate.name}');
@@ -4999,11 +5157,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final title = info.isSeries
           ? _formatTorboxSeriesTitle(info, fallbackTitle)
           : (displayName.isNotEmpty ? displayName : fallbackTitle);
-      final entry = _TorboxPlayableEntry(
-        file: file,
-        title: title,
-        info: info,
-      );
+      final entry = _TorboxPlayableEntry(file: file, title: title, info: info);
       if (info.isSeries && info.season != null && info.episode != null) {
         seriesCandidates.add(entry);
       } else {
@@ -5053,7 +5207,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final episode = info.episode?.toString().padLeft(2, '0');
     final descriptor = info.episodeTitle?.trim().isNotEmpty == true
         ? info.episodeTitle!.trim()
-        : (info.title?.trim().isNotEmpty == true ? info.title!.trim() : fallback);
+        : (info.title?.trim().isNotEmpty == true
+              ? info.title!.trim()
+              : fallback);
     if (season != null && episode != null) {
       return 'S${season}E${episode} · $descriptor';
     }
@@ -5148,7 +5304,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   int _countPreparedInLookahead() {
-    final end = _queue.length < _lookaheadWindow ? _queue.length : _lookaheadWindow;
+    final end = _queue.length < _lookaheadWindow
+        ? _queue.length
+        : _lookaheadWindow;
     int count = 0;
     for (int i = 0; i < end; i++) {
       final item = _queue[i];
@@ -5160,7 +5318,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   int _findUnpreparedTorrentIndexInLookahead() {
-    final end = _queue.length < _lookaheadWindow ? _queue.length : _lookaheadWindow;
+    final end = _queue.length < _lookaheadWindow
+        ? _queue.length
+        : _lookaheadWindow;
     for (int i = 0; i < end; i++) {
       final item = _queue[i];
       if (item is Torrent && !_inflightInfohashes.contains(item.infohash)) {
@@ -5180,9 +5340,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     debugPrint('MagicTV: Prefetching torrent at idx=$idx name="${item.name}"');
     try {
       final magnetLink = 'magnet:?xt=urn:btih:$infohash';
-      final result = await DebridService.addTorrentToDebridPreferVideos(_activeApiKey!, magnetLink);
+      final result = await DebridService.addTorrentToDebridPreferVideos(
+        _activeApiKey!,
+        magnetLink,
+      );
       final String torrentId = result['torrentId'] as String? ?? '';
-      final List<dynamic> rdLinks = (result['links'] as List<dynamic>? ?? const []);
+      final List<dynamic> rdLinks =
+          (result['links'] as List<dynamic>? ?? const []);
 
       if (rdLinks.isEmpty) {
         // Nothing ready; move to tail to retry later
@@ -5190,14 +5354,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _queue.removeAt(idx);
           _queue.add(item);
         }
-        debugPrint('MagicTV: Prefetch: no links; moved torrent to tail idx=$idx');
+        debugPrint(
+          'MagicTV: Prefetch: no links; moved torrent to tail idx=$idx',
+        );
         return;
       }
 
       // Convert this queue slot to rd_restricted using first link
       final headLinkCandidates = rdLinks
           .map((link) => link?.toString() ?? '')
-          .where((link) => link.isNotEmpty && !_seenRestrictedLinks.contains(link))
+          .where(
+            (link) => link.isNotEmpty && !_seenRestrictedLinks.contains(link),
+          )
           .toList();
       if (headLinkCandidates.isEmpty) {
         if (idx < _queue.length && identical(_queue[idx], item)) {
@@ -5209,15 +5377,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       headLinkCandidates.shuffle(Random());
       final headLink = headLinkCandidates.removeAt(0);
-          _seenRestrictedLinks.add(headLink);
-          _seenLinkWithTorrentId.add('$torrentId|$headLink');
+      _seenRestrictedLinks.add(headLink);
+      _seenLinkWithTorrentId.add('$torrentId|$headLink');
 
-        if (idx < _queue.length && identical(_queue[idx], item)) {
-          _queue[idx] = {
-            'type': 'rd_restricted',
-            'restrictedLink': headLink,
-            'torrentId': torrentId,
-            'displayName': item.name,
+      if (idx < _queue.length && identical(_queue[idx], item)) {
+        _queue[idx] = {
+          'type': 'rd_restricted',
+          'restrictedLink': headLink,
+          'torrentId': torrentId,
+          'displayName': item.name,
         };
       }
 
@@ -5292,9 +5460,7 @@ class _KeywordWarmResult {
 class _CachedLoadingDialog extends StatefulWidget {
   final void Function(BuildContext context) onReady;
 
-  const _CachedLoadingDialog({
-    required this.onReady,
-  });
+  const _CachedLoadingDialog({required this.onReady});
 
   @override
   State<_CachedLoadingDialog> createState() => _CachedLoadingDialogState();
@@ -5495,10 +5661,7 @@ class _ChannelCreationDialogState extends State<_ChannelCreationDialog> {
                 _remainingSeconds != null && _remainingSeconds! > 0
                     ? 'About ${_remainingSeconds!}s remaining…'
                     : 'Taking longer than usual…',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -5568,8 +5731,11 @@ class _GradientSpinnerState extends State<_GradientSpinner>
                 shape: BoxShape.circle,
               ),
               child: const Center(
-                child: Icon(Icons.play_arrow_rounded,
-                    color: Colors.white70, size: 22),
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white70,
+                  size: 22,
+                ),
               ),
             ),
           ),
@@ -5655,9 +5821,7 @@ class _FocusHighlightWrapperState extends State<_FocusHighlightWrapper> {
         decoration: BoxDecoration(
           borderRadius: widget.borderRadius,
           border: Border.all(
-            color: _hasFocusedDescendant
-                ? highlightColor
-                : Colors.transparent,
+            color: _hasFocusedDescendant ? highlightColor : Colors.transparent,
             width: 2,
           ),
           boxShadow: _hasFocusedDescendant
@@ -5680,7 +5844,11 @@ class _InfoTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  const _InfoTile({required this.icon, required this.title, required this.subtitle});
+  const _InfoTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
   @override
   Widget build(BuildContext context) {
     return Expanded(
@@ -5695,7 +5863,10 @@ class _InfoTile extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(8),
+              ),
               child: Icon(icon, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 10),
@@ -5704,9 +5875,18 @@ class _InfoTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ],
               ),
             ),
@@ -5723,7 +5903,9 @@ class _StatsTile extends StatelessWidget {
   const _StatsTile({required this.queue, required this.lastSearchedAt});
   @override
   Widget build(BuildContext context) {
-    final last = lastSearchedAt == null ? '—' : '${lastSearchedAt!.hour.toString().padLeft(2,'0')}:${lastSearchedAt!.minute.toString().padLeft(2,'0')}';
+    final last = lastSearchedAt == null
+        ? '—'
+        : '${lastSearchedAt!.hour.toString().padLeft(2, '0')}:${lastSearchedAt!.minute.toString().padLeft(2, '0')}';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -5735,8 +5917,15 @@ class _StatsTile extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
-            child: const Icon(Icons.insights_rounded, color: Colors.white, size: 18),
+            decoration: BoxDecoration(
+              color: Colors.white10,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.insights_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -5744,9 +5933,18 @@ class _StatsTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Search snapshot', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                const Text(
+                  'Search snapshot',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text('Queue prepared: $queue • Last search: $last', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(
+                  'Queue prepared: $queue • Last search: $last',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -5817,16 +6015,12 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
     final helperStyle = theme.textTheme.bodySmall?.copyWith(
       color: Colors.white60,
     );
-    final divisions =
-        (_randomStartPercentMax - _randomStartPercentMin) ~/ 5;
+    final divisions = (_randomStartPercentMax - _randomStartPercentMin) ~/ 5;
 
     Widget sliderColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Random start within first ${widget.value}%',
-          style: textStyle,
-        ),
+        Text('Random start within first ${widget.value}%', style: textStyle),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackShape: const RoundedRectSliderTrackShape(),
@@ -5847,8 +6041,8 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
             onChangeEnd: widget.onChangeEnd == null
                 ? null
                 : (raw) => widget.onChangeEnd!(
-                      _clampRandomStartPercent(raw.round()),
-                    ),
+                    _clampRandomStartPercent(raw.round()),
+                  ),
           ),
         ),
         Text(
@@ -5887,7 +6081,12 @@ class _SwitchRow extends StatelessWidget {
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
-  const _SwitchRow({required this.title, required this.subtitle, required this.value, required this.onChanged});
+  const _SwitchRow({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
   @override
   Widget build(BuildContext context) {
     return Container(
