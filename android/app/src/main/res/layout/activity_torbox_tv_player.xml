@@ -14,7 +14,7 @@
         app:resize_mode="fit"
         app:controller_layout_id="@layout/view_debrify_tv_controls"
         app:show_timeout="5000"
-        app:surface_type="texture_view" />
+        app:surface_type="surface_view" />
 
     <LinearLayout
         android:id="@+id/player_header_container"
