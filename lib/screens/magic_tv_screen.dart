@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -19,6 +21,7 @@ import '../services/torbox_service.dart';
 import '../services/torrent_service.dart';
 import '../services/torrents_csv_engine.dart';
 import '../services/pirate_bay_engine.dart';
+import '../services/debrify_tv_zip_importer.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/nsfw_filter.dart';
@@ -56,6 +59,8 @@ int _parseRandomStartPercent(dynamic value) {
 }
 
 enum _SettingsScope { quickPlay, channels }
+
+enum _ImportChannelsMode { repository, zip }
 
 class DebrifyTVScreen extends StatefulWidget {
   const DebrifyTVScreen({super.key});
@@ -1478,6 +1483,70 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return result;
   }
 
+  Future<void> _handleImportChannels() async {
+    if (_isBusy) {
+      return;
+    }
+
+    final mode = await _selectImportMode();
+    if (mode == null) {
+      return;
+    }
+
+    switch (mode) {
+      case _ImportChannelsMode.repository:
+        await _handleImportChannelsFromRepository();
+        break;
+      case _ImportChannelsMode.zip:
+        await _handleImportChannelsFromZip();
+        break;
+    }
+  }
+
+  Future<_ImportChannelsMode?> _selectImportMode() async {
+    if (!mounted) {
+      return null;
+    }
+
+    return showDialog<_ImportChannelsMode>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Import Channels'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.cloud_download_rounded),
+                  title: const Text('Import from repository'),
+                  subtitle: const Text('Fetch channels from the configured URL'),
+                  onTap: () =>
+                      Navigator.of(dialogContext).pop(_ImportChannelsMode.repository),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.archive_rounded),
+                  title: const Text('Import zip'),
+                  subtitle:
+                      const Text('Load prebuilt channels from a zip of YAML files'),
+                  onTap: () =>
+                      Navigator.of(dialogContext).pop(_ImportChannelsMode.zip),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _handleAddChannel() async {
     await _syncProviderAvailability();
     final channel = await _openChannelDialog();
@@ -1486,7 +1555,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _handleImportChannels() async {
+  Future<void> _handleImportChannelsFromRepository() async {
     if (_isBusy) {
       return;
     }
@@ -1611,6 +1680,313 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         });
       }
     }
+  }
+
+  Future<void> _handleImportChannelsFromZip() async {
+    final selection = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+      withData: true,
+      withReadStream: true,
+    );
+
+    if (selection == null || selection.files.isEmpty) {
+      return;
+    }
+
+    Uint8List bytes;
+    try {
+      bytes = await _readPickedFileBytes(selection.files.first);
+    } catch (error) {
+      _showSnack(
+        'Unable to read selected file: ${_formatImportError(error)}',
+        color: Colors.red,
+      );
+      return;
+    }
+
+    if (bytes.isEmpty) {
+      _showSnack('Selected zip appears to be empty.', color: Colors.orange);
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      final parsed = DebrifyTvZipImporter.parseZip(bytes);
+      final persistence = await _persistImportedZipChannels(parsed.channels);
+      await _showZipImportSummary(parsed, persistence);
+    } catch (error) {
+      _showSnack(
+        'Zip import failed: ${_formatImportError(error)}',
+        color: Colors.red,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<Uint8List> _readPickedFileBytes(PlatformFile file) async {
+    if (file.bytes != null && file.bytes!.isNotEmpty) {
+      return Uint8List.fromList(file.bytes!);
+    }
+
+    final stream = file.readStream;
+    if (stream != null) {
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in stream) {
+        builder.add(chunk);
+      }
+      return builder.takeBytes();
+    }
+
+    throw const FormatException('Unable to access file bytes.');
+  }
+
+  Future<_ZipImportPersistenceResult> _persistImportedZipChannels(
+    List<DebrifyTvZipImportedChannel> channels,
+  ) async {
+    if (channels.isEmpty) {
+      return const _ZipImportPersistenceResult(
+        successes: [],
+        failures: [],
+      );
+    }
+
+    final successes = <_ZipImportSuccess>[];
+    final failures = <_ZipImportSaveFailure>[];
+
+    final List<_DebrifyTvChannel> appendedChannels = [];
+    final Map<String, DebrifyTvChannelCacheEntry> appendedCache = {};
+
+    final Set<String> usedNames =
+        _channels.map((channel) => channel.name.toLowerCase()).toSet();
+
+    for (final channel in channels) {
+      if (channel.normalizedKeywords.length > _maxChannelKeywords) {
+        failures.add(
+          _ZipImportSaveFailure(
+            sourceName: channel.sourceName,
+            channelName: channel.channelName,
+            reason:
+                'Channel has ${channel.normalizedKeywords.length} keywords; maximum supported is $_maxChannelKeywords.',
+          ),
+        );
+        continue;
+      }
+
+      final uniqueName = _resolveUniqueChannelName(channel.channelName, usedNames);
+      final channelId = DateTime.now().microsecondsSinceEpoch.toString();
+      final now = DateTime.now();
+
+      final record = DebrifyTvChannelRecord(
+        channelId: channelId,
+        name: uniqueName,
+        keywords: channel.displayKeywords,
+        avoidNsfw: channel.avoidNsfw,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final entry = DebrifyTvChannelCacheEntry(
+        version: 1,
+        channelId: channelId,
+        normalizedKeywords: channel.normalizedKeywords,
+        fetchedAt: now.millisecondsSinceEpoch,
+        status: DebrifyTvCacheStatus.ready,
+        errorMessage: null,
+        torrents: channel.torrents,
+        keywordStats: channel.keywordStats,
+      );
+
+      try {
+        await DebrifyTvRepository.instance.upsertChannel(record);
+        await DebrifyTvCacheService.saveEntry(entry);
+
+        appendedChannels.add(
+          _DebrifyTvChannel(
+            id: channelId,
+            name: uniqueName,
+            keywords: const <String>[],
+            avoidNsfw: channel.avoidNsfw,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+        appendedCache[channelId] = entry;
+
+        successes.add(
+          _ZipImportSuccess(
+            sourceName: channel.sourceName,
+            channelName: uniqueName,
+            keywordCount: channel.normalizedKeywords.length,
+            torrentCount: channel.torrentCount,
+          ),
+        );
+
+        usedNames.add(uniqueName.toLowerCase());
+      } catch (error) {
+        failures.add(
+          _ZipImportSaveFailure(
+            sourceName: channel.sourceName,
+            channelName: uniqueName,
+            reason: _formatImportError(error),
+          ),
+        );
+      }
+    }
+
+    if (appendedChannels.isNotEmpty && mounted) {
+      setState(() {
+        _channels = [..._channels, ...appendedChannels];
+        _channelCache.addAll(appendedCache);
+      });
+    }
+
+    return _ZipImportPersistenceResult(
+      successes: successes,
+      failures: failures,
+    );
+  }
+
+  Future<void> _showZipImportSummary(
+    DebrifyTvZipImportResult parsed,
+    _ZipImportPersistenceResult persisted,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+
+    final bool hasSuccess = persisted.successes.isNotEmpty;
+    final List<_ZipImportFailureDisplay> failureRows = [
+      ...parsed.failures.map(
+        (failure) => _ZipImportFailureDisplay(
+          sourceName: failure.entryName,
+          reason: failure.reason,
+        ),
+      ),
+      ...persisted.failures.map(
+        (failure) => _ZipImportFailureDisplay(
+          sourceName:
+              failure.sourceName.isEmpty ? failure.channelName : failure.sourceName,
+          reason: failure.reason,
+        ),
+      ),
+    ];
+
+    if (!hasSuccess && failureRows.isEmpty) {
+      _showSnack('No channels found in the selected zip.', color: Colors.orange);
+      return;
+    }
+
+    final String dialogTitle = hasSuccess ? 'Zip import complete' : 'Zip import failed';
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(dialogTitle),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (hasSuccess) ...[
+                    Text(
+                      'Imported ${persisted.successes.length} channel${persisted.successes.length == 1 ? '' : 's'}.',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    ...persisted.successes.map(
+                      (success) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        leading: const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 20,
+                        ),
+                        title: Text(success.channelName),
+                        subtitle: Text(
+                          '${success.keywordCount} keyword${success.keywordCount == 1 ? '' : 's'} • ${success.torrentCount} torrent${success.torrentCount == 1 ? '' : 's'}',
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    const Text('No channels were imported.'),
+                  ],
+                  if (failureRows.isNotEmpty) ...[
+                    if (hasSuccess) const SizedBox(height: 12),
+                    Text(
+                      'Issues detected:',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    ...failureRows.map(
+                      (failure) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        leading: const Icon(
+                          Icons.error_outline,
+                          color: Colors.orange,
+                          size: 20,
+                        ),
+                        title: Text(failure.sourceName),
+                        subtitle: Text(failure.reason),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (hasSuccess) {
+      final String names = persisted.successes
+          .map((success) => '"${success.channelName}"')
+          .join(', ');
+      _showSnack(
+        'Imported ${persisted.successes.length} channel${persisted.successes.length == 1 ? '' : 's'}: $names',
+        color: Colors.green,
+      );
+    } else if (failureRows.isNotEmpty) {
+      _showSnack('Zip import failed: ${failureRows.first.reason}', color: Colors.red);
+    }
+  }
+
+  String _resolveUniqueChannelName(
+    String baseName,
+    Set<String> usedLowerCaseNames,
+  ) {
+    final String trimmed = baseName.trim().isEmpty ? 'Imported Channel' : baseName.trim();
+    String candidate = trimmed;
+    int suffix = 2;
+    while (usedLowerCaseNames.contains(candidate.toLowerCase())) {
+      candidate = '$trimmed ($suffix)';
+      suffix++;
+    }
+    return candidate;
   }
 
   Future<void> _handleEditChannel(_DebrifyTvChannel channel) async {
@@ -1764,13 +2140,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final String baseName = candidate.displayName;
-    String channelName = baseName;
-    int suffix = 2;
     final lowerExisting = _channels.map((c) => c.name.toLowerCase()).toSet();
-    while (lowerExisting.contains(channelName.toLowerCase())) {
-      channelName = '$baseName ($suffix)';
-      suffix++;
-    }
+    final String channelName = _resolveUniqueChannelName(baseName, lowerExisting);
 
     final now = DateTime.now();
     final channel = _DebrifyTvChannel(
@@ -6166,6 +6537,53 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
     }
     return KeyEventResult.ignored;
   }
+}
+
+// Helper types for zip import persistence and reporting.
+class _ZipImportPersistenceResult {
+  final List<_ZipImportSuccess> successes;
+  final List<_ZipImportSaveFailure> failures;
+
+  const _ZipImportPersistenceResult({
+    required this.successes,
+    required this.failures,
+  });
+}
+
+class _ZipImportSuccess {
+  final String sourceName;
+  final String channelName;
+  final int keywordCount;
+  final int torrentCount;
+
+  const _ZipImportSuccess({
+    required this.sourceName,
+    required this.channelName,
+    required this.keywordCount,
+    required this.torrentCount,
+  });
+}
+
+class _ZipImportSaveFailure {
+  final String sourceName;
+  final String channelName;
+  final String reason;
+
+  const _ZipImportSaveFailure({
+    required this.sourceName,
+    required this.channelName,
+    required this.reason,
+  });
+}
+
+class _ZipImportFailureDisplay {
+  final String sourceName;
+  final String reason;
+
+  const _ZipImportFailureDisplay({
+    required this.sourceName,
+    required this.reason,
+  });
 }
 
 class _SwitchRow extends StatelessWidget {
