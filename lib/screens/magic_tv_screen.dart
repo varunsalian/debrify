@@ -4345,6 +4345,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     await Future.delayed(const Duration(seconds: 5));
     debugPrint('DebrifyTV: Cooldown complete. Proceeding with next channel.');
 
+    final previousChannelId = _currentWatchingChannelId;
+    if (previousChannelId != null) {
+      _channelCache.remove(previousChannelId);
+      debugPrint(
+        'DebrifyTV: Evicted cache entry for previous channel $previousChannelId',
+      );
+    }
+
     _seenRestrictedLinks.clear();
     _seenLinkWithTorrentId.clear();
     debugPrint('DebrifyTV: Cleared prefetch state');
