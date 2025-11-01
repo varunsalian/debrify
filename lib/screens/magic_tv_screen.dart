@@ -1826,6 +1826,28 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final controller = TextEditingController();
     String? errorText;
+    final FocusNode urlFocusNode = FocusNode(
+      debugLabel: 'ZipUrlField',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) {
+          return KeyEventResult.ignored;
+        }
+        final focusContext = node.context;
+        if (focusContext == null) {
+          return KeyEventResult.ignored;
+        }
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.arrowDown) {
+          FocusScope.of(focusContext).nextFocus();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowUp) {
+          FocusScope.of(focusContext).previousFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
 
     final result = await showDialog<String>(
       context: context,
@@ -1847,6 +1869,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         errorText: errorText,
                       ),
                       autofocus: true,
+                      focusNode: urlFocusNode,
                       keyboardType: TextInputType.url,
                     ),
                     const SizedBox(height: 12),
@@ -1897,6 +1920,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
 
     controller.dispose();
+    urlFocusNode.dispose();
     return result;
   }
 
@@ -5363,6 +5387,28 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     bool avoidNsfw = _quickAvoidNsfw;
     String? error;
     final TextEditingController controller = _keywordsController;
+    final FocusNode keywordFocusNode = FocusNode(
+      debugLabel: 'QuickPlayKeywordsField',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) {
+          return KeyEventResult.ignored;
+        }
+        final focusContext = node.context;
+        if (focusContext == null) {
+          return KeyEventResult.ignored;
+        }
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.arrowDown) {
+          FocusScope.of(focusContext).nextFocus();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowUp) {
+          FocusScope.of(focusContext).previousFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
 
     await showDialog<void>(
       context: context,
@@ -5385,6 +5431,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     TextField(
                       controller: controller,
                       autofocus: true,
+                      focusNode: keywordFocusNode,
                       textInputAction: TextInputAction.search,
                       decoration: const InputDecoration(
                         labelText: 'Keywords',
@@ -5459,6 +5506,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         );
       },
     );
+
+    keywordFocusNode.dispose();
   }
 
   Future<void> _showGlobalSettingsDialog() async {
