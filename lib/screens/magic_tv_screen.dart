@@ -60,7 +60,7 @@ int _parseRandomStartPercent(dynamic value) {
 
 enum _SettingsScope { quickPlay, channels }
 
-enum _ImportChannelsMode { repository, zip }
+enum _ImportChannelsMode { repository, zip, zipUrl }
 
 class DebrifyTVScreen extends StatefulWidget {
   const DebrifyTVScreen({super.key});
@@ -1500,6 +1500,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       case _ImportChannelsMode.zip:
         await _handleImportChannelsFromZip();
         break;
+      case _ImportChannelsMode.zipUrl:
+        await _handleImportChannelsFromZipUrl();
+        break;
     }
   }
 
@@ -1529,9 +1532,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   leading: const Icon(Icons.archive_rounded),
                   title: const Text('Import zip'),
                   subtitle:
-                      const Text('Load prebuilt channels from a zip of YAML files'),
+                      const Text('Load prebuilt channels from a local zip of YAML files'),
                   onTap: () =>
                       Navigator.of(dialogContext).pop(_ImportChannelsMode.zip),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.link_rounded),
+                  title: const Text('Import zip from URL'),
+                  subtitle: const Text('Download a zip archive directly from a link'),
+                  onTap: () =>
+                      Navigator.of(dialogContext).pop(_ImportChannelsMode.zipUrl),
                 ),
               ],
             ),
@@ -1736,6 +1746,62 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<void> _handleImportChannelsFromZipUrl() async {
+    final url = await _promptZipUrl();
+    if (url == null) {
+      return;
+    }
+
+    Uri uri;
+    try {
+      uri = Uri.parse(url.trim());
+      if (!uri.hasAbsolutePath ||
+          (uri.scheme != 'http' && uri.scheme != 'https')) {
+        throw const FormatException('invalid');
+      }
+    } catch (_) {
+      _showSnack('Enter a valid http(s) URL.', color: Colors.red);
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        throw FormatException('HTTP ${response.statusCode}');
+      }
+
+      final bytes = response.bodyBytes;
+      if (bytes.isEmpty) {
+        _showSnack('Downloaded zip is empty.', color: Colors.orange);
+        return;
+      }
+
+      final parsed = DebrifyTvZipImporter.parseZip(bytes);
+      final persistence = await _persistImportedZipChannels(parsed.channels);
+      await _showZipImportSummary(parsed, persistence);
+      _lastChannelImportAt = DateTime.now();
+    } catch (error) {
+      _showSnack(
+        'Zip import failed: ${_formatImportError(error)}',
+        color: Colors.red,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
   Future<Uint8List> _readPickedFileBytes(PlatformFile file) async {
     if (file.bytes != null && file.bytes!.isNotEmpty) {
       return Uint8List.fromList(file.bytes!);
@@ -1751,6 +1817,87 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     throw const FormatException('Unable to access file bytes.');
+  }
+
+  Future<String?> _promptZipUrl() async {
+    if (!mounted) {
+      return null;
+    }
+
+    final controller = TextEditingController();
+    String? errorText;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Enter zip URL'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      decoration: InputDecoration(
+                        labelText: 'Zip URL',
+                        hintText: 'https://example.com/channels.zip',
+                        errorText: errorText,
+                      ),
+                      autofocus: true,
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'The archive should contain Debrify channel YAML files.',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final candidate = controller.text.trim();
+                    if (candidate.isEmpty) {
+                      setState(() {
+                        errorText = 'Enter a URL to continue.';
+                      });
+                      return;
+                    }
+
+                    try {
+                      final parsed = Uri.parse(candidate);
+                      if (!parsed.hasAbsolutePath ||
+                          (parsed.scheme != 'http' && parsed.scheme != 'https')) {
+                        throw const FormatException('invalid');
+                      }
+                    } catch (_) {
+                      setState(() {
+                        errorText = 'Only http(s) URLs are supported.';
+                      });
+                      return;
+                    }
+
+                    Navigator.of(dialogContext).pop(candidate);
+                  },
+                  child: const Text('Download'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+    return result;
   }
 
   Future<_ZipImportPersistenceResult> _persistImportedZipChannels(
@@ -2050,6 +2197,70 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (confirmed == true) {
       await _deleteChannel(channel.id);
       _showSnack('Channel deleted', color: Colors.orange);
+    }
+  }
+
+  Future<void> _handleDeleteAllChannels() async {
+    if (_channels.isEmpty) {
+      _showSnack('No channels to delete.', color: Colors.orange);
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete all channels?'),
+          content: const Text(
+            'This will remove every Debrify TV channel along with cached torrents. '
+            'This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              child: const Text('Delete all'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      await DebrifyTvRepository.instance.clearAll();
+      await DebrifyTvCacheService.clearAll();
+      setState(() {
+        _channels = const <_DebrifyTvChannel>[];
+        _channelCache.clear();
+      });
+      _showSnack('All channels deleted.', color: Colors.orange);
+    } catch (error) {
+      _showSnack(
+        'Failed to delete channels: ${_formatImportError(error)}',
+        color: Colors.red,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
     }
   }
 
@@ -5079,6 +5290,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Delete all channels',
+                onPressed: _isBusy || _channels.isEmpty
+                    ? null
+                    : _handleDeleteAllChannels,
+                icon: const Icon(Icons.delete_outline_rounded),
+                color: Colors.redAccent,
               ),
               const SizedBox(width: 4),
               IconButton(
