@@ -2583,6 +2583,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               (result['torrents'] as List<Torrent>?) ?? <Torrent>[];
           final engineCounts =
               (result['engineCounts'] as Map<String, int>?) ?? const {};
+          final Map<String, String> engineErrors = {};
+          final rawErrors = result['engineErrors'];
+          if (rawErrors is Map) {
+            rawErrors.forEach((key, value) {
+              engineErrors[key.toString()] = value?.toString() ?? '';
+            });
+          }
+          if (engineErrors.isNotEmpty) {
+            engineErrors.forEach((engine, message) {
+              debugPrint(
+                'DebrifyTV: Search engine "$engine" failed: $message',
+              );
+            });
+          }
           debugPrint(
             'DebrifyTV: Partial results received: total=${torrents.length}, engineCounts=$engineCounts',
           );
@@ -3055,6 +3069,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await for (final result in Stream.fromFutures(futures)) {
         final torrents =
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
+        final Map<String, String> engineErrors = {};
+        final rawErrors = result['engineErrors'];
+        if (rawErrors is Map) {
+          rawErrors.forEach((key, value) {
+            engineErrors[key.toString()] = value?.toString() ?? '';
+          });
+        }
+        if (engineErrors.isNotEmpty) {
+          engineErrors.forEach((engine, message) {
+            debugPrint('Torbox: Search engine "$engine" failed: $message');
+          });
+        }
 
         // Apply NSFW filter if enabled
         List<Torrent> torrentsToProcess = torrents;

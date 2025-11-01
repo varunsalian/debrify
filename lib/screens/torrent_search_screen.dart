@@ -196,6 +196,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final fetchedTorrents = (result['torrents'] as List<Torrent>).toList(
         growable: false,
       );
+      final Map<String, String> engineErrors = {};
+      final rawErrors = result['engineErrors'];
+      if (rawErrors is Map) {
+        rawErrors.forEach((key, value) {
+          engineErrors[key.toString()] = value?.toString() ?? '';
+        });
+      }
+      if (engineErrors.isNotEmpty) {
+        debugPrint(
+          'TorrentSearchScreen: Search engine failures: $engineErrors',
+        );
+      }
+      String nextErrorMessage = '';
+      if (engineErrors.isNotEmpty && fetchedTorrents.isEmpty) {
+        final failedEngines = engineErrors.keys
+            .map(_friendlyEngineName)
+            .join(', ');
+        nextErrorMessage =
+            'Failed to load results from $failedEngines. Please try again.';
+      }
       Map<String, bool>? torboxCacheMap;
 
       final String? torboxKeyValue = torboxKey;
@@ -253,6 +273,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _torboxCacheStatus = torboxCacheMap;
         _isLoading = false;
         _showingTorboxCachedOnly = showOnlyCached;
+        _errorMessage = nextErrorMessage;
       });
 
       // Apply sorting to the results
@@ -263,6 +284,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
+    }
+  }
+
+  String _friendlyEngineName(String name) {
+    switch (name) {
+      case 'torrents_csv':
+        return 'Torrents CSV';
+      case 'pirate_bay':
+        return 'The Pirate Bay';
+      default:
+        return name;
     }
   }
 

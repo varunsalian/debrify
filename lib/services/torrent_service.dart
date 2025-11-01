@@ -19,6 +19,7 @@ class TorrentService {
     final engineNames = SearchEngineFactory.getAllEngineNames();
     final List<List<Torrent>> allResults = [];
     final Map<String, int> engineCounts = {};
+    final Map<String, String> engineErrors = {};
     
     // Filter engines based on user selection
     final List<SearchEngine> selectedEngines = [];
@@ -43,16 +44,28 @@ class TorrentService {
       };
     }
     
-    // Search selected engines concurrently
-    final futures = selectedEngines.map((engine) => engine.search(query));
-    final results = await Future.wait(futures);
-    
-    // Combine all results and track counts
-    for (int i = 0; i < results.length; i++) {
-      final result = results[i];
+    // Search selected engines concurrently while tolerating per-engine failures
+    final List<Future<List<Torrent>>> futures = [];
+    for (int i = 0; i < selectedEngines.length; i++) {
+      final engine = selectedEngines[i];
       final engineName = selectedEngineNames[i];
+      futures.add(
+        engine.search(query).then((result) {
+          engineCounts[engineName] = result.length;
+          return result;
+        }).catchError((error, _) {
+          engineCounts[engineName] = 0;
+          engineErrors[engineName] = error.toString();
+          return <Torrent>[];
+        }),
+      );
+    }
+
+    final results = await Future.wait(futures);
+
+    // Combine all results and track counts
+    for (final result in results) {
       allResults.add(result);
-      engineCounts[engineName] = result.length;
     }
     
     // Deduplicate based on infohash
@@ -72,6 +85,7 @@ class TorrentService {
     return {
       'torrents': deduplicatedResults,
       'engineCounts': engineCounts,
+      'engineErrors': engineErrors,
     };
   }
 
