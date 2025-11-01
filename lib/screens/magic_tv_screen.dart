@@ -4339,6 +4339,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     debugPrint('DebrifyTV: Stopping old channel prefetcher...');
     await _stopPrefetch();
+    debugPrint('DebrifyTV: Prefetcher stopped. Waiting for RD cooldown...');
+    await Future.delayed(const Duration(seconds: 5));
+    debugPrint('DebrifyTV: Cooldown complete. Proceeding with next channel.');
 
     _seenRestrictedLinks.clear();
     _seenLinkWithTorrentId.clear();
@@ -4424,9 +4427,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
 
-    final Torrent firstTorrent = filteredTorrents.first;
-    final List<Torrent> remainder = filteredTorrents.skip(1).toList();
-
     try {
       if (_provider == _providerRealDebrid) {
         debugPrint('DebrifyTV: Next channel uses global Real-Debrid provider');
@@ -4436,66 +4436,90 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           return null;
         }
 
-        final magnetLink = 'magnet:?xt=urn:btih:${firstTorrent.infohash}';
-        final result = await DebridService.addTorrentToDebridPreferVideos(
-          apiKey,
-          magnetLink,
-        );
+        for (var index = 0; index < filteredTorrents.length; index++) {
+          final candidate = filteredTorrents[index];
+          final magnetLink = 'magnet:?xt=urn:btih:${candidate.infohash}';
 
-        final List<String> rdLinks =
-            (result['links'] as List<dynamic>? ?? const [])
-                .map((link) => link?.toString() ?? '')
-                .where((link) => link.isNotEmpty)
-                .toList();
-
-        if (rdLinks.isEmpty) {
-          debugPrint('DebrifyTV: No links from first torrent in next channel');
-          return null;
-        }
-
-        final firstLink = rdLinks.first;
-        final unrestrict = await DebridService.unrestrictLink(
-          apiKey,
-          firstLink,
-        );
-        final String? videoUrl = unrestrict['download'] as String?;
-
-        if (videoUrl == null || videoUrl.isEmpty) {
-          debugPrint('DebrifyTV: Real-Debrid unrestrict returned empty URL');
-          return null;
-        }
-
-        String title = firstTorrent.name;
-        final uri = Uri.tryParse(videoUrl);
-        if (uri != null && uri.pathSegments.isNotEmpty) {
-          final inferred = Uri.decodeComponent(uri.pathSegments.last);
-          if (inferred.isNotEmpty) {
-            title = inferred;
+          Map<String, dynamic> selection;
+          try {
+            selection = await DebridService.addTorrentToDebridPreferVideos(
+              apiKey,
+              magnetLink,
+            );
+          } catch (error) {
+            debugPrint(
+              'DebrifyTV: Real-Debrid rejected candidate ${candidate.infohash}: $error',
+            );
+            continue;
           }
-        }
 
-        if (mounted) {
-          setState(() {
-            _currentWatchingChannelId = targetChannel.id;
-            _queue
-              ..clear()
-              ..addAll(remainder);
-          });
+          final rdLinks = (selection['links'] as List<dynamic>? ?? const [])
+              .map((link) => link?.toString() ?? '')
+              .where((link) => link.isNotEmpty)
+              .toList();
+
+          if (rdLinks.isEmpty) {
+            debugPrint(
+              'DebrifyTV: Real-Debrid returned no usable links for candidate ${candidate.infohash}',
+            );
+            continue;
+          }
+
+          final firstLink = rdLinks.first;
+          Map<String, dynamic> unrestrict;
+          try {
+            unrestrict = await DebridService.unrestrictLink(apiKey, firstLink);
+          } catch (error) {
+            debugPrint(
+              'DebrifyTV: Real-Debrid unrestrict failed for candidate ${candidate.infohash}: $error',
+            );
+            continue;
+          }
+
+          final String? videoUrl = unrestrict['download'] as String?;
+          if (videoUrl == null || videoUrl.isEmpty) {
+            debugPrint(
+              'DebrifyTV: Real-Debrid unrestrict returned empty URL for candidate ${candidate.infohash}',
+            );
+            continue;
+          }
+
+          String title = candidate.name;
+          final uri = Uri.tryParse(videoUrl);
+          if (uri != null && uri.pathSegments.isNotEmpty) {
+            final inferred = Uri.decodeComponent(uri.pathSegments.last);
+            if (inferred.isNotEmpty) {
+              title = inferred;
+            }
+          }
+
+          if (mounted) {
+            final remaining = filteredTorrents.skip(index + 1).toList();
+            setState(() {
+              _currentWatchingChannelId = targetChannel.id;
+              _queue
+                ..clear()
+                ..addAll(remaining);
+            });
             _keywordsController.text = keywords.join(', ');
+          }
+
+          _startPrefetch();
+          debugPrint('DebrifyTV: Started Real-Debrid prefetcher for new channel');
+          debugPrint(
+            'DebrifyTV: Successfully got stream from next channel: $title',
+          );
+
+          return {
+            'channelName': targetChannel.name,
+            'channelNumber': nextIndex + 1,
+            'firstUrl': videoUrl,
+            'firstTitle': title,
+          };
         }
 
-        _startPrefetch();
-        debugPrint('DebrifyTV: Started Real-Debrid prefetcher for new channel');
-        debugPrint(
-          'DebrifyTV: Successfully got first stream from next channel: $title',
-        );
-
-        return {
-          'channelName': targetChannel.name,
-          'channelNumber': nextIndex + 1,
-          'firstUrl': videoUrl,
-          'firstTitle': title,
-        };
+        debugPrint('DebrifyTV: All Real-Debrid candidates failed for next channel');
+        return null;
       }
 
       if (_provider == _providerTorbox) {
@@ -4505,39 +4529,49 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           return null;
         }
 
-        final prepared = await _prepareTorboxTorrent(
-          candidate: firstTorrent,
-          apiKey: apiKey,
-          log: (message) => debugPrint(message),
-        );
+        for (var index = 0; index < filteredTorrents.length; index++) {
+          final candidate = filteredTorrents[index];
 
-        if (prepared == null || prepared.streamUrl.isEmpty) {
-          debugPrint('DebrifyTV: Torbox preparation failed for next channel');
-          return null;
-        }
+          final prepared = await _prepareTorboxTorrent(
+            candidate: candidate,
+            apiKey: apiKey,
+            log: (message) => debugPrint(message),
+          );
 
-        if (mounted) {
-          setState(() {
-            _currentWatchingChannelId = targetChannel.id;
-            _queue
-              ..clear()
-              ..addAll(remainder);
-            if (prepared.hasMore) {
-              _queue.add(firstTorrent);
-            }
-          });
+          if (prepared == null || prepared.streamUrl.isEmpty) {
+            debugPrint(
+              'DebrifyTV: Torbox preparation failed for candidate ${candidate.infohash}',
+            );
+            continue;
+          }
+
+          if (mounted) {
+            final remaining = filteredTorrents.skip(index + 1).toList();
+            setState(() {
+              _currentWatchingChannelId = targetChannel.id;
+              _queue
+                ..clear()
+                ..addAll(remaining);
+              if (prepared.hasMore) {
+                _queue.add(candidate);
+              }
+            });
             _keywordsController.text = keywords.join(', ');
+          }
+
+          debugPrint(
+            'DebrifyTV: Torbox channel switch ready with stream ${prepared.title}',
+          );
+          return {
+            'channelName': targetChannel.name,
+            'channelNumber': nextIndex + 1,
+            'firstUrl': prepared.streamUrl,
+            'firstTitle': prepared.title,
+          };
         }
 
-        debugPrint(
-          'DebrifyTV: Torbox channel switch ready with stream ${prepared.title}',
-        );
-        return {
-          'channelName': targetChannel.name,
-          'channelNumber': nextIndex + 1,
-          'firstUrl': prepared.streamUrl,
-          'firstTitle': prepared.title,
-        };
+        debugPrint('DebrifyTV: All Torbox candidates failed for next channel');
+        return null;
       }
 
       debugPrint(
