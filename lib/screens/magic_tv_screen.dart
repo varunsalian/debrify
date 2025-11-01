@@ -254,7 +254,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
     _loadSettings();
     _loadChannels();
-    _loadCacheEntries();
   }
 
   @override
@@ -510,18 +509,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _channels = records
           .map(_DebrifyTvChannel.fromRecord)
           .toList(growable: false);
-    });
-  }
-
-  Future<void> _loadCacheEntries() async {
-    final entries = await DebrifyTvCacheService.loadAllEntries();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _channelCache
-        ..clear()
-        ..addAll(entries);
     });
   }
 
@@ -848,6 +835,44 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       normalized.add(value);
     }
     return normalized;
+  }
+
+  Future<DebrifyTvChannelCacheEntry?> _ensureCacheEntry(
+    String channelId,
+  ) async {
+    final cached = _channelCache[channelId];
+    if (cached != null) {
+      return cached;
+    }
+    final fetched = await DebrifyTvCacheService.getEntry(channelId);
+    if (fetched != null) {
+      _channelCache[channelId] = fetched;
+    }
+    return fetched;
+  }
+
+  Future<List<String>> _getChannelKeywords(String channelId) async {
+    final index = _channels.indexWhere((c) => c.id == channelId);
+    if (index == -1) {
+      return const <String>[];
+    }
+    final existing = _channels[index];
+    if (existing.keywords.isNotEmpty) {
+      return existing.keywords;
+    }
+    final fetched = await DebrifyTvRepository.instance.fetchChannelKeywords(
+      channelId,
+    );
+    if (!mounted) {
+      return fetched;
+    }
+    final updated = existing.copyWith(keywords: fetched);
+    setState(() {
+      final next = List<_DebrifyTvChannel>.from(_channels);
+      next[index] = updated;
+      _channels = next;
+    });
+    return fetched;
   }
 
   int _estimatedWarmDurationSeconds(
@@ -1594,7 +1619,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Store current channel's NSFW setting before dialog
     final nsfwBeforeEdit = channel.avoidNsfw;
 
-    final updated = await _openChannelDialog(existing: channel);
+    final keywords = await _getChannelKeywords(channel.id);
+    final hydrated = channel.copyWith(keywords: keywords);
+    final updated = await _openChannelDialog(existing: hydrated);
     if (updated != null) {
       // Check if channel's NSFW setting changed
       final nsfwAfterEdit = updated.avoidNsfw;
@@ -1808,7 +1835,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     try {
-      final baseline = isEdit ? _channelCache[channel.id] : null;
+      final baseline = isEdit
+          ? await _ensureCacheEntry(channel.id)
+          : null;
       if (normalizedKeywords.length > _maxChannelKeywords) {
         _showSnack(
           'Channels support up to $_maxChannelKeywords keywords. Remove some and try again.',
@@ -1952,16 +1981,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         updatedAt: DateTime.now(),
       );
 
+      final displayChannel = updatedChannel.copyWith(keywords: const <String>[]);
+
       setState(() {
-        final index = _channels.indexWhere((c) => c.id == updatedChannel.id);
+        final index = _channels.indexWhere((c) => c.id == displayChannel.id);
         if (index == -1) {
-          _channels = <_DebrifyTvChannel>[..._channels, updatedChannel];
+          _channels = <_DebrifyTvChannel>[..._channels, displayChannel];
         } else {
           final next = List<_DebrifyTvChannel>.from(_channels);
-          next[index] = updatedChannel;
+          next[index] = displayChannel;
           _channels = next;
         }
-        _channelCache[updatedChannel.id] = entry;
+        _channelCache[displayChannel.id] = entry;
       });
 
       await DebrifyTvRepository.instance
@@ -1989,7 +2020,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _watchChannel(_DebrifyTvChannel channel) async {
-    if (channel.keywords.isEmpty) {
+    final keywords = await _getChannelKeywords(channel.id);
+    if (keywords.isEmpty) {
       _showSnack('Channel has no keywords yet', color: Colors.orange);
       return;
     }
@@ -2006,7 +2038,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final cacheEntry = _channelCache[channel.id];
+    final cacheEntry = await _ensureCacheEntry(channel.id);
     if (cacheEntry == null) {
       _showSnack(
         'Channel cache not found. Edit the channel to rebuild it.',
@@ -2034,9 +2066,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     setState(() {
       _currentWatchingChannelId = channel.id; // Track for channel switching
     });
-    _keywordsController.text = channel.keywords.join(', ');
+    _keywordsController.text = keywords.join(', ');
 
-    final normalizedKeywords = _normalizedKeywords(channel.keywords);
+    final normalizedKeywords = _normalizedKeywords(keywords);
     final playbackSelection = _selectTorrentsForPlayback(
       cacheEntry,
       normalizedKeywords,
@@ -3614,7 +3646,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       'DebrifyTV: Switching from channel ${currentIndex + 1} to ${nextIndex + 1} (${targetChannel.name})',
     );
 
-    final cacheEntry = _channelCache[targetChannel.id];
+    final cacheEntry = await _ensureCacheEntry(targetChannel.id);
     if (cacheEntry == null) {
       debugPrint(
         'DebrifyTV: Next channel "${targetChannel.name}" has no cache entry',
@@ -3641,7 +3673,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _seenLinkWithTorrentId.clear();
     debugPrint('DebrifyTV: Cleared prefetch state');
 
-    final normalizedKeywords = _normalizedKeywords(targetChannel.keywords);
+    final keywords = await _getChannelKeywords(targetChannel.id);
+    if (keywords.isEmpty) {
+      debugPrint('DebrifyTV: Next channel "${targetChannel.name}" has no keywords');
+      if (_provider == _providerRealDebrid) {
+        _startPrefetch();
+      }
+      return null;
+    }
+
+    final normalizedKeywords = _normalizedKeywords(keywords);
     final playbackSelection = _selectTorrentsForPlayback(
       cacheEntry,
       normalizedKeywords,
@@ -3769,7 +3810,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ..clear()
               ..addAll(remainder);
           });
-          _keywordsController.text = targetChannel.keywords.join(', ');
+            _keywordsController.text = keywords.join(', ');
         }
 
         _startPrefetch();
@@ -3814,7 +3855,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               _queue.add(firstTorrent);
             }
           });
-          _keywordsController.text = targetChannel.keywords.join(', ');
+            _keywordsController.text = keywords.join(', ');
         }
 
         debugPrint(
@@ -4702,7 +4743,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    bool avoidNsfw = true;
+    bool avoidNsfw = _quickAvoidNsfw;
     String? error;
     final TextEditingController controller = _keywordsController;
 
@@ -4892,7 +4933,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildChannelCard(_DebrifyTvChannel channel) {
-    final keywords = channel.keywords;
     final cacheEntry = _channelCache[channel.id];
     final int cachedCount = cacheEntry?.torrents.length ?? 0;
     final card = Container(
@@ -4956,20 +4996,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                Icons.settings_input_component_rounded,
-                color: Colors.white54,
-                size: 16,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '${keywords.length} keyword${keywords.length == 1 ? '' : 's'}',
-                style: const TextStyle(color: Colors.white60, fontSize: 13),
-              ),
-            ],
-          ),
           if (cacheEntry != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),

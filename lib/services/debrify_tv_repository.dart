@@ -21,24 +21,12 @@ class DebrifyTvRepository {
       return const [];
     }
 
-    final keywordRows = await db.query(
-      'tv_channel_keywords',
-      orderBy: 'channel_id ASC, position ASC',
-    );
-
-    final Map<String, List<String>> keywordMap = {};
-    for (final row in keywordRows) {
-      final channelId = row['channel_id'] as String;
-      final keyword = row['keyword'] as String;
-      keywordMap.putIfAbsent(channelId, () => <String>[]).add(keyword);
-    }
-
     return channels.map((row) {
       final channelId = row['channel_id'] as String;
       return DebrifyTvChannelRecord(
         channelId: channelId,
         name: row['name'] as String,
-        keywords: keywordMap[channelId] ?? const <String>[],
+        keywords: const <String>[],
         avoidNsfw: (row['avoid_nsfw'] as int? ?? 1) == 1,
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int? ?? 0),
@@ -46,6 +34,23 @@ class DebrifyTvRepository {
             DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int? ?? 0),
       );
     }).toList();
+  }
+
+  Future<List<String>> fetchChannelKeywords(String channelId) async {
+    final db = await DebrifyTvDatabase.instance.database;
+    final rows = await db.query(
+      'tv_channel_keywords',
+      where: 'channel_id = ?',
+      whereArgs: [channelId],
+      orderBy: 'position ASC',
+    );
+    if (rows.isEmpty) {
+      return const <String>[];
+    }
+    return rows
+        .map((row) => (row['keyword'] as String?)?.trim() ?? '')
+        .where((keyword) => keyword.isNotEmpty)
+        .toList(growable: false);
   }
 
   Future<void> upsertChannel(DebrifyTvChannelRecord record) async {
