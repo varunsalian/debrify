@@ -329,6 +329,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     });
   }
 
+  void _updateProgress(Iterable<String> messages, {bool replace = false}) {
+    final sanitized = messages
+        .map((message) => message.trim())
+        .where((message) => message.isNotEmpty)
+        .toList();
+    if (sanitized.isEmpty) {
+      return;
+    }
+
+    if (replace || _progress.value.isEmpty) {
+      _progress.value = sanitized;
+      return;
+    }
+
+    final copy = List<String>.from(_progress.value)..addAll(sanitized);
+    _progress.value = copy;
+  }
+
   void _cancelActiveWatch({
     BuildContext? dialogContext,
     bool clearQueue = true,
@@ -1726,11 +1744,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     setState(() {
       _isBusy = true;
+      _status = 'Importing zip from local storage…';
     });
 
     try {
+      _showChannelCreationDialog('Importing zip…');
       final parsed = DebrifyTvZipImporter.parseZip(bytes);
+      _updateProgress(['Parsed ${parsed.channels.length} channel(s)']);
       final persistence = await _persistImportedZipChannels(parsed.channels);
+      _updateProgress([
+        'Saved ${persistence.successes.length} channel(s)',
+        if (persistence.failures.isNotEmpty)
+          '${persistence.failures.length} channel(s) failed',
+      ]);
       await _showZipImportSummary(parsed, persistence);
     } catch (error) {
       _showSnack(
@@ -1741,7 +1767,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (mounted) {
         setState(() {
           _isBusy = false;
+          _status = '';
         });
+        _closeProgressDialog();
       }
     }
   }
@@ -1770,14 +1798,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     setState(() {
       _isBusy = true;
+      _status = 'Downloading zip…';
     });
 
     try {
+      _showChannelCreationDialog('Downloading zip…');
       final response = await http.get(uri);
       if (response.statusCode != 200) {
         throw FormatException('HTTP ${response.statusCode}');
       }
 
+      _updateProgress(['Download complete. Parsing…']);
       final bytes = response.bodyBytes;
       if (bytes.isEmpty) {
         _showSnack('Downloaded zip is empty.', color: Colors.orange);
@@ -1785,7 +1816,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       final parsed = DebrifyTvZipImporter.parseZip(bytes);
+      _updateProgress(['Parsed ${parsed.channels.length} channel(s). Saving…']);
       final persistence = await _persistImportedZipChannels(parsed.channels);
+      _updateProgress([
+        'Saved ${persistence.successes.length} channel(s)',
+        if (persistence.failures.isNotEmpty)
+          '${persistence.failures.length} channel(s) failed',
+      ]);
       await _showZipImportSummary(parsed, persistence);
       _lastChannelImportAt = DateTime.now();
     } catch (error) {
@@ -1797,7 +1834,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (mounted) {
         setState(() {
           _isBusy = false;
+          _status = '';
         });
+        _closeProgressDialog();
       }
     }
   }
