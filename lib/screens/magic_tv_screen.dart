@@ -975,7 +975,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   ) {
     final all = entry.torrents;
     if (all.length <= _playbackTorrentThreshold) {
-      return all;
+      final list = List<CachedTorrent>.from(all);
+      list.shuffle(Random());
+      return list;
     }
 
     final selected = <CachedTorrent>[];
