@@ -2784,6 +2784,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final previousKeywords = _keywordsController.text;
 
+    final int resolvedChannelNumber = _resolveChannelNumber(channel);
+
     setState(() {
       _currentWatchingChannelId = channel.id; // Track for channel switching
     });
@@ -2801,12 +2803,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await _watchTorboxWithCachedTorrents(
         cachedTorrents,
         channelName: channel.name,
+        channelId: channel.id,
+        channelNumber: resolvedChannelNumber,
       );
     } else {
       await _watchWithCachedTorrents(
         cachedTorrents,
         applyNsfwFilter: channel.avoidNsfw,
         channelName: channel.name,
+        channelId: channel.id,
+        channelNumber: resolvedChannelNumber,
       );
     }
 
@@ -3401,11 +3407,37 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   _activeApiKey = apiKeyEarly;
                   _startPrefetch();
 
+                  final String? activeChannelId = _currentWatchingChannelId;
+                  final int? activeChannelNumber;
+                  if (activeChannelId != null) {
+                    final int idx =
+                        _channels.indexWhere((c) => c.id == activeChannelId);
+                    if (idx >= 0) {
+                      final int resolvedNumber =
+                          _resolveChannelNumber(_channels[idx]);
+                      activeChannelNumber =
+                          resolvedNumber > 0 ? resolvedNumber : null;
+                    } else {
+                      activeChannelNumber = null;
+                    }
+                  } else {
+                    activeChannelNumber = null;
+                  }
+                  final List<Map<String, dynamic>>? activeChannelDirectory =
+                      _channels.isNotEmpty
+                          ? _androidTvChannelMetadata(
+                              activeChannelId: activeChannelId,
+                            )
+                          : null;
+
                   // Try to launch on Android TV first (early launch path)
                   final launchedOnTv = await _launchRealDebridOnAndroidTv(
                     firstStream: first,
                     requestNext: requestMagicNext,
                     showChannelNameOverride: _quickShowChannelName,
+                    channelId: activeChannelId,
+                    channelNumber: activeChannelNumber,
+                    channelDirectory: activeChannelDirectory,
                   );
 
                   if (launchedOnTv) {
@@ -3430,7 +3462,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         channelName: null,
                         showVideoTitle: _quickShowVideoTitle,
                         hideOptions: _quickHideOptions,
-                        hideBackButton: _quickHideBackButton,
                         requestMagicNext: requestMagicNext,
                         requestNextChannel:
                             _channels.length > 1 &&
@@ -3704,11 +3735,32 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         Navigator.of(_progressSheetContext!).pop();
       }
 
+      final String? activeChannelId = _currentWatchingChannelId;
+      final int? activeChannelNumber;
+      if (activeChannelId != null) {
+        final int idx = _channels.indexWhere((c) => c.id == activeChannelId);
+        if (idx >= 0) {
+          final int resolvedNumber = _resolveChannelNumber(_channels[idx]);
+          activeChannelNumber = resolvedNumber > 0 ? resolvedNumber : null;
+        } else {
+          activeChannelNumber = null;
+        }
+      } else {
+        activeChannelNumber = null;
+      }
+      final List<Map<String, dynamic>>? quickChannelDirectory =
+          _channels.isNotEmpty
+              ? _androidTvChannelMetadata(activeChannelId: activeChannelId)
+              : null;
+
       // Try to launch on Android TV first
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
         showChannelNameOverride: _quickShowChannelName,
+        channelId: activeChannelId,
+        channelNumber: activeChannelNumber,
+        channelDirectory: quickChannelDirectory,
       );
 
       if (launchedOnTv) {
@@ -3731,7 +3783,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             channelName: null,
             showVideoTitle: _quickShowVideoTitle,
             hideOptions: _quickHideOptions,
-            hideBackButton: _quickHideBackButton,
             requestMagicNext: requestMagicNext,
             requestNextChannel:
                 _channels.length > 1 &&
@@ -4078,6 +4129,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         requestNext: requestTorboxNext,
         showChannelNameOverride: _quickShowChannelName,
         channelName: null,
+        channelId: null,
+        channelNumber: null,
+        channelDirectory: null,
       );
       if (_watchCancelled) {
         return;
@@ -4099,7 +4153,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             channelName: null,
             showVideoTitle: _showVideoTitle,
             hideOptions: _hideOptions,
-            hideBackButton: _hideBackButton,
             requestMagicNext: requestTorboxNext,
             requestNextChannel:
                 _channels.length > 1 &&
@@ -4134,6 +4187,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     List<Torrent> cachedTorrents, {
     required bool applyNsfwFilter,
     String? channelName,
+    String? channelId,
+    int? channelNumber,
   }) async {
     if (cachedTorrents.isEmpty) {
       _showSnack(
@@ -4142,6 +4197,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       return;
     }
+
+    final List<Map<String, dynamic>>? channelDirectory =
+        _channels.isNotEmpty
+            ? _androidTvChannelMetadata(
+                activeChannelId: channelId ?? _currentWatchingChannelId,
+              )
+            : null;
 
     _launchedPlayer = false;
     await _stopPrefetch();
@@ -4331,6 +4393,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         firstStream: first,
         requestNext: requestMagicNext,
         channelName: channelName,
+        channelId: channelId,
+        channelNumber: channelNumber,
+        channelDirectory: channelDirectory,
       );
 
       if (launchedOnTv) {
@@ -4355,7 +4420,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             channelName: channelName,
             showVideoTitle: _showVideoTitle,
             hideOptions: _hideOptions,
-            hideBackButton: _hideBackButton,
             requestMagicNext: requestMagicNext,
             requestNextChannel:
                 _channels.length > 1 &&
@@ -4383,6 +4447,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     required Future<Map<String, String>?> Function() requestNext,
     String? channelName,
     bool? showChannelNameOverride,
+    String? channelId,
+    int? channelNumber,
+    List<Map<String, dynamic>>? channelDirectory,
   }) async {
     if (!_isAndroidTv) {
       return false;
@@ -4404,6 +4471,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         magnets: magnets,
         requestNext: requestNext,
         requestChannelSwitch: _channels.length > 1 ? _requestNextChannel : null,
+        requestChannelById: _channels.length > 1 ? _requestChannelById : null,
         onFinished: () async {
           AndroidTvPlayerBridge.clearTorboxProvider();
           if (!mounted) {
@@ -4422,7 +4490,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         showVideoTitle: _showVideoTitle,
         showChannelName: showChannelNameOverride ?? _showChannelName,
         channelName: channelName,
-        hideBackButton: _hideBackButton,
+        channels: channelDirectory,
+        currentChannelId: channelId ?? _currentWatchingChannelId,
+        currentChannelNumber: channelNumber,
       );
       if (launched) {
         if (mounted) {
@@ -4458,30 +4528,90 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final int nextIndex = (currentIndex + 1) % _channels.length;
     final _DebrifyTvChannel targetChannel = _channels[nextIndex];
-    final int targetChannelNumber = targetChannel.channelNumber > 0
-        ? targetChannel.channelNumber
-        : nextIndex + 1;
 
     debugPrint(
       'DebrifyTV: Switching from channel ${currentIndex + 1} to ${nextIndex + 1} (${targetChannel.name})',
     );
 
+    return _switchToChannel(
+      targetChannel,
+      fallbackIndex: nextIndex,
+      reason: 'next',
+    );
+  }
+
+  Future<Map<String, dynamic>?> _requestChannelById(String channelId) async {
+    debugPrint('DebrifyTV: _requestChannelById($channelId) called');
+
+    if (_channels.isEmpty) {
+      debugPrint('DebrifyTV: No channels available for direct selection');
+      return null;
+    }
+
+    _DebrifyTvChannel? targetChannel;
+    int discoveredIndex = -1;
+    for (var i = 0; i < _channels.length; i++) {
+      final channel = _channels[i];
+      if (channel.id == channelId) {
+        targetChannel = channel;
+        discoveredIndex = i;
+        break;
+      }
+    }
+
+    if (targetChannel == null) {
+      debugPrint('DebrifyTV: Channel id $channelId not found');
+      return null;
+    }
+
+    if (_currentWatchingChannelId == targetChannel.id) {
+      debugPrint(
+        'DebrifyTV: Selected channel is already active; refreshing playback',
+      );
+    } else {
+      debugPrint(
+        'DebrifyTV: Switching directly to channel ${targetChannel.name}',
+      );
+    }
+
+    return _switchToChannel(
+      targetChannel,
+      fallbackIndex: discoveredIndex >= 0 ? discoveredIndex : null,
+      reason: 'direct',
+    );
+  }
+
+  Future<Map<String, dynamic>?> _switchToChannel(
+    _DebrifyTvChannel targetChannel, {
+    int? fallbackIndex,
+    String reason = 'direct',
+  }) async {
+    debugPrint(
+      'DebrifyTV: _switchToChannel(${targetChannel.name}) reason=$reason',
+    );
+
+    final int computedIndex = fallbackIndex ??
+        _channels.indexWhere((channel) => channel.id == targetChannel.id);
+    final int targetChannelNumber = targetChannel.channelNumber > 0
+        ? targetChannel.channelNumber
+        : (computedIndex >= 0 ? computedIndex + 1 : 0);
+
     final cacheEntry = await _ensureCacheEntry(targetChannel.id);
     if (cacheEntry == null) {
       debugPrint(
-        'DebrifyTV: Next channel "${targetChannel.name}" has no cache entry',
+        'DebrifyTV: Channel "${targetChannel.name}" has no cache entry',
       );
       return null;
     }
     if (!cacheEntry.isReady) {
       debugPrint(
-        'DebrifyTV: Next channel "${targetChannel.name}" cache not ready. Error: ${cacheEntry.errorMessage}',
+        'DebrifyTV: Channel "${targetChannel.name}" cache not ready. Error: ${cacheEntry.errorMessage}',
       );
       return null;
     }
     if (cacheEntry.torrents.isEmpty) {
       debugPrint(
-        'DebrifyTV: Next channel "${targetChannel.name}" has no torrents',
+        'DebrifyTV: Channel "${targetChannel.name}" has no torrents',
       );
       return null;
     }
@@ -4490,7 +4620,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     await _stopPrefetch();
     debugPrint('DebrifyTV: Prefetcher stopped. Waiting for RD cooldown...');
     await Future.delayed(const Duration(seconds: 5));
-    debugPrint('DebrifyTV: Cooldown complete. Proceeding with next channel.');
+    debugPrint('DebrifyTV: Cooldown complete. Proceeding with channel switch.');
 
     final previousChannelId = _currentWatchingChannelId;
     if (previousChannelId != null) {
@@ -4506,7 +4636,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final keywords = await _getChannelKeywords(targetChannel.id);
     if (keywords.isEmpty) {
-      debugPrint('DebrifyTV: Next channel "${targetChannel.name}" has no keywords');
+      debugPrint('DebrifyTV: Channel "${targetChannel.name}" has no keywords');
       if (_provider == _providerRealDebrid) {
         _startPrefetch();
       }
@@ -4520,7 +4650,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
 
     if (playbackSelection.isEmpty) {
-      debugPrint('DebrifyTV: No torrents in next channel');
+      debugPrint('DebrifyTV: No torrents matched in selected channel');
       if (_provider == _providerRealDebrid) {
         _startPrefetch();
       }
@@ -4531,7 +4661,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .map((cached) => cached.toTorrent())
         .toList();
     if (allTorrents.isEmpty) {
-      debugPrint('DebrifyTV: No playable torrents resolved for next channel');
+      debugPrint('DebrifyTV: No playable torrents resolved for channel');
       if (_provider == _providerRealDebrid) {
         _startPrefetch();
       }
@@ -4588,7 +4718,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     try {
       if (_provider == _providerRealDebrid) {
-        debugPrint('DebrifyTV: Next channel uses global Real-Debrid provider');
+        debugPrint('DebrifyTV: Selected channel uses Real-Debrid provider');
         final apiKey = await StorageService.getApiKey();
         if (apiKey == null || apiKey.isEmpty) {
           debugPrint('DebrifyTV: ❌ No Real-Debrid API key configured');
@@ -4666,10 +4796,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _startPrefetch();
           debugPrint('DebrifyTV: Started Real-Debrid prefetcher for new channel');
           debugPrint(
-            'DebrifyTV: Successfully got stream from next channel: $title',
+            'DebrifyTV: Successfully got stream from channel: $title',
           );
 
           return {
+            'channelId': targetChannel.id,
             'channelName': targetChannel.name,
             'channelNumber': targetChannelNumber,
             'firstUrl': videoUrl,
@@ -4677,7 +4808,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           };
         }
 
-        debugPrint('DebrifyTV: All Real-Debrid candidates failed for next channel');
+        debugPrint('DebrifyTV: All Real-Debrid candidates failed for channel');
         return null;
       }
 
@@ -4722,6 +4853,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             'DebrifyTV: Torbox channel switch ready with stream ${prepared.title}',
           );
           return {
+            'channelId': targetChannel.id,
             'channelName': targetChannel.name,
             'channelNumber': targetChannelNumber,
             'firstUrl': prepared.streamUrl,
@@ -4729,7 +4861,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           };
         }
 
-        debugPrint('DebrifyTV: All Torbox candidates failed for next channel');
+        debugPrint('DebrifyTV: All Torbox candidates failed for channel');
         return null;
       }
 
@@ -4738,7 +4870,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       return null;
     } catch (e) {
-      debugPrint('DebrifyTV: Error getting first stream from next channel: $e');
+      debugPrint('DebrifyTV: Error getting stream from channel: $e');
     }
 
     debugPrint('DebrifyTV: Channel switch failed');
@@ -4751,11 +4883,45 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return null;
   }
 
+  int _resolveChannelNumber(_DebrifyTvChannel channel) {
+    if (channel.channelNumber > 0) {
+      return channel.channelNumber;
+    }
+    final int index = _channels.indexWhere((element) => element.id == channel.id);
+    if (index >= 0) {
+      return index + 1;
+    }
+    final int fallback = _channels.indexOf(channel);
+    return fallback >= 0 ? fallback + 1 : 0;
+  }
+
+  List<Map<String, dynamic>> _androidTvChannelMetadata({String? activeChannelId}) {
+    if (_channels.isEmpty) {
+      return const <Map<String, dynamic>>[];
+    }
+    final String? highlightId = activeChannelId ?? _currentWatchingChannelId;
+    final List<Map<String, dynamic>> payload = <Map<String, dynamic>>[];
+    for (var i = 0; i < _channels.length; i++) {
+      final channel = _channels[i];
+      payload.add({
+        'id': channel.id,
+        'name': channel.name,
+        'channelNumber': channel.channelNumber > 0 ? channel.channelNumber : i + 1,
+        'keywords': channel.keywords,
+        'isCurrent': highlightId != null && channel.id == highlightId,
+      });
+    }
+    return payload;
+  }
+
   Future<bool> _launchRealDebridOnAndroidTv({
     required Map<String, String> firstStream,
     required Future<Map<String, String>?> Function() requestNext,
     String? channelName,
     bool? showChannelNameOverride,
+    String? channelId,
+    int? channelNumber,
+    List<Map<String, dynamic>>? channelDirectory,
   }) async {
     debugPrint('DebrifyTV: _launchRealDebridOnAndroidTv() called');
     debugPrint('DebrifyTV: _isAndroidTv=$_isAndroidTv');
@@ -4782,18 +4948,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
 
     try {
+      final bool canSwitchChannels =
+          _currentWatchingChannelId != null &&
+              _channels.length > 1 &&
+              _provider == _providerRealDebrid;
+
       final launched = await AndroidTvPlayerBridge.launchRealDebridPlayback(
         initialUrl: initialUrl,
         title: title.isEmpty ? 'Debrify TV' : title,
         channelName: channelName,
         requestNext: requestNext,
         requestChannelSwitch:
-            _currentWatchingChannelId != null &&
-                _channels.length > 1 &&
-                _provider ==
-                    _providerRealDebrid // Only Real-Debrid channels support switching for now
-            ? _requestNextChannel
-            : null, // Only enable channel switching if watching a RD channel and multiple channels exist
+            canSwitchChannels ? _requestNextChannel : null,
+        requestChannelById: canSwitchChannels ? _requestChannelById : null,
         onFinished: () async {
           debugPrint('DebrifyTV: Android TV playback finished callback');
 
@@ -4816,7 +4983,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         hideOptions: _hideOptions,
         showVideoTitle: _showVideoTitle,
         showChannelName: showChannelNameOverride ?? _showChannelName,
-        hideBackButton: _hideBackButton,
+        channels: channelDirectory,
+        currentChannelId: channelId ?? _currentWatchingChannelId,
+        currentChannelNumber: channelNumber,
       );
 
       debugPrint(
@@ -4851,6 +5020,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<void> _watchTorboxWithCachedTorrents(
     List<Torrent> cachedTorrents, {
     String? channelName,
+    String? channelId,
+    int? channelNumber,
   }) async {
     if (cachedTorrents.isEmpty) {
       _showSnack(
@@ -4859,6 +5030,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       return;
     }
+
+    final List<Map<String, dynamic>>? channelDirectory =
+        _channels.isNotEmpty
+            ? _androidTvChannelMetadata(
+                activeChannelId: channelId ?? _currentWatchingChannelId,
+              )
+            : null;
 
     void log(String message) {
       debugPrint('DebrifyTV: $message');
@@ -5047,6 +5225,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         firstStream: first,
         requestNext: requestTorboxNext,
         channelName: channelName,
+        channelId: channelId,
+        channelNumber: channelNumber,
+        channelDirectory: channelDirectory,
       );
       if (launchedOnTv) {
         return;
@@ -5064,7 +5245,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             channelName: channelName,
             showVideoTitle: _showVideoTitle,
             hideOptions: _hideOptions,
-            hideBackButton: _hideBackButton,
             requestMagicNext: requestTorboxNext,
             requestNextChannel:
                 _channels.length > 1 &&
@@ -5212,7 +5392,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   channelName: null,
                   showVideoTitle: _quickShowVideoTitle,
                   hideOptions: _quickHideOptions,
-                  hideBackButton: _quickHideBackButton,
                 ),
               ),
             );

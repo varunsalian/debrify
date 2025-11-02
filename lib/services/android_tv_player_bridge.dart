@@ -9,6 +9,8 @@ import 'package:flutter/material.dart' show debugPrint;
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
 typedef ChannelSwitchProvider = Future<Map<String, dynamic>?> Function();
+typedef ChannelByIdSwitchProvider = Future<Map<String, dynamic>?> Function(
+    String channelId);
 typedef PlaybackFinishedCallback = Future<void> Function();
 
 /// Bridge helper for launching native Android TV playback using ExoPlayer.
@@ -22,6 +24,7 @@ class AndroidTvPlayerBridge {
 
   static StreamNextProvider? _streamNextProvider;
   static ChannelSwitchProvider? _channelSwitchProvider;
+  static ChannelByIdSwitchProvider? _channelByIdSwitchProvider;
   static PlaybackFinishedCallback? _playbackFinishedCallback;
   static bool _handlerInitialized = false;
   
@@ -67,12 +70,36 @@ class AndroidTvPlayerBridge {
               message: e.toString(),
             );
           }
+        case 'requestChannelById':
+          final args = call.arguments;
+          String? channelId;
+          if (args is Map) {
+            final raw = args['channelId'];
+            if (raw is String) {
+              channelId = raw.trim();
+            }
+          } else if (args is String) {
+            channelId = args.trim();
+          }
+          final selectProvider = _channelByIdSwitchProvider;
+          if (channelId == null || channelId.isEmpty || selectProvider == null) {
+            return null;
+          }
+          try {
+            return await selectProvider(channelId);
+          } catch (e) {
+            throw PlatformException(
+              code: 'channel_select_failed',
+              message: e.toString(),
+            );
+          }
         case 'torboxPlaybackFinished':
         case 'realDebridPlaybackFinished':
         case 'streamPlaybackFinished':
           final finished = _playbackFinishedCallback;
           _streamNextProvider = null;
           _channelSwitchProvider = null;
+          _channelByIdSwitchProvider = null;
           _playbackFinishedCallback = null;
           if (finished != null) {
             try {
@@ -98,6 +125,7 @@ class AndroidTvPlayerBridge {
     required List<Map<String, dynamic>> magnets,
     required TorboxNextProvider requestNext,
     ChannelSwitchProvider? requestChannelSwitch,
+    ChannelByIdSwitchProvider? requestChannelById,
     PlaybackFinishedCallback? onFinished,
     bool startFromRandom = false,
     int randomStartMaxPercent = 40,
@@ -106,7 +134,9 @@ class AndroidTvPlayerBridge {
     bool showVideoTitle = true,
     bool showChannelName = false,
     String? channelName,
-    bool hideBackButton = false,
+    List<Map<String, dynamic>>? channels,
+    String? currentChannelId,
+    int? currentChannelNumber,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -118,9 +148,14 @@ class AndroidTvPlayerBridge {
     _ensureInitialized();
     _streamNextProvider = requestNext;
     _channelSwitchProvider = requestChannelSwitch;
+    _channelByIdSwitchProvider = requestChannelById;
     _playbackFinishedCallback = onFinished;
 
     try {
+      final List<Map<String, dynamic>>? channelDirectory = channels
+          ?.map((entry) => Map<String, dynamic>.from(entry))
+          .toList(growable: false);
+
       final bool? launched = await _channel.invokeMethod<bool>(
         'launchTorboxPlayback',
         {
@@ -128,6 +163,9 @@ class AndroidTvPlayerBridge {
           'initialTitle': title,
           'magnets': magnets,
           'channelName': channelName,
+          'currentChannelId': currentChannelId,
+          'currentChannelNumber': currentChannelNumber,
+          'channels': channelDirectory,
           'config': {
             'startFromRandom': startFromRandom,
             'randomStartMaxPercent': randomStartMaxPercent,
@@ -135,7 +173,6 @@ class AndroidTvPlayerBridge {
             'hideOptions': hideOptions,
             'showVideoTitle': showVideoTitle,
             'showChannelName': showChannelName,
-            'hideBackButton': hideBackButton,
           },
         },
       );
@@ -148,6 +185,7 @@ class AndroidTvPlayerBridge {
 
     _streamNextProvider = null;
     _channelSwitchProvider = null;
+    _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
     return false;
   }
@@ -158,6 +196,7 @@ class AndroidTvPlayerBridge {
     String? channelName,
     required StreamNextProvider requestNext,
     ChannelSwitchProvider? requestChannelSwitch,
+    ChannelByIdSwitchProvider? requestChannelById,
     PlaybackFinishedCallback? onFinished,
     bool startFromRandom = false,
     int randomStartMaxPercent = 40,
@@ -165,7 +204,9 @@ class AndroidTvPlayerBridge {
     bool hideOptions = false,
     bool showVideoTitle = true,
     bool showChannelName = false,
-    bool hideBackButton = false,
+    List<Map<String, dynamic>>? channels,
+    String? currentChannelId,
+    int? currentChannelNumber,
   }) async {
     debugPrint('AndroidTvPlayerBridge: launchRealDebridPlayback() called');
     debugPrint('AndroidTvPlayerBridge: Platform.isAndroid=${Platform.isAndroid}');
@@ -183,6 +224,7 @@ class AndroidTvPlayerBridge {
     _ensureInitialized();
     _streamNextProvider = requestNext;
     _channelSwitchProvider = requestChannelSwitch;
+    _channelByIdSwitchProvider = requestChannelById;
     _playbackFinishedCallback = onFinished;
 
     try {
@@ -198,6 +240,11 @@ class AndroidTvPlayerBridge {
           'initialTitle': title,
           'provider': 'real_debrid',
           'channelName': channelName,
+          'currentChannelId': currentChannelId,
+          'currentChannelNumber': currentChannelNumber,
+          'channels': channels
+              ?.map((entry) => Map<String, dynamic>.from(entry))
+              .toList(growable: false),
           'config': {
             'startFromRandom': startFromRandom,
             'randomStartMaxPercent': randomStartMaxPercent,
@@ -205,7 +252,6 @@ class AndroidTvPlayerBridge {
             'hideOptions': hideOptions,
             'showVideoTitle': showVideoTitle,
             'showChannelName': showChannelName,
-            'hideBackButton': hideBackButton,
           },
         },
       );
@@ -228,6 +274,7 @@ class AndroidTvPlayerBridge {
     debugPrint('AndroidTvPlayerBridge: Cleaning up providers');
     _streamNextProvider = null;
     _channelSwitchProvider = null;
+    _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
     return false;
   }
@@ -235,12 +282,14 @@ class AndroidTvPlayerBridge {
   static void clearTorboxProvider() {
     _streamNextProvider = null;
     _channelSwitchProvider = null;
+    _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
   }
 
   static void clearStreamProvider() {
     _streamNextProvider = null;
     _channelSwitchProvider = null;
+    _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
   }
 }

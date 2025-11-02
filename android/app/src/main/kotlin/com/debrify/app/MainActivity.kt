@@ -225,7 +225,7 @@ class MainActivity : FlutterActivity() {
         @Suppress("UNCHECKED_CAST")
         val config = args["config"] as? Map<String, Any?>
         android.util.Log.d("DebrifyTV", "MainActivity: config=$config")
-        
+
         android.util.Log.d("DebrifyTV", "MainActivity: Creating intent for TorboxTvPlayerActivity")
         val intent = Intent().apply {
             setClassName(this@MainActivity, "com.debrify.app.tv.TorboxTvPlayerActivity")
@@ -233,7 +233,58 @@ class MainActivity : FlutterActivity() {
             putExtra("initialTitle", initialTitle)
             putExtra("provider", provider)
             putExtra("channelName", (args["channelName"] as? String)?.trim())
-            
+            putExtra("currentChannelId", (args["currentChannelId"] as? String)?.trim())
+            (args["currentChannelNumber"] as? Number)?.toInt()?.let { number ->
+                putExtra("currentChannelNumber", number)
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            val channelsRaw = args["channels"] as? List<Map<String, Any?>>
+            if (!channelsRaw.isNullOrEmpty()) {
+                android.util.Log.d(
+                    "DebrifyTV",
+                    "MainActivity: Preparing ${channelsRaw.size} channel directory entries",
+                )
+                val channelBundles = ArrayList<Bundle>(channelsRaw.size)
+                channelsRaw.forEach { entry ->
+                    val bundle = Bundle()
+                    (entry["id"] as? String)?.trim()?.let { bundle.putString("id", it) }
+                    (entry["name"] as? String)?.trim()?.let { bundle.putString("name", it) }
+                    (entry["channelNumber"] as? Number)?.toInt()
+                        ?.let { bundle.putInt("channelNumber", it) }
+                    val keywordsRaw = entry["keywords"]
+                    when (keywordsRaw) {
+                        is List<*> -> {
+                            val keywords = keywordsRaw
+                                .mapNotNull { it?.toString()?.trim() }
+                                .filter { it.isNotEmpty() }
+                            if (keywords.isNotEmpty()) {
+                                bundle.putStringArrayList(
+                                    "keywords",
+                                    ArrayList(keywords),
+                                )
+                            }
+                        }
+                        is String -> {
+                            val parts = keywordsRaw.split(',')
+                                .map { it.trim() }
+                                .filter { it.isNotEmpty() }
+                            if (parts.isNotEmpty()) {
+                                bundle.putStringArrayList(
+                                    "keywords",
+                                    ArrayList(parts),
+                                )
+                            }
+                        }
+                    }
+                    (entry["isCurrent"] as? Boolean)?.let { bundle.putBoolean("isCurrent", it) }
+                    channelBundles.add(bundle)
+                }
+                if (channelBundles.isNotEmpty()) {
+                    putParcelableArrayListExtra("channelDirectory", channelBundles)
+                }
+            }
+
             // For Torbox: magnets are required. For Real-Debrid: magnets are optional
             @Suppress("UNCHECKED_CAST")
             val magnetsRaw = args["magnets"] as? List<Map<String, Any?>>
@@ -266,7 +317,6 @@ class MainActivity : FlutterActivity() {
             putExtra("hideOptions", config?.get("hideOptions") as? Boolean ?: false)
             putExtra("showVideoTitle", config?.get("showVideoTitle") as? Boolean ?: true)
             putExtra("showChannelName", config?.get("showChannelName") as? Boolean ?: false)
-            putExtra("hideBackButton", config?.get("hideBackButton") as? Boolean ?: false)
         }
 
         try {

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="10dp"
+    android:background="@drawable/tv_search_item_bg"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:gravity="center_vertical"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="18dp"
+    android:paddingBottom="18dp">
+
+    <TextView
+        android:id="@+id/search_channel_number"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="CH 01"
+        android:textColor="#00FF00"
+        android:textSize="16sp"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.08"
+        android:shadowColor="#66003300"
+        android:shadowDx="0"
+        android:shadowDy="0"
+        android:shadowRadius="6" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="18dp">
+
+        <TextView
+            android:id="@+id/search_channel_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="NEON CINEMA"
+            android:textColor="#CCFFFFFF"
+            android:textSize="17sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.08"
+            android:shadowColor="#44003300"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="8" />
+
+        <TextView
+            android:id="@+id/search_channel_keywords"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="sci-fi • cyberpunk • classics"
+            android:textColor="#8800FF00"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.04" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/search_channel_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="NOW"
+        android:textColor="#00FF00"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:visibility="gone"
+        android:padding="6dp"
+        android:background="@drawable/tv_search_item_active_badge"
+        android:letterSpacing="0.12" />
+
+</LinearLayout>

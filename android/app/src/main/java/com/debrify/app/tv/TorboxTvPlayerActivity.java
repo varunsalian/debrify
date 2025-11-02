@@ -2,20 +2,29 @@ package com.debrify.app.tv;
 
 import android.content.Intent;
 import android.os.Build;
+import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.core.content.ContextCompat;
@@ -40,12 +49,15 @@ import androidx.media3.ui.CaptionStyleCompat;
 import androidx.media3.ui.DefaultTimeBar;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.SubtitleView;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -101,6 +113,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View channelSlideView;
     private View channelRgbBars;
     private SubtitleView subtitleOverlay;
+    private View searchOverlay;
+    private View searchPanel;
+    private EditText searchInput;
+    private RecyclerView searchResultsView;
+    private ChannelSearchAdapter searchAdapter;
+    private final ArrayList<ChannelEntry> channelDirectoryEntries = new ArrayList<>();
+    private final ArrayList<ChannelEntry> filteredChannelEntries = new ArrayList<>();
+    private boolean searchOverlayVisible = false;
     private android.animation.ValueAnimator staticAnimator;
     private Handler staticHandler = new Handler(Looper.getMainLooper());
     private final Handler keyPressHandler = new Handler(Looper.getMainLooper());
@@ -125,7 +145,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean showVideoTitle;
     private boolean showChannelName;
     private String currentChannelName = "";
-    private boolean hideBackButton;
+    private String currentChannelId;
+    private int currentChannelNumber = -1;
 
     private boolean randomApplied = false;
     private boolean requestingNext = false;
@@ -133,9 +154,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean longPressHandled = false;
     private boolean longPressDownHandled = false;
     private boolean longPressRightHandled = false;
+    private boolean longPressUpHandled = false;
     private boolean centerKeyDown = false;
     private boolean downKeyDown = false;
     private boolean rightKeyDown = false;
+    private boolean upKeyDown = false;
     private int playedCount = 0;
     private long lastChannelSwitchTime = 0;
     private static final long CHANNEL_SWITCH_COOLDOWN_MS = 2000L; // 2 second cooldown
@@ -175,6 +198,24 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             longPressRightHandled = true;
             requestNextChannel();
             hideControllerIfVisible();
+        }
+    };
+    private final Runnable upLongPressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!upKeyDown || longPressUpHandled) {
+                return;
+            }
+            longPressUpHandled = true;
+            hideControllerIfVisible();
+            if (!channelDirectoryEntries.isEmpty()) {
+                showSearchOverlay();
+            } else {
+                runOnUiThread(() ->
+                        Toast.makeText(TorboxTvPlayerActivity.this,
+                                "Channel search unavailable",
+                                Toast.LENGTH_SHORT).show());
+            }
         }
     };
     private final Player.Listener playbackListener = new Player.Listener() {
@@ -219,6 +260,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         channelRgbBars = findViewById(R.id.channel_rgb_bars);
         // Use our custom SubtitleView that's positioned independently
         subtitleOverlay = findViewById(R.id.player_subtitles_custom);
+        searchOverlay = findViewById(R.id.player_search_overlay);
+        searchPanel = findViewById(R.id.player_search_panel);
+        searchInput = findViewById(R.id.player_search_input);
+        searchResultsView = findViewById(R.id.player_search_results);
 
         Intent intent = getIntent();
         
@@ -260,13 +305,22 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (initialChannelName != null) {
             currentChannelName = initialChannelName;
         }
-        hideBackButton = intent.getBooleanExtra("hideBackButton", false);
+        currentChannelId = safeString(intent.getStringExtra("currentChannelId"));
+        int providedChannelNumber = intent.getIntExtra("currentChannelNumber", -1);
+        if (providedChannelNumber > 0) {
+            currentChannelNumber = providedChannelNumber;
+        }
 
         if (initialUrl == null || initialUrl.isEmpty()) {
             Toast.makeText(this, "Missing stream URL", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
+
+        setupSearchOverlay(intent);
+        runOnUiThread(() -> updateChannelBadge(currentChannelName));
+        
+        setupBackPressHandler();
 
         initialisePlayer();
         applyUiPreferences(initialTitle);
@@ -1033,35 +1087,29 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 }
                 @SuppressWarnings("unchecked")
                 Map<String, Object> payload = (Map<String, Object>) result;
-                String channelName = safeString(payload.get("channelName"));
-                Integer channelNumber = payload.get("channelNumber") instanceof Integer ? 
-                        (Integer) payload.get("channelNumber") : null;
-                String firstUrl = safeString(payload.get("firstUrl"));
-                String firstTitle = safeString(payload.get("firstTitle"));
-
-                if (channelName != null && !channelName.isEmpty()) {
-                    currentChannelName = channelName;
-                }
-                runOnUiThread(() -> updateChannelBadge(currentChannelName));
-                
-                if (firstUrl == null || firstUrl.isEmpty()) {
+                ChannelSwitchData switchData = parseChannelSwitchPayload(payload, null, null);
+                if (switchData == null || switchData.url == null || switchData.url.isEmpty()) {
                     runOnUiThread(() -> {
                         Toast.makeText(TorboxTvPlayerActivity.this, "Channel has no streams", Toast.LENGTH_SHORT).show();
                         hideChannelOverlay();
                     });
                     return;
                 }
+                final Integer overlayNumber = switchData.channelNumber;
+                final String overlayName = switchData.channelName;
+                final String playUrl = switchData.url;
+                final String playTitle = switchData.title;
                 
                 // Update the channel info (overlay already showing)
                 runOnUiThread(() -> {
                     if (channelNumberText != null) {
-                        String displayNum = channelNumber != null ? 
-                                String.format(Locale.US, "CH %02d", channelNumber) : "CHANNEL";
+                        String displayNum = overlayNumber != null ?
+                                String.format(Locale.US, "CH %02d", overlayNumber) : "CHANNEL";
                         channelNumberText.setText(displayNum);
                     }
                     
                     if (channelNameText != null) {
-                        String displayName = channelName != null && !channelName.isEmpty() ? channelName.toUpperCase() : "";
+                        String displayName = overlayName != null && !overlayName.isEmpty() ? overlayName.toUpperCase() : "";
                         channelNameText.setText(displayName);
                         channelNameText.setVisibility(!displayName.isEmpty() ? View.VISIBLE : View.GONE);
                     }
@@ -1073,7 +1121,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 
                 // Play the first video from the new channel after a short delay
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    playMedia(firstUrl, firstTitle);
+                    playMedia(playUrl, playTitle);
                     scheduleHideChannelOverlay(800L);
                 }, 200L);
             }
@@ -1409,6 +1457,430 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
+    private void setupSearchOverlay(Intent intent) {
+        if (searchOverlay == null || searchInput == null || searchResultsView == null) {
+            return;
+        }
+
+        searchOverlay.setVisibility(View.GONE);
+        searchOverlay.setAlpha(0f);
+        searchOverlay.setFocusable(true);
+        searchOverlay.setFocusableInTouchMode(true);
+        searchOverlay.setOnClickListener(v -> hideSearchOverlay());
+        if (searchPanel != null) {
+            searchPanel.setClickable(true);
+        }
+
+        ArrayList<Bundle> directoryBundles;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            directoryBundles = intent.getParcelableArrayListExtra("channelDirectory", Bundle.class);
+        } else {
+            directoryBundles = intent.getParcelableArrayListExtra("channelDirectory");
+        }
+
+        if (directoryBundles != null) {
+            for (int index = 0; index < directoryBundles.size(); index++) {
+                Bundle bundle = directoryBundles.get(index);
+                if (bundle == null) {
+                    continue;
+                }
+                String id = safeString(bundle.get("id"));
+                if (id == null || id.isEmpty()) {
+                    continue;
+                }
+                String name = safeString(bundle.get("name"));
+                int number = bundle.containsKey("channelNumber")
+                        ? bundle.getInt("channelNumber", -1)
+                        : -1;
+                ArrayList<String> keywordList = bundle.getStringArrayList("keywords");
+                List<String> keywords = keywordList != null ? keywordList : Collections.emptyList();
+                boolean isCurrent = bundle.getBoolean("isCurrent", false);
+                if (currentChannelId != null && currentChannelId.equals(id)) {
+                    isCurrent = true;
+                    if (number > 0) {
+                        currentChannelNumber = number;
+                    }
+                }
+                channelDirectoryEntries.add(new ChannelEntry(
+                        id,
+                        name != null ? name : "",
+                        number,
+                        keywords,
+                        isCurrent,
+                        index));
+            }
+        }
+
+        if (currentChannelNumber <= 0 && currentChannelId != null) {
+            int lookedUp = resolveChannelNumberFromDirectory(currentChannelId);
+            if (lookedUp > 0) {
+                currentChannelNumber = lookedUp;
+            }
+        }
+
+        if (channelDirectoryEntries.isEmpty()) {
+            return;
+        }
+
+        filteredChannelEntries.clear();
+        filteredChannelEntries.addAll(channelDirectoryEntries);
+
+        searchAdapter = new ChannelSearchAdapter(filteredChannelEntries, this::requestChannelByEntry);
+        searchResultsView.setLayoutManager(new LinearLayoutManager(this));
+        searchResultsView.setHasFixedSize(false);
+        searchResultsView.setItemAnimator(null);
+        searchResultsView.setAdapter(searchAdapter);
+
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) { }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                filterChannels(s != null ? s.toString() : "");
+            }
+        });
+
+        searchInput.setOnKeyListener((v, keyCode, event) -> {
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+                hideSearchOverlay();
+                return true;
+            }
+            return false;
+        });
+
+        markSearchCurrentChannelState(currentChannelId);
+        if (searchAdapter != null) {
+            searchAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void filterChannels(@Nullable String query) {
+        if (filteredChannelEntries == null) {
+            return;
+        }
+        final String raw = query != null ? query.trim() : "";
+        final String normalized = raw.toLowerCase(Locale.US);
+        final String digitsOnly = raw.replaceAll("[^0-9]", "");
+        filteredChannelEntries.clear();
+        if (normalized.isEmpty()) {
+            filteredChannelEntries.addAll(channelDirectoryEntries);
+        } else {
+            for (ChannelEntry entry : channelDirectoryEntries) {
+                if (entry.matches(normalized, digitsOnly)) {
+                    filteredChannelEntries.add(entry);
+                }
+            }
+        }
+        if (searchAdapter != null) {
+            searchAdapter.notifyDataSetChanged();
+        }
+        if (!filteredChannelEntries.isEmpty() && searchResultsView != null) {
+            searchResultsView.post(() -> searchResultsView.scrollToPosition(0));
+        }
+    }
+
+    private void showSearchOverlay() {
+        if (searchOverlay == null || searchInput == null || searchResultsView == null) {
+            return;
+        }
+        if (channelDirectoryEntries.isEmpty()) {
+            return;
+        }
+        keyPressHandler.removeCallbacks(upLongPressRunnable);
+        searchOverlayVisible = true;
+        filterChannels(searchInput.getText() != null ? searchInput.getText().toString() : "");
+
+        searchOverlay.setVisibility(View.VISIBLE);
+        searchOverlay.setAlpha(0f);
+        searchOverlay.bringToFront();
+        searchOverlay.animate().alpha(1f).setDuration(160L).start();
+
+        if (searchPanel != null) {
+            searchPanel.setScaleX(0.96f);
+            searchPanel.setScaleY(0.96f);
+            searchPanel.setAlpha(0.85f);
+            searchPanel.animate()
+                    .alpha(1f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(200L)
+                    .start();
+        }
+
+        searchInput.requestFocus();
+        searchInput.post(() -> {
+            searchInput.selectAll();
+            showKeyboard(searchInput);
+        });
+
+        searchResultsView.post(() -> {
+            if (searchResultsView.getChildCount() > 0) {
+                View first = searchResultsView.getChildAt(0);
+                if (first != null) {
+                    first.requestFocus();
+                }
+            }
+        });
+    }
+
+    private void hideSearchOverlay() {
+        if (searchOverlay == null || !isSearchOverlayVisible()) {
+            return;
+        }
+        searchOverlayVisible = false;
+        hideKeyboard(searchInput);
+        searchOverlay.animate()
+                .alpha(0f)
+                .setDuration(140L)
+                .withEndAction(() -> {
+                    if (searchOverlay != null) {
+                        searchOverlay.setVisibility(View.GONE);
+                        searchOverlay.setAlpha(1f);
+                    }
+                })
+                .start();
+        longPressUpHandled = false;
+    }
+
+    private boolean isSearchOverlayVisible() {
+        return searchOverlayVisible && searchOverlay != null && searchOverlay.getVisibility() == View.VISIBLE;
+    }
+
+    private void showKeyboard(@Nullable View target) {
+        if (target == null) {
+            return;
+        }
+        target.post(() -> {
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.showSoftInput(target, InputMethodManager.SHOW_IMPLICIT);
+            }
+        });
+    }
+
+    private void hideKeyboard(@Nullable View target) {
+        if (target == null) {
+            return;
+        }
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.hideSoftInputFromWindow(target.getWindowToken(), 0);
+        }
+    }
+
+    private void markSearchCurrentChannelState(@Nullable String channelIdValue) {
+        if (channelDirectoryEntries.isEmpty()) {
+            return;
+        }
+        for (ChannelEntry entry : channelDirectoryEntries) {
+            entry.isCurrent = channelIdValue != null && channelIdValue.equals(entry.id);
+        }
+    }
+
+    private int resolveChannelNumberFromDirectory(@Nullable String channelIdValue) {
+        if (channelIdValue == null || channelDirectoryEntries.isEmpty()) {
+            return -1;
+        }
+        for (ChannelEntry entry : channelDirectoryEntries) {
+            if (channelIdValue.equals(entry.id) && entry.number > 0) {
+                return entry.number;
+            }
+        }
+        return -1;
+    }
+
+    @Nullable
+    private ChannelSwitchData parseChannelSwitchPayload(Map<String, Object> payload,
+                                                        @Nullable Integer fallbackNumber,
+                                                        @Nullable String fallbackName) {
+        String channelName = safeString(payload.get("channelName"));
+        Integer channelNumber = payload.get("channelNumber") instanceof Integer
+                ? (Integer) payload.get("channelNumber")
+                : null;
+        String channelId = safeString(payload.get("channelId"));
+        String firstUrl = safeString(payload.get("firstUrl"));
+        String firstTitle = safeString(payload.get("firstTitle"));
+
+        if (channelId != null && !channelId.isEmpty()) {
+            currentChannelId = channelId;
+        }
+
+        String resolvedName;
+        if (channelName != null && !channelName.isEmpty()) {
+            resolvedName = channelName;
+        } else if (fallbackName != null && !fallbackName.isEmpty()) {
+            resolvedName = fallbackName;
+        } else {
+            resolvedName = currentChannelName;
+        }
+        if (resolvedName == null) {
+            resolvedName = "";
+        }
+
+        Integer resolvedNumber = channelNumber;
+        if (resolvedNumber == null || resolvedNumber <= 0) {
+            if (fallbackNumber != null && fallbackNumber > 0) {
+                resolvedNumber = fallbackNumber;
+            } else if (currentChannelId != null) {
+                int lookedUp = resolveChannelNumberFromDirectory(currentChannelId);
+                if (lookedUp > 0) {
+                    resolvedNumber = lookedUp;
+                }
+            }
+        }
+
+        currentChannelName = resolvedName;
+        currentChannelNumber = resolvedNumber != null ? resolvedNumber : -1;
+        markSearchCurrentChannelState(currentChannelId);
+
+        final String badgeName = currentChannelName;
+        final boolean hasAdapter = searchAdapter != null;
+        runOnUiThread(() -> {
+            updateChannelBadge(badgeName);
+            if (hasAdapter) {
+                searchAdapter.notifyDataSetChanged();
+            }
+        });
+
+        if (firstUrl == null || firstUrl.isEmpty()) {
+            return null;
+        }
+
+        String resolvedTitle;
+        if (firstTitle != null && !firstTitle.isEmpty()) {
+            resolvedTitle = firstTitle;
+        } else if (!resolvedName.isEmpty()) {
+            resolvedTitle = resolvedName;
+        } else {
+            resolvedTitle = "Debrify TV";
+        }
+
+        return new ChannelSwitchData(firstUrl, resolvedTitle, resolvedNumber, resolvedName);
+    }
+
+    private void requestChannelByEntry(ChannelEntry entry) {
+        if (entry == null) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastChannelSwitchTime < CHANNEL_SWITCH_COOLDOWN_MS) {
+            Toast.makeText(this, "Please wait...", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (requestingNext) {
+            return;
+        }
+
+        MethodChannel channel = MainActivity.getAndroidTvPlayerChannel();
+        if (channel == null) {
+            Toast.makeText(this, "Playback bridge unavailable", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        hideSearchOverlay();
+        showChannelOverlay(entry.number > 0 ? entry.number : null, entry.name);
+
+        lastChannelSwitchTime = now;
+        requestingNext = true;
+        currentChannelId = entry.id;
+        if (entry.number > 0) {
+            currentChannelNumber = entry.number;
+        }
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("channelId", entry.id);
+
+        channel.invokeMethod("requestChannelById", args, new MethodChannel.Result() {
+            @Override
+            public void success(@Nullable Object result) {
+                requestingNext = false;
+
+                if (!(result instanceof Map)) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(TorboxTvPlayerActivity.this,
+                                "Channel switch failed. Check logs.",
+                                Toast.LENGTH_SHORT).show();
+                        hideChannelOverlay();
+                    });
+                    return;
+                }
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> payload = (Map<String, Object>) result;
+                ChannelSwitchData switchData = parseChannelSwitchPayload(
+                        payload,
+                        entry.number > 0 ? entry.number : null,
+                        entry.name);
+
+                if (switchData == null || switchData.url == null || switchData.url.isEmpty()) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(TorboxTvPlayerActivity.this,
+                                "Channel has no streams",
+                                Toast.LENGTH_SHORT).show();
+                        hideChannelOverlay();
+                    });
+                    return;
+                }
+
+                final Integer overlayNumber = switchData.channelNumber;
+                final String overlayName = switchData.channelName != null
+                        ? switchData.channelName
+                        : entry.name;
+                final String playUrl = switchData.url;
+                final String playTitle = switchData.title;
+
+                runOnUiThread(() -> {
+                    if (channelNumberText != null) {
+                        String displayNum = overlayNumber != null
+                                ? String.format(Locale.US, "CH %02d", overlayNumber)
+                                : "CHANNEL";
+                        channelNumberText.setText(displayNum);
+                    }
+
+                    if (channelNameText != null) {
+                        String displayName = overlayName != null
+                                ? overlayName.toUpperCase()
+                                : "";
+                        channelNameText.setText(displayName);
+                        channelNameText.setVisibility(!displayName.isEmpty() ? View.VISIBLE : View.GONE);
+                    }
+
+                    if (channelStatusText != null) {
+                        channelStatusText.setText("⚡ LOADING VIDEO ⚡");
+                    }
+                });
+
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    playMedia(playUrl, playTitle);
+                    scheduleHideChannelOverlay(800L);
+                }, 200L);
+            }
+
+            @Override
+            public void error(String errorCode, @Nullable String errorMessage, @Nullable Object errorDetails) {
+                requestingNext = false;
+                runOnUiThread(() -> {
+                    Toast.makeText(TorboxTvPlayerActivity.this,
+                            errorMessage != null ? errorMessage : "Failed to switch channel",
+                            Toast.LENGTH_SHORT).show();
+                    hideChannelOverlay();
+                });
+            }
+
+            @Override
+            public void notImplemented() {
+                requestingNext = false;
+                runOnUiThread(() -> hideChannelOverlay());
+            }
+        });
+    }
+
     private static class TrackOption {
         final Tracks.Group group;
         final int trackIndex;
@@ -1418,6 +1890,147 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             this.group = group;
             this.trackIndex = trackIndex;
             this.label = label;
+        }
+    }
+
+    private static class ChannelEntry {
+        final String id;
+        final String name;
+        final String nameUpper;
+        final String nameLower;
+        final int number;
+        final List<String> keywords;
+        final String keywordsDisplay;
+        final String keywordsLower;
+        final int order;
+        boolean isCurrent;
+
+        ChannelEntry(String id, String name, int number, List<String> keywords, boolean isCurrent, int order) {
+            this.id = id;
+            this.name = name != null ? name : "";
+            this.nameUpper = this.name.toUpperCase(Locale.US);
+            this.nameLower = this.name.toLowerCase(Locale.US);
+            this.number = number;
+            this.keywords = keywords != null ? keywords : Collections.emptyList();
+            this.keywordsDisplay = this.keywords.isEmpty() ? "" : TextUtils.join(" • ", this.keywords);
+            this.keywordsLower = this.keywordsDisplay.toLowerCase(Locale.US);
+            this.isCurrent = isCurrent;
+            this.order = order;
+        }
+
+        boolean matches(String normalizedQuery, String digitsQuery) {
+            if (normalizedQuery.isEmpty()) {
+                return true;
+            }
+            if (!nameLower.isEmpty() && nameLower.contains(normalizedQuery)) {
+                return true;
+            }
+            if (!keywordsLower.isEmpty() && keywordsLower.contains(normalizedQuery)) {
+                return true;
+            }
+            if (!digitsQuery.isEmpty() && number > 0) {
+                String plain = Integer.toString(number);
+                String padded = String.format(Locale.US, "%02d", number);
+                return plain.contains(digitsQuery) || padded.contains(digitsQuery);
+            }
+            return false;
+        }
+    }
+
+    private static class ChannelSearchAdapter extends RecyclerView.Adapter<ChannelSearchAdapter.ChannelViewHolder> {
+        interface OnChannelClickListener {
+            void onChannelClicked(ChannelEntry entry);
+        }
+
+        private final List<ChannelEntry> items;
+        private final OnChannelClickListener listener;
+
+        ChannelSearchAdapter(List<ChannelEntry> items, OnChannelClickListener listener) {
+            this.items = items;
+            this.listener = listener;
+        }
+
+        @NonNull
+        @Override
+        public ChannelViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.item_tv_channel_search, parent, false);
+            view.setFocusable(true);
+            view.setFocusableInTouchMode(true);
+            return new ChannelViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ChannelViewHolder holder, int position) {
+            ChannelEntry entry = items.get(position);
+            holder.bind(entry, listener);
+        }
+
+        @Override
+        public int getItemCount() {
+            return items.size();
+        }
+
+        static class ChannelViewHolder extends RecyclerView.ViewHolder {
+            private final TextView numberView;
+            private final TextView nameView;
+            private final TextView keywordsView;
+            private final TextView statusView;
+
+            ChannelViewHolder(@NonNull View itemView) {
+                super(itemView);
+                numberView = itemView.findViewById(R.id.search_channel_number);
+                nameView = itemView.findViewById(R.id.search_channel_name);
+                keywordsView = itemView.findViewById(R.id.search_channel_keywords);
+                statusView = itemView.findViewById(R.id.search_channel_status);
+            }
+
+            void bind(ChannelEntry entry, OnChannelClickListener listener) {
+                String numberText = entry.number > 0
+                        ? String.format(Locale.US, "CH %02d", entry.number)
+                        : "AUTO";
+                numberView.setText(numberText);
+                nameView.setText(entry.nameUpper);
+                if (entry.keywordsDisplay.isEmpty()) {
+                    keywordsView.setText("Press OK to tune instantly");
+                } else {
+                    keywordsView.setText(entry.keywordsDisplay);
+                }
+                statusView.setVisibility(entry.isCurrent ? View.VISIBLE : View.INVISIBLE);
+                itemView.setBackgroundResource(entry.isCurrent
+                        ? R.drawable.tv_search_item_bg_active
+                        : R.drawable.tv_search_item_bg);
+                itemView.setAlpha(entry.isCurrent ? 1f : 0.86f);
+
+                itemView.setOnClickListener(v -> listener.onChannelClicked(entry));
+                itemView.setOnFocusChangeListener((v, hasFocus) -> {
+                    if (hasFocus) {
+                        v.animate().scaleX(1.04f).scaleY(1.04f).setDuration(120L).start();
+                        v.setBackgroundResource(R.drawable.tv_search_item_bg_active);
+                    } else {
+                        v.animate().scaleX(1f).scaleY(1f).setDuration(120L).start();
+                        v.setBackgroundResource(entry.isCurrent
+                                ? R.drawable.tv_search_item_bg_active
+                                : R.drawable.tv_search_item_bg);
+                    }
+                });
+            }
+        }
+    }
+
+    private static class ChannelSwitchData {
+        final String url;
+        final String title;
+        @Nullable
+        final Integer channelNumber;
+        @Nullable
+        final String channelName;
+
+        ChannelSwitchData(String url, String title, @Nullable Integer channelNumber, @Nullable String channelName) {
+            this.url = url;
+            this.title = title;
+            this.channelNumber = channelNumber;
+            this.channelName = channelName;
         }
     }
 
@@ -1442,6 +2055,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (isSearchOverlayVisible()) {
+            return super.onKeyDown(keyCode, event);
+        }
         // Long press handling is done in dispatchKeyEvent
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             // Consume center/enter to prevent default behavior
@@ -1453,6 +2069,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (isSearchOverlayVisible()) {
+            return super.onKeyUp(keyCode, event);
+        }
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             if (!longPressHandled) {
                 if (playerView != null) {
@@ -1473,9 +2092,33 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         return super.onKeyUp(keyCode, event);
     }
 
+    private void setupBackPressHandler() {
+        // Use modern OnBackPressedDispatcher API instead of deprecated onBackPressed()
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (isSearchOverlayVisible()) {
+                    hideSearchOverlay();
+                    return;
+                }
+                // Allow back button to finish the activity and return to Flutter app
+                setEnabled(false);
+                getOnBackPressedDispatcher().onBackPressed();
+            }
+        });
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
+        
+        if (isSearchOverlayVisible()) {
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
+                hideSearchOverlay();
+                return true;
+            }
+            return super.dispatchKeyEvent(event);
+        }
         
         // Intercept center/enter button to manage long press without waking controller
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
@@ -1495,6 +2138,32 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 centerKeyDown = false;
                 longPressHandled = false;
                 return true;
+            }
+        }
+        
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (!upKeyDown) {
+                    upKeyDown = true;
+                    longPressUpHandled = false;
+                    keyPressHandler.removeCallbacks(upLongPressRunnable);
+                    keyPressHandler.postDelayed(upLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
+                }
+                return super.dispatchKeyEvent(event);
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                keyPressHandler.removeCallbacks(upLongPressRunnable);
+                upKeyDown = false;
+                boolean handled = longPressUpHandled;
+                longPressUpHandled = false;
+                if (!handled && playerView != null) {
+                    playerView.showController();
+                }
+                return super.dispatchKeyEvent(event);
+            } else if (event.isCanceled()) {
+                keyPressHandler.removeCallbacks(upLongPressRunnable);
+                upKeyDown = false;
+                longPressUpHandled = false;
+                return super.dispatchKeyEvent(event);
             }
         }
         
@@ -1662,13 +2331,31 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
 
-        String display = name != null ? name.trim() : null;
-
-        if (showChannelName && display != null && !display.isEmpty()) {
-            channelBadgeView.setText(display.toUpperCase(Locale.US));
-            channelBadgeView.setVisibility(View.VISIBLE);
-        } else {
+        if (!showChannelName) {
             channelBadgeView.setVisibility(View.GONE);
+            return;
         }
+
+        String displayName = name != null ? name.trim() : "";
+        boolean hasNumber = currentChannelNumber > 0;
+
+        if (!hasNumber && displayName.isEmpty()) {
+            channelBadgeView.setVisibility(View.GONE);
+            return;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        if (hasNumber) {
+            builder.append(String.format(Locale.US, "CH %02d", currentChannelNumber));
+            if (!displayName.isEmpty()) {
+                builder.append("  •  ");
+            }
+        }
+        if (!displayName.isEmpty()) {
+            builder.append(displayName.toUpperCase(Locale.US));
+        }
+
+        channelBadgeView.setText(builder.toString());
+        channelBadgeView.setVisibility(View.VISIBLE);
     }
 }
