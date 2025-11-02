@@ -40,6 +40,8 @@ class VideoPlayerScreen extends StatefulWidget {
   final String? rdTorrentId; // For updating playlist poster
   // Optional: Debrify TV provider to fetch the next playable item (url & title)
   final Future<Map<String, String>?> Function()? requestMagicNext;
+  // Optional: Debrify TV channel switcher (firstUrl, firstTitle, channel metadata)
+  final Future<Map<String, dynamic>?> Function()? requestNextChannel;
   // Advanced: start each video at a random timestamp
   final bool startFromRandom;
   final int randomStartMaxPercent;
@@ -64,6 +66,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.startIndex,
     this.rdTorrentId,
     this.requestMagicNext,
+    this.requestNextChannel,
     this.startFromRandom = false,
     this.randomStartMaxPercent = 40,
     this.hideSeekbar = false,
@@ -140,6 +143,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return _cachedSeriesPlaylist;
   }
 
+  String? get _channelBadgeText {
+    final String? nameSource =
+        (_currentChannelName ?? widget.channelName)?.trim();
+    final int? numberSource = _currentChannelNumber;
+
+    final bool hasName = nameSource != null && nameSource.isNotEmpty;
+    if (!hasName && numberSource == null) {
+      return null;
+    }
+
+    String formattedNumber = '';
+    if (numberSource != null) {
+      final int safeNumber = numberSource.clamp(0, 999).toInt();
+      formattedNumber = 'CH ${safeNumber.toString().padLeft(2, '0')}';
+    }
+    if (!hasName) {
+      return formattedNumber;
+    }
+
+    final upperName = nameSource!.toUpperCase();
+    if (formattedNumber.isEmpty) {
+      return upperName;
+    }
+    return '$formattedNumber • $upperName';
+  }
+
   Timer? _hideTimer;
   bool _isSeekingWithSlider = false;
 
@@ -153,6 +182,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _allowResumeForManualSelection =
       false; // Allow resuming for manual selections with progress
   Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
+
+  // Channel metadata for Debrify TV flows
+  String? _currentChannelName;
+  int? _currentChannelNumber;
 
   // media_kit state
   bool _isReady = false;
@@ -238,6 +271,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void initState() {
     super.initState();
+    if (widget.channelName != null && widget.channelName!.trim().isNotEmpty) {
+      _currentChannelName = widget.channelName;
+    }
+    _currentChannelNumber = null;
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // Default to landscape when entering the player
@@ -448,6 +485,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Preload episode information if this is a series
     _preloadEpisodeInfo();
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoPlayerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.channelName != oldWidget.channelName) {
+      final String? trimmed = widget.channelName?.trim();
+      if ((trimmed == null || trimmed.isEmpty) && _currentChannelName != null) {
+        setState(() {
+          _currentChannelName = null;
+        });
+      } else if (trimmed != null && trimmed.isNotEmpty &&
+          _currentChannelName != widget.channelName) {
+        setState(() {
+          _currentChannelName = widget.channelName;
+        });
+      }
+    }
   }
 
   // Wait for the video to be ready and duration to be available
@@ -858,6 +913,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           }
           
           await _player.open(mk.Media(url), play: true);
+          _currentStreamUrl = url;
           // If advanced option is enabled, jump to a random timestamp for Debrify TV items
           if (widget.startFromRandom) {
             await _waitForVideoReady();
@@ -887,6 +943,117 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Clear transition state if no next episode found
     if (mounted) {
       setState(() {
+        _isTransitioning = false;
+      });
+    }
+  }
+
+  /// Switch to the next Debrify TV channel (MediaKit fallback)
+  Future<void> _goToNextChannel() async {
+    final request = widget.requestNextChannel;
+    if (request == null) {
+      return;
+    }
+
+    setState(() {
+      _isTransitioning = true;
+    });
+    _startTransitionOverlay();
+
+    try {
+      await _player.pause();
+    } catch (_) {}
+
+    Map<String, dynamic>? payload;
+    try {
+      payload = await request();
+    } catch (e) {
+      debugPrint('Player: Next channel request failed: $e');
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (payload == null) {
+      setState(() {
+        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
+        _tvStaticSubtext = '';
+        _isTransitioning = false;
+      });
+      return;
+    }
+
+    final dynamic rawUrl = payload['firstUrl'] ?? payload['url'];
+    final dynamic rawTitle = payload['firstTitle'] ?? payload['title'];
+    final String nextUrl = rawUrl is String ? rawUrl : '';
+    final String nextTitle = rawTitle is String ? rawTitle : '';
+
+    final String? channelName = payload['channelName'] is String
+        ? (payload['channelName'] as String)
+        : null;
+    final dynamic channelNumberRaw = payload['channelNumber'];
+    int? channelNumber;
+    if (channelNumberRaw is int) {
+      channelNumber = channelNumberRaw;
+    } else if (channelNumberRaw is String) {
+      channelNumber = int.tryParse(channelNumberRaw);
+    }
+
+    if ((channelName != null && channelName.trim().isNotEmpty) ||
+        channelNumber != null) {
+      setState(() {
+        if (channelName != null && channelName.trim().isNotEmpty) {
+          _currentChannelName = channelName;
+        }
+        if (channelNumber != null) {
+          _currentChannelNumber = channelNumber;
+        }
+      });
+    }
+
+    if (nextUrl.isEmpty) {
+      setState(() {
+        _tvStaticMessage = '⚠ CHANNEL HAS NO STREAMS';
+        _tvStaticSubtext = '';
+        _isTransitioning = false;
+      });
+      return;
+    }
+
+    if (nextTitle.isNotEmpty) {
+      setState(() {
+        _tvStaticMessage = '📺 SIGNAL ACQUIRED';
+        _tvStaticSubtext = '▶ ${nextTitle.toUpperCase()}';
+      });
+    }
+
+    try {
+      await _player.open(mk.Media(nextUrl), play: true);
+      _currentStreamUrl = nextUrl;
+    } catch (e) {
+      debugPrint('Player: Failed to open next channel stream: $e');
+      setState(() {
+        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
+        _tvStaticSubtext = '';
+        _isTransitioning = false;
+      });
+      return;
+    }
+
+    if (widget.startFromRandom) {
+      await _waitForVideoReady();
+      final offset = _randomStartOffset(_duration);
+      if (offset != null) {
+        await _player.seek(offset);
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        if (nextTitle.isNotEmpty) {
+          _dynamicTitle = nextTitle;
+        }
         _isTransitioning = false;
       });
     }
@@ -2366,6 +2533,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
     final isReady = _isReady;
     final duration = _duration;
     final pos = _position;
+    final String? channelBadgeText = _channelBadgeText;
     // final remaining = (duration - pos).clamp(Duration.zero, duration); // not used
 
     return Scaffold(
@@ -2517,6 +2685,13 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                 return KeyEventResult.handled;
               }
             }
+            if (key == LogicalKeyboardKey.channelUp ||
+                key == LogicalKeyboardKey.pageUp) {
+              if (widget.requestNextChannel != null) {
+                _goToNextChannel();
+                return KeyEventResult.handled;
+              }
+            }
             return KeyEventResult.ignored;
           },
           child: Stack(
@@ -2541,15 +2716,15 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
               // Transition overlay above video
               if (_rainbowActive) _buildTransitionOverlay(),
               if (widget.showChannelName &&
-                  widget.channelName != null &&
-                  widget.channelName!.isNotEmpty)
+                  channelBadgeText != null &&
+                  channelBadgeText.isNotEmpty)
                 Positioned(
                   bottom: 22,
                   right: 22,
                   child: IgnorePointer(
                     ignoring: true,
                     child: Text(
-                      widget.channelName!.toUpperCase(),
+                      channelBadgeText,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -2709,12 +2884,17 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                                   widget.requestMagicNext != null)
                               ? _goToNextEpisode
                               : null,
+                          onNextChannel:
+                              widget.requestNextChannel != null
+                                  ? _goToNextChannel
+                                  : null,
                           onPrevious: _hasPreviousEpisode()
                               ? _goToPreviousEpisode
                               : null,
                           hasNext:
                               _hasNextEpisode() ||
                               widget.requestMagicNext != null,
+                          hasNextChannel: widget.requestNextChannel != null,
                           hasPrevious: _hasPreviousEpisode(),
                           hideSeekbar: widget.hideSeekbar,
                           hideOptions: widget.hideOptions,
@@ -2756,8 +2936,10 @@ class _Controls extends StatelessWidget {
   final ValueChanged<double> onSeekBarChanged;
   final VoidCallback onSeekBarChangeEnd;
   final VoidCallback? onNext;
+  final VoidCallback? onNextChannel;
   final VoidCallback? onPrevious;
   final bool hasNext;
+  final bool hasNextChannel;
   final bool hasPrevious;
   final bool hideSeekbar;
   final bool hideOptions;
@@ -2787,8 +2969,10 @@ class _Controls extends StatelessWidget {
     required this.onSeekBarChanged,
     required this.onSeekBarChangeEnd,
     this.onNext,
+    this.onNextChannel,
     this.onPrevious,
     this.hasNext = false,
+    this.hasNextChannel = false,
     this.hasPrevious = false,
     required this.hideSeekbar,
     required this.hideOptions,
@@ -3062,6 +3246,15 @@ class _Controls extends StatelessWidget {
                                 icon: Icons.skip_next_rounded,
                                 label: 'Next',
                                 onPressed: onNext!,
+                                isCompact: true,
+                              ),
+
+                            // Next channel button
+                            if (hasNextChannel && onNextChannel != null)
+                              _NetflixControlButton(
+                                icon: Icons.tv_rounded,
+                                label: 'Next Channel',
+                                onPressed: onNextChannel!,
                                 isCompact: true,
                               ),
 

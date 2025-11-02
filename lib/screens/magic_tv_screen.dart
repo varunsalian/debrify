@@ -3358,6 +3358,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         hideOptions: _quickHideOptions,
                         hideBackButton: _quickHideBackButton,
                         requestMagicNext: requestMagicNext,
+                        requestNextChannel:
+                            _channels.length > 1 &&
+                                    (_quickProvider == _providerRealDebrid ||
+                                        _quickProvider == _providerTorbox)
+                                ? _requestNextChannel
+                                : null,
                       ),
                     ),
                   );
@@ -3653,6 +3659,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideOptions: _quickHideOptions,
             hideBackButton: _quickHideBackButton,
             requestMagicNext: requestMagicNext,
+            requestNextChannel:
+                _channels.length > 1 &&
+                        (_quickProvider == _providerRealDebrid ||
+                            _quickProvider == _providerTorbox)
+                    ? _requestNextChannel
+                    : null,
           ),
         ),
       );
@@ -3986,6 +3998,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideOptions: _hideOptions,
             hideBackButton: _hideBackButton,
             requestMagicNext: requestTorboxNext,
+            requestNextChannel:
+                _channels.length > 1 &&
+                        (_quickProvider == _providerRealDebrid ||
+                            _quickProvider == _providerTorbox)
+                    ? _requestNextChannel
+                    : null,
           ),
           ),
         );
@@ -4236,6 +4254,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideOptions: _hideOptions,
             hideBackButton: _hideBackButton,
             requestMagicNext: requestMagicNext,
+            requestNextChannel:
+                _channels.length > 1 &&
+                        (_provider == _providerRealDebrid ||
+                            _provider == _providerTorbox)
+                    ? _requestNextChannel
+                    : null,
           ),
         ),
       );
@@ -4889,6 +4913,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideOptions: _hideOptions,
             hideBackButton: _hideBackButton,
             requestMagicNext: requestTorboxNext,
+            requestNextChannel:
+                _channels.length > 1 &&
+                        (_provider == _providerRealDebrid ||
+                            _provider == _providerTorbox)
+                    ? _requestNextChannel
+                    : null,
           ),
         ),
       );
@@ -5922,7 +5952,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         apiKey,
         torrentId,
         attempts: 1,
-        pageSize: 100,
       );
       if (torboxTorrent != null && torboxTorrent.files.isNotEmpty) {
         break;

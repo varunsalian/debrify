@@ -1118,31 +1118,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String apiKey,
     int torrentId,
   ) async {
-    const limit = 50;
-    int attempt = 0;
-    while (attempt < 5) {
-      int offset = 0;
-      bool hasMore = true;
-      while (hasMore) {
-        final result = await TorboxService.getTorrents(
-          apiKey,
-          offset: offset,
-          limit: limit,
-        );
-        final torrents = (result['torrents'] as List).cast<TorboxTorrent>();
-        for (final torrent in torrents) {
-          if (torrent.id == torrentId) {
-            return torrent;
-          }
-        }
-        hasMore = result['hasMore'] as bool? ?? false;
-        if (!hasMore) break;
-        offset += limit;
-      }
-      await Future.delayed(const Duration(milliseconds: 300));
-      attempt += 1;
-    }
-    return null;
+    return TorboxService.getTorrentById(
+      apiKey,
+      torrentId,
+      attempts: 5,
+    );
   }
 
   Future<void> _showTorboxPostAddOptions(TorboxTorrent torrent) async {

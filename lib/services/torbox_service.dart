@@ -60,19 +60,29 @@ class TorboxService {
     String apiKey, {
     int offset = 0,
     int limit = 50,
+    int? torrentId,
   }) async {
-    final uri = Uri.parse('$_baseUrl/torrents/mylist').replace(
-      queryParameters: {
-        'bypass_cache': 'true',
-        'offset': '$offset',
-        'limit': '$limit',
-      },
-    );
+    final queryParameters = <String, String>{
+      'bypass_cache': 'true',
+    };
+    if (torrentId != null) {
+      queryParameters['id'] = '$torrentId';
+    } else {
+      queryParameters['offset'] = '$offset';
+      queryParameters['limit'] = '$limit';
+    }
+
+    final uri = Uri.parse('$_baseUrl/torrents/mylist')
+        .replace(queryParameters: queryParameters);
 
     try {
-      debugPrint(
-        'TorboxService: Fetching torrents offset=$offset limit=$limit',
-      );
+      if (torrentId != null) {
+        debugPrint('TorboxService: Fetching torrent id=$torrentId');
+      } else {
+        debugPrint(
+          'TorboxService: Fetching torrents offset=$offset limit=$limit',
+        );
+      }
       final headers = {
         'Authorization': _formatAuthHeader(apiKey),
         'Content-Type': 'application/json',
@@ -99,17 +109,55 @@ class TorboxService {
       }
 
       final data = payload['data'];
+      if (torrentId != null) {
+        if (data is Map<String, dynamic>) {
+          final torrent = TorboxTorrent.fromJson(data);
+          if (!torrent.isCachedOrCompleted) {
+            debugPrint(
+              'TorboxService: Torrent $torrentId not cached/completed yet',
+            );
+            return {
+              'torrents': <TorboxTorrent>[],
+              'hasMore': false,
+              'torrent': null,
+            };
+          }
+          return {
+            'torrents': <TorboxTorrent>[torrent],
+            'hasMore': false,
+            'torrent': torrent,
+          };
+        }
+        if (data is List) {
+          final rawList = data.whereType<Map<String, dynamic>>().toList();
+          final torrents = rawList
+              .map(TorboxTorrent.fromJson)
+              .where((torrent) => torrent.isCachedOrCompleted)
+              .toList();
+          final torrent = torrents.isNotEmpty ? torrents.first : null;
+          return {
+            'torrents': torrents,
+            'hasMore': false,
+            'torrent': torrent,
+          };
+        }
+      }
+
       if (data is List) {
         final rawList = data.whereType<Map<String, dynamic>>().toList();
         final torrents = rawList
             .map(TorboxTorrent.fromJson)
             .where((torrent) => torrent.isCachedOrCompleted)
             .toList();
-        final bool hasMore = rawList.length == limit && rawList.isNotEmpty;
+        final bool hasMore = torrentId == null && rawList.length == limit && rawList.isNotEmpty;
         debugPrint(
           'TorboxService: Retrieved ${torrents.length} cached torrents (raw=${rawList.length}). hasMore=$hasMore',
         );
-        return {'torrents': torrents, 'hasMore': hasMore};
+        return {
+          'torrents': torrents,
+          'hasMore': hasMore,
+          'torrent': torrents.isNotEmpty ? torrents.first : null,
+        };
       }
 
       debugPrint('TorboxService: Torrent payload unexpected: $payload');
@@ -347,30 +395,36 @@ class TorboxService {
     String apiKey,
     int torrentId, {
     int attempts = 5,
-    int pageSize = 50,
     Duration delayBetweenAttempts = const Duration(milliseconds: 300),
   }) async {
     for (int attempt = 0; attempt < attempts; attempt++) {
-      int offset = 0;
-      bool hasMore = true;
-      while (hasMore) {
+      try {
         final result = await getTorrents(
           apiKey,
-          offset: offset,
-          limit: pageSize,
+          torrentId: torrentId,
         );
-        final torrents = (result['torrents'] as List).cast<TorboxTorrent>();
-        for (final torrent in torrents) {
-          if (torrent.id == torrentId) {
-            return torrent;
-          }
+        final TorboxTorrent? torrent =
+            result['torrent'] as TorboxTorrent? ??
+                _firstTorrent(result['torrents']);
+        if (torrent != null) {
+          return torrent;
         }
-        hasMore = result['hasMore'] as bool? ?? false;
-        if (!hasMore) break;
-        offset += pageSize;
+      } catch (e) {
+        debugPrint('TorboxService: getTorrentById attempt ${attempt + 1} failed: $e');
       }
       if (attempt < attempts - 1) {
         await Future.delayed(delayBetweenAttempts);
+      }
+    }
+    return null;
+  }
+
+  static TorboxTorrent? _firstTorrent(dynamic value) {
+    if (value is List) {
+      for (final item in value) {
+        if (item is TorboxTorrent) {
+          return item;
+        }
       }
     }
     return null;
