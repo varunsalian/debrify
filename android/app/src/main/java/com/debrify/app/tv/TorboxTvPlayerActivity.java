@@ -689,16 +689,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void showLoadingBar(LoadingType type) {
+        showLoadingBar(type, null, null);
+    }
+
+    private void showLoadingBar(LoadingType type, @Nullable Integer channelNum, @Nullable String channelName) {
         if (loadingBarContainer == null || loadingBar == null) {
             return;
         }
-        
+
         runOnUiThread(() -> {
             // Stop any existing animation
             if (loadingBarAnimator != null && loadingBarAnimator.isRunning()) {
                 loadingBarAnimator.cancel();
             }
-            
+
             // Set color based on type
             int barColor;
             int shadowColor;
@@ -710,13 +714,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 shadowColor = Color.parseColor("#AA00FF00");
             }
             loadingBar.setBackgroundColor(barColor);
-            
+
             // Show the container
             loadingBarContainer.setVisibility(View.VISIBLE);
             loadingBarContainer.setAlpha(1f);
-            
+
             // Show bottom indicator
-            showBottomLoadingIndicator(type);
+            showBottomLoadingIndicator(type, channelNum, channelName);
             
             // Get the width of the container
             loadingBarContainer.post(() -> {
@@ -765,32 +769,38 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         });
     }
     
-    private void showBottomLoadingIndicator(LoadingType type) {
+    private void showBottomLoadingIndicator(LoadingType type, @Nullable Integer channelNum, @Nullable String channelName) {
         if (loadingIndicator == null || loadingText == null) {
             return;
         }
-        
+
         runOnUiThread(() -> {
             // Stop any existing animation
             if (dotsAnimator != null && dotsAnimator.isRunning()) {
                 dotsAnimator.cancel();
             }
-            
+
             // Set text and color based on type
             int textColor;
             int dotColor;
             String text;
-            
+
             if (type == LoadingType.CHANNEL) {
                 textColor = Color.parseColor("#00FFFF"); // Cyan
                 dotColor = Color.parseColor("#00FFFF");
-                text = "CHANNEL";
+                if (channelNum != null && channelName != null) {
+                    text = String.format(Locale.US, "Loading channel %02d : %s", channelNum, channelName.toUpperCase());
+                } else if (channelNum != null) {
+                    text = String.format(Locale.US, "Loading channel %02d", channelNum);
+                } else {
+                    text = "Loading channel";
+                }
             } else {
                 textColor = Color.parseColor("#00FF00"); // Green
                 dotColor = Color.parseColor("#00FF00");
-                text = "STREAM";
+                text = "Loading Stream";
             }
-            
+
             loadingText.setText(text);
             loadingText.setTextColor(textColor);
             
@@ -1902,7 +1912,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         hideSearchOverlay();
-        showLoadingBar(LoadingType.CHANNEL);
+        showLoadingBar(LoadingType.CHANNEL, entry.number > 0 ? entry.number : null, entry.name);
 
         lastChannelSwitchTime = now;
         requestingNext = true;
@@ -2088,7 +2098,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 itemView.setOnClickListener(v -> listener.onChannelClicked(entry));
                 itemView.setOnFocusChangeListener((v, hasFocus) -> {
                     if (hasFocus) {
-                        v.animate().scaleX(1.04f).scaleY(1.04f).setDuration(120L).start();
+                        v.animate().scaleX(1.01f).scaleY(1.01f).setDuration(120L).start();
                         v.setBackgroundResource(R.drawable.tv_search_item_bg_active);
                     } else {
                         v.animate().scaleX(1f).scaleY(1f).setDuration(120L).start();
