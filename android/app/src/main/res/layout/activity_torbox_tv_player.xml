@@ -67,6 +67,26 @@
         android:alpha="0.85"
         android:visibility="gone" />
 
+    <!-- YouTube-style Top Loading Bar -->
+    <FrameLayout
+        android:id="@+id/player_loading_bar_container"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="top"
+        android:visibility="gone"
+        android:background="#15000000">
+
+        <View
+            android:id="@+id/player_loading_bar"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:background="#CC00FF00"
+            android:shadowColor="#AA00FF00"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="4" />
+    </FrameLayout>
+
     <!-- Custom SubtitleView - positioned independently of video -->
     <androidx.media3.ui.SubtitleView
         android:id="@+id/player_subtitles_custom"

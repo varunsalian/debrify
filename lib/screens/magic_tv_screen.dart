@@ -4907,7 +4907,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         'id': channel.id,
         'name': channel.name,
         'channelNumber': channel.channelNumber > 0 ? channel.channelNumber : i + 1,
-        'keywords': channel.keywords,
         'isCurrent': highlightId != null && channel.id == highlightId,
       });
     }

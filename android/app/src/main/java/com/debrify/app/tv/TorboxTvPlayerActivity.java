@@ -118,6 +118,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private EditText searchInput;
     private RecyclerView searchResultsView;
     private ChannelSearchAdapter searchAdapter;
+    private View loadingBarContainer;
+    private View loadingBar;
+    private android.animation.ValueAnimator loadingBarAnimator;
     private final ArrayList<ChannelEntry> channelDirectoryEntries = new ArrayList<>();
     private final ArrayList<ChannelEntry> filteredChannelEntries = new ArrayList<>();
     private boolean searchOverlayVisible = false;
@@ -264,6 +267,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         searchPanel = findViewById(R.id.player_search_panel);
         searchInput = findViewById(R.id.player_search_input);
         searchResultsView = findViewById(R.id.player_search_results);
+        loadingBarContainer = findViewById(R.id.player_loading_bar_container);
+        loadingBar = findViewById(R.id.player_loading_bar);
 
         Intent intent = getIntent();
         
@@ -667,46 +672,96 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .start();
     }
 
-    private void showNextOverlay(@Nullable String headline, @Nullable String subline) {
-        if (nextOverlay == null || player == null) {
+    private void showLoadingBar() {
+        if (loadingBarContainer == null || loadingBar == null) {
             return;
         }
         
         runOnUiThread(() -> {
-            // Pause the current video
-            if (player.isPlaying()) {
-                player.pause();
+            // Stop any existing animation
+            if (loadingBarAnimator != null && loadingBarAnimator.isRunning()) {
+                loadingBarAnimator.cancel();
             }
             
-            nextOverlay.removeCallbacks(hideNextOverlayRunnable);
+            // Show the container
+            loadingBarContainer.setVisibility(View.VISIBLE);
+            loadingBarContainer.setAlpha(1f);
             
-            // Set retro TV message
-            String displayHeadline = getRandomTvStaticMessage();
-            if (nextText != null) {
-                nextText.setText(displayHeadline);
-            }
-            
-            // Show next video title if available
-            if (nextSubtext != null) {
-                if (subline != null && !subline.isEmpty()) {
-                    nextSubtext.setVisibility(View.VISIBLE);
-                    nextSubtext.setText("▶ " + subline.toUpperCase());
-                } else {
-                    nextSubtext.setVisibility(View.GONE);
+            // Get the width of the container
+            loadingBarContainer.post(() -> {
+                int containerWidth = loadingBarContainer.getWidth();
+                if (containerWidth <= 0) {
+                    return;
                 }
+                
+                // Create indeterminate loading animation (0% to 100%)
+                loadingBarAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f);
+                loadingBarAnimator.setDuration(1500L);
+                loadingBarAnimator.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+                loadingBarAnimator.setRepeatMode(android.animation.ValueAnimator.RESTART);
+                loadingBarAnimator.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+                
+                loadingBarAnimator.addUpdateListener(animation -> {
+                    if (loadingBar == null) {
+                        return;
+                    }
+                    float progress = (float) animation.getAnimatedValue();
+                    
+                    // Calculate width for indeterminate animation
+                    // The bar will grow from 0% to 30% of width, then slide across
+                    float barWidth;
+                    float barPosition;
+                    
+                    if (progress < 0.3f) {
+                        // Growing phase
+                        barWidth = (progress / 0.3f) * 0.3f * containerWidth;
+                        barPosition = 0;
+                    } else {
+                        // Sliding phase
+                        barWidth = 0.3f * containerWidth;
+                        float slideProgress = (progress - 0.3f) / 0.7f;
+                        barPosition = slideProgress * containerWidth;
+                    }
+                    
+                    android.view.ViewGroup.LayoutParams params = loadingBar.getLayoutParams();
+                    params.width = (int) barWidth;
+                    loadingBar.setLayoutParams(params);
+                    loadingBar.setTranslationX(barPosition);
+                });
+                
+                loadingBarAnimator.start();
+            });
+        });
+    }
+    
+    private void hideLoadingBar() {
+        if (loadingBarContainer == null) {
+            return;
+        }
+        
+        runOnUiThread(() -> {
+            // Stop animation
+            if (loadingBarAnimator != null && loadingBarAnimator.isRunning()) {
+                loadingBarAnimator.cancel();
             }
             
-            // Start TV static animation
-            startTvStaticEffect();
-            
-            // Animate overlay in
-            nextOverlay.setVisibility(View.VISIBLE);
-            nextOverlay.setAlpha(0f);
-            nextOverlay.animate()
-                .alpha(1f)
-                .setDuration(150L)
+            // Fade out
+            loadingBarContainer.animate()
+                .alpha(0f)
+                .setDuration(200L)
+                .withEndAction(() -> {
+                    if (loadingBarContainer != null) {
+                        loadingBarContainer.setVisibility(View.GONE);
+                        loadingBarContainer.setAlpha(1f);
+                    }
+                })
                 .start();
         });
+    }
+    
+    private void showNextOverlay(@Nullable String headline, @Nullable String subline) {
+        // Now just show loading bar instead of full overlay
+        showLoadingBar();
     }
     
     private String getRandomTvStaticMessage() {
@@ -789,43 +844,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void hideNextOverlay() {
-        scheduleHideNextOverlay(0L);
+        // Now just hide loading bar
+        hideLoadingBar();
     }
 
     private void scheduleHideNextOverlay(long delayMs) {
-        if (nextOverlay == null) {
-            return;
-        }
-        runOnUiThread(() -> {
-            nextOverlay.removeCallbacks(hideNextOverlayRunnable);
-            nextOverlay.postDelayed(hideNextOverlayRunnable, delayMs);
-        });
+        // Schedule hiding the loading bar
+        new Handler(Looper.getMainLooper()).postDelayed(this::hideLoadingBar, delayMs);
     }
 
     private void performHideNextOverlay() {
-        if (nextOverlay == null) {
-            return;
-        }
-        if (nextOverlay.getVisibility() != View.VISIBLE) {
-            nextOverlay.setAlpha(1f);
-            return;
-        }
-        
-        // Stop TV static effect
-        stopTvStaticEffect();
-        
-        // Fade out the overlay
-        nextOverlay.animate().cancel();
-        nextOverlay.animate()
-                .alpha(0f)
-                .setDuration(200L)
-                .withEndAction(() -> {
-                    if (nextOverlay != null) {
-                        nextOverlay.setVisibility(View.GONE);
-                        nextOverlay.setAlpha(1f);
-                    }
-                })
-                .start();
+        // Now just hide loading bar
+        hideLoadingBar();
     }
 
     private void playMedia(String url, @Nullable String title) {
@@ -1064,8 +1094,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         
-        // Show animation IMMEDIATELY before fetching
-        showChannelOverlay(null, "SWITCHING...");
+        // Show loading bar IMMEDIATELY before fetching
+        showLoadingBar();
         
         lastChannelSwitchTime = now;
         requestingNext = true;
@@ -1091,39 +1121,16 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 if (switchData == null || switchData.url == null || switchData.url.isEmpty()) {
                     runOnUiThread(() -> {
                         Toast.makeText(TorboxTvPlayerActivity.this, "Channel has no streams", Toast.LENGTH_SHORT).show();
-                        hideChannelOverlay();
+                        hideLoadingBar();
                     });
                     return;
                 }
-                final Integer overlayNumber = switchData.channelNumber;
-                final String overlayName = switchData.channelName;
                 final String playUrl = switchData.url;
                 final String playTitle = switchData.title;
                 
-                // Update the channel info (overlay already showing)
-                runOnUiThread(() -> {
-                    if (channelNumberText != null) {
-                        String displayNum = overlayNumber != null ?
-                                String.format(Locale.US, "CH %02d", overlayNumber) : "CHANNEL";
-                        channelNumberText.setText(displayNum);
-                    }
-                    
-                    if (channelNameText != null) {
-                        String displayName = overlayName != null && !overlayName.isEmpty() ? overlayName.toUpperCase() : "";
-                        channelNameText.setText(displayName);
-                        channelNameText.setVisibility(!displayName.isEmpty() ? View.VISIBLE : View.GONE);
-                    }
-                    
-                    if (channelStatusText != null) {
-                        channelStatusText.setText("⚡ LOADING VIDEO ⚡");
-                    }
-                });
-                
-                // Play the first video from the new channel after a short delay
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    playMedia(playUrl, playTitle);
-                    scheduleHideChannelOverlay(800L);
-                }, 200L);
+                // Play the first video from the new channel
+                playMedia(playUrl, playTitle);
+                scheduleHideNextOverlay(350L);
             }
 
             @Override
@@ -1132,14 +1139,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 String displayMsg = errorMessage != null ? errorMessage : "Failed to switch channel";
                 runOnUiThread(() -> {
                     Toast.makeText(TorboxTvPlayerActivity.this, displayMsg, Toast.LENGTH_SHORT).show();
-                    hideChannelOverlay();
+                    hideLoadingBar();
                 });
             }
 
             @Override
             public void notImplemented() {
                 requestingNext = false;
-                runOnUiThread(() -> hideChannelOverlay());
+                runOnUiThread(() -> hideLoadingBar());
             }
         });
     }
@@ -1151,9 +1158,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         runOnUiThread(() -> {
             cancelScheduledChannelOverlayHide();
-
-            // Pause the current video regardless of current state to avoid race with play()
-            player.pause();
             
             // Set channel info
             if (channelNumberText != null) {
@@ -1284,11 +1288,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 }
             })
             .start();
-
-        // Resume playback only when we are no longer waiting for a channel response
-        if (player != null && !player.isPlaying() && !requestingNext) {
-            player.play();
-        }
     }
 
     private void cancelScheduledChannelOverlayHide() {
@@ -1492,8 +1491,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 int number = bundle.containsKey("channelNumber")
                         ? bundle.getInt("channelNumber", -1)
                         : -1;
-                ArrayList<String> keywordList = bundle.getStringArrayList("keywords");
-                List<String> keywords = keywordList != null ? keywordList : Collections.emptyList();
                 boolean isCurrent = bundle.getBoolean("isCurrent", false);
                 if (currentChannelId != null && currentChannelId.equals(id)) {
                     isCurrent = true;
@@ -1505,7 +1502,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         id,
                         name != null ? name : "",
                         number,
-                        keywords,
                         isCurrent,
                         index));
             }
@@ -1559,9 +1555,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void filterChannels(@Nullable String query) {
-        if (filteredChannelEntries == null) {
-            return;
-        }
         final String raw = query != null ? query.trim() : "";
         final String normalized = raw.toLowerCase(Locale.US);
         final String digitsOnly = raw.replaceAll("[^0-9]", "");
@@ -1784,7 +1777,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         hideSearchOverlay();
-        showChannelOverlay(entry.number > 0 ? entry.number : null, entry.name);
+        showLoadingBar();
 
         lastChannelSwitchTime = now;
         requestingNext = true;
@@ -1823,43 +1816,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         Toast.makeText(TorboxTvPlayerActivity.this,
                                 "Channel has no streams",
                                 Toast.LENGTH_SHORT).show();
-                        hideChannelOverlay();
+                        hideLoadingBar();
                     });
                     return;
                 }
 
-                final Integer overlayNumber = switchData.channelNumber;
-                final String overlayName = switchData.channelName != null
-                        ? switchData.channelName
-                        : entry.name;
                 final String playUrl = switchData.url;
                 final String playTitle = switchData.title;
 
-                runOnUiThread(() -> {
-                    if (channelNumberText != null) {
-                        String displayNum = overlayNumber != null
-                                ? String.format(Locale.US, "CH %02d", overlayNumber)
-                                : "CHANNEL";
-                        channelNumberText.setText(displayNum);
-                    }
-
-                    if (channelNameText != null) {
-                        String displayName = overlayName != null
-                                ? overlayName.toUpperCase()
-                                : "";
-                        channelNameText.setText(displayName);
-                        channelNameText.setVisibility(!displayName.isEmpty() ? View.VISIBLE : View.GONE);
-                    }
-
-                    if (channelStatusText != null) {
-                        channelStatusText.setText("⚡ LOADING VIDEO ⚡");
-                    }
-                });
-
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    playMedia(playUrl, playTitle);
-                    scheduleHideChannelOverlay(800L);
-                }, 200L);
+                // Play the new channel video
+                playMedia(playUrl, playTitle);
+                scheduleHideNextOverlay(350L);
             }
 
             @Override
@@ -1869,14 +1836,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     Toast.makeText(TorboxTvPlayerActivity.this,
                             errorMessage != null ? errorMessage : "Failed to switch channel",
                             Toast.LENGTH_SHORT).show();
-                    hideChannelOverlay();
+                    hideLoadingBar();
                 });
             }
 
             @Override
             public void notImplemented() {
                 requestingNext = false;
-                runOnUiThread(() -> hideChannelOverlay());
+                runOnUiThread(() -> hideLoadingBar());
             }
         });
     }
@@ -1899,21 +1866,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         final String nameUpper;
         final String nameLower;
         final int number;
-        final List<String> keywords;
-        final String keywordsDisplay;
-        final String keywordsLower;
         final int order;
         boolean isCurrent;
 
-        ChannelEntry(String id, String name, int number, List<String> keywords, boolean isCurrent, int order) {
+        ChannelEntry(String id, String name, int number, boolean isCurrent, int order) {
             this.id = id;
             this.name = name != null ? name : "";
             this.nameUpper = this.name.toUpperCase(Locale.US);
             this.nameLower = this.name.toLowerCase(Locale.US);
             this.number = number;
-            this.keywords = keywords != null ? keywords : Collections.emptyList();
-            this.keywordsDisplay = this.keywords.isEmpty() ? "" : TextUtils.join(" • ", this.keywords);
-            this.keywordsLower = this.keywordsDisplay.toLowerCase(Locale.US);
             this.isCurrent = isCurrent;
             this.order = order;
         }
@@ -1923,9 +1884,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 return true;
             }
             if (!nameLower.isEmpty() && nameLower.contains(normalizedQuery)) {
-                return true;
-            }
-            if (!keywordsLower.isEmpty() && keywordsLower.contains(normalizedQuery)) {
                 return true;
             }
             if (!digitsQuery.isEmpty() && number > 0) {
@@ -1991,10 +1949,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         : "AUTO";
                 numberView.setText(numberText);
                 nameView.setText(entry.nameUpper);
-                if (entry.keywordsDisplay.isEmpty()) {
-                    keywordsView.setText("Press OK to tune instantly");
+                if (entry.isCurrent) {
+                    keywordsView.setText("Currently playing");
                 } else {
-                    keywordsView.setText(entry.keywordsDisplay);
+                    keywordsView.setText("Press OK to tune instantly");
                 }
                 statusView.setVisibility(entry.isCurrent ? View.VISIBLE : View.INVISIBLE);
                 itemView.setBackgroundResource(entry.isCurrent
@@ -2291,6 +2249,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         stopTvStaticEffect();
         if (staticHandler != null) {
             staticHandler.removeCallbacksAndMessages(null);
+        }
+        
+        // Clean up loading bar animation
+        if (loadingBarAnimator != null && loadingBarAnimator.isRunning()) {
+            loadingBarAnimator.cancel();
         }
         
         if (player != null) {

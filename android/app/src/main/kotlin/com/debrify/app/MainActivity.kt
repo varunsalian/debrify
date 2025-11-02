@@ -252,31 +252,6 @@ class MainActivity : FlutterActivity() {
                     (entry["name"] as? String)?.trim()?.let { bundle.putString("name", it) }
                     (entry["channelNumber"] as? Number)?.toInt()
                         ?.let { bundle.putInt("channelNumber", it) }
-                    val keywordsRaw = entry["keywords"]
-                    when (keywordsRaw) {
-                        is List<*> -> {
-                            val keywords = keywordsRaw
-                                .mapNotNull { it?.toString()?.trim() }
-                                .filter { it.isNotEmpty() }
-                            if (keywords.isNotEmpty()) {
-                                bundle.putStringArrayList(
-                                    "keywords",
-                                    ArrayList(keywords),
-                                )
-                            }
-                        }
-                        is String -> {
-                            val parts = keywordsRaw.split(',')
-                                .map { it.trim() }
-                                .filter { it.isNotEmpty() }
-                            if (parts.isNotEmpty()) {
-                                bundle.putStringArrayList(
-                                    "keywords",
-                                    ArrayList(parts),
-                                )
-                            }
-                        }
-                    }
                     (entry["isCurrent"] as? Boolean)?.let { bundle.putBoolean("isCurrent", it) }
                     channelBundles.add(bundle)
                 }
