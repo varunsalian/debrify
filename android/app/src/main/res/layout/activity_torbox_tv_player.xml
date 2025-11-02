@@ -87,6 +87,63 @@
             android:shadowRadius="4" />
     </FrameLayout>
 
+    <!-- Bottom-right Loading Indicator (independent of badge) -->
+    <LinearLayout
+        android:id="@+id/player_loading_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="60dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/player_loading_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="LOADING"
+            android:textColor="#00FF00"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1"
+            android:shadowColor="#AA000000"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:layout_marginEnd="8dp"
+            android:alpha="0.9" />
+
+        <LinearLayout
+            android:id="@+id/player_loading_dots"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <View
+                android:id="@+id/loading_dot_1"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/loading_dot" />
+
+            <View
+                android:id="@+id/loading_dot_2"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/loading_dot" />
+
+            <View
+                android:id="@+id/loading_dot_3"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:background="@drawable/loading_dot" />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- Custom SubtitleView - positioned independently of video -->
     <androidx.media3.ui.SubtitleView
         android:id="@+id/player_subtitles_custom"

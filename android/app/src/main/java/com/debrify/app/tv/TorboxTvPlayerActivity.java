@@ -76,6 +76,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private static final String PROVIDER_TORBOX = "torbox";
     private static final String PROVIDER_REAL_DEBRID = "real_debrid";
     
+    private enum LoadingType {
+        STREAM,   // Loading next stream (green)
+        CHANNEL   // Switching channel (cyan)
+    }
+    
     private static final long SEEK_STEP_MS = 10_000L;
     private static final long DEFAULT_TARGET_BUFFER_MS = 12_000L;
     private static final long HIGH_TARGET_BUFFER_MS = 20_000L;
@@ -121,6 +126,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View loadingBarContainer;
     private View loadingBar;
     private android.animation.ValueAnimator loadingBarAnimator;
+    private View loadingIndicator;
+    private TextView loadingText;
+    private View loadingDot1;
+    private View loadingDot2;
+    private View loadingDot3;
+    private android.animation.ValueAnimator dotsAnimator;
     private final ArrayList<ChannelEntry> channelDirectoryEntries = new ArrayList<>();
     private final ArrayList<ChannelEntry> filteredChannelEntries = new ArrayList<>();
     private boolean searchOverlayVisible = false;
@@ -269,6 +280,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         searchResultsView = findViewById(R.id.player_search_results);
         loadingBarContainer = findViewById(R.id.player_loading_bar_container);
         loadingBar = findViewById(R.id.player_loading_bar);
+        loadingIndicator = findViewById(R.id.player_loading_indicator);
+        loadingText = findViewById(R.id.player_loading_text);
+        loadingDot1 = findViewById(R.id.loading_dot_1);
+        loadingDot2 = findViewById(R.id.loading_dot_2);
+        loadingDot3 = findViewById(R.id.loading_dot_3);
 
         Intent intent = getIntent();
         
@@ -672,7 +688,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .start();
     }
 
-    private void showLoadingBar() {
+    private void showLoadingBar(LoadingType type) {
         if (loadingBarContainer == null || loadingBar == null) {
             return;
         }
@@ -683,9 +699,24 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 loadingBarAnimator.cancel();
             }
             
+            // Set color based on type
+            int barColor;
+            int shadowColor;
+            if (type == LoadingType.CHANNEL) {
+                barColor = Color.parseColor("#CC00FFFF"); // Cyan for channel
+                shadowColor = Color.parseColor("#AA00FFFF");
+            } else {
+                barColor = Color.parseColor("#CC00FF00"); // Green for stream
+                shadowColor = Color.parseColor("#AA00FF00");
+            }
+            loadingBar.setBackgroundColor(barColor);
+            
             // Show the container
             loadingBarContainer.setVisibility(View.VISIBLE);
             loadingBarContainer.setAlpha(1f);
+            
+            // Show bottom indicator
+            showBottomLoadingIndicator(type);
             
             // Get the width of the container
             loadingBarContainer.post(() -> {
@@ -734,18 +765,112 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         });
     }
     
+    private void showBottomLoadingIndicator(LoadingType type) {
+        if (loadingIndicator == null || loadingText == null) {
+            return;
+        }
+        
+        runOnUiThread(() -> {
+            // Stop any existing animation
+            if (dotsAnimator != null && dotsAnimator.isRunning()) {
+                dotsAnimator.cancel();
+            }
+            
+            // Set text and color based on type
+            int textColor;
+            int dotColor;
+            String text;
+            
+            if (type == LoadingType.CHANNEL) {
+                textColor = Color.parseColor("#00FFFF"); // Cyan
+                dotColor = Color.parseColor("#00FFFF");
+                text = "CHANNEL";
+            } else {
+                textColor = Color.parseColor("#00FF00"); // Green
+                dotColor = Color.parseColor("#00FF00");
+                text = "STREAM";
+            }
+            
+            loadingText.setText(text);
+            loadingText.setTextColor(textColor);
+            
+            if (loadingDot1 != null) {
+                loadingDot1.setBackgroundColor(dotColor);
+            }
+            if (loadingDot2 != null) {
+                loadingDot2.setBackgroundColor(dotColor);
+            }
+            if (loadingDot3 != null) {
+                loadingDot3.setBackgroundColor(dotColor);
+            }
+            
+            // Show indicator
+            loadingIndicator.setVisibility(View.VISIBLE);
+            loadingIndicator.setAlpha(0f);
+            loadingIndicator.animate()
+                .alpha(1f)
+                .setDuration(150L)
+                .start();
+            
+            // Animate dots (wave effect)
+            dotsAnimator = android.animation.ValueAnimator.ofInt(0, 1, 2, 3);
+            dotsAnimator.setDuration(1200L);
+            dotsAnimator.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            dotsAnimator.setRepeatMode(android.animation.ValueAnimator.RESTART);
+            
+            dotsAnimator.addUpdateListener(animation -> {
+                int step = (int) animation.getAnimatedValue();
+                if (loadingDot1 != null && loadingDot2 != null && loadingDot3 != null) {
+                    loadingDot1.setAlpha(step == 1 ? 1f : 0.3f);
+                    loadingDot2.setAlpha(step == 2 ? 1f : 0.3f);
+                    loadingDot3.setAlpha(step == 3 ? 1f : 0.3f);
+                }
+            });
+            
+            dotsAnimator.start();
+        });
+    }
+    
+    private void hideBottomLoadingIndicator() {
+        if (loadingIndicator == null) {
+            return;
+        }
+        
+        runOnUiThread(() -> {
+            // Stop animation
+            if (dotsAnimator != null && dotsAnimator.isRunning()) {
+                dotsAnimator.cancel();
+            }
+            
+            // Fade out
+            loadingIndicator.animate()
+                .alpha(0f)
+                .setDuration(200L)
+                .withEndAction(() -> {
+                    if (loadingIndicator != null) {
+                        loadingIndicator.setVisibility(View.GONE);
+                        loadingIndicator.setAlpha(1f);
+                    }
+                })
+                .start();
+        });
+    }
+    
     private void hideLoadingBar() {
         if (loadingBarContainer == null) {
             return;
         }
         
         runOnUiThread(() -> {
-            // Stop animation
+            // Stop top bar animation
             if (loadingBarAnimator != null && loadingBarAnimator.isRunning()) {
                 loadingBarAnimator.cancel();
             }
             
-            // Fade out
+            // Hide bottom indicator
+            hideBottomLoadingIndicator();
+            
+            // Fade out top bar
             loadingBarContainer.animate()
                 .alpha(0f)
                 .setDuration(200L)
@@ -760,8 +885,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
     
     private void showNextOverlay(@Nullable String headline, @Nullable String subline) {
-        // Now just show loading bar instead of full overlay
-        showLoadingBar();
+        // Now just show loading bar instead of full overlay - STREAM type (green)
+        showLoadingBar(LoadingType.STREAM);
     }
     
     private String getRandomTvStaticMessage() {
@@ -1094,8 +1219,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         
-        // Show loading bar IMMEDIATELY before fetching
-        showLoadingBar();
+        // Show loading bar IMMEDIATELY before fetching - CHANNEL type (cyan)
+        showLoadingBar(LoadingType.CHANNEL);
         
         lastChannelSwitchTime = now;
         requestingNext = true;
@@ -1777,7 +1902,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         hideSearchOverlay();
-        showLoadingBar();
+        showLoadingBar(LoadingType.CHANNEL);
 
         lastChannelSwitchTime = now;
         requestingNext = true;
@@ -2254,6 +2379,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Clean up loading bar animation
         if (loadingBarAnimator != null && loadingBarAnimator.isRunning()) {
             loadingBarAnimator.cancel();
+        }
+        
+        // Clean up dots animation
+        if (dotsAnimator != null && dotsAnimator.isRunning()) {
+            dotsAnimator.cancel();
         }
         
         if (player != null) {
