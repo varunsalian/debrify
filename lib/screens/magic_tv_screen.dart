@@ -898,6 +898,64 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return fetched;
   }
 
+  Future<_TorboxCacheWindowResult> _fetchTorboxCacheWindow({
+    required List<Torrent> candidates,
+    required int startIndex,
+    required String apiKey,
+  }) async {
+    const int chunkSize = 90;
+    const int maxCalls = 2;
+
+    int cursor = startIndex;
+    int calls = 0;
+    final List<Torrent> hits = <Torrent>[];
+
+    while (cursor < candidates.length && calls < maxCalls && hits.isEmpty) {
+      final int end = min(cursor + chunkSize, candidates.length);
+      final List<Torrent> chunk = candidates.sublist(cursor, end);
+      cursor = end;
+
+      final List<String> hashes = chunk
+          .map((torrent) => _normalizeInfohash(torrent.infohash))
+          .where((hash) => hash.isNotEmpty)
+          .toList();
+
+      if (hashes.isEmpty) {
+        continue;
+      }
+
+      calls += 1;
+      final Set<String> cachedHashes = await TorboxService.checkCachedTorrents(
+        apiKey: apiKey,
+        infoHashes: hashes,
+        listFiles: false,
+      );
+
+      if (cachedHashes.isEmpty) {
+        continue;
+      }
+
+      final Set<String> normalized = cachedHashes
+          .map((hash) => hash.trim().toLowerCase())
+          .where((hash) => hash.isNotEmpty)
+          .toSet();
+
+      hits.addAll(
+        chunk.where(
+          (torrent) =>
+              normalized.contains(_normalizeInfohash(torrent.infohash)),
+        ),
+      );
+    }
+
+    final bool exhausted = cursor >= candidates.length;
+    return _TorboxCacheWindowResult(
+      cachedTorrents: hits,
+      nextCursor: cursor,
+      exhausted: exhausted,
+    );
+  }
+
   int _estimatedWarmDurationSeconds(
     int keywordCount, {
     int? totalKeywordUniverse,
@@ -3807,28 +3865,53 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      final uniqueHashes = combinedList
-          .map((torrent) => _normalizeInfohash(torrent.infohash))
-          .where((hash) => hash.isNotEmpty)
-          .toList();
-
-      if (uniqueHashes.isEmpty) {
-        _closeProgressDialog();
-        if (mounted) {
-          setState(() {
-            _status = 'No valid torrents found for Torbox.';
-          });
-        }
-        return;
+      combinedList.shuffle(Random());
+      if (mounted) {
+        setState(() {
+          _status = 'Checking Torbox cache...';
+        });
       }
 
-      Set<String> cachedHashes;
+      int candidateCursor = 0;
+
+      Future<bool> populateQueue() async {
+        while (true) {
+          if (candidateCursor >= combinedList.length) {
+            return false;
+          }
+          final _TorboxCacheWindowResult window =
+              await _fetchTorboxCacheWindow(
+            candidates: combinedList,
+            startIndex: candidateCursor,
+            apiKey: apiKey,
+          );
+          candidateCursor = window.nextCursor;
+          if (window.cachedTorrents.isEmpty) {
+            if (window.exhausted) {
+              return false;
+            }
+            continue;
+          }
+          _queue
+            ..clear()
+            ..addAll(window.cachedTorrents);
+          _lastQueueSize = _queue.length;
+          _lastSearchAt = DateTime.now();
+          if (mounted) {
+            setState(() {
+              _status = _queue.isEmpty
+                  ? ''
+                  : 'Queue has ${_queue.length} remaining';
+            });
+          }
+          log('✅ Found ${_queue.length} cached Torbox torrent(s)');
+          return true;
+        }
+      }
+
+      bool seeded;
       try {
-        cachedHashes = await TorboxService.checkCachedTorrents(
-          apiKey: apiKey,
-          infoHashes: uniqueHashes,
-          listFiles: false,
-        );
+        seeded = await populateQueue();
       } catch (e) {
         log('❌ Torbox cache check failed: $e');
         _closeProgressDialog();
@@ -3844,14 +3927,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      final filtered = combinedList
-          .where(
-            (torrent) =>
-                cachedHashes.contains(_normalizeInfohash(torrent.infohash)),
-          )
-          .toList();
-
-      if (filtered.isEmpty) {
+      if (!seeded) {
         _closeProgressDialog();
         if (mounted) {
           setState(() {
@@ -3865,25 +3941,36 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      filtered.shuffle(Random());
-      _queue
-        ..clear()
-        ..addAll(filtered);
-      _lastQueueSize = _queue.length;
-      _lastSearchAt = DateTime.now();
-      if (mounted) {
-        setState(() {
-          _status =
-              'Found ${_queue.length} cached Torbox result${_queue.length == 1 ? '' : 's'}';
-        });
-      }
-      log('✅ Found ${_queue.length} cached Torbox torrent(s)');
-
       Future<Map<String, String>?> requestTorboxNext() async {
         if (_watchCancelled) {
           return null;
         }
-        while (_queue.isNotEmpty && !_watchCancelled) {
+        while (!_watchCancelled) {
+          if (_queue.isEmpty) {
+            bool replenished;
+            try {
+              replenished = await populateQueue();
+            } catch (e) {
+              log('❌ Torbox cache check failed: $e');
+              _closeProgressDialog();
+              if (mounted && !_watchCancelled) {
+                setState(() {
+                  _status = 'Torbox cache check failed. Try again.';
+                });
+                _showSnack(
+                  'Torbox cache check failed: ${_formatTorboxError(e)}',
+                  color: Colors.red,
+                );
+              }
+              return null;
+            }
+            if (!replenished) {
+              break;
+            }
+          }
+          if (_queue.isEmpty) {
+            break;
+          }
           final item = _queue.removeAt(0);
           if (_watchCancelled) {
             break;
@@ -3922,23 +4009,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             if (_watchCancelled) {
               return null;
             }
-            if (result != null) {
-              if (result.hasMore && !_watchCancelled) {
-                _queue.add(item);
-              }
-              if (mounted && !_watchCancelled) {
-                setState(() {
-                  _status = _queue.isEmpty
-                      ? ''
-                      : 'Queue has ${_queue.length} remaining';
-                });
-              }
-              if (_watchCancelled) {
-                return null;
-              }
-              return {'url': result.streamUrl, 'title': result.title};
+          if (result != null) {
+            // if (result.hasMore && !_watchCancelled) {
+            //   _queue.add(item);
+            // }
+            if (mounted && !_watchCancelled) {
+              setState(() {
+                _status = _queue.isEmpty
+                    ? ''
+                    : 'Queue has ${_queue.length} remaining';
+              });
             }
+            if (_watchCancelled) {
+              return null;
+            }
+            return {'url': result.streamUrl, 'title': result.title};
           }
+        }
         }
         if (mounted && !_watchCancelled) {
           setState(() {
@@ -4440,29 +4527,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      final uniqueHashes = filteredTorrents
-          .map((torrent) => _normalizeInfohash(torrent.infohash))
-          .where((hash) => hash.isNotEmpty)
-          .toList();
+      final List<Torrent> torboxCandidates = List<Torrent>.from(filteredTorrents);
+      torboxCandidates.shuffle(Random());
 
-      if (uniqueHashes.isEmpty) {
-        debugPrint('DebrifyTV: Torbox channel has no valid infohashes');
-        return null;
-      }
-
+      int candidateCursor = 0;
+      List<Torrent> cachedCandidates = <Torrent>[];
       try {
-        final cachedHashes = await TorboxService.checkCachedTorrents(
-          apiKey: apiKey,
-          infoHashes: uniqueHashes,
-          listFiles: false,
-        );
-
-        filteredTorrents = filteredTorrents
-            .where(
-              (torrent) =>
-                  cachedHashes.contains(_normalizeInfohash(torrent.infohash)),
-            )
-            .toList();
+        while (candidateCursor < torboxCandidates.length &&
+            cachedCandidates.isEmpty) {
+          final _TorboxCacheWindowResult window =
+              await _fetchTorboxCacheWindow(
+            candidates: torboxCandidates,
+            startIndex: candidateCursor,
+            apiKey: apiKey,
+          );
+          candidateCursor = window.nextCursor;
+          if (window.cachedTorrents.isNotEmpty) {
+            cachedCandidates = window.cachedTorrents;
+            break;
+          }
+          if (window.exhausted) {
+            break;
+          }
+        }
       } catch (e) {
         debugPrint(
           'DebrifyTV: Torbox cache check failed during channel switch: $e',
@@ -4470,12 +4557,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      if (filteredTorrents.isEmpty) {
+      if (cachedCandidates.isEmpty) {
         debugPrint(
           'DebrifyTV: Torbox channel has no cached torrents available',
         );
         return null;
       }
+
+      filteredTorrents = cachedCandidates;
     }
 
     try {
@@ -4775,68 +4864,113 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final uniqueHashes = cachedTorrents
-        .map((torrent) => _normalizeInfohash(torrent.infohash))
-        .where((hash) => hash.isNotEmpty)
-        .toSet();
-
-    if (uniqueHashes.isEmpty) {
-      _showSnack(
-        'Cached torrents look invalid. Try refreshing the channel.',
-        color: Colors.orange,
-      );
-      return;
-    }
-
     _showCachedPlaybackDialog();
 
-    Set<String> cachedHashes;
+    final List<Torrent> candidatePool = List<Torrent>.from(cachedTorrents);
+    candidatePool.shuffle(Random());
+
+    if (mounted) {
+      setState(() {
+        _status = 'Checking Torbox cache...';
+        _isBusy = true;
+      });
+    }
+
+    int candidateCursor = 0;
+
+    Future<bool> populateQueue() async {
+      while (true) {
+        if (candidateCursor >= candidatePool.length) {
+          return false;
+        }
+        final _TorboxCacheWindowResult window =
+            await _fetchTorboxCacheWindow(
+          candidates: candidatePool,
+          startIndex: candidateCursor,
+          apiKey: apiKey,
+        );
+        candidateCursor = window.nextCursor;
+        if (window.cachedTorrents.isEmpty) {
+          if (window.exhausted) {
+            return false;
+          }
+          continue;
+        }
+        _queue
+          ..clear()
+          ..addAll(window.cachedTorrents);
+        _lastQueueSize = _queue.length;
+        _lastSearchAt = DateTime.now();
+        if (mounted) {
+          setState(() {
+            _status = _queue.isEmpty
+                ? ''
+                : 'Queue has ${_queue.length} remaining';
+          });
+        }
+        log('✅ Cached Torbox batch ready with ${_queue.length} item(s)');
+        return true;
+      }
+    }
+
+    bool seeded;
     try {
-      cachedHashes = await TorboxService.checkCachedTorrents(
-        apiKey: apiKey,
-        infoHashes: uniqueHashes.toList(),
-        listFiles: false,
-      );
-      debugPrint(
-        'DebrifyTV: Torbox cache check returned ${cachedHashes.length} cached torrent(s) out of ${uniqueHashes.length}.',
-      );
+      seeded = await populateQueue();
     } catch (e) {
       _closeProgressDialog();
       _showSnack(
         'Torbox cache check failed: ${_formatTorboxError(e)}',
         color: Colors.orange,
       );
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
       return;
     }
 
-    final filtered = cachedTorrents
-        .where(
-          (torrent) =>
-              cachedHashes.contains(_normalizeInfohash(torrent.infohash)),
-        )
-        .toList();
-
-    if (filtered.isEmpty) {
+    if (!seeded) {
       _closeProgressDialog();
       _showSnack(
         'Cached torrents are no longer available on Torbox. Please refresh the channel.',
         color: Colors.orange,
       );
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
       return;
     }
 
-    _queue
-      ..clear()
-      ..addAll(List<Torrent>.from(filtered)..shuffle(Random()));
-    _lastQueueSize = _queue.length;
-    _lastSearchAt = DateTime.now();
-
-    setState(() {
-      _status = 'Preparing Torbox stream...';
-      _isBusy = true;
-    });
     Future<Map<String, String>?> requestTorboxNext() async {
-      while (_queue.isNotEmpty) {
+      while (true) {
+        if (_queue.isEmpty) {
+          bool replenished;
+          try {
+            replenished = await populateQueue();
+          } catch (e) {
+            _closeProgressDialog();
+            _showSnack(
+              'Torbox cache check failed: ${_formatTorboxError(e)}',
+              color: Colors.orange,
+            );
+            if (mounted) {
+              setState(() {
+                _isBusy = false;
+              });
+            }
+            return null;
+          }
+          if (!replenished) {
+            break;
+          }
+        }
+        if (_queue.isEmpty) {
+          break;
+        }
+
         final next = _queue.removeAt(0);
         if (next is Map && next['type'] == _torboxFileEntryType) {
           final resolved = await _resolveTorboxQueuedFile(
@@ -4863,9 +4997,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           continue;
         }
 
-        if (prepared.hasMore) {
-          _queue.add(next);
-        }
+        // if (prepared.hasMore) {
+        //   _queue.add(next);
+        // }
         return {'url': prepared.streamUrl, 'title': prepared.title};
       }
       return null;
@@ -6296,6 +6430,18 @@ class _TorboxPreparedTorrent {
     required this.streamUrl,
     required this.title,
     required this.hasMore,
+  });
+}
+
+class _TorboxCacheWindowResult {
+  final List<Torrent> cachedTorrents;
+  final int nextCursor;
+  final bool exhausted;
+
+  const _TorboxCacheWindowResult({
+    required this.cachedTorrents,
+    required this.nextCursor,
+    required this.exhausted,
   });
 }
 
