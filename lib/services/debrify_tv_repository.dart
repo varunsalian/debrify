@@ -14,7 +14,7 @@ class DebrifyTvRepository {
 
     final channels = await db.query(
       'tv_channels',
-      orderBy: 'updated_at DESC',
+      orderBy: 'channel_number ASC',
     );
 
     if (channels.isEmpty) {
@@ -28,6 +28,7 @@ class DebrifyTvRepository {
         name: row['name'] as String,
         keywords: const <String>[],
         avoidNsfw: (row['avoid_nsfw'] as int? ?? 1) == 1,
+        channelNumber: (row['channel_number'] as int? ?? 0),
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int? ?? 0),
         updatedAt:
@@ -55,12 +56,35 @@ class DebrifyTvRepository {
 
   Future<void> upsertChannel(DebrifyTvChannelRecord record) async {
     await DebrifyTvDatabase.instance.runTxn((txn) async {
+      var channelNumber = record.channelNumber;
+
+      if (channelNumber <= 0) {
+        final existing = await txn.query(
+          'tv_channels',
+          columns: ['channel_number'],
+          where: 'channel_id = ?',
+          whereArgs: [record.channelId],
+          limit: 1,
+        );
+
+        if (existing.isNotEmpty) {
+          channelNumber = existing.first['channel_number'] as int? ?? 0;
+        } else {
+          final result = await txn.rawQuery(
+            'SELECT MAX(channel_number) as max_channel FROM tv_channels',
+          );
+          final maxValue = (result.first['max_channel'] as int?) ?? 0;
+          channelNumber = maxValue + 1;
+        }
+      }
+
       await txn.insert(
         'tv_channels',
         {
           'channel_id': record.channelId,
           'name': record.name,
           'avoid_nsfw': record.avoidNsfw ? 1 : 0,
+          'channel_number': channelNumber,
           'created_at': record.createdAt.millisecondsSinceEpoch,
           'updated_at': record.updatedAt.millisecondsSinceEpoch,
         },

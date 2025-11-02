@@ -74,6 +74,7 @@ class _DebrifyTvChannel {
   final String name;
   final List<String> keywords;
   final bool avoidNsfw; // Per-channel NSFW filter setting
+  final int channelNumber;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -82,6 +83,7 @@ class _DebrifyTvChannel {
     required this.name,
     required this.keywords,
     required this.avoidNsfw,
+    required this.channelNumber,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -114,6 +116,9 @@ class _DebrifyTvChannel {
       avoidNsfw: json['avoidNsfw'] is bool
           ? json['avoidNsfw'] as bool
           : true, // Default to enabled for backward compatibility
+      channelNumber: json['channelNumber'] is int
+          ? (json['channelNumber'] as int)
+          : 0,
       createdAt: json['createdAt'] is int
           ? DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int)
           : DateTime.now(),
@@ -129,6 +134,7 @@ class _DebrifyTvChannel {
       name: record.name,
       keywords: record.keywords,
       avoidNsfw: record.avoidNsfw,
+      channelNumber: record.channelNumber,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     );
@@ -140,6 +146,7 @@ class _DebrifyTvChannel {
       'name': name,
       'keywords': keywords,
       'avoidNsfw': avoidNsfw,
+      'channelNumber': channelNumber,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
     };
@@ -150,6 +157,7 @@ class _DebrifyTvChannel {
     String? name,
     List<String>? keywords,
     bool? avoidNsfw,
+    int? channelNumber,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -158,6 +166,7 @@ class _DebrifyTvChannel {
       name: name ?? this.name,
       keywords: keywords ?? this.keywords,
       avoidNsfw: avoidNsfw ?? this.avoidNsfw,
+      channelNumber: channelNumber ?? this.channelNumber,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -169,6 +178,7 @@ class _DebrifyTvChannel {
       name: name,
       keywords: keywords,
       avoidNsfw: avoidNsfw,
+      channelNumber: channelNumber,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
@@ -1340,6 +1350,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   name: name,
                   keywords: keywords,
                   avoidNsfw: avoidNsfw, // Channel's own NSFW setting
+                  channelNumber: existing?.channelNumber ?? 0,
                   createdAt: existing?.createdAt ?? now,
                   updatedAt: now,
                 );
@@ -2064,6 +2075,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         name: uniqueName,
         keywords: channel.displayKeywords,
         avoidNsfw: channel.avoidNsfw,
+        channelNumber: 0,
         createdAt: now,
         updatedAt: now,
       );
@@ -2089,6 +2101,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             name: uniqueName,
             keywords: const <String>[],
             avoidNsfw: channel.avoidNsfw,
+            channelNumber: 0,
             createdAt: now,
             updatedAt: now,
           ),
@@ -2121,6 +2134,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _channels = [..._channels, ...appendedChannels];
         _channelCache.addAll(appendedCache);
       });
+      await _loadChannels();
     }
 
     return _ZipImportPersistenceResult(
@@ -2483,6 +2497,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       name: channelName,
       keywords: keywords,
       avoidNsfw: true,
+      channelNumber: 0,
       createdAt: now,
       updatedAt: now,
     );
@@ -2703,6 +2718,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await DebrifyTvRepository.instance
           .upsertChannel(updatedChannel.toRecord());
       await DebrifyTvCacheService.saveEntry(entry);
+      await _loadChannels();
 
       final successMsg = isEdit
           ? 'Channel "${updatedChannel.name}" updated'
@@ -4442,6 +4458,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final int nextIndex = (currentIndex + 1) % _channels.length;
     final _DebrifyTvChannel targetChannel = _channels[nextIndex];
+    final int targetChannelNumber = targetChannel.channelNumber > 0
+        ? targetChannel.channelNumber
+        : nextIndex + 1;
 
     debugPrint(
       'DebrifyTV: Switching from channel ${currentIndex + 1} to ${nextIndex + 1} (${targetChannel.name})',
@@ -4652,7 +4671,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           return {
             'channelName': targetChannel.name,
-            'channelNumber': nextIndex + 1,
+            'channelNumber': targetChannelNumber,
             'firstUrl': videoUrl,
             'firstTitle': title,
           };
@@ -4704,7 +4723,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           );
           return {
             'channelName': targetChannel.name,
-            'channelNumber': nextIndex + 1,
+            'channelNumber': targetChannelNumber,
             'firstUrl': prepared.streamUrl,
             'firstTitle': prepared.title,
           };

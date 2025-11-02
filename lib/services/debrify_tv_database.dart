@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -20,7 +21,7 @@ class DebrifyTvDatabase {
 
     _db = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -30,6 +31,7 @@ class DebrifyTvDatabase {
             channel_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             avoid_nsfw INTEGER NOT NULL DEFAULT 1,
+            channel_number INTEGER NOT NULL UNIQUE,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
           )
@@ -92,6 +94,43 @@ class DebrifyTvDatabase {
           )
         ''');
       },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE tv_channels ADD COLUMN channel_number INTEGER',
+          );
+
+          final rows = await db.query(
+            'tv_channels',
+            columns: ['channel_id'],
+            orderBy: 'updated_at DESC',
+          );
+
+          var channelNumber = 1;
+          for (final row in rows) {
+            final channelId = row['channel_id'] as String?;
+            if (channelId == null || channelId.isEmpty) {
+              continue;
+            }
+            await db.update(
+              'tv_channels',
+              {'channel_number': channelNumber},
+              where: 'channel_id = ?',
+              whereArgs: [channelId],
+            );
+            channelNumber += 1;
+          }
+
+          await db.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_channels_channel_number ON tv_channels(channel_number)',
+          );
+        }
+      },
+    );
+
+    // Ensure index exists for fresh creates (onCreate already runs for v2 DB)
+    await _db!.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_channels_channel_number ON tv_channels(channel_number)',
     );
 
     return _db!;
