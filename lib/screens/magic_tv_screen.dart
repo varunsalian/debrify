@@ -5582,28 +5582,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               FilledButton.icon(
                 onPressed: _isBusy ? null : _handleImportChannels,
                 icon: const Icon(Icons.cloud_download_rounded),
-                label: const Text('Import Channels'),
+                label: const Text('Import'),
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF2563EB),
                   foregroundColor: Colors.white,
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton.icon(
+              IconButton.filled(
                 onPressed: _handleAddChannel,
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('Add Channel'),
-                style: ElevatedButton.styleFrom(
+                style: IconButton.styleFrom(
                   backgroundColor: Colors.white.withOpacity(0.08),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
+                  minimumSize: const Size(44, 44),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
+                tooltip: 'Add Channel',
               ),
               const SizedBox(width: 4),
               IconButton(
@@ -5909,15 +5906,45 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  channel.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1E1E1E), Color(0xFF2A2A2A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10, width: 1),
+                ),
+                child: Text(
+                  channel.channelNumber > 0
+                      ? 'CH ${channel.channelNumber.toString().padLeft(2, '0')}'
+                      : 'CH --',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      channel.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               ElevatedButton.icon(
