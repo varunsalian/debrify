@@ -1261,8 +1261,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     final List<String> keywordList = [];
     final seenKeywords = <String>{};
-    final initialKeywords =
-        existing?.keywords ?? _parseKeywords(_keywordsController.text);
+    final initialKeywords = existing != null
+        ? existing.keywords
+        : const <String>[];
     for (final kw in initialKeywords) {
       final trimmed = kw.trim();
       if (trimmed.isEmpty) continue;
