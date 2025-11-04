@@ -92,6 +92,13 @@ class DebrifyTvZipImporter {
     return DebrifyTvZipImportResult(channels: channels, failures: failures);
   }
 
+  static DebrifyTvZipImportedChannel parseYaml({
+    required String sourceName,
+    required String content,
+  }) {
+    return _parseChannelYaml(sourceName, content);
+  }
+
   static DebrifyTvZipImportedChannel _parseChannelYaml(
     String sourceName,
     String content,
@@ -105,19 +112,28 @@ class DebrifyTvZipImporter {
     if (converted is! Map) {
       throw const FormatException('Top-level YAML node must be a map.');
     }
-    final Map<String, dynamic> root =
-        converted.map((key, value) => MapEntry('$key'.trim(), value));
+    final Map<String, dynamic> root = converted.map(
+      (key, value) => MapEntry('$key'.trim(), value),
+    );
 
     final Map<String, dynamic> channelBlock = _extractChannelBlock(root);
 
-    String? channelName = _stringFromMap(channelBlock, const ['channel_name', 'name']);
-    channelName ??= _stringFromMap(root, const ['channel_name', 'channelName', 'name']);
+    String? channelName = _stringFromMap(channelBlock, const [
+      'channel_name',
+      'name',
+    ]);
+    channelName ??= _stringFromMap(root, const [
+      'channel_name',
+      'channelName',
+      'name',
+    ]);
     if (channelName == null || channelName.isEmpty) {
       throw const FormatException('Missing channel_name.');
     }
     channelName = channelName.trim();
 
-    bool avoidNsfw = _boolFromMap(channelBlock, const ['avoid_nsfw', 'avoidNsfw']) ??
+    bool avoidNsfw =
+        _boolFromMap(channelBlock, const ['avoid_nsfw', 'avoidNsfw']) ??
         _boolFromMap(root, const ['avoid_nsfw', 'avoidNsfw']) ??
         true;
 
@@ -138,7 +154,9 @@ class DebrifyTvZipImporter {
 
     final Map<String, _MutableTorrent> torrentsByHash = {};
 
-    final Map<String, _KeywordStatBaseline> fallbackStats = _parseKeywordStats(root);
+    final Map<String, _KeywordStatBaseline> fallbackStats = _parseKeywordStats(
+      root,
+    );
 
     keywordsMap.forEach((rawKey, rawValue) {
       final keywordName = rawKey.toString().trim();
@@ -151,28 +169,27 @@ class DebrifyTvZipImporter {
         'keywords["$keywordName"]',
       );
 
-      final aggregate = keywordAggregates.putIfAbsent(
-        normalizedKeyword,
-        () {
-          keywordOrder.add(normalizedKeyword);
-          final baseline = fallbackStats[normalizedKeyword];
-          return _MutableKeywordAggregate(
-            displayName: keywordName,
-            totalFetched: baseline?.totalFetched ?? 0,
-            lastSearchedAt: baseline?.lastSearchedAt ?? 0,
-            pagesPulled: baseline?.pagesPulled ?? 0,
-            pirateBayHits: baseline?.pirateBayHits ?? 0,
-          );
-        },
-      );
+      final aggregate = keywordAggregates.putIfAbsent(normalizedKeyword, () {
+        keywordOrder.add(normalizedKeyword);
+        final baseline = fallbackStats[normalizedKeyword];
+        return _MutableKeywordAggregate(
+          displayName: keywordName,
+          totalFetched: baseline?.totalFetched ?? 0,
+          lastSearchedAt: baseline?.lastSearchedAt ?? 0,
+          pagesPulled: baseline?.pagesPulled ?? 0,
+          pirateBayHits: baseline?.pirateBayHits ?? 0,
+        );
+      });
 
-      final int? totalFetched = _readInt(keywordData['total_fetched']) ??
+      final int? totalFetched =
+          _readInt(keywordData['total_fetched']) ??
           _readInt(keywordData['totalFetched']);
       if (totalFetched != null) {
         aggregate.totalFetched += totalFetched;
       }
 
-      final int? lastSearchedAt = _readInt(keywordData['last_searched_at']) ??
+      final int? lastSearchedAt =
+          _readInt(keywordData['last_searched_at']) ??
           _readInt(keywordData['lastSearchedAt']);
       if (lastSearchedAt != null) {
         if (lastSearchedAt > aggregate.lastSearchedAt) {
@@ -180,13 +197,15 @@ class DebrifyTvZipImporter {
         }
       }
 
-      final int? pagesPulled = _readInt(keywordData['pages_pulled']) ??
+      final int? pagesPulled =
+          _readInt(keywordData['pages_pulled']) ??
           _readInt(keywordData['pagesPulled']);
       if (pagesPulled != null) {
         aggregate.pagesPulled += pagesPulled;
       }
 
-      final int? pirateBayHits = _readInt(keywordData['pirate_bay_hits']) ??
+      final int? pirateBayHits =
+          _readInt(keywordData['pirate_bay_hits']) ??
           _readInt(keywordData['pirateBayHits']);
       if (pirateBayHits != null) {
         aggregate.pirateBayHits += pirateBayHits;
@@ -257,9 +276,7 @@ class DebrifyTvZipImporter {
     return error.toString().replaceFirst('Exception: ', '').trim();
   }
 
-  static Map<String, dynamic> _extractChannelBlock(
-    Map<String, dynamic> root,
-  ) {
+  static Map<String, dynamic> _extractChannelBlock(Map<String, dynamic> root) {
     final dynamic rawChannel = root['channel'];
     if (rawChannel == null) {
       return const <String, dynamic>{};
@@ -302,10 +319,7 @@ class DebrifyTvZipImporter {
     throw FormatException('$context must be a list.');
   }
 
-  static String? _stringFromMap(
-    Map<String, dynamic> map,
-    List<String> keys,
-  ) {
+  static String? _stringFromMap(Map<String, dynamic> map, List<String> keys) {
     for (final key in keys) {
       final value = map[key];
       if (value == null) {
@@ -319,10 +333,7 @@ class DebrifyTvZipImporter {
     return null;
   }
 
-  static bool? _boolFromMap(
-    Map<String, dynamic> map,
-    List<String> keys,
-  ) {
+  static bool? _boolFromMap(Map<String, dynamic> map, List<String> keys) {
     for (final key in keys) {
       final value = map[key];
       if (value is bool) {
@@ -384,16 +395,20 @@ class DebrifyTvZipImporter {
         'keyword_stats["$key"]',
       );
       parsed[keyword] = _KeywordStatBaseline(
-        totalFetched: _readInt(statData['total_fetched']) ??
+        totalFetched:
+            _readInt(statData['total_fetched']) ??
             _readInt(statData['totalFetched']) ??
             0,
-        lastSearchedAt: _readInt(statData['last_searched_at']) ??
+        lastSearchedAt:
+            _readInt(statData['last_searched_at']) ??
             _readInt(statData['lastSearchedAt']) ??
             0,
-        pagesPulled: _readInt(statData['pages_pulled']) ??
+        pagesPulled:
+            _readInt(statData['pages_pulled']) ??
             _readInt(statData['pagesPulled']) ??
             0,
-        pirateBayHits: _readInt(statData['pirate_bay_hits']) ??
+        pirateBayHits:
+            _readInt(statData['pirate_bay_hits']) ??
             _readInt(statData['pirateBayHits']) ??
             0,
       );
@@ -410,31 +425,26 @@ class DebrifyTvZipImporter {
       raw,
       'keywords["$keywordDisplay"].torrents[...]',
     );
-    final String? infohash = _stringFromMap(
-      map,
-      const ['infohash', 'info_hash', 'hash'],
-    );
+    final String? infohash = _stringFromMap(map, const [
+      'infohash',
+      'info_hash',
+      'hash',
+    ]);
     if (infohash == null || infohash.trim().isEmpty) {
       return null;
     }
     final String normalizedHash = infohash.trim().toLowerCase();
-    final String name = _stringFromMap(
-          map,
-          const ['title', 'name'],
-        ) ??
-        infohash;
-    final int sizeBytes = _readInt(map['size_bytes']) ??
-        _readInt(map['sizeBytes']) ??
-        0;
-    final int createdUnix = _readInt(map['created_unix']) ??
-        _readInt(map['createdUnix']) ??
-        0;
+    final String name =
+        _stringFromMap(map, const ['title', 'name']) ?? infohash;
+    final int sizeBytes =
+        _readInt(map['size_bytes']) ?? _readInt(map['sizeBytes']) ?? 0;
+    final int createdUnix =
+        _readInt(map['created_unix']) ?? _readInt(map['createdUnix']) ?? 0;
     final int seeders = _readInt(map['seeders']) ?? 0;
     final int leechers = _readInt(map['leechers']) ?? 0;
     final int completed = _readInt(map['completed']) ?? 0;
-    final int scrapedDate = _readInt(map['scraped_date']) ??
-        _readInt(map['scrapedDate']) ??
-        0;
+    final int scrapedDate =
+        _readInt(map['scraped_date']) ?? _readInt(map['scrapedDate']) ?? 0;
     final List<String> sources = _readStringList(map['sources']);
     final List<String> torrentKeywords = _readStringList(map['keywords']);
     final Set<String> keywordSet = {
@@ -547,25 +557,27 @@ class _MutableTorrent {
   final Set<String> keywords;
 
   _MutableTorrent(_ParsedTorrentSnapshot snapshot)
-      : normalizedInfohash = snapshot.normalizedInfohash,
-        infohash = snapshot.infohash,
-        name = snapshot.name,
-        sizeBytes = snapshot.sizeBytes,
-        createdUnix = snapshot.createdUnix,
-        seeders = snapshot.seeders,
-        leechers = snapshot.leechers,
-        completed = snapshot.completed,
-        scrapedDate = snapshot.scrapedDate,
-        sources = {...snapshot.sources},
-        keywords = {...snapshot.keywords};
+    : normalizedInfohash = snapshot.normalizedInfohash,
+      infohash = snapshot.infohash,
+      name = snapshot.name,
+      sizeBytes = snapshot.sizeBytes,
+      createdUnix = snapshot.createdUnix,
+      seeders = snapshot.seeders,
+      leechers = snapshot.leechers,
+      completed = snapshot.completed,
+      scrapedDate = snapshot.scrapedDate,
+      sources = {...snapshot.sources},
+      keywords = {...snapshot.keywords};
 
   void mergeSnapshot(_ParsedTorrentSnapshot snapshot) {
     sources.addAll(snapshot.sources);
     keywords.addAll(snapshot.keywords);
 
-    final bool shouldAdopt = snapshot.seeders > seeders ||
+    final bool shouldAdopt =
+        snapshot.seeders > seeders ||
         (snapshot.seeders == seeders && snapshot.leechers > leechers) ||
-        (snapshot.seeders == seeders && snapshot.leechers == leechers &&
+        (snapshot.seeders == seeders &&
+            snapshot.leechers == leechers &&
             snapshot.createdUnix > createdUnix);
 
     if (shouldAdopt) {

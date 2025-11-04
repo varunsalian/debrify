@@ -27,9 +27,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _torboxStatus = 'Not connected';
   String _torboxCaption = 'Tap to connect';
 
-  String _debrifyTvImportRepoUrl =
-      StorageService.debrifyTvImportRepoDefaultUrl;
-
   @override
   void initState() {
     super.initState();
@@ -53,7 +50,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (user != null) {
         final expiry = _tryParseDate(user.expiration);
         final bool isPremium = user.isPremium;
-        final bool active = isPremium && (expiry == null || expiry.isAfter(DateTime.now()));
+        final bool active =
+            isPremium && (expiry == null || expiry.isAfter(DateTime.now()));
         rdStatus = active ? 'Active' : 'Inactive';
         if (active && expiry != null) {
           rdCaption = 'Expires ${_formatDate(expiry)}';
@@ -98,8 +96,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     }
 
-    final importRepoUrl = await StorageService.getDebrifyTvImportRepoUrl();
-
     if (!mounted) return;
 
     setState(() {
@@ -109,7 +105,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _torboxConnected = torConnected;
       _torboxStatus = torStatus;
       _torboxCaption = torCaption;
-      _debrifyTvImportRepoUrl = importRepoUrl;
       _loading = false;
     });
   }
@@ -139,129 +134,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: _openTorboxSettings,
         ),
       ),
-      debriFyTvImportRepoUrl: _debrifyTvImportRepoUrl,
-      onEditDebrifyTvImportRepo: _editDebrifyTvImportRepo,
       onOpenTorrentSettings: _openTorrentSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
-          onDangerAction: _resetAppData,
-        );
-  }
-
-  Future<void> _editDebrifyTvImportRepo() async {
-    final controller = TextEditingController(text: _debrifyTvImportRepoUrl);
-    String? error;
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Channel Import Repository URL'),
-              content: SizedBox(
-                width: 400,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Enter the API endpoint that lists your channel text files. '
-                      'It should point to a Git repository tree JSON (GitLab/GitHub).',
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.url,
-                      autofillHints: const [AutofillHints.url],
-                      decoration: InputDecoration(
-                        labelText: 'Repository URL',
-                        errorText: error,
-                        hintText: StorageService.debrifyTvImportRepoDefaultUrl,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    controller.text =
-                        StorageService.debrifyTvImportRepoDefaultUrl;
-                    setDialogState(() {
-                      error = null;
-                    });
-                  },
-                  child: const Text('Reset to default'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    final value = controller.text.trim();
-                    if (value.isEmpty) {
-                      setDialogState(() {
-                        error = 'Enter a repository URL';
-                      });
-                      return;
-                    }
-                    Uri? uri;
-                    try {
-                      uri = Uri.parse(value);
-                    } catch (_) {
-                      uri = null;
-                    }
-                    if (uri == null ||
-                        !(uri.scheme == 'http' || uri.scheme == 'https')) {
-                      setDialogState(() {
-                        error = 'Enter a valid http(s) URL';
-                      });
-                      return;
-                    }
-                    Navigator.of(dialogContext).pop(value);
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      onDangerAction: _resetAppData,
     );
-    controller.dispose();
-
-    if (result != null) {
-      await StorageService.saveDebrifyTvImportRepoUrl(result);
-      if (!mounted) return;
-      setState(() {
-        _debrifyTvImportRepoUrl = result;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Repository URL updated.')),
-      );
-    }
   }
 
   Future<void> _openTorrentSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TorrentSettingsPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TorrentSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openRealDebridSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RealDebridSettingsPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const RealDebridSettingsPage()));
     await _loadSummaries();
   }
 
   Future<void> _openTorboxSettings() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TorboxSettingsPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TorboxSettingsPage()));
     await _loadSummaries();
   }
 
@@ -289,9 +187,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed == true) {
       await DownloadService.instance.clearDownloadDatabase();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Download data cleared')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Download data cleared')));
     }
   }
 
@@ -319,9 +217,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed == true) {
       await StorageService.clearAllPlaybackData();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Playback data cleared')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Playback data cleared')));
     }
   }
 
@@ -356,14 +254,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearAllPlaybackData();
     await StorageService.clearPlaylist();
     await StorageService.setInitialSetupComplete(false);
-    await StorageService.saveDebrifyTvImportRepoUrl(
-      StorageService.debrifyTvImportRepoDefaultUrl,
-    );
-
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('App data reset. You can reconnect services anytime.')),
+      const SnackBar(
+        content: Text('App data reset. You can reconnect services anytime.'),
+      ),
     );
 
     await _loadSummaries();
@@ -384,8 +280,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _SettingsLayout extends StatelessWidget {
   final _ConnectionsSummary connections;
-  final String debriFyTvImportRepoUrl;
-  final Future<void> Function() onEditDebrifyTvImportRepo;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
@@ -393,8 +287,6 @@ class _SettingsLayout extends StatelessWidget {
 
   const _SettingsLayout({
     required this.connections,
-    required this.debriFyTvImportRepoUrl,
-    required this.onEditDebrifyTvImportRepo,
     required this.onOpenTorrentSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
@@ -421,18 +313,6 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Torrent Settings',
                 subtitle: 'Search engines, filters, and sorting',
                 onTap: onOpenTorrentSettings,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _SettingsSection(
-            title: 'Debrify TV',
-            children: [
-              _SettingsTile(
-                icon: Icons.cloud_sync_rounded,
-                title: 'Channel Import Repository',
-                subtitle: debriFyTvImportRepoUrl,
-                onTap: onEditDebrifyTvImportRepo,
               ),
             ],
           ),
@@ -510,8 +390,9 @@ class _SettingsHeader extends StatelessWidget {
                 Text(
                   'Manage connections and clean up your library.',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color:
-                        theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                    color: theme.colorScheme.onPrimaryContainer.withValues(
+                      alpha: 0.7,
+                    ),
                   ),
                 ),
               ],
@@ -527,10 +408,7 @@ class _ConnectionsSummary extends StatelessWidget {
   final _ConnectionInfo realDebrid;
   final _ConnectionInfo torbox;
 
-  const _ConnectionsSummary({
-    required this.realDebrid,
-    required this.torbox,
-  });
+  const _ConnectionsSummary({required this.realDebrid, required this.torbox});
 
   @override
   Widget build(BuildContext context) {
@@ -556,8 +434,14 @@ class _ConnectionsSummary extends StatelessWidget {
               spacing: 12,
               runSpacing: 12,
               children: [
-                SizedBox(width: itemWidth, child: _ConnectionCard(info: realDebrid)),
-                SizedBox(width: itemWidth, child: _ConnectionCard(info: torbox)),
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(info: realDebrid),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(info: torbox),
+                ),
               ],
             );
           },
@@ -711,7 +595,9 @@ class _SettingsSection extends StatelessWidget {
                   Divider(
                     height: 1,
                     thickness: 1,
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.35,
+                    ),
                   ),
                 children[i],
               ],

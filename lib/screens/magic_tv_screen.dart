@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/torrent.dart';
 import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
@@ -60,7 +63,51 @@ int _parseRandomStartPercent(dynamic value) {
 
 enum _SettingsScope { quickPlay, channels }
 
-enum _ImportChannelsMode { repository, zip, zipUrl }
+enum _ImportChannelsMode { device, url }
+
+enum _ChannelImportOrigin { device, url }
+
+enum _ChannelImportType { zip, yaml, text }
+
+String _formatBytes(int bytes) {
+  if (bytes <= 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  final exponent = min(units.length - 1, (log(bytes) / log(1024)).floor());
+  final value = bytes / pow(1024, exponent);
+  final formatted = value >= 10
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+  return '$formatted ${units[exponent]}';
+}
+
+Future<DebrifyTvZipImportResult> _parseZipInBackground(Uint8List bytes) {
+  return compute(_parseZipCompute, bytes);
+}
+
+DebrifyTvZipImportResult _parseZipCompute(Uint8List bytes) {
+  return DebrifyTvZipImporter.parseZip(bytes);
+}
+
+Future<DebrifyTvZipImportedChannel> _parseYamlInBackground(
+  String sourceName,
+  String content,
+) {
+  return compute(_parseYamlCompute, <String, String>{
+    'sourceName': sourceName,
+    'content': content,
+  });
+}
+
+DebrifyTvZipImportedChannel _parseYamlCompute(Map<String, String> payload) {
+  final sourceName = payload['sourceName'] ?? 'channel.yaml';
+  final content = payload['content'] ?? '';
+  return DebrifyTvZipImporter.parseYaml(
+    sourceName: sourceName,
+    content: content,
+  );
+}
 
 class DebrifyTVScreen extends StatefulWidget {
   const DebrifyTVScreen({super.key});
@@ -258,7 +305,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _launchedPlayer = false;
   bool _watchCancelled = false;
   int? _originalMaxCap;
-  DateTime? _lastChannelImportAt;
 
   @override
   void initState() {
@@ -470,8 +516,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _isAndroidTv = isTv;
 
         _quickStartRandom = startRandom;
-        _quickRandomStartPercent =
-            _clampRandomStartPercent(randomStartPercent);
+        _quickRandomStartPercent = _clampRandomStartPercent(randomStartPercent);
         _quickHideSeekbar = hideOptions;
         _quickShowChannelName = showChannelName;
         _quickShowVideoTitle = showVideoTitle;
@@ -1102,8 +1147,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     StateSetter? dialogSetState,
   }) {
     final bool isQuickScope = scope == _SettingsScope.quickPlay;
-    final String currentProvider =
-        isQuickScope ? _quickProvider : _provider;
+    final String currentProvider = isQuickScope ? _quickProvider : _provider;
 
     void handleSelection(String value) {
       if (!_isProviderSelectable(value)) {
@@ -1584,14 +1628,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     switch (mode) {
-      case _ImportChannelsMode.repository:
-        await _handleImportChannelsFromRepository();
+      case _ImportChannelsMode.device:
+        await _handleImportChannelsFromDevice();
         break;
-      case _ImportChannelsMode.zip:
-        await _handleImportChannelsFromZip();
-        break;
-      case _ImportChannelsMode.zipUrl:
-        await _handleImportChannelsFromZipUrl();
+      case _ImportChannelsMode.url:
+        await _handleImportChannelsFromUrl();
         break;
     }
   }
@@ -1612,26 +1653,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: const Icon(Icons.cloud_download_rounded),
-                  title: const Text('Import from repository'),
-                  subtitle: const Text('Fetch channels from the configured URL'),
-                  onTap: () =>
-                      Navigator.of(dialogContext).pop(_ImportChannelsMode.repository),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.archive_rounded),
-                  title: const Text('Import zip'),
-                  subtitle:
-                      const Text('Load prebuilt channels from a local zip of YAML files'),
-                  onTap: () =>
-                      Navigator.of(dialogContext).pop(_ImportChannelsMode.zip),
+                  leading: const Icon(Icons.sd_storage_rounded),
+                  title: const Text('Import from device'),
+                  subtitle: const Text(
+                    'Load a .zip, .yaml, or .txt channel file',
+                  ),
+                  onTap: () => Navigator.of(
+                    dialogContext,
+                  ).pop(_ImportChannelsMode.device),
                 ),
                 ListTile(
                   leading: const Icon(Icons.link_rounded),
-                  title: const Text('Import zip from URL'),
-                  subtitle: const Text('Download a zip archive directly from a link'),
+                  title: const Text('Import from URL'),
+                  subtitle: const Text(
+                    'Download a .zip, .yaml, or .txt channel file',
+                  ),
                   onTap: () =>
-                      Navigator.of(dialogContext).pop(_ImportChannelsMode.zipUrl),
+                      Navigator.of(dialogContext).pop(_ImportChannelsMode.url),
                 ),
               ],
             ),
@@ -1655,137 +1693,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _handleImportChannelsFromRepository() async {
-    if (_isBusy) {
-      return;
-    }
-
-    final now = DateTime.now();
-    if (_lastChannelImportAt != null) {
-      final elapsed = now.difference(_lastChannelImportAt!);
-      const cooldown = Duration(seconds: 30);
-      if (elapsed < cooldown) {
-        final remaining = cooldown - elapsed;
-        final seconds =
-            remaining.inSeconds + (remaining.inMilliseconds % 1000 > 0 ? 1 : 0);
-        _showSnack(
-          'Please wait $seconds second${seconds == 1 ? '' : 's'} before importing again.',
-          color: Colors.orange,
-        );
-        return;
-      }
-    }
-
-    String repoUrl = (await StorageService.getDebrifyTvImportRepoUrl()).trim();
-    if (repoUrl.isEmpty) {
-      _showSnack(
-        'Set a channel repository URL in Settings before importing.',
-        color: Colors.orange,
-      );
-      return;
-    }
-
-    Uri treeUri;
-    try {
-      treeUri = Uri.parse(repoUrl);
-      if (!treeUri.hasAbsolutePath ||
-          (treeUri.scheme != 'http' && treeUri.scheme != 'https')) {
-        throw const FormatException('invalid');
-      }
-    } catch (_) {
-      _showSnack(
-        'Repository URL is invalid. Update it in Settings and try again.',
-        color: Colors.red,
-      );
-      return;
-    }
-
-    List<_ImportChannelCandidate> candidates;
-    try {
-      candidates = await _fetchImportChannelCandidates(treeUri);
-    } catch (e) {
-      _showSnack(
-        'Failed to fetch channels: ${_formatImportError(e)}',
-        color: Colors.red,
-      );
-      return;
-    }
-
-    if (candidates.isEmpty) {
-      _showSnack(
-        'No channel files found at the repository URL.',
-        color: Colors.orange,
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    final selected = await showDialog<_ImportChannelCandidate>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Import Channels'),
-          content: SizedBox(
-            width: 420,
-            height: 360,
-            child: ListView.separated(
-              itemCount: candidates.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, index) {
-                final candidate = candidates[index];
-                return ListTile(
-                  title: Text(candidate.displayName),
-                  subtitle: Text(
-                    candidate.name,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  trailing: FilledButton(
-                    onPressed: () {
-                      Navigator.of(dialogContext).pop(candidate);
-                    },
-                    child: const Text('Import'),
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (selected == null) {
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isBusy = true;
-    });
-
-    try {
-      await _importChannelCandidate(selected, treeUri);
-      _lastChannelImportAt = DateTime.now();
-    } catch (e) {
-      _showSnack('Import failed: ${_formatImportError(e)}', color: Colors.red);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBusy = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _handleImportChannelsFromZip() async {
+  Future<void> _handleImportChannelsFromDevice() async {
     final selection = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['zip'],
+      allowedExtensions: const ['zip', 'yaml', 'yml', 'txt'],
       withData: true,
       withReadStream: true,
     );
@@ -1794,9 +1705,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
+    final pickedFile = selection.files.first;
     Uint8List bytes;
     try {
-      bytes = await _readPickedFileBytes(selection.files.first);
+      bytes = await _readPickedFileBytes(pickedFile);
     } catch (error) {
       _showSnack(
         'Unable to read selected file: ${_formatImportError(error)}',
@@ -1806,7 +1718,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     if (bytes.isEmpty) {
-      _showSnack('Selected zip appears to be empty.', color: Colors.orange);
+      _showSnack('Selected file appears to be empty.', color: Colors.orange);
       return;
     }
 
@@ -1816,23 +1728,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     setState(() {
       _isBusy = true;
-      _status = 'Importing zip from local storage…';
+      _status = 'Importing channel from local storage…';
     });
 
     try {
-      _showChannelCreationDialog('Importing zip…');
-      final parsed = DebrifyTvZipImporter.parseZip(bytes);
-      _updateProgress(['Parsed ${parsed.channels.length} channel(s)']);
-      final persistence = await _persistImportedZipChannels(parsed.channels);
-      _updateProgress([
-        'Saved ${persistence.successes.length} channel(s)',
-        if (persistence.failures.isNotEmpty)
-          '${persistence.failures.length} channel(s) failed',
-      ]);
-      await _showZipImportSummary(parsed, persistence);
+      await _safeImportChannelBytes(
+        sourceName: pickedFile.name,
+        bytes: bytes,
+        origin: _ChannelImportOrigin.device,
+      );
     } catch (error) {
       _showSnack(
-        'Zip import failed: ${_formatImportError(error)}',
+        'Import failed: ${_formatImportError(error)}',
         color: Colors.red,
       );
     } finally {
@@ -1846,8 +1753,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _handleImportChannelsFromZipUrl() async {
-    final url = await _promptZipUrl();
+  Future<void> _handleImportChannelsFromUrl() async {
+    final url = await _promptImportUrl();
     if (url == null) {
       return;
     }
@@ -1870,36 +1777,55 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     setState(() {
       _isBusy = true;
-      _status = 'Downloading zip…';
+      _status = 'Downloading channel file…';
     });
 
+    _showChannelCreationDialog('Importing channel…');
+    _updateProgress(['Downloading channel file…']);
+
     try {
-      _showChannelCreationDialog('Downloading zip…');
-      final response = await http.get(uri);
-      if (response.statusCode != 200) {
-        throw FormatException('HTTP ${response.statusCode}');
+      final streamedResponse = await http.Request('GET', uri).send();
+      if (streamedResponse.statusCode != 200) {
+        throw FormatException('HTTP ${streamedResponse.statusCode}');
       }
 
-      _updateProgress(['Download complete. Parsing…']);
-      final bytes = response.bodyBytes;
+      final totalBytes = streamedResponse.contentLength ?? 0;
+      int receivedBytes = 0;
+      final builder = BytesBuilder(copy: false);
+
+      await for (final chunk in streamedResponse.stream) {
+        builder.add(chunk);
+        receivedBytes += chunk.length;
+        final percent = totalBytes > 0
+            ? (receivedBytes / totalBytes * 100).clamp(0, 100)
+            : null;
+        final progressMessage = percent != null
+            ? 'Downloading… ${percent.toStringAsFixed(0)}%'
+            : 'Downloading… ${_formatBytes(receivedBytes)}';
+        _updateProgress([progressMessage], replace: true);
+      }
+
+      final bytes = builder.takeBytes();
       if (bytes.isEmpty) {
-        _showSnack('Downloaded zip is empty.', color: Colors.orange);
+        _updateProgress(['Downloaded file is empty.'], replace: true);
+        _showSnack('Downloaded file is empty.', color: Colors.orange);
         return;
       }
 
-      final parsed = DebrifyTvZipImporter.parseZip(bytes);
-      _updateProgress(['Parsed ${parsed.channels.length} channel(s). Saving…']);
-      final persistence = await _persistImportedZipChannels(parsed.channels);
-      _updateProgress([
-        'Saved ${persistence.successes.length} channel(s)',
-        if (persistence.failures.isNotEmpty)
-          '${persistence.failures.length} channel(s) failed',
-      ]);
-      await _showZipImportSummary(parsed, persistence);
-      _lastChannelImportAt = DateTime.now();
+      final sourceName = uri.pathSegments.isNotEmpty
+          ? uri.pathSegments.last
+          : 'channel.${_guessExtensionFromHeaders(streamedResponse.headers)}';
+
+      _updateProgress(['Download complete. Processing…'], replace: true);
+
+      await _safeImportChannelBytes(
+        sourceName: sourceName,
+        bytes: bytes,
+        origin: _ChannelImportOrigin.url,
+      );
     } catch (error) {
       _showSnack(
-        'Zip import failed: ${_formatImportError(error)}',
+        'Import failed: ${_formatImportError(error)}',
         color: Colors.red,
       );
     } finally {
@@ -1930,7 +1856,201 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     throw const FormatException('Unable to access file bytes.');
   }
 
-  Future<String?> _promptZipUrl() async {
+  Future<bool> _importChannelBytes({
+    required String sourceName,
+    required Uint8List bytes,
+    required _ChannelImportOrigin origin,
+  }) async {
+    final type = _determineImportType(sourceName, bytes);
+    if (type == null) {
+      _showSnack(
+        'Unsupported file type. Select a .zip, .yaml, or .txt file.',
+        color: Colors.orange,
+      );
+      return false;
+    }
+
+    switch (type) {
+      case _ChannelImportType.zip:
+        return await _importZipBytes(bytes, origin);
+      case _ChannelImportType.yaml:
+        return await _importYamlBytes(sourceName, bytes, origin);
+      case _ChannelImportType.text:
+        return await _importTextBytes(sourceName, bytes);
+    }
+  }
+
+  Future<bool> _safeImportChannelBytes({
+    required String sourceName,
+    required Uint8List bytes,
+    required _ChannelImportOrigin origin,
+  }) async {
+    try {
+      return await _importChannelBytes(
+        sourceName: sourceName,
+        bytes: bytes,
+        origin: origin,
+      );
+    } on FormatException catch (error) {
+      _showSnack(error.message, color: Colors.red);
+      return false;
+    }
+  }
+
+  _ChannelImportType? _determineImportType(String sourceName, Uint8List bytes) {
+    final lower = sourceName.toLowerCase();
+    if (lower.endsWith('.zip')) {
+      return _ChannelImportType.zip;
+    }
+    if (lower.endsWith('.yaml') || lower.endsWith('.yml')) {
+      return _ChannelImportType.yaml;
+    }
+    if (lower.endsWith('.txt')) {
+      return _ChannelImportType.text;
+    }
+
+    if (bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4b) {
+      // PK — zip signature
+      return _ChannelImportType.zip;
+    }
+
+    return null;
+  }
+
+  Future<bool> _importZipBytes(
+    Uint8List bytes,
+    _ChannelImportOrigin origin,
+  ) async {
+    final dialogLabel = origin == _ChannelImportOrigin.device
+        ? 'Importing zip…'
+        : 'Processing zip…';
+
+    _showChannelCreationDialog(dialogLabel);
+    _updateProgress(['Parsing archive…']);
+
+    final parsed = await _parseZipInBackground(bytes);
+    _updateProgress([
+      'Parsed ${parsed.channels.length} channel(s)',
+      'Saving channel data…',
+    ]);
+
+    final persistence = await _persistImportedZipChannels(parsed.channels);
+    _updateProgress([
+      'Saved ${persistence.successes.length} channel(s)',
+      if (persistence.failures.isNotEmpty)
+        '${persistence.failures.length} channel(s) failed',
+    ]);
+
+    await _showZipImportSummary(parsed, persistence);
+    return persistence.successes.isNotEmpty;
+  }
+
+  Future<bool> _importYamlBytes(
+    String sourceName,
+    Uint8List bytes,
+    _ChannelImportOrigin origin,
+  ) async {
+    final content = utf8.decode(bytes);
+    final dialogLabel = origin == _ChannelImportOrigin.device
+        ? 'Importing YAML…'
+        : 'Processing YAML…';
+
+    _showChannelCreationDialog(dialogLabel);
+    _updateProgress(['Parsing YAML…']);
+
+    final channel = await _parseYamlInBackground(sourceName, content);
+
+    final parsed = DebrifyTvZipImportResult(
+      channels: [channel],
+      failures: const [],
+    );
+
+    _updateProgress(['Saving channel…']);
+    final persistence = await _persistImportedZipChannels(parsed.channels);
+    _updateProgress([
+      'Saved ${persistence.successes.length} channel(s)',
+      if (persistence.failures.isNotEmpty)
+        '${persistence.failures.length} channel(s) failed',
+    ]);
+
+    await _showZipImportSummary(parsed, persistence);
+    return persistence.successes.isNotEmpty;
+  }
+
+  Future<bool> _importTextBytes(String sourceName, Uint8List bytes) async {
+    final content = utf8.decode(bytes);
+    final keywords = <String>[];
+    final seen = <String>{};
+
+    final lines = const LineSplitter().convert(content);
+    for (final rawLine in lines) {
+      final parts = rawLine.split(',');
+      for (final part in parts) {
+        final trimmed = part.trim();
+        if (trimmed.isEmpty) {
+          continue;
+        }
+        if (trimmed.length > 120) {
+          throw FormatException(
+            'Keyword exceeds 120 characters: "${trimmed.substring(0, trimmed.length > 40 ? 40 : trimmed.length)}${trimmed.length > 40 ? '…' : ''}"',
+          );
+        }
+        final lower = trimmed.toLowerCase();
+        if (seen.add(lower)) {
+          keywords.add(trimmed);
+        }
+      }
+    }
+
+    if (keywords.isEmpty) {
+      throw const FormatException('No keywords found in the selected file.');
+    }
+    if (keywords.length > 500) {
+      throw const FormatException(
+        'Channel files must contain 500 keywords or fewer.',
+      );
+    }
+
+    final baseName = _stripExtension(sourceName);
+    final lowerExisting = _channels.map((c) => c.name.toLowerCase()).toSet();
+    final channelName = _resolveUniqueChannelName(baseName, lowerExisting);
+    final now = DateTime.now();
+    final channel = _DebrifyTvChannel(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: channelName,
+      keywords: keywords,
+      avoidNsfw: true,
+      channelNumber: 0,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await _createOrUpdateChannel(channel, isEdit: false);
+    _showSnack('Imported "${channel.name}"', color: Colors.green);
+    return true;
+  }
+
+  String _stripExtension(String name) {
+    final dotIndex = name.lastIndexOf('.');
+    if (dotIndex <= 0) {
+      return name.trim();
+    }
+    return name.substring(0, dotIndex).trim();
+  }
+
+  String _guessExtensionFromHeaders(Map<String, String> headers) {
+    final contentType =
+        headers['content-type'] ?? headers['Content-Type'] ?? 'text/plain';
+    if (contentType.contains('zip')) {
+      return 'zip';
+    }
+    if (contentType.contains('yaml') || contentType.contains('yml')) {
+      return 'yaml';
+    }
+    return 'txt';
+  }
+
+  Future<String?> _promptImportUrl() async {
     if (!mounted) {
       return null;
     }
@@ -1966,7 +2086,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Enter zip URL'),
+              title: const Text('Enter file URL'),
               content: SizedBox(
                 width: 420,
                 child: Column(
@@ -1975,7 +2095,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     TextField(
                       controller: controller,
                       decoration: InputDecoration(
-                        labelText: 'Zip URL',
+                        labelText: 'File URL',
                         hintText: 'https://example.com/channels.zip',
                         errorText: errorText,
                       ),
@@ -1985,7 +2105,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'The archive should contain Debrify channel YAML files.',
+                      'Supports .zip archives, .yaml files, or .txt keyword lists.',
                       style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ],
@@ -2009,7 +2129,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     try {
                       final parsed = Uri.parse(candidate);
                       if (!parsed.hasAbsolutePath ||
-                          (parsed.scheme != 'http' && parsed.scheme != 'https')) {
+                          (parsed.scheme != 'http' &&
+                              parsed.scheme != 'https')) {
                         throw const FormatException('invalid');
                       }
                     } catch (_) {
@@ -2039,10 +2160,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     List<DebrifyTvZipImportedChannel> channels,
   ) async {
     if (channels.isEmpty) {
-      return const _ZipImportPersistenceResult(
-        successes: [],
-        failures: [],
-      );
+      return const _ZipImportPersistenceResult(successes: [], failures: []);
     }
 
     final successes = <_ZipImportSuccess>[];
@@ -2051,8 +2169,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final List<_DebrifyTvChannel> appendedChannels = [];
     final Map<String, DebrifyTvChannelCacheEntry> appendedCache = {};
 
-    final Set<String> usedNames =
-        _channels.map((channel) => channel.name.toLowerCase()).toSet();
+    final Set<String> usedNames = _channels
+        .map((channel) => channel.name.toLowerCase())
+        .toSet();
 
     for (final channel in channels) {
       if (channel.normalizedKeywords.length > _maxChannelKeywords) {
@@ -2067,7 +2186,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         continue;
       }
 
-      final uniqueName = _resolveUniqueChannelName(channel.channelName, usedNames);
+      final uniqueName = _resolveUniqueChannelName(
+        channel.channelName,
+        usedNames,
+      );
       final channelId = DateTime.now().microsecondsSinceEpoch.toString();
       final now = DateTime.now();
 
@@ -2162,19 +2284,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       ),
       ...persisted.failures.map(
         (failure) => _ZipImportFailureDisplay(
-          sourceName:
-              failure.sourceName.isEmpty ? failure.channelName : failure.sourceName,
+          sourceName: failure.sourceName.isEmpty
+              ? failure.channelName
+              : failure.sourceName,
           reason: failure.reason,
         ),
       ),
     ];
 
     if (!hasSuccess && failureRows.isEmpty) {
-      _showSnack('No channels found in the selected zip.', color: Colors.orange);
+      _showSnack(
+        'No channels found in the selected zip.',
+        color: Colors.orange,
+      );
       return;
     }
 
-    final String dialogTitle = hasSuccess ? 'Zip import complete' : 'Zip import failed';
+    final String dialogTitle = hasSuccess
+        ? 'Zip import complete'
+        : 'Zip import failed';
 
     await showDialog<void>(
       context: context,
@@ -2256,7 +2384,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         color: Colors.green,
       );
     } else if (failureRows.isNotEmpty) {
-      _showSnack('Zip import failed: ${failureRows.first.reason}', color: Colors.red);
+      _showSnack(
+        'Zip import failed: ${failureRows.first.reason}',
+        color: Colors.red,
+      );
     }
   }
 
@@ -2264,7 +2395,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     String baseName,
     Set<String> usedLowerCaseNames,
   ) {
-    final String trimmed = baseName.trim().isEmpty ? 'Imported Channel' : baseName.trim();
+    final String trimmed = baseName.trim().isEmpty
+        ? 'Imported Channel'
+        : baseName.trim();
     String candidate = trimmed;
     int suffix = 2;
     while (usedLowerCaseNames.contains(candidate.toLowerCase())) {
@@ -2402,127 +2535,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<List<_ImportChannelCandidate>> _fetchImportChannelCandidates(
-    Uri treeUri,
-  ) async {
-    debugPrint('DebrifyTV: Import - fetching tree ${treeUri.toString()}');
-    final response = await http.get(treeUri);
-    if (response.statusCode != 200) {
-      debugPrint(
-        'DebrifyTV: Import - tree request failed [${response.statusCode}] ${response.reasonPhrase}',
-      );
-      throw Exception('HTTP ${response.statusCode}');
-    }
-    final decoded = jsonDecode(response.body);
-    if (decoded is! List) {
-      throw const FormatException('Unexpected response structure');
-    }
-    final candidates = <_ImportChannelCandidate>[];
-    for (final entry in decoded) {
-      if (entry is! Map) continue;
-      final type = entry['type'] as String?;
-      final name = entry['name'] as String?;
-      final path = entry['path'] as String?;
-      if (type != 'blob' || name == null || path == null) {
-        continue;
-      }
-      if (!name.toLowerCase().endsWith('.txt')) {
-        continue;
-      }
-      candidates.add(_ImportChannelCandidate(name: name, path: path));
-    }
-    candidates.sort(
-      (a, b) =>
-          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
-    );
-    return candidates;
-  }
-
-  Future<void> _importChannelCandidate(
-    _ImportChannelCandidate candidate,
-    Uri treeUri,
-  ) async {
-    final rawUri = _buildRawFileUri(treeUri, candidate.path);
-    debugPrint('DebrifyTV: Import - fetching raw ${rawUri.toString()}');
-    final response = await http.get(rawUri);
-    if (response.statusCode != 200) {
-      debugPrint(
-        'DebrifyTV: Import - raw request failed [${response.statusCode}] ${response.reasonPhrase}',
-      );
-      throw Exception('HTTP ${response.statusCode}');
-    }
-
-    final lines = const LineSplitter().convert(response.body);
-    final seen = <String>{};
-    final keywords = <String>[];
-
-    for (final rawLine in lines) {
-      final parts = rawLine.split(',');
-      for (final part in parts) {
-        final trimmed = part.trim();
-        if (trimmed.isEmpty) {
-          continue;
-        }
-        if (trimmed.length > 120) {
-          debugPrint(
-            'DebrifyTV: Import - keyword too long (${trimmed.length} chars): $trimmed',
-          );
-          throw FormatException(
-            'Keyword exceeds 120 characters: "${trimmed.substring(0, trimmed.length > 40 ? 40 : trimmed.length)}${trimmed.length > 40 ? '…' : ''}"',
-          );
-        }
-        final lower = trimmed.toLowerCase();
-        if (seen.add(lower)) {
-          debugPrint('DebrifyTV: Import - accepted keyword: $trimmed');
-          keywords.add(trimmed);
-        }
-      }
-    }
-
-    if (keywords.isEmpty) {
-      throw const FormatException('No keywords found in the selected file.');
-    }
-    if (keywords.length > 500) {
-      throw const FormatException(
-        'Channel files must contain 500 keywords or fewer.',
-      );
-    }
-
-    final String baseName = candidate.displayName;
-    final lowerExisting = _channels.map((c) => c.name.toLowerCase()).toSet();
-    final String channelName = _resolveUniqueChannelName(baseName, lowerExisting);
-
-    final now = DateTime.now();
-    final channel = _DebrifyTvChannel(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      name: channelName,
-      keywords: keywords,
-      avoidNsfw: true,
-      channelNumber: 0,
-      createdAt: now,
-      updatedAt: now,
-    );
-
-    await _createOrUpdateChannel(channel, isEdit: false);
-    _showSnack('Imported "${channel.name}"', color: Colors.green);
-  }
-
-  Uri _buildRawFileUri(Uri treeUri, String filePath) {
-    final List<String> segments = treeUri.pathSegments;
-    if (segments.length < 4) {
-      throw const FormatException(
-        'Repository URL is not a GitLab tree API endpoint.',
-      );
-    }
-    final encodedProject = Uri.encodeComponent(segments[3]);
-    final basePath = 'api/v4/projects/$encodedProject';
-    final ref = treeUri.queryParameters['ref'] ?? 'main';
-    final encodedPath = Uri.encodeComponent(filePath);
-    final rawUrl =
-        '${treeUri.scheme}://${treeUri.authority}/$basePath/repository/files/$encodedPath/raw?ref=${Uri.encodeComponent(ref)}';
-    return Uri.parse(rawUrl);
-  }
-
   Future<void> _createOrUpdateChannel(
     _DebrifyTvChannel channel, {
     required bool isEdit,
@@ -2556,9 +2568,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     try {
-      final baseline = isEdit
-          ? await _ensureCacheEntry(channel.id)
-          : null;
+      final baseline = isEdit ? await _ensureCacheEntry(channel.id) : null;
       if (normalizedKeywords.length > _maxChannelKeywords) {
         _showSnack(
           'Channels support up to $_maxChannelKeywords keywords. Remove some and try again.',
@@ -2698,11 +2708,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return;
       }
 
-      final updatedChannel = channel.copyWith(
-        updatedAt: DateTime.now(),
-      );
+      final updatedChannel = channel.copyWith(updatedAt: DateTime.now());
 
-      final displayChannel = updatedChannel.copyWith(keywords: const <String>[]);
+      final displayChannel = updatedChannel.copyWith(
+        keywords: const <String>[],
+      );
 
       setState(() {
         final index = _channels.indexWhere((c) => c.id == displayChannel.id);
@@ -2716,8 +2726,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _channelCache[displayChannel.id] = entry;
       });
 
-      await DebrifyTvRepository.instance
-          .upsertChannel(updatedChannel.toRecord());
+      await DebrifyTvRepository.instance.upsertChannel(
+        updatedChannel.toRecord(),
+      );
       await DebrifyTvCacheService.saveEntry(entry);
       await _loadChannels();
 
@@ -3324,9 +3335,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
           if (engineErrors.isNotEmpty) {
             engineErrors.forEach((engine, message) {
-              debugPrint(
-                'DebrifyTV: Search engine "$engine" failed: $message',
-              );
+              debugPrint('DebrifyTV: Search engine "$engine" failed: $message');
             });
           }
           debugPrint(
@@ -3411,13 +3420,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   final String? activeChannelId = _currentWatchingChannelId;
                   final int? activeChannelNumber;
                   if (activeChannelId != null) {
-                    final int idx =
-                        _channels.indexWhere((c) => c.id == activeChannelId);
+                    final int idx = _channels.indexWhere(
+                      (c) => c.id == activeChannelId,
+                    );
                     if (idx >= 0) {
-                      final int resolvedNumber =
-                          _resolveChannelNumber(_channels[idx]);
-                      activeChannelNumber =
-                          resolvedNumber > 0 ? resolvedNumber : null;
+                      final int resolvedNumber = _resolveChannelNumber(
+                        _channels[idx],
+                      );
+                      activeChannelNumber = resolvedNumber > 0
+                          ? resolvedNumber
+                          : null;
                     } else {
                       activeChannelNumber = null;
                     }
@@ -3426,10 +3438,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   }
                   final List<Map<String, dynamic>>? activeChannelDirectory =
                       _channels.isNotEmpty
-                          ? _androidTvChannelMetadata(
-                              activeChannelId: activeChannelId,
-                            )
-                          : null;
+                      ? _androidTvChannelMetadata(
+                          activeChannelId: activeChannelId,
+                        )
+                      : null;
 
                   // Try to launch on Android TV first (early launch path)
                   final launchedOnTv = await _launchRealDebridOnAndroidTv(
@@ -3466,10 +3478,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         requestMagicNext: requestMagicNext,
                         requestNextChannel:
                             _channels.length > 1 &&
-                                    (_quickProvider == _providerRealDebrid ||
-                                        _quickProvider == _providerTorbox)
-                                ? _requestNextChannel
-                                : null,
+                                (_quickProvider == _providerRealDebrid ||
+                                    _quickProvider == _providerTorbox)
+                            ? _requestNextChannel
+                            : null,
                       ),
                     ),
                   );
@@ -3751,8 +3763,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
       final List<Map<String, dynamic>>? quickChannelDirectory =
           _channels.isNotEmpty
-              ? _androidTvChannelMetadata(activeChannelId: activeChannelId)
-              : null;
+          ? _androidTvChannelMetadata(activeChannelId: activeChannelId)
+          : null;
 
       // Try to launch on Android TV first
       final launchedOnTv = await _launchRealDebridOnAndroidTv(
@@ -3787,10 +3799,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestMagicNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                        (_quickProvider == _providerRealDebrid ||
-                            _quickProvider == _providerTorbox)
-                    ? _requestNextChannel
-                    : null,
+                    (_quickProvider == _providerRealDebrid ||
+                        _quickProvider == _providerTorbox)
+                ? _requestNextChannel
+                : null,
           ),
         ),
       );
@@ -3947,8 +3959,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (candidateCursor >= combinedList.length) {
             return false;
           }
-          final _TorboxCacheWindowResult window =
-              await _fetchTorboxCacheWindow(
+          final _TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
             candidates: combinedList,
             startIndex: candidateCursor,
             apiKey: apiKey,
@@ -4077,23 +4088,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             if (_watchCancelled) {
               return null;
             }
-          if (result != null) {
-            // if (result.hasMore && !_watchCancelled) {
-            //   _queue.add(item);
-            // }
-            if (mounted && !_watchCancelled) {
-              setState(() {
-                _status = _queue.isEmpty
-                    ? ''
-                    : 'Queue has ${_queue.length} remaining';
-              });
+            if (result != null) {
+              // if (result.hasMore && !_watchCancelled) {
+              //   _queue.add(item);
+              // }
+              if (mounted && !_watchCancelled) {
+                setState(() {
+                  _status = _queue.isEmpty
+                      ? ''
+                      : 'Queue has ${_queue.length} remaining';
+                });
+              }
+              if (_watchCancelled) {
+                return null;
+              }
+              return {'url': result.streamUrl, 'title': result.title};
             }
-            if (_watchCancelled) {
-              return null;
-            }
-            return {'url': result.streamUrl, 'title': result.title};
           }
-        }
         }
         if (mounted && !_watchCancelled) {
           setState(() {
@@ -4144,24 +4155,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!_watchCancelled) {
         await Navigator.of(context).push(
           MaterialPageRoute(
-          builder: (_) => VideoPlayerScreen(
-            videoUrl: first['url'] ?? '',
-            title: first['title'] ?? 'Debrify TV',
-            startFromRandom: _startRandom,
-            randomStartMaxPercent: _randomStartPercent,
-            hideSeekbar: _hideSeekbar,
-            showChannelName: _showChannelName,
-            channelName: null,
-            showVideoTitle: _showVideoTitle,
-            hideOptions: _hideOptions,
-            requestMagicNext: requestTorboxNext,
-            requestNextChannel:
-                _channels.length > 1 &&
-                        (_quickProvider == _providerRealDebrid ||
-                            _quickProvider == _providerTorbox)
-                    ? _requestNextChannel
-                    : null,
-          ),
+            builder: (_) => VideoPlayerScreen(
+              videoUrl: first['url'] ?? '',
+              title: first['title'] ?? 'Debrify TV',
+              startFromRandom: _startRandom,
+              randomStartMaxPercent: _randomStartPercent,
+              hideSeekbar: _hideSeekbar,
+              showChannelName: _showChannelName,
+              channelName: null,
+              showVideoTitle: _showVideoTitle,
+              hideOptions: _hideOptions,
+              requestMagicNext: requestTorboxNext,
+              requestNextChannel:
+                  _channels.length > 1 &&
+                      (_quickProvider == _providerRealDebrid ||
+                          _quickProvider == _providerTorbox)
+                  ? _requestNextChannel
+                  : null,
+            ),
           ),
         );
       }
@@ -4199,12 +4210,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final List<Map<String, dynamic>>? channelDirectory =
-        _channels.isNotEmpty
-            ? _androidTvChannelMetadata(
-                activeChannelId: channelId ?? _currentWatchingChannelId,
-              )
-            : null;
+    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
+        ? _androidTvChannelMetadata(
+            activeChannelId: channelId ?? _currentWatchingChannelId,
+          )
+        : null;
 
     _launchedPlayer = false;
     await _stopPrefetch();
@@ -4424,10 +4434,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestMagicNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                        (_provider == _providerRealDebrid ||
-                            _provider == _providerTorbox)
-                    ? _requestNextChannel
-                    : null,
+                    (_provider == _providerRealDebrid ||
+                        _provider == _providerTorbox)
+                ? _requestNextChannel
+                : null,
           ),
         ),
       );
@@ -4591,7 +4601,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       'DebrifyTV: _switchToChannel(${targetChannel.name}) reason=$reason',
     );
 
-    final int computedIndex = fallbackIndex ??
+    final int computedIndex =
+        fallbackIndex ??
         _channels.indexWhere((channel) => channel.id == targetChannel.id);
     final int targetChannelNumber = targetChannel.channelNumber > 0
         ? targetChannel.channelNumber
@@ -4611,9 +4622,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return null;
     }
     if (cacheEntry.torrents.isEmpty) {
-      debugPrint(
-        'DebrifyTV: Channel "${targetChannel.name}" has no torrents',
-      );
+      debugPrint('DebrifyTV: Channel "${targetChannel.name}" has no torrents');
       return null;
     }
 
@@ -4677,7 +4686,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
-      final List<Torrent> torboxCandidates = List<Torrent>.from(filteredTorrents);
+      final List<Torrent> torboxCandidates = List<Torrent>.from(
+        filteredTorrents,
+      );
       torboxCandidates.shuffle(Random());
 
       int candidateCursor = 0;
@@ -4685,8 +4696,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       try {
         while (candidateCursor < torboxCandidates.length &&
             cachedCandidates.isEmpty) {
-          final _TorboxCacheWindowResult window =
-              await _fetchTorboxCacheWindow(
+          final _TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
             candidates: torboxCandidates,
             startIndex: candidateCursor,
             apiKey: apiKey,
@@ -4795,10 +4805,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           _startPrefetch();
-          debugPrint('DebrifyTV: Started Real-Debrid prefetcher for new channel');
           debugPrint(
-            'DebrifyTV: Successfully got stream from channel: $title',
+            'DebrifyTV: Started Real-Debrid prefetcher for new channel',
           );
+          debugPrint('DebrifyTV: Successfully got stream from channel: $title');
 
           return {
             'channelId': targetChannel.id,
@@ -4888,7 +4898,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (channel.channelNumber > 0) {
       return channel.channelNumber;
     }
-    final int index = _channels.indexWhere((element) => element.id == channel.id);
+    final int index = _channels.indexWhere(
+      (element) => element.id == channel.id,
+    );
     if (index >= 0) {
       return index + 1;
     }
@@ -4896,7 +4908,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return fallback >= 0 ? fallback + 1 : 0;
   }
 
-  List<Map<String, dynamic>> _androidTvChannelMetadata({String? activeChannelId}) {
+  List<Map<String, dynamic>> _androidTvChannelMetadata({
+    String? activeChannelId,
+  }) {
     if (_channels.isEmpty) {
       return const <Map<String, dynamic>>[];
     }
@@ -4907,7 +4921,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       payload.add({
         'id': channel.id,
         'name': channel.name,
-        'channelNumber': channel.channelNumber > 0 ? channel.channelNumber : i + 1,
+        'channelNumber': channel.channelNumber > 0
+            ? channel.channelNumber
+            : i + 1,
         'isCurrent': highlightId != null && channel.id == highlightId,
       });
     }
@@ -4950,16 +4966,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     try {
       final bool canSwitchChannels =
           _currentWatchingChannelId != null &&
-              _channels.length > 1 &&
-              _provider == _providerRealDebrid;
+          _channels.length > 1 &&
+          _provider == _providerRealDebrid;
 
       final launched = await AndroidTvPlayerBridge.launchRealDebridPlayback(
         initialUrl: initialUrl,
         title: title.isEmpty ? 'Debrify TV' : title,
         channelName: channelName,
         requestNext: requestNext,
-        requestChannelSwitch:
-            canSwitchChannels ? _requestNextChannel : null,
+        requestChannelSwitch: canSwitchChannels ? _requestNextChannel : null,
         requestChannelById: canSwitchChannels ? _requestChannelById : null,
         onFinished: () async {
           debugPrint('DebrifyTV: Android TV playback finished callback');
@@ -5031,12 +5046,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final List<Map<String, dynamic>>? channelDirectory =
-        _channels.isNotEmpty
-            ? _androidTvChannelMetadata(
-                activeChannelId: channelId ?? _currentWatchingChannelId,
-              )
-            : null;
+    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
+        ? _androidTvChannelMetadata(
+            activeChannelId: channelId ?? _currentWatchingChannelId,
+          )
+        : null;
 
     void log(String message) {
       debugPrint('DebrifyTV: $message');
@@ -5080,8 +5094,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (candidateCursor >= candidatePool.length) {
           return false;
         }
-        final _TorboxCacheWindowResult window =
-            await _fetchTorboxCacheWindow(
+        final _TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
           candidates: candidatePool,
           startIndex: candidateCursor,
           apiKey: apiKey,
@@ -5248,10 +5261,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestMagicNext: requestTorboxNext,
             requestNextChannel:
                 _channels.length > 1 &&
-                        (_provider == _providerRealDebrid ||
-                            _provider == _providerTorbox)
-                    ? _requestNextChannel
-                    : null,
+                    (_provider == _providerRealDebrid ||
+                        _provider == _providerTorbox)
+                ? _requestNextChannel
+                : null,
           ),
         ),
       );
@@ -5952,7 +5965,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _quickStartRandom = _startRandom;
                         _quickRandomStartPercent = _randomStartPercent;
                         _quickHideSeekbar = _hideSeekbar;
-                      _quickShowChannelName = _showChannelName;
+                        _quickShowChannelName = _showChannelName;
                         _quickShowVideoTitle = _showVideoTitle;
                         _quickHideOptions = _hideOptions;
                         _quickHideBackButton = _hideBackButton;
@@ -6088,8 +6101,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF1E1E1E), Color(0xFF2A2A2A)],
@@ -6629,20 +6644,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } finally {
       _inflightInfohashes.remove(infohash);
     }
-  }
-}
-
-class _ImportChannelCandidate {
-  final String name;
-  final String path;
-
-  const _ImportChannelCandidate({required this.name, required this.path});
-
-  String get displayName {
-    if (name.toLowerCase().endsWith('.txt')) {
-      return name.substring(0, name.length - 4);
-    }
-    return name;
   }
 }
 

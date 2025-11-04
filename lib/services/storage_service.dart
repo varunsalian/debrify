@@ -26,7 +26,8 @@ class StorageService {
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
-  static const String _debrifyTvShowChannelNameKey = 'debrify_tv_show_watermark';
+  static const String _debrifyTvShowChannelNameKey =
+      'debrify_tv_show_watermark';
   static const String _debrifyTvShowVideoTitleKey =
       'debrify_tv_show_video_title';
   static const String _debrifyTvHideOptionsKey = 'debrify_tv_hide_options';
@@ -37,19 +38,11 @@ class StorageService {
   static const String _debrifyTvRandomStartPercentKey =
       'debrify_tv_random_start_percent';
   static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
-  static const String _debrifyTvImportRepoUrlKey =
-      'debrify_tv_import_repo_url';
   static const String _playlistKey = 'user_playlist_v1';
-  static const String _onboardingCompleteKey =
-      'initial_setup_complete_v1';
+  static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
   static const int _debrifyTvRandomStartPercentDefault = 40;
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
-  static const String _debrifyTvImportRepoDefault =
-      'https://gitlab.com/api/v4/projects/mediacontent%2Flist/repository/tree?path=data&per_page=100&ref=main';
-
-  static const String debrifyTvImportRepoDefaultUrl =
-      _debrifyTvImportRepoDefault;
 
   // Note: Plain text storage is fine for API key since they're stored locally on user's device
   // and can be easily regenerated if compromised
@@ -679,17 +672,6 @@ class StorageService {
     return prefs.containsKey(_debrifyTvProviderKey);
   }
 
-  static Future<String> getDebrifyTvImportRepoUrl() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_debrifyTvImportRepoUrlKey) ??
-        _debrifyTvImportRepoDefault;
-  }
-
-  static Future<void> saveDebrifyTvImportRepoUrl(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_debrifyTvImportRepoUrlKey, value);
-  }
-
   static Future<bool> getDebrifyTvStartRandom() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_debrifyTvStartRandomKey) ?? true;
@@ -874,10 +856,13 @@ class StorageService {
     for (final existing in items) {
       final existingKey = computePlaylistDedupeKey(existing);
       final existingProvider = (existing['provider'] as String?) ?? 'unknown';
-      debugPrint('Playlist dedupe: existingKey=$existingKey provider=$existingProvider');
+      debugPrint(
+        'Playlist dedupe: existingKey=$existingKey provider=$existingProvider',
+      );
     }
-    final initialExists =
-        items.any((entry) => computePlaylistDedupeKey(entry) == initialKey);
+    final initialExists = items.any(
+      (entry) => computePlaylistDedupeKey(entry) == initialKey,
+    );
     if (initialExists) {
       debugPrint('Playlist dedupe: blocked by initial key match');
       return false;
@@ -952,8 +937,9 @@ class StorageService {
 
     final finalKey = computePlaylistDedupeKey(enriched);
     if (finalKey != initialKey) {
-      final finalExists =
-          items.any((entry) => computePlaylistDedupeKey(entry) == finalKey);
+      final finalExists = items.any(
+        (entry) => computePlaylistDedupeKey(entry) == finalKey,
+      );
       if (finalExists) {
         debugPrint('Playlist dedupe: blocked by final key match ($finalKey)');
         return false;
