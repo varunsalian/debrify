@@ -5759,58 +5759,157 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 24),
-          Row(
-            children: [
-              FilledButton.icon(
-                onPressed: _isBusy ? null : _showQuickPlayDialog,
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Quick Play'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFE50914),
-                  foregroundColor: Colors.white,
-                ),
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: _isBusy ? null : _handleImportChannels,
-                icon: const Icon(Icons.cloud_download_rounded),
-                label: const Text('Import'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                onPressed: _handleAddChannel,
-                icon: const Icon(Icons.add_rounded),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white.withOpacity(0.08),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(44, 44),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+
+              double horizontal = 20;
+              double vertical = 14;
+              double iconEdge = 46;
+              double gapMain = 12;
+              double gapActions = 8;
+
+              if (width < 620) {
+                horizontal = 18;
+              }
+              if (width < 560) {
+                horizontal = 16;
+                gapMain = 10;
+              }
+              if (width < 520) {
+                horizontal = 14;
+                vertical = 12;
+                iconEdge = 42;
+                gapActions = 6;
+              }
+              if (width < 470) {
+                horizontal = 12;
+                vertical = 10;
+                iconEdge = 40;
+                gapMain = 8;
+                gapActions = 4;
+              }
+              if (width < 430) {
+                horizontal = 10;
+                vertical = 9;
+                iconEdge = 38;
+              }
+              if (width < 390) {
+                horizontal = 8;
+                vertical = 8;
+                iconEdge = 36;
+                gapMain = 6;
+              }
+
+              final buttonPadding = EdgeInsets.symmetric(
+                horizontal: horizontal,
+                vertical: vertical,
+              );
+              final iconSize = Size.square(iconEdge);
+
+              final leftRow = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _isBusy ? null : _showQuickPlayDialog,
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text('Quick Play'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFE50914),
+                      foregroundColor: Colors.white,
+                      padding: buttonPadding,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                   ),
-                ),
-                tooltip: 'Add Channel',
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                tooltip: 'Delete all channels',
-                onPressed: _isBusy || _channels.isEmpty
-                    ? null
-                    : _handleDeleteAllChannels,
-                icon: const Icon(Icons.delete_outline_rounded),
-                color: Colors.redAccent,
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                tooltip: 'Global settings',
-                onPressed: _showGlobalSettingsDialog,
-                icon: const Icon(Icons.settings_rounded),
-                color: Colors.white70,
-              ),
-            ],
+                  SizedBox(width: gapMain),
+                  FilledButton.icon(
+                    onPressed: _isBusy ? null : _handleImportChannels,
+                    icon: const Icon(Icons.cloud_download_rounded),
+                    label: const Text('Import'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: buttonPadding,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+
+              final actionsRow = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton.filled(
+                    onPressed: _handleAddChannel,
+                    icon: const Icon(Icons.add_rounded),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.1),
+                      foregroundColor: Colors.white,
+                      minimumSize: iconSize,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    tooltip: 'Add Channel',
+                  ),
+                  SizedBox(width: gapActions),
+                  IconButton.filled(
+                    onPressed: _isBusy || _channels.isEmpty
+                        ? null
+                        : _handleDeleteAllChannels,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.08),
+                      foregroundColor: Colors.redAccent,
+                      minimumSize: iconSize,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    tooltip: 'Delete all channels',
+                  ),
+                  SizedBox(width: gapActions),
+                  IconButton.filled(
+                    onPressed: _showGlobalSettingsDialog,
+                    icon: const Icon(Icons.settings_rounded),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.08),
+                      foregroundColor: Colors.white70,
+                      minimumSize: iconSize,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    tooltip: 'Global settings',
+                  ),
+                ],
+              );
+
+              return Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: leftRow,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: gapMain),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: actionsRow,
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           TextField(
