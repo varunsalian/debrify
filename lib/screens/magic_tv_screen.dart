@@ -6187,7 +6187,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Widget _buildChannelCard(_DebrifyTvChannel channel) {
     final cacheEntry = _channelCache[channel.id];
     final int cachedCount = cacheEntry?.torrents.length ?? 0;
-    final card = Container(
+    final String? channelNumberLabel = channel.channelNumber > 0
+        ? 'Channel ${channel.channelNumber.toString().padLeft(2, '0')}'
+        : null;
+
+    final gestureKey = ValueKey('channel-card-${channel.id}');
+
+    final cardContent = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF101010),
@@ -6207,32 +6213,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1E1E1E), Color(0xFF2A2A2A)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white10, width: 1),
-                ),
-                child: Text(
-                  channel.channelNumber > 0
-                      ? 'CH ${channel.channelNumber.toString().padLeft(2, '0')}'
-                      : 'CH --',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -6245,25 +6225,34 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         fontSize: 18,
                       ),
                     ),
+                    if (channelNumberLabel != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        channelNumberLabel,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 11,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              ElevatedButton.icon(
+              const SizedBox(width: 12),
+              FilledButton(
                 onPressed: _isBusy ? null : () => _watchChannel(channel),
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Watch'),
-                style: ElevatedButton.styleFrom(
+                style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFFE50914),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
+                  padding: const EdgeInsets.all(12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
+                child: const Icon(Icons.play_arrow_rounded),
               ),
+              const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Edit channel',
                 onPressed: () => _handleEditChannel(channel),
@@ -6312,15 +6301,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ],
       ),
     );
-    if (!_isAndroidTv) {
-      return card;
-    }
-    return _FocusHighlightWrapper(
-      enabled: true,
-      borderRadius: BorderRadius.circular(20),
-      debugLabel: 'debrify-tv-channel-card-${channel.id}',
-      child: card,
+    Widget interactive = InkWell(
+      key: gestureKey,
+      borderRadius: BorderRadius.circular(16),
+      onTap: _isBusy ? null : () => _watchChannel(channel),
+      child: cardContent,
     );
+
+    if (_isAndroidTv) {
+      interactive = _FocusHighlightWrapper(
+        enabled: true,
+        borderRadius: BorderRadius.circular(20),
+        debugLabel: 'debrify-tv-channel-card-${channel.id}',
+        child: interactive,
+      );
+    }
+
+    return interactive;
   }
 
   Widget _buildKeywordChip(String keyword) {
