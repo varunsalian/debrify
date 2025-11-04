@@ -1608,10 +1608,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         },
       );
     } finally {
-      channelNameFocus?.dispose();
-      channelKeywordFocus?.dispose();
-      nameController.dispose();
-      keywordInputController.dispose();
+      final disposer = () {
+        channelNameFocus?.dispose();
+        channelKeywordFocus?.dispose();
+        nameController.dispose();
+        keywordInputController.dispose();
+      };
+
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => disposer());
+      } else {
+        disposer();
+      }
     }
 
     return result;
