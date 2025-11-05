@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Circular Text Ring Menu -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/radial_menu_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#DD000000"
+    android:visibility="gone"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Circular Container -->
+    <RelativeLayout
+        android:id="@+id/radial_menu_container"
+        android:layout_width="380dp"
+        android:layout_height="380dp"
+        android:layout_gravity="center"
+        android:background="@drawable/circular_menu_bg">
+
+        <!-- Center Text (PAUSED) -->
+        <TextView
+            android:id="@+id/radial_menu_center_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:text="PAUSED"
+            android:textSize="28sp"
+            android:textColor="#FFFFFF"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.2"
+            android:shadowColor="#000000"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="4" />
+
+        <!-- Dummy center view for reference -->
+        <View
+            android:id="@+id/radial_menu_center"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_centerInParent="true" />
+
+        <!-- TOP - Next Channel -->
+        <TextView
+            android:id="@+id/radial_option_up"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerHorizontal="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginTop="30dp"
+            android:text="Next Channel"
+            android:textSize="18sp"
+            android:textColor="#CCFFFFFF"
+            android:fontFamily="sans-serif"
+            android:padding="12dp"
+            android:background="@drawable/menu_item_bg"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <!-- BOTTOM - Next Stream -->
+        <TextView
+            android:id="@+id/radial_option_down"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerHorizontal="true"
+            android:layout_alignParentBottom="true"
+            android:layout_marginBottom="30dp"
+            android:text="Next Stream"
+            android:textSize="18sp"
+            android:textColor="#CCFFFFFF"
+            android:fontFamily="sans-serif"
+            android:padding="12dp"
+            android:background="@drawable/menu_item_bg"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <!-- LEFT - Audio Track -->
+        <TextView
+            android:id="@+id/radial_option_left"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_alignParentLeft="true"
+            android:layout_marginLeft="20dp"
+            android:text="Audio"
+            android:textSize="18sp"
+            android:textColor="#CCFFFFFF"
+            android:fontFamily="sans-serif"
+            android:padding="12dp"
+            android:background="@drawable/menu_item_bg"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <!-- RIGHT - Subtitles -->
+        <TextView
+            android:id="@+id/radial_option_right"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_alignParentRight="true"
+            android:layout_marginRight="20dp"
+            android:text="Subtitles"
+            android:textSize="18sp"
+            android:textColor="#CCFFFFFF"
+            android:fontFamily="sans-serif"
+            android:padding="12dp"
+            android:background="@drawable/menu_item_bg"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <!-- TOP-LEFT - Aspect Ratio -->
+        <TextView
+            android:id="@+id/radial_option_up_left"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentLeft="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginLeft="60dp"
+            android:layout_marginTop="70dp"
+            android:text="Aspect"
+            android:textSize="16sp"
+            android:textColor="#CCFFFFFF"
+            android:fontFamily="sans-serif"
+            android:padding="10dp"
+            android:background="@drawable/menu_item_bg"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <!-- TOP-RIGHT - Channel Guide -->
+        <TextView
+            android:id="@+id/radial_option_up_right"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginRight="60dp"
+            android:layout_marginTop="70dp"
+            android:text="Guide"
+            android:textSize="16sp"
+            android:textColor="#CCFFFFFF"
+            android:fontFamily="sans-serif"
+            android:padding="10dp"
+            android:background="@drawable/menu_item_bg"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <!-- BOTTOM-LEFT - Playback Speed -->
+        <TextView
+            android:id="@+id/radial_option_down_left"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentLeft="true"
+            android:layout_alignParentBottom="true"
+            android:layout_marginLeft="60dp"
+            android:layout_marginBottom="70dp"
+            android:text="Speed"
+            android:textSize="16sp"
+            android:textColor="#CCFFFFFF"
+            android:fontFamily="sans-serif"
+            android:padding="10dp"
+            android:background="@drawable/menu_item_bg"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <!-- BOTTOM-RIGHT - Seek -->
+        <TextView
+            android:id="@+id/radial_option_down_right"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_alignParentBottom="true"
+            android:layout_marginRight="60dp"
+            android:layout_marginBottom="70dp"
+            android:text="Seek"
+            android:textSize="16sp"
+            android:textColor="#CCFFFFFF"
+            android:fontFamily="sans-serif"
+            android:padding="10dp"
+            android:background="@drawable/menu_item_bg"
+            android:focusable="true"
+            android:clickable="true" />
+
+    </RelativeLayout>
+
+</FrameLayout>

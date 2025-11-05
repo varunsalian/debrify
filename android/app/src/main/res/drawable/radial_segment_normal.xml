@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Normal segment state -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Shadow layer -->
+    <item android:top="2dp" android:left="2dp" android:right="2dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#30000000" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+
+    <!-- Main segment with gradient -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#2a2a2a"
+                android:centerColor="#1f1f1f"
+                android:endColor="#1a1a1a"
+                android:type="linear" />
+            <corners android:radius="8dp" />
+            <stroke android:width="1dp" android:color="#40ffffff" />
+        </shape>
+    </item>
+</layer-list>

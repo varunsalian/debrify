@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selected segment with glow effect -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Outer glow -->
+    <item android:top="-4dp" android:bottom="-4dp" android:left="-4dp" android:right="-4dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#60dc143c" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+
+    <!-- Middle glow -->
+    <item android:top="-2dp" android:bottom="-2dp" android:left="-2dp" android:right="-2dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#80dc143c" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+
+    <!-- Main segment with red gradient -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#ff4757"
+                android:centerColor="#dc143c"
+                android:endColor="#b01030"
+                android:type="linear" />
+            <corners android:radius="8dp" />
+            <stroke android:width="2dp" android:color="#ffffffff" />
+        </shape>
+    </item>
+</layer-list>

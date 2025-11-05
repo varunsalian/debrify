@@ -132,6 +132,35 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View loadingDot2;
     private View loadingDot3;
     private android.animation.ValueAnimator dotsAnimator;
+
+    // Radial Menu Views
+    private View radialMenuOverlay;
+    private View radialMenuContainer;
+    private TextView radialMenuCenterText;
+    private View radialOptionUp;
+    private View radialOptionDown;
+    private View radialOptionLeft;
+    private View radialOptionRight;
+    private View radialOptionUpLeft;
+    private View radialOptionUpRight;
+    private View radialOptionDownLeft;
+    private View radialOptionDownRight;
+    private View currentRadialSelection;
+    private boolean radialMenuVisible = false;
+
+    // Custom Seekbar Views
+    private View seekbarOverlay;
+    private View seekbarProgress;
+    private View seekbarHandle;
+    private TextView seekbarCurrentTime;
+    private TextView seekbarTotalTime;
+    private long seekbarPosition = 0;
+    private long videoDuration = 0;
+    private boolean seekbarVisible = false;
+    private int playbackSpeedIndex = 2; // Default to 1.0x
+    private final float[] playbackSpeeds = new float[] {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+    private final String[] playbackSpeedLabels = new String[] {"0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x"};
+
     private final ArrayList<ChannelEntry> channelDirectoryEntries = new ArrayList<>();
     private final ArrayList<ChannelEntry> filteredChannelEntries = new ArrayList<>();
     private boolean searchOverlayVisible = false;
@@ -165,14 +194,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean randomApplied = false;
     private boolean requestingNext = false;
     private boolean finishedNotified = false;
-    private boolean longPressHandled = false;
-    private boolean longPressDownHandled = false;
-    private boolean longPressRightHandled = false;
-    private boolean longPressUpHandled = false;
-    private boolean centerKeyDown = false;
-    private boolean downKeyDown = false;
-    private boolean rightKeyDown = false;
-    private boolean upKeyDown = false;
     private int playedCount = 0;
     private long lastChannelSwitchTime = 0;
     private static final long CHANNEL_SWITCH_COOLDOWN_MS = 2000L; // 2 second cooldown
@@ -181,57 +202,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
     private final Runnable hideNextOverlayRunnable = this::performHideNextOverlay;
     private final Runnable hideChannelOverlayRunnable = this::performHideChannelOverlay;
-    private final Runnable centerLongPressRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!centerKeyDown || longPressHandled) {
-                return;
-            }
-            longPressHandled = true;
-            requestNextStream();
-            hideControllerIfVisible();
-        }
-    };
-    private final Runnable downLongPressRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!downKeyDown || longPressDownHandled) {
-                return;
-            }
-            longPressDownHandled = true;
-            cycleAspectRatio();
-            hideControllerIfVisible();
-        }
-    };
-    private final Runnable rightLongPressRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!rightKeyDown || longPressRightHandled) {
-                return;
-            }
-            longPressRightHandled = true;
-            requestNextChannel();
-            hideControllerIfVisible();
-        }
-    };
-    private final Runnable upLongPressRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!upKeyDown || longPressUpHandled) {
-                return;
-            }
-            longPressUpHandled = true;
-            hideControllerIfVisible();
-            if (!channelDirectoryEntries.isEmpty()) {
-                showSearchOverlay();
-            } else {
-                runOnUiThread(() ->
-                        Toast.makeText(TorboxTvPlayerActivity.this,
-                                "Channel search unavailable",
-                                Toast.LENGTH_SHORT).show());
-            }
-        }
-    };
     private final Player.Listener playbackListener = new Player.Listener() {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
@@ -285,6 +255,26 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         loadingDot1 = findViewById(R.id.loading_dot_1);
         loadingDot2 = findViewById(R.id.loading_dot_2);
         loadingDot3 = findViewById(R.id.loading_dot_3);
+
+        // Initialize Radial Menu Views
+        radialMenuOverlay = findViewById(R.id.radial_menu_overlay);
+        radialMenuContainer = findViewById(R.id.radial_menu_container);
+        radialMenuCenterText = findViewById(R.id.radial_menu_center_text);
+        radialOptionUp = findViewById(R.id.radial_option_up);
+        radialOptionDown = findViewById(R.id.radial_option_down);
+        radialOptionLeft = findViewById(R.id.radial_option_left);
+        radialOptionRight = findViewById(R.id.radial_option_right);
+        radialOptionUpLeft = findViewById(R.id.radial_option_up_left);
+        radialOptionUpRight = findViewById(R.id.radial_option_up_right);
+        radialOptionDownLeft = findViewById(R.id.radial_option_down_left);
+        radialOptionDownRight = findViewById(R.id.radial_option_down_right);
+
+        // Initialize Custom Seekbar Views
+        seekbarOverlay = findViewById(R.id.seekbar_overlay);
+        seekbarProgress = findViewById(R.id.seekbar_progress);
+        seekbarHandle = findViewById(R.id.seekbar_handle);
+        seekbarCurrentTime = findViewById(R.id.seekbar_current_time);
+        seekbarTotalTime = findViewById(R.id.seekbar_total_time);
 
         Intent intent = getIntent();
         
@@ -346,6 +336,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         initialisePlayer();
         applyUiPreferences(initialTitle);
         setupControllerUi();
+        setupRadialMenu();
+        setupCustomSeekbar();
         playMedia(initialUrl, initialTitle);
     }
 
@@ -644,6 +636,397 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         aspectButton.setText(resizeModeLabels[resizeModeIndex]);
+    }
+
+    private void setupRadialMenu() {
+        if (radialMenuOverlay == null) {
+            return;
+        }
+
+        // Set initial selection to center (no option selected)
+        currentRadialSelection = null;
+
+        // Set up click listeners, key listeners, and focus listeners for each menu option
+        // For Android TV, we need OnKeyListener to handle D-pad center button
+        if (radialOptionUp != null) {
+            radialOptionUp.setOnClickListener(v -> executeRadialAction("up"));
+            setupRadialOptionKeyListener(radialOptionUp, "up");
+            setupCircularTextFocusListener(radialOptionUp);
+        }
+        if (radialOptionDown != null) {
+            radialOptionDown.setOnClickListener(v -> executeRadialAction("down"));
+            setupRadialOptionKeyListener(radialOptionDown, "down");
+            setupCircularTextFocusListener(radialOptionDown);
+        }
+        if (radialOptionLeft != null) {
+            radialOptionLeft.setOnClickListener(v -> executeRadialAction("left"));
+            setupRadialOptionKeyListener(radialOptionLeft, "left");
+            setupCircularTextFocusListener(radialOptionLeft);
+        }
+        if (radialOptionRight != null) {
+            radialOptionRight.setOnClickListener(v -> executeRadialAction("right"));
+            setupRadialOptionKeyListener(radialOptionRight, "right");
+            setupCircularTextFocusListener(radialOptionRight);
+        }
+        if (radialOptionUpLeft != null) {
+            radialOptionUpLeft.setOnClickListener(v -> executeRadialAction("up_left"));
+            setupRadialOptionKeyListener(radialOptionUpLeft, "up_left");
+            setupCircularTextFocusListener(radialOptionUpLeft);
+        }
+        if (radialOptionUpRight != null) {
+            radialOptionUpRight.setOnClickListener(v -> executeRadialAction("up_right"));
+            setupRadialOptionKeyListener(radialOptionUpRight, "up_right");
+            setupCircularTextFocusListener(radialOptionUpRight);
+        }
+        if (radialOptionDownLeft != null) {
+            radialOptionDownLeft.setOnClickListener(v -> executeRadialAction("down_left"));
+            setupRadialOptionKeyListener(radialOptionDownLeft, "down_left");
+            setupCircularTextFocusListener(radialOptionDownLeft);
+        }
+        if (radialOptionDownRight != null) {
+            radialOptionDownRight.setOnClickListener(v -> executeRadialAction("down_right"));
+            setupRadialOptionKeyListener(radialOptionDownRight, "down_right");
+            setupCircularTextFocusListener(radialOptionDownRight);
+        }
+
+        // Back button on overlay closes menu
+        if (radialMenuOverlay != null) {
+            radialMenuOverlay.setOnKeyListener((v, keyCode, event) -> {
+                if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
+                    hideRadialMenu();
+                    return true;
+                }
+                return false;
+            });
+        }
+    }
+
+    private void setupRadialOptionKeyListener(View option, String action) {
+        option.setOnKeyListener((v, keyCode, event) -> {
+            if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
+                    && event.getAction() == KeyEvent.ACTION_DOWN) {
+                executeRadialAction(action);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private void setupCircularTextFocusListener(View option) {
+        if (!(option instanceof TextView)) {
+            return;
+        }
+        TextView textView = (TextView) option;
+
+        option.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                // Turn text red and scale up when focused
+                textView.setTextColor(0xFFDC143C); // Debrify red
+                textView.animate()
+                        .scaleX(1.15f)
+                        .scaleY(1.15f)
+                        .setDuration(150)
+                        .start();
+            } else {
+                // Return to white and normal scale when not focused
+                textView.setTextColor(0xCCFFFFFF); // Light white
+                textView.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(150)
+                        .start();
+            }
+        });
+    }
+
+    private void setupCustomSeekbar() {
+        if (seekbarOverlay == null) {
+            return;
+        }
+
+        // Back button on overlay closes seekbar
+        seekbarOverlay.setOnKeyListener((v, keyCode, event) -> {
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
+                hideSeekbar();
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private void showRadialMenu() {
+        if (radialMenuOverlay == null || radialMenuVisible) {
+            return;
+        }
+
+        // Pause the video
+        if (player != null && player.isPlaying()) {
+            player.pause();
+        }
+
+        // Hide controller if visible
+        hideControllerIfVisible();
+
+        // Update center text
+        if (radialMenuCenterText != null) {
+            radialMenuCenterText.setText("PAUSED");
+        }
+
+        // Show menu with simple fade-in animation
+        radialMenuVisible = true;
+        radialMenuOverlay.setVisibility(View.VISIBLE);
+        radialMenuOverlay.setAlpha(0f);
+        radialMenuOverlay.animate()
+                .alpha(1f)
+                .setDuration(200)
+                .start();
+
+        // Simple scale animation for container
+        if (radialMenuContainer != null) {
+            radialMenuContainer.setScaleX(0.9f);
+            radialMenuContainer.setScaleY(0.9f);
+            radialMenuContainer.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(200)
+                    .start();
+        }
+
+        // Set initial focus to first option (Next Channel - top)
+        if (radialOptionUp != null) {
+            radialOptionUp.postDelayed(() -> {
+                radialOptionUp.requestFocus();
+                currentRadialSelection = radialOptionUp;
+            }, 100);
+        }
+    }
+
+    private void hideRadialMenu() {
+        if (radialMenuOverlay == null || !radialMenuVisible) {
+            return;
+        }
+
+        radialMenuVisible = false;
+        radialMenuOverlay.animate()
+                .alpha(0f)
+                .setDuration(150)
+                .withEndAction(() -> {
+                    if (radialMenuOverlay != null) {
+                        radialMenuOverlay.setVisibility(View.GONE);
+                    }
+                })
+                .start();
+
+        // Resume playback
+        if (player != null && !player.isPlaying()) {
+            player.play();
+        }
+    }
+
+    private void executeRadialAction(String action) {
+        switch (action) {
+            case "up":
+                // Next Channel
+                hideRadialMenu();
+                requestNextChannel();
+                break;
+            case "down":
+                // Next Stream
+                hideRadialMenu();
+                requestNextStream();
+                break;
+            case "left":
+                // Audio Track
+                hideRadialMenu();
+                cycleAudioTrack();
+                Toast.makeText(this, "Audio track cycled", Toast.LENGTH_SHORT).show();
+                break;
+            case "right":
+                // Subtitles
+                hideRadialMenu();
+                cycleSubtitleTrack();
+                Toast.makeText(this, "Subtitle track cycled", Toast.LENGTH_SHORT).show();
+                break;
+            case "up_left":
+                // Aspect Ratio
+                hideRadialMenu();
+                cycleAspectRatio();
+                break;
+            case "up_right":
+                // Channel Guide
+                hideRadialMenu();
+                if (!channelDirectoryEntries.isEmpty()) {
+                    showSearchOverlay();
+                } else {
+                    Toast.makeText(this, "Channel search unavailable", Toast.LENGTH_SHORT).show();
+                }
+                break;
+            case "down_left":
+                // Playback Speed
+                hideRadialMenu();
+                cyclePlaybackSpeed();
+                break;
+            case "down_right":
+                // Seek/Scrub
+                hideRadialMenu();
+                showSeekbar();
+                break;
+        }
+    }
+
+    private void cyclePlaybackSpeed() {
+        if (player == null) {
+            return;
+        }
+        playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.length;
+        float speed = playbackSpeeds[playbackSpeedIndex];
+        player.setPlaybackSpeed(speed);
+        Toast.makeText(this, "Speed: " + playbackSpeedLabels[playbackSpeedIndex], Toast.LENGTH_SHORT).show();
+    }
+
+    private void showSeekbar() {
+        if (seekbarOverlay == null || player == null || seekbarVisible) {
+            return;
+        }
+
+        // Get current position and duration
+        seekbarPosition = player.getCurrentPosition();
+        videoDuration = player.getDuration();
+
+        if (videoDuration <= 0) {
+            Toast.makeText(this, "Seeking not available", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Update UI
+        updateSeekbarUI();
+
+        // Show seekbar overlay with fade-in
+        seekbarVisible = true;
+        seekbarOverlay.setVisibility(View.VISIBLE);
+        seekbarOverlay.setAlpha(0f);
+        seekbarOverlay.animate()
+                .alpha(1f)
+                .setDuration(200)
+                .start();
+
+        // Pause the video
+        if (player.isPlaying()) {
+            player.pause();
+        }
+    }
+
+    private void hideSeekbar() {
+        if (seekbarOverlay == null || !seekbarVisible) {
+            return;
+        }
+
+        seekbarVisible = false;
+        seekbarOverlay.animate()
+                .alpha(0f)
+                .setDuration(150)
+                .withEndAction(() -> {
+                    if (seekbarOverlay != null) {
+                        seekbarOverlay.setVisibility(View.GONE);
+                    }
+                })
+                .start();
+
+        // Show radial menu again
+        showRadialMenu();
+    }
+
+    private void confirmSeekPosition() {
+        if (player == null || !seekbarVisible) {
+            return;
+        }
+
+        // Seek to the position
+        player.seekTo(seekbarPosition);
+
+        // Hide seekbar
+        seekbarVisible = false;
+        if (seekbarOverlay != null) {
+            seekbarOverlay.animate()
+                    .alpha(0f)
+                    .setDuration(150)
+                    .withEndAction(() -> {
+                        if (seekbarOverlay != null) {
+                            seekbarOverlay.setVisibility(View.GONE);
+                        }
+                    })
+                    .start();
+        }
+
+        // Resume playback
+        if (player != null) {
+            player.play();
+        }
+    }
+
+    private void updateSeekbarUI() {
+        if (seekbarProgress == null || seekbarHandle == null || seekbarCurrentTime == null || seekbarTotalTime == null) {
+            return;
+        }
+
+        // Update time displays
+        seekbarCurrentTime.setText(formatTime(seekbarPosition));
+        seekbarTotalTime.setText(formatTime(videoDuration));
+
+        // Update progress bar and handle position
+        float progressPercent = (float) seekbarPosition / videoDuration;
+
+        // Get the width of the seekbar background to calculate positions
+        View seekbarBackground = findViewById(R.id.seekbar_background);
+        if (seekbarBackground != null) {
+            int totalWidth = seekbarBackground.getWidth();
+            if (totalWidth > 0) {
+                int progressWidth = (int) (totalWidth * progressPercent);
+
+                ViewGroup.LayoutParams progressParams = seekbarProgress.getLayoutParams();
+                progressParams.width = progressWidth;
+                seekbarProgress.setLayoutParams(progressParams);
+
+                // Position the handle
+                int handleSize = seekbarHandle.getWidth();
+                float handleX = progressWidth - (handleSize / 2f);
+                seekbarHandle.setTranslationX(handleX);
+            }
+        }
+    }
+
+    private void seekForward() {
+        if (player == null) {
+            return;
+        }
+        seekbarPosition = Math.min(seekbarPosition + SEEK_STEP_MS, videoDuration);
+        player.seekTo(seekbarPosition);
+        updateSeekbarUI();
+    }
+
+    private void seekBackward() {
+        if (player == null) {
+            return;
+        }
+        seekbarPosition = Math.max(seekbarPosition - SEEK_STEP_MS, 0);
+        player.seekTo(seekbarPosition);
+        updateSeekbarUI();
+    }
+
+    private String formatTime(long timeMs) {
+        if (timeMs <= 0) {
+            return "00:00";
+        }
+        long totalSeconds = timeMs / 1000;
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+
+        if (hours > 0) {
+            return String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds);
+        } else {
+            return String.format(Locale.US, "%02d:%02d", minutes, seconds);
+        }
     }
 
     private void showTitleTemporarily(@Nullable String title) {
@@ -1718,7 +2101,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (channelDirectoryEntries.isEmpty()) {
             return;
         }
-        keyPressHandler.removeCallbacks(upLongPressRunnable);
         searchOverlayVisible = true;
         filterChannels(searchInput.getText() != null ? searchInput.getText().toString() : "");
 
@@ -1771,7 +2153,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     }
                 })
                 .start();
-        longPressUpHandled = false;
     }
 
     private boolean isSearchOverlayVisible() {
@@ -2162,26 +2543,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
-        if (isSearchOverlayVisible()) {
-            return super.onKeyUp(keyCode, event);
-        }
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            if (!longPressHandled) {
-                if (playerView != null) {
-                    playerView.showController();
-                }
-                togglePlayPause();
-            }
-            longPressHandled = false;
-            return true;
-        }
-        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            boolean wasLongPress = longPressDownHandled;
-            longPressDownHandled = false;
-            if (!wasLongPress && playerView != null && event.getAction() == KeyEvent.ACTION_UP) {
-                playerView.showController();
-            }
-        }
+        // Key events are now handled in dispatchKeyEvent
         return super.onKeyUp(keyCode, event);
     }
 
@@ -2204,7 +2566,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
-        
+
+        // Handle search overlay separately
         if (isSearchOverlayVisible()) {
             if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
                 hideSearchOverlay();
@@ -2212,137 +2575,81 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
             return super.dispatchKeyEvent(event);
         }
-        
-        // Intercept center/enter button to manage long press without waking controller
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (!centerKeyDown) {
-                    centerKeyDown = true;
-                    longPressHandled = false;
-                    keyPressHandler.removeCallbacks(centerLongPressRunnable);
-                    keyPressHandler.postDelayed(centerLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
-                }
-                return true;
-            } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                keyPressHandler.removeCallbacks(centerLongPressRunnable);
-                centerKeyDown = false;
-            } else if (event.isCanceled()) {
-                keyPressHandler.removeCallbacks(centerLongPressRunnable);
-                centerKeyDown = false;
-                longPressHandled = false;
-                return true;
-            }
-        }
-        
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (!upKeyDown) {
-                    upKeyDown = true;
-                    longPressUpHandled = false;
-                    keyPressHandler.removeCallbacks(upLongPressRunnable);
-                    keyPressHandler.postDelayed(upLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
-                }
-                return super.dispatchKeyEvent(event);
-            } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                keyPressHandler.removeCallbacks(upLongPressRunnable);
-                upKeyDown = false;
-                boolean handled = longPressUpHandled;
-                longPressUpHandled = false;
-                if (!handled && playerView != null) {
-                    playerView.showController();
-                }
-                return super.dispatchKeyEvent(event);
-            } else if (event.isCanceled()) {
-                keyPressHandler.removeCallbacks(upLongPressRunnable);
-                upKeyDown = false;
-                longPressUpHandled = false;
-                return super.dispatchKeyEvent(event);
-            }
-        }
-        
-        // Intercept down button to manage long press without waking controller
-        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            boolean controllerVisible = playerView != null && playerView.isControllerFullyVisible();
 
-            if (!controllerVisible) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    if (!downKeyDown) {
-                        downKeyDown = true;
-                        longPressDownHandled = false;
-                        keyPressHandler.removeCallbacks(downLongPressRunnable);
-                        keyPressHandler.postDelayed(downLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
-                    }
+        // Handle seekbar overlay
+        if (seekbarVisible) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    seekBackward();
                     return true;
-                } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                    keyPressHandler.removeCallbacks(downLongPressRunnable);
-                    downKeyDown = false;
-                } else if (event.isCanceled()) {
-                    keyPressHandler.removeCallbacks(downLongPressRunnable);
-                    downKeyDown = false;
-                    longPressDownHandled = false;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    seekForward();
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    confirmSeekPosition();
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_BACK) {
+                    hideSeekbar();
                     return true;
                 }
             }
+            return true;
         }
-        
-        // Handle Right arrow - seek OR long press for next channel
+
+        // Handle radial menu navigation
+        if (radialMenuVisible) {
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
+                hideRadialMenu();
+                return true;
+            }
+            // Let the focused view handle all key events for navigation and selection
+            return super.dispatchKeyEvent(event);
+        }
+
+        // Normal playback controls
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                // Show radial menu
+                showRadialMenu();
+                return true;
+            }
+            return true;
+        }
+
+        // Handle Left/Right seeking when not in menu
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            boolean controllerVisible = playerView != null && playerView.isControllerFullyVisible();
             boolean focusInControls = isFocusInControlsOverlay();
 
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (!rightKeyDown) {
-                    boolean controllerVisible = playerView != null && playerView.isControllerFullyVisible();
-
-                    if (controllerVisible && focusInControls) {
-                        View defaultFocus = playerView != null ? playerView.getRootView().findFocus() : null;
-                        if (defaultFocus == null || defaultFocus == playerView) {
-                            hideControllerIfVisible();
-                        } else {
-                            return super.dispatchKeyEvent(event);
-                        }
-                    } else {
-                        hideControllerIfVisible();
-                    }
-
-                    // First key down - start timer and seek
-                    rightKeyDown = true;
-                    longPressRightHandled = false;
-                    keyPressHandler.removeCallbacks(rightLongPressRunnable);
-                    keyPressHandler.postDelayed(rightLongPressRunnable, LONG_PRESS_TIMEOUT_MS);
-                    // Also seek forward on first press
+            if (!controllerVisible && !focusInControls) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
                     seekBy(SEEK_STEP_MS);
+                    return true;
                 }
-                return true;
-            } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                keyPressHandler.removeCallbacks(rightLongPressRunnable);
-                rightKeyDown = false;
-                longPressRightHandled = false;
-                return true;
-            } else if (event.isCanceled()) {
-                keyPressHandler.removeCallbacks(rightLongPressRunnable);
-                rightKeyDown = false;
-                longPressRightHandled = false;
                 return true;
             }
         }
-        
-        // Handle Left arrow - always seek backward
+
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             boolean controllerVisible = playerView != null && playerView.isControllerFullyVisible();
             boolean focusInControls = isFocusInControlsOverlay();
 
             if (!controllerVisible && !focusInControls) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    if (event.getRepeatCount() == 0) {
-                        seekBy(-SEEK_STEP_MS);
-                    }
+                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                    seekBy(-SEEK_STEP_MS);
                     return true;
                 }
-                if (event.getAction() == KeyEvent.ACTION_UP) {
-                    return true;
-                }
+                return true;
             }
         }
+
+        // Up/Down can show controller
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && playerView != null) {
+                playerView.showController();
+            }
+        }
+
         return super.dispatchKeyEvent(event);
     }
 

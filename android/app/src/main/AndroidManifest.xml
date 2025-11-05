@@ -18,7 +18,7 @@
         android:fullBackupContent="true"
         android:usesCleartextTraffic="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:banner="@mipmap/ic_launcher">
+        android:banner="@drawable/banner_debrify">
         <service
             android:name="background.downloader.DownloadWorkerService"
             android:exported="false"

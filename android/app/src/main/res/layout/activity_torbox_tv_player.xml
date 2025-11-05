@@ -430,4 +430,10 @@
 
     </FrameLayout>
 
+    <!-- Radial Menu Overlay -->
+    <include layout="@layout/view_radial_menu" />
+
+    <!-- Custom Seekbar Overlay -->
+    <include layout="@layout/view_custom_seekbar" />
+
 </FrameLayout>
