@@ -136,7 +136,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     // Radial Menu Views
     private View radialMenuOverlay;
     private View radialMenuContainer;
-    private TextView radialMenuCenterText;
     private View radialOptionUp;
     private View radialOptionDown;
     private View radialOptionLeft;
@@ -259,7 +258,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Initialize Radial Menu Views
         radialMenuOverlay = findViewById(R.id.radial_menu_overlay);
         radialMenuContainer = findViewById(R.id.radial_menu_container);
-        radialMenuCenterText = findViewById(R.id.radial_menu_center_text);
         radialOptionUp = findViewById(R.id.radial_option_up);
         radialOptionDown = findViewById(R.id.radial_option_down);
         radialOptionLeft = findViewById(R.id.radial_option_left);
@@ -766,11 +764,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Hide controller if visible
         hideControllerIfVisible();
-
-        // Update center text
-        if (radialMenuCenterText != null) {
-            radialMenuCenterText.setText("PAUSED");
-        }
 
         // Show menu with simple fade-in animation
         radialMenuVisible = true;

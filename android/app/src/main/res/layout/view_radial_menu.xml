@@ -1,185 +1,347 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Circular Text Ring Menu -->
+<!-- Floating Action Grid Menu Overlay -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/radial_menu_overlay"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#DD000000"
-    android:visibility="gone"
     android:clickable="true"
-    android:focusable="true">
+    android:focusable="true"
+    android:visibility="gone">
 
-    <!-- Circular Container -->
-    <RelativeLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/radial_menu_container"
-        android:layout_width="380dp"
-        android:layout_height="380dp"
+        android:layout_width="520dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="@drawable/circular_menu_bg">
+        android:background="@drawable/tv_glass_panel_bg"
+        android:clipToPadding="false"
+        android:elevation="18dp"
+        android:padding="28dp">
 
-        <!-- Center Text (PAUSED) -->
         <TextView
-            android:id="@+id/radial_menu_center_text"
+            android:id="@+id/radial_menu_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
-            android:text="PAUSED"
-            android:textSize="28sp"
-            android:textColor="#FFFFFF"
+            android:text="Quick Controls"
+            android:textColor="#FFFFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
-            android:letterSpacing="0.2"
-            android:shadowColor="#000000"
-            android:shadowDx="0"
-            android:shadowDy="2"
-            android:shadowRadius="4" />
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Dummy center view for reference -->
-        <View
-            android:id="@+id/radial_menu_center"
+        <TextView
+            android:id="@+id/radial_menu_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Jump between channels or tweak playback instantly"
+            android:textColor="#CCFFFFFF"
+            android:textSize="13sp"
+            android:fontFamily="sans-serif"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/radial_menu_title" />
+
+        <LinearLayout
+            android:id="@+id/radial_menu_secondary_row"
             android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_centerInParent="true" />
-
-        <!-- TOP - Next Channel -->
-        <TextView
-            android:id="@+id/radial_option_up"
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_centerHorizontal="true"
-            android:layout_alignParentTop="true"
-            android:layout_marginTop="30dp"
-            android:text="Next Channel"
-            android:textSize="18sp"
-            android:textColor="#CCFFFFFF"
-            android:fontFamily="sans-serif"
-            android:padding="12dp"
-            android:background="@drawable/menu_item_bg"
-            android:focusable="true"
-            android:clickable="true" />
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/radial_menu_subtitle">
 
-        <!-- BOTTOM - Next Stream -->
-        <TextView
-            android:id="@+id/radial_option_down"
-            android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/radial_option_up_left"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/tv_chip_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/ic_aspect"
+                    android:tint="#FFFFFFFF" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Aspect"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/radial_option_up_right"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/tv_chip_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/ic_guide"
+                    android:tint="#FFFFFFFF" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Guide"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/radial_action_grid"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_centerHorizontal="true"
-            android:layout_alignParentBottom="true"
-            android:layout_marginBottom="30dp"
-            android:text="Next Stream"
-            android:textSize="18sp"
-            android:textColor="#CCFFFFFF"
-            android:fontFamily="sans-serif"
-            android:padding="12dp"
-            android:background="@drawable/menu_item_bg"
-            android:focusable="true"
-            android:clickable="true" />
+            android:layout_marginTop="28dp"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/radial_menu_secondary_row">
 
-        <!-- LEFT - Audio Track -->
-        <TextView
-            android:id="@+id/radial_option_left"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
-            android:layout_alignParentLeft="true"
-            android:layout_marginLeft="20dp"
-            android:text="Audio"
-            android:textSize="18sp"
-            android:textColor="#CCFFFFFF"
-            android:fontFamily="sans-serif"
-            android:padding="12dp"
-            android:background="@drawable/menu_item_bg"
-            android:focusable="true"
-            android:clickable="true" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="18dp"
+                android:orientation="horizontal"
+                android:weightSum="3">
 
-        <!-- RIGHT - Subtitles -->
-        <TextView
-            android:id="@+id/radial_option_right"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
-            android:layout_alignParentRight="true"
-            android:layout_marginRight="20dp"
-            android:text="Subtitles"
-            android:textSize="18sp"
-            android:textColor="#CCFFFFFF"
-            android:fontFamily="sans-serif"
-            android:padding="12dp"
-            android:background="@drawable/menu_item_bg"
-            android:focusable="true"
-            android:clickable="true" />
+                <LinearLayout
+                    android:id="@+id/radial_option_left"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tv_action_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:minHeight="128dp"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:stateListAnimator="@null">
 
-        <!-- TOP-LEFT - Aspect Ratio -->
-        <TextView
-            android:id="@+id/radial_option_up_left"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentLeft="true"
-            android:layout_alignParentTop="true"
-            android:layout_marginLeft="60dp"
-            android:layout_marginTop="70dp"
-            android:text="Aspect"
-            android:textSize="16sp"
-            android:textColor="#CCFFFFFF"
-            android:fontFamily="sans-serif"
-            android:padding="10dp"
-            android:background="@drawable/menu_item_bg"
-            android:focusable="true"
-            android:clickable="true" />
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginBottom="12dp"
+                        android:src="@drawable/ic_audio"
+                        android:tint="#FFFFFFFF" />
 
-        <!-- TOP-RIGHT - Channel Guide -->
-        <TextView
-            android:id="@+id/radial_option_up_right"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentRight="true"
-            android:layout_alignParentTop="true"
-            android:layout_marginRight="60dp"
-            android:layout_marginTop="70dp"
-            android:text="Guide"
-            android:textSize="16sp"
-            android:textColor="#CCFFFFFF"
-            android:fontFamily="sans-serif"
-            android:padding="10dp"
-            android:background="@drawable/menu_item_bg"
-            android:focusable="true"
-            android:clickable="true" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Audio"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
 
-        <!-- BOTTOM-LEFT - Playback Speed -->
-        <TextView
-            android:id="@+id/radial_option_down_left"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentLeft="true"
-            android:layout_alignParentBottom="true"
-            android:layout_marginLeft="60dp"
-            android:layout_marginBottom="70dp"
-            android:text="Speed"
-            android:textSize="16sp"
-            android:textColor="#CCFFFFFF"
-            android:fontFamily="sans-serif"
-            android:padding="10dp"
-            android:background="@drawable/menu_item_bg"
-            android:focusable="true"
-            android:clickable="true" />
+                <LinearLayout
+                    android:id="@+id/radial_option_up"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tv_action_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:minHeight="128dp"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:stateListAnimator="@null">
 
-        <!-- BOTTOM-RIGHT - Seek -->
-        <TextView
-            android:id="@+id/radial_option_down_right"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentRight="true"
-            android:layout_alignParentBottom="true"
-            android:layout_marginRight="60dp"
-            android:layout_marginBottom="70dp"
-            android:text="Seek"
-            android:textSize="16sp"
-            android:textColor="#CCFFFFFF"
-            android:fontFamily="sans-serif"
-            android:padding="10dp"
-            android:background="@drawable/menu_item_bg"
-            android:focusable="true"
-            android:clickable="true" />
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginBottom="12dp"
+                        android:src="@drawable/ic_next_channel"
+                        android:tint="#FFFFFFFF" />
 
-    </RelativeLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Next Channel"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/radial_option_right"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tv_action_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:minHeight="128dp"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:stateListAnimator="@null">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginBottom="12dp"
+                        android:src="@drawable/ic_subtitles"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Subtitles"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:weightSum="3">
+
+                <LinearLayout
+                    android:id="@+id/radial_option_down_left"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tv_action_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:minHeight="128dp"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:stateListAnimator="@null">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginBottom="12dp"
+                        android:src="@drawable/ic_speed"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Speed"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/radial_option_down"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tv_action_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:minHeight="128dp"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:stateListAnimator="@null">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginBottom="12dp"
+                        android:src="@drawable/ic_next_stream"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Next Stream"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/radial_option_down_right"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tv_action_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:minHeight="128dp"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:stateListAnimator="@null">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginBottom="12dp"
+                        android:src="@drawable/ic_seek"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Seek"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </FrameLayout>
