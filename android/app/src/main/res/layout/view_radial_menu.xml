@@ -18,10 +18,10 @@
         android:background="@drawable/tv_glass_panel_bg"
         android:clipToPadding="false"
         android:elevation="18dp"
-        android:paddingStart="32dp"
-        android:paddingEnd="32dp"
-        android:paddingTop="32dp"
-        android:paddingBottom="32dp">
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp">
 
         <TextView
             android:id="@+id/radial_menu_title"
@@ -59,25 +59,25 @@
         <!-- Cardinal actions: Channel navigation and core playback -->
         <LinearLayout
             android:id="@+id/radial_option_up"
-            android:layout_width="200dp"
-            android:layout_height="110dp"
-            android:layout_margin="12dp"
+            android:layout_width="172dp"
+            android:layout_height="94dp"
+            android:layout_margin="8dp"
             android:background="@drawable/tv_action_card_bg"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="18dp"
+            android:padding="14dp"
             android:stateListAnimator="@null"
             app:layout_constraintCircle="@id/radial_menu_anchor"
             app:layout_constraintCircleAngle="270"
-            app:layout_constraintCircleRadius="190dp">
+            app:layout_constraintCircleRadius="160dp">
 
             <ImageView
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_marginBottom="10dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginBottom="8dp"
                 android:src="@drawable/ic_next_channel"
                 android:tint="@color/tv_button_selected" />
 
@@ -86,32 +86,32 @@
                 android:layout_height="wrap_content"
                 android:text="Next Channel"
                 android:textColor="@color/tv_button_selected"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/radial_option_down"
-            android:layout_width="200dp"
-            android:layout_height="110dp"
-            android:layout_margin="12dp"
+            android:layout_width="172dp"
+            android:layout_height="94dp"
+            android:layout_margin="8dp"
             android:background="@drawable/tv_action_card_bg"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="18dp"
+            android:padding="14dp"
             android:stateListAnimator="@null"
             app:layout_constraintCircle="@id/radial_menu_anchor"
             app:layout_constraintCircleAngle="90"
-            app:layout_constraintCircleRadius="190dp">
+            app:layout_constraintCircleRadius="160dp">
 
             <ImageView
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_marginBottom="10dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginBottom="8dp"
                 android:src="@drawable/ic_next_stream"
                 android:tint="@color/tv_button_selected" />
 
@@ -120,32 +120,32 @@
                 android:layout_height="wrap_content"
                 android:text="Next Stream"
                 android:textColor="@color/tv_button_selected"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/radial_option_left"
-            android:layout_width="190dp"
-            android:layout_height="110dp"
-            android:layout_margin="12dp"
+            android:layout_width="160dp"
+            android:layout_height="94dp"
+            android:layout_margin="8dp"
             android:background="@drawable/tv_action_card_bg"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="16dp"
+            android:padding="14dp"
             android:stateListAnimator="@null"
             app:layout_constraintCircle="@id/radial_menu_anchor"
             app:layout_constraintCircleAngle="180"
-            app:layout_constraintCircleRadius="190dp">
+            app:layout_constraintCircleRadius="160dp">
 
             <ImageView
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:layout_marginBottom="10dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_marginBottom="8dp"
                 android:src="@drawable/ic_audio"
                 android:tint="#FFFFFFFF" />
 
@@ -154,32 +154,32 @@
                 android:layout_height="wrap_content"
                 android:text="Audio"
                 android:textColor="#FFFFFFFF"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/radial_option_right"
-            android:layout_width="190dp"
-            android:layout_height="110dp"
-            android:layout_margin="12dp"
+            android:layout_width="160dp"
+            android:layout_height="94dp"
+            android:layout_margin="8dp"
             android:background="@drawable/tv_action_card_bg"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="16dp"
+            android:padding="14dp"
             android:stateListAnimator="@null"
             app:layout_constraintCircle="@id/radial_menu_anchor"
             app:layout_constraintCircleAngle="0"
-            app:layout_constraintCircleRadius="190dp">
+            app:layout_constraintCircleRadius="160dp">
 
             <ImageView
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:layout_marginBottom="10dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_marginBottom="8dp"
                 android:src="@drawable/ic_subtitles"
                 android:tint="#FFFFFFFF" />
 
@@ -188,7 +188,7 @@
                 android:layout_height="wrap_content"
                 android:text="Subtitles"
                 android:textColor="#FFFFFFFF"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-medium" />
         </LinearLayout>
@@ -198,26 +198,26 @@
             android:id="@+id/radial_option_up_left"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="12dp"
+            android:layout_margin="10dp"
             android:background="@drawable/tv_chip_bg"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center_vertical"
-            android:minHeight="48dp"
+            android:minHeight="42dp"
             android:orientation="horizontal"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
             app:layout_constraintCircle="@id/radial_menu_anchor"
             app:layout_constraintCircleAngle="225"
-            app:layout_constraintCircleRadius="150dp">
+            app:layout_constraintCircleRadius="130dp">
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="10dp"
                 android:src="@drawable/ic_aspect"
                 android:tint="#FFFFFFFF" />
 
@@ -234,26 +234,26 @@
             android:id="@+id/radial_option_up_right"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="12dp"
+            android:layout_margin="10dp"
             android:background="@drawable/tv_chip_bg"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center_vertical"
-            android:minHeight="48dp"
+            android:minHeight="42dp"
             android:orientation="horizontal"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
             app:layout_constraintCircle="@id/radial_menu_anchor"
             app:layout_constraintCircleAngle="315"
-            app:layout_constraintCircleRadius="150dp">
+            app:layout_constraintCircleRadius="130dp">
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="10dp"
                 android:src="@drawable/ic_guide"
                 android:tint="#FFFFFFFF" />
 
@@ -270,26 +270,26 @@
             android:id="@+id/radial_option_down_left"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="12dp"
+            android:layout_margin="10dp"
             android:background="@drawable/tv_chip_bg"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center_vertical"
-            android:minHeight="48dp"
+            android:minHeight="42dp"
             android:orientation="horizontal"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
             app:layout_constraintCircle="@id/radial_menu_anchor"
             app:layout_constraintCircleAngle="135"
-            app:layout_constraintCircleRadius="150dp">
+            app:layout_constraintCircleRadius="130dp">
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="10dp"
                 android:src="@drawable/ic_speed"
                 android:tint="#FFFFFFFF" />
 
@@ -306,26 +306,26 @@
             android:id="@+id/radial_option_down_right"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="12dp"
+            android:layout_margin="10dp"
             android:background="@drawable/tv_chip_bg"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center_vertical"
-            android:minHeight="48dp"
+            android:minHeight="42dp"
             android:orientation="horizontal"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
             app:layout_constraintCircle="@id/radial_menu_anchor"
             app:layout_constraintCircleAngle="45"
-            app:layout_constraintCircleRadius="150dp">
+            app:layout_constraintCircleRadius="130dp">
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="10dp"
                 android:src="@drawable/ic_seek"
                 android:tint="#FFFFFFFF" />
 
