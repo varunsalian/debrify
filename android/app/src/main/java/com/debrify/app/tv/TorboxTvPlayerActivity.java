@@ -25,6 +25,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.activity.OnBackPressedCallback;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.core.content.ContextCompat;
@@ -146,6 +147,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View radialOptionDownRight;
     private View currentRadialSelection;
     private boolean radialMenuVisible = false;
+    private boolean reopenRadialMenuAfterSeek = false;
+    private boolean resumePlaybackOnSeekbarClose = false;
 
     // Custom Seekbar Views
     private View seekbarOverlay;
@@ -196,6 +199,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private int playedCount = 0;
     private long lastChannelSwitchTime = 0;
     private static final long CHANNEL_SWITCH_COOLDOWN_MS = 2000L; // 2 second cooldown
+    private static final int SEEK_LONG_PRESS_THRESHOLD = 3;
 
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
@@ -506,7 +510,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (audioButton != null) {
             audioButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             audioButton.setOnClickListener(v -> {
-                cycleAudioTrack();
+                showAudioSelectionDialog();
                 if (!hideOptions) {
                     playerView.showController();
                 }
@@ -516,7 +520,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (subtitleButton != null) {
             subtitleButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             subtitleButton.setOnClickListener(v -> {
-                cycleSubtitleTrack();
+                showSubtitleSelectionDialog();
                 if (!hideOptions) {
                     playerView.showController();
                 }
@@ -831,14 +835,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             case "left":
                 // Audio Track
                 hideRadialMenu();
-                cycleAudioTrack();
-                Toast.makeText(this, "Audio track cycled", Toast.LENGTH_SHORT).show();
+                showAudioSelectionDialog();
                 break;
             case "right":
                 // Subtitles
                 hideRadialMenu();
-                cycleSubtitleTrack();
-                Toast.makeText(this, "Subtitle track cycled", Toast.LENGTH_SHORT).show();
+                showSubtitleSelectionDialog();
                 break;
             case "up_left":
                 // Aspect Ratio
@@ -862,7 +864,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             case "down_right":
                 // Seek/Scrub
                 hideRadialMenu();
-                showSeekbar();
+                showSeekbar(true, true);
                 break;
         }
     }
@@ -877,7 +879,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         Toast.makeText(this, "Speed: " + playbackSpeedLabels[playbackSpeedIndex], Toast.LENGTH_SHORT).show();
     }
 
-    private void showSeekbar() {
+    private void showSeekbar(boolean pauseVideo, boolean reopenMenu) {
         if (seekbarOverlay == null || player == null || seekbarVisible) {
             return;
         }
@@ -891,6 +893,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
 
+        reopenRadialMenuAfterSeek = reopenMenu;
+        boolean wasPlaying = player.isPlaying();
+        resumePlaybackOnSeekbarClose = false;
+
         // Update UI
         updateSeekbarUI();
 
@@ -903,8 +909,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .setDuration(200)
                 .start();
 
-        // Pause the video
-        if (player.isPlaying()) {
+        // Pause the video if required
+        if (pauseVideo && wasPlaying) {
+            resumePlaybackOnSeekbarClose = true;
             player.pause();
         }
     }
@@ -915,6 +922,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         seekbarVisible = false;
+        final boolean reopenMenu = reopenRadialMenuAfterSeek;
+        final boolean resumePlayback = resumePlaybackOnSeekbarClose;
+
         seekbarOverlay.animate()
                 .alpha(0f)
                 .setDuration(150)
@@ -922,11 +932,16 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     if (seekbarOverlay != null) {
                         seekbarOverlay.setVisibility(View.GONE);
                     }
+                    if (resumePlayback && player != null && !player.isPlaying()) {
+                        player.play();
+                    }
+                    if (reopenMenu) {
+                        showRadialMenu();
+                    }
+                    resumePlaybackOnSeekbarClose = false;
+                    reopenRadialMenuAfterSeek = false;
                 })
                 .start();
-
-        // Show radial menu again
-        showRadialMenu();
     }
 
     private void confirmSeekPosition() {
@@ -937,24 +952,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Seek to the position
         player.seekTo(seekbarPosition);
 
-        // Hide seekbar
-        seekbarVisible = false;
-        if (seekbarOverlay != null) {
-            seekbarOverlay.animate()
-                    .alpha(0f)
-                    .setDuration(150)
-                    .withEndAction(() -> {
-                        if (seekbarOverlay != null) {
-                            seekbarOverlay.setVisibility(View.GONE);
-                        }
-                    })
-                    .start();
-        }
-
-        // Resume playback
-        if (player != null) {
-            player.play();
-        }
+        // Hide seekbar overlay
+        reopenRadialMenuAfterSeek = false;
+        hideSeekbar();
     }
 
     private void updateSeekbarUI() {
@@ -1834,7 +1834,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         updatePauseButtonLabel();
     }
 
-    private void cycleAudioTrack() {
+    private void showAudioSelectionDialog() {
         if (player == null || trackSelector == null) {
             return;
         }
@@ -1843,27 +1843,48 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             showToast("No alternate audio tracks");
             return;
         }
-        int currentIndex = -1;
+
+        int checkedItem = -1;
         for (int i = 0; i < audioTracks.size(); i++) {
             TrackOption option = audioTracks.get(i);
             if (option.group.isTrackSelected(option.trackIndex)) {
-                currentIndex = i;
+                checkedItem = i;
                 break;
             }
         }
-        int nextIndex = (currentIndex + 1) % audioTracks.size();
-        TrackOption next = audioTracks.get(nextIndex);
+
+        String[] labels = new String[audioTracks.size()];
+        for (int i = 0; i < audioTracks.size(); i++) {
+            labels[i] = audioTracks.get(i).label;
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Audio Tracks")
+                .setSingleChoiceItems(labels, checkedItem, (d, which) -> {
+                    applyAudioTrack(audioTracks.get(which));
+                    d.dismiss();
+                })
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.show();
+    }
+
+    private void applyAudioTrack(TrackOption option) {
+        if (trackSelector == null || option == null) {
+            return;
+        }
         DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters()
                 .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                 .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
                 .addOverride(new TrackSelectionOverride(
-                        next.group.getMediaTrackGroup(),
-                        Collections.singletonList(next.trackIndex)));
+                        option.group.getMediaTrackGroup(),
+                        Collections.singletonList(option.trackIndex)));
         trackSelector.setParameters(builder.build());
-        showToast("Audio: " + next.label);
+        showToast("Audio: " + option.label);
     }
 
-    private void cycleSubtitleTrack() {
+    private void showSubtitleSelectionDialog() {
         if (player == null || trackSelector == null) {
             return;
         }
@@ -1872,31 +1893,57 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             showToast("No subtitles available");
             return;
         }
-        DefaultTrackSelector.Parameters parameters = trackSelector.getParameters();
-        int currentIndex = -1;
+
+        String[] labels = new String[subtitleTracks.size() + 1];
+        labels[0] = "Off";
+        for (int i = 0; i < subtitleTracks.size(); i++) {
+            labels[i + 1] = subtitleTracks.get(i).label;
+        }
+
+        int checkedItem = 0;
         for (int i = 0; i < subtitleTracks.size(); i++) {
             TrackOption option = subtitleTracks.get(i);
             if (option.group.isTrackSelected(option.trackIndex)) {
-                currentIndex = i;
+                checkedItem = i + 1;
                 break;
             }
         }
-        int nextIndex = currentIndex + 1;
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Subtitles")
+                .setSingleChoiceItems(labels, checkedItem, (d, which) -> {
+                    if (which == 0) {
+                        applySubtitleTrack(null);
+                    } else {
+                        applySubtitleTrack(subtitleTracks.get(which - 1));
+                    }
+                    d.dismiss();
+                })
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.show();
+    }
+
+    private void applySubtitleTrack(@Nullable TrackOption option) {
+        if (trackSelector == null) {
+            return;
+        }
         DefaultTrackSelector.Parameters.Builder builder =
                 trackSelector.buildUponParameters().clearOverridesOfType(C.TRACK_TYPE_TEXT);
-        if (nextIndex >= subtitleTracks.size()) {
+        if (option == null) {
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
             trackSelector.setParameters(builder.build());
             showToast("Subtitles off");
             return;
         }
-        TrackOption next = subtitleTracks.get(nextIndex);
+
         builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .addOverride(new TrackSelectionOverride(
-                        next.group.getMediaTrackGroup(),
-                        Collections.singletonList(next.trackIndex)));
+                        option.group.getMediaTrackGroup(),
+                        Collections.singletonList(option.trackIndex)));
         trackSelector.setParameters(builder.build());
-        showToast("Subtitles: " + next.label);
+        showToast("Subtitles: " + option.label);
     }
 
     private void cycleAspectRatio() {
@@ -2520,6 +2567,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     }
 
+    private void openChannelGuideShortcut() {
+        if (searchOverlayVisible) {
+            return;
+        }
+        if (!channelDirectoryEntries.isEmpty()) {
+            showSearchOverlay();
+        } else {
+            Toast.makeText(this, "Channel search unavailable", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (isSearchOverlayVisible()) {
@@ -2615,9 +2673,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             boolean focusInControls = isFocusInControlsOverlay();
 
             if (!controllerVisible && !focusInControls) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                    seekBy(SEEK_STEP_MS);
-                    return true;
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    int repeat = event.getRepeatCount();
+                    if (repeat >= SEEK_LONG_PRESS_THRESHOLD) {
+                        if (!seekbarVisible) {
+                            showSeekbar(false, false);
+                        }
+                    } else if (repeat == 0) {
+                        seekBy(SEEK_STEP_MS);
+                    }
                 }
                 return true;
             }
@@ -2628,19 +2692,32 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             boolean focusInControls = isFocusInControlsOverlay();
 
             if (!controllerVisible && !focusInControls) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                    seekBy(-SEEK_STEP_MS);
-                    return true;
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    int repeat = event.getRepeatCount();
+                    if (repeat >= SEEK_LONG_PRESS_THRESHOLD) {
+                        if (!seekbarVisible) {
+                            showSeekbar(false, false);
+                        }
+                    } else if (repeat == 0) {
+                        seekBy(-SEEK_STEP_MS);
+                    }
                 }
                 return true;
             }
         }
 
-        // Up/Down can show controller
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN && playerView != null) {
-                playerView.showController();
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                openChannelGuideShortcut();
             }
+            return true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                cycleAspectRatio();
+            }
+            return true;
         }
 
         return super.dispatchKeyEvent(event);

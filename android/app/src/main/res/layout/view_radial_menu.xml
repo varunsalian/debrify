@@ -49,6 +49,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
+            android:layout_marginBottom="20dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
@@ -75,7 +76,7 @@
                 <ImageView
                     android:layout_width="20dp"
                     android:layout_height="20dp"
-                    android:layout_marginEnd="8dp"
+                    android:layout_marginEnd="12dp"
                     android:src="@drawable/ic_aspect"
                     android:tint="#FFFFFFFF" />
 
@@ -107,7 +108,7 @@
                 <ImageView
                     android:layout_width="20dp"
                     android:layout_height="20dp"
-                    android:layout_marginEnd="8dp"
+                    android:layout_marginEnd="12dp"
                     android:src="@drawable/ic_guide"
                     android:tint="#FFFFFFFF" />
 
@@ -175,7 +176,6 @@
                     android:id="@+id/radial_option_up"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
                     android:layout_marginEnd="16dp"
                     android:layout_weight="1"
                     android:background="@drawable/tv_action_card_bg"
@@ -199,7 +199,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Next Channel"
-                        android:textColor="#FFFFFFFF"
+                        android:textColor="@color/tv_button_selected"
                         android:textSize="15sp"
                         android:fontFamily="sans-serif-medium" />
                 </LinearLayout>
@@ -208,7 +208,6 @@
                     android:id="@+id/radial_option_right"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
                     android:layout_weight="1"
                     android:background="@drawable/tv_action_card_bg"
                     android:clickable="true"
@@ -279,7 +278,6 @@
                     android:id="@+id/radial_option_down"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
                     android:layout_marginEnd="16dp"
                     android:layout_weight="1"
                     android:background="@drawable/tv_action_card_bg"
@@ -303,7 +301,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Next Stream"
-                        android:textColor="#FFFFFFFF"
+                        android:textColor="@color/tv_button_selected"
                         android:textSize="15sp"
                         android:fontFamily="sans-serif-medium" />
                 </LinearLayout>
@@ -312,7 +310,6 @@
                     android:id="@+id/radial_option_down_right"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
                     android:layout_weight="1"
                     android:background="@drawable/tv_action_card_bg"
                     android:clickable="true"
