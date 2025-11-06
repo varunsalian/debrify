@@ -789,11 +789,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     .start();
         }
 
-        // Set initial focus to first option (Next Channel - top)
-        if (radialOptionUp != null) {
-            radialOptionUp.postDelayed(() -> {
-                radialOptionUp.requestFocus();
-                currentRadialSelection = radialOptionUp;
+        // Set initial focus to a safe action (Seek)
+        View defaultFocus = radialOptionDownRight != null ? radialOptionDownRight : radialOptionDown;
+        if (defaultFocus != null) {
+            defaultFocus.postDelayed(() -> {
+                defaultFocus.requestFocus();
+                currentRadialSelection = defaultFocus;
             }, 100);
         }
     }

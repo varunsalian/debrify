@@ -1,102 +1,113 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Custom Seekbar Overlay - Full Screen Gaming Style -->
+<!-- Custom Seekbar Overlay - compact bottom dock -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/seekbar_overlay"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#99000000"
+    android:background="#00000000"
     android:visibility="gone"
     android:clickable="true"
     android:focusable="true">
 
-    <!-- Main Container -->
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:orientation="vertical"
-        android:paddingLeft="80dp"
-        android:paddingRight="80dp">
+        android:layout_gravity="bottom"
+        android:paddingStart="48dp"
+        android:paddingEnd="48dp"
+        android:paddingBottom="60dp">
 
-        <!-- Instruction Text -->
-        <TextView
-            android:id="@+id/seekbar_instruction"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="Use ◄ ► to scrub • Center to confirm • Back to cancel"
-            android:textSize="16sp"
-            android:textColor="#CCFFFFFF"
-            android:layout_marginBottom="40dp" />
-
-        <!-- Progress Bar Container -->
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp">
-
-            <!-- Background Bar -->
-            <View
-                android:id="@+id/seekbar_background"
-                android:layout_width="match_parent"
-                android:layout_height="8dp"
-                android:layout_centerVertical="true"
-                android:background="@drawable/seekbar_background" />
-
-            <!-- Progress Bar -->
-            <View
-                android:id="@+id/seekbar_progress"
-                android:layout_width="0dp"
-                android:layout_height="8dp"
-                android:layout_centerVertical="true"
-                android:background="@drawable/seekbar_progress" />
-
-            <!-- Scrubber Handle -->
-            <View
-                android:id="@+id/seekbar_handle"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_centerVertical="true"
-                android:background="@drawable/seekbar_handle" />
-        </RelativeLayout>
-
-        <!-- Time Display -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center">
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:background="#55000000"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="16dp"
+            android:layout_gravity="bottom"
+            android:clipToPadding="false"
+            android:layout_marginBottom="8dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTintMode="src_over">
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp">
+
+                <View
+                    android:id="@+id/seekbar_background"
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:layout_centerVertical="true"
+                    android:background="@drawable/seekbar_background" />
+
+                <View
+                    android:id="@+id/seekbar_progress"
+                    android:layout_width="0dp"
+                    android:layout_height="3dp"
+                    android:layout_centerVertical="true"
+                    android:background="@drawable/seekbar_progress" />
+
+                <View
+                    android:id="@+id/seekbar_handle"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:layout_centerVertical="true"
+                    android:background="@drawable/seekbar_handle" />
+            </RelativeLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="2dp">
+
+                <TextView
+                    android:id="@+id/seekbar_current_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00"
+                    android:textSize="16sp"
+                    android:textColor="#FFFFFFFF"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" / "
+                    android:textSize="14sp"
+                    android:textColor="#B3FFFFFF"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp" />
+
+                <TextView
+                    android:id="@+id/seekbar_total_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00"
+                    android:textSize="14sp"
+                    android:textColor="#B3FFFFFF"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
 
             <TextView
-                android:id="@+id/seekbar_current_time"
+                android:id="@+id/seekbar_instruction"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="00:00"
-                android:textSize="32sp"
-                android:textColor="#FFFFFF"
-                android:fontFamily="monospace"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=" / "
-                android:textSize="24sp"
-                android:textColor="#99FFFFFF"
-                android:layout_marginLeft="8dp"
-                android:layout_marginRight="8dp" />
-
-            <TextView
-                android:id="@+id/seekbar_total_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="00:00"
-                android:textSize="24sp"
-                android:textColor="#99FFFFFF"
-                android:fontFamily="monospace" />
+                android:layout_marginTop="8dp"
+                android:text="◄ ► scrub    ● confirm    ⌫ cancel"
+                android:textColor="#88FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif" />
         </LinearLayout>
 
-    </LinearLayout>
+    </FrameLayout>
 
 </FrameLayout>
