@@ -178,6 +178,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private android.animation.ValueAnimator staticAnimator;
     private Handler staticHandler = new Handler(Looper.getMainLooper());
     private final Handler keyPressHandler = new Handler(Looper.getMainLooper());
+
+    // Double-back to exit
+    private long lastBackPressTime = 0;
+    private static final long BACK_PRESS_INTERVAL_MS = 2000; // 2 seconds
     private final Handler channelOverlayHandler = new Handler(Looper.getMainLooper());
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
     private int resizeModeIndex = 0;
@@ -2717,9 +2721,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     hideSearchOverlay();
                     return;
                 }
-                // Allow back button to finish the activity and return to Flutter app
-                setEnabled(false);
-                getOnBackPressedDispatcher().onBackPressed();
+
+                // Double-back to exit confirmation
+                long currentTime = System.currentTimeMillis();
+                if (currentTime - lastBackPressTime < BACK_PRESS_INTERVAL_MS) {
+                    // Second back press within time window - exit
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                } else {
+                    // First back press - show message
+                    lastBackPressTime = currentTime;
+                    Toast.makeText(TorboxTvPlayerActivity.this,
+                        "Press back again to exit",
+                        Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }
