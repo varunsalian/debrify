@@ -2,7 +2,7 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <corners android:radius="8dp" />
+            <corners android:radius="6dp" />
             <solid android:color="#40FFFFFF" />
             <stroke
                 android:width="2dp"
@@ -11,7 +11,7 @@
     </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <corners android:radius="8dp" />
+            <corners android:radius="6dp" />
             <solid android:color="#4DFFFFFF" />
             <stroke
                 android:width="2dp"
@@ -20,7 +20,7 @@
     </item>
     <item>
         <shape android:shape="rectangle">
-            <corners android:radius="8dp" />
+            <corners android:radius="6dp" />
             <solid android:color="#22FFFFFF" />
             <stroke
                 android:width="0.5dp"

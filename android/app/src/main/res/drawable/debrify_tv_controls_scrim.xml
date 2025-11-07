@@ -7,7 +7,7 @@
         android:centerColor="#66000000"
         android:endColor="#60000000"
         android:type="linear" />
-    <corners android:radius="10dp" />
+    <corners android:radius="8dp" />
     <stroke
         android:width="0.5dp"
         android:color="#30FFFFFF" />
