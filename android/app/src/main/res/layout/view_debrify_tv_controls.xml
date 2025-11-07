@@ -15,11 +15,12 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:background="@drawable/debrify_tv_controls_scrim"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="12dp"
-        android:clipToPadding="false">
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="10dp"
+        android:clipToPadding="false"
+        android:elevation="4dp">
 
         <LinearLayout
             android:id="@+id/debrify_time_group"
@@ -27,31 +28,35 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center"
-            android:paddingBottom="4dp">
+            android:paddingBottom="3dp">
 
             <TextView
                 android:id="@id/exo_position"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="#FFFFFFFF"
-                android:textSize="10sp"
-                android:textStyle="bold" />
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:shadowColor="#80000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="2" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text=" / "
                 android:textColor="#99FFFFFF"
-                android:textSize="10sp"
-                android:paddingStart="3dp"
-                android:paddingEnd="3dp" />
+                android:textSize="9sp"
+                android:paddingStart="2dp"
+                android:paddingEnd="2dp" />
 
             <TextView
                 android:id="@id/exo_duration"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="#99FFFFFF"
-                android:textSize="10sp" />
+                android:textSize="9sp" />
         </LinearLayout>
 
         <HorizontalScrollView
@@ -67,24 +72,7 @@
                 android:orientation="horizontal"
                 android:gravity="center">
 
-                <androidx.appcompat.widget.AppCompatButton
-                    android:id="@+id/debrify_seek_button"
-                    style="@style/DebrifyTvChipButton"
-                    android:drawableStart="@drawable/ic_seek"
-                    android:text="Seek" />
-
-                <androidx.appcompat.widget.AppCompatButton
-                    android:id="@+id/debrify_next_button"
-                    style="@style/DebrifyTvChipButton"
-                    android:drawableStart="@drawable/ic_next_stream"
-                    android:text="Next Stream" />
-
-                <androidx.appcompat.widget.AppCompatButton
-                    android:id="@+id/debrify_channel_next_button"
-                    style="@style/DebrifyTvChipButton"
-                    android:drawableStart="@drawable/ic_next_channel"
-                    android:text="Next Channel" />
-
+                <!-- Left side controls -->
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/debrify_audio_button"
                     style="@style/DebrifyTvChipButton"
@@ -92,22 +80,10 @@
                     android:text="Audio" />
 
                 <androidx.appcompat.widget.AppCompatButton
-                    android:id="@+id/debrify_pause_button"
-                    style="@style/DebrifyTvChipButton"
-                    android:drawableStart="@drawable/ic_pause"
-                    android:text="Pause" />
-
-                <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/debrify_subtitle_button"
                     style="@style/DebrifyTvChipButton"
                     android:drawableStart="@drawable/ic_subtitles"
                     android:text="Subtitles" />
-
-                <androidx.appcompat.widget.AppCompatButton
-                    android:id="@+id/debrify_speed_button"
-                    style="@style/DebrifyTvChipButton"
-                    android:drawableStart="@drawable/ic_speed"
-                    android:text="Speed" />
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/debrify_aspect_button"
@@ -119,7 +95,39 @@
                     android:id="@+id/debrify_guide_button"
                     style="@style/DebrifyTvChipButton"
                     android:drawableStart="@drawable/ic_guide"
-                    android:text="Guide"
+                    android:text="Guide" />
+
+                <!-- Center: Pause/Play -->
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/debrify_pause_button"
+                    style="@style/DebrifyTvChipButton"
+                    android:drawableStart="@drawable/ic_pause"
+                    android:text="Pause" />
+
+                <!-- Right side controls -->
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/debrify_next_button"
+                    style="@style/DebrifyTvChipButton"
+                    android:drawableStart="@drawable/ic_next_stream"
+                    android:text="Next Stream" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/debrify_channel_next_button"
+                    style="@style/DebrifyTvChipButton"
+                    android:drawableStart="@drawable/ic_next_channel"
+                    android:text="Next Ch" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/debrify_speed_button"
+                    style="@style/DebrifyTvChipButton"
+                    android:drawableStart="@drawable/ic_speed"
+                    android:text="Speed" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/debrify_seek_button"
+                    style="@style/DebrifyTvChipButton"
+                    android:drawableStart="@drawable/ic_seek"
+                    android:text="Seek"
                     android:layout_marginEnd="0dp" />
 
             </LinearLayout>

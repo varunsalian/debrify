@@ -3,75 +3,175 @@
     android:id="@+id/channel_jump_overlay"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#B3000000"
+    android:background="#CC000000"
     android:visibility="gone"
     android:clickable="true"
     android:focusable="true">
 
     <LinearLayout
-        android:layout_width="260dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:layout_gravity="center"
         android:background="@drawable/channel_jump_panel_bg"
-        android:padding="18dp"
-        android:clipToPadding="false">
-
-        <TextView
-            android:id="@+id/channel_jump_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Jump to Channel"
-            android:textColor="#FFFFFFFF"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-medium" />
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:gravity="center"
+        android:elevation="8dp">
 
         <TextView
             android:id="@+id/channel_jump_input"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="--"
-            android:textColor="#FF3B82F6"
-            android:textSize="26sp"
+            android:text="_"
+            android:textColor="#00FF00"
+            android:textSize="42sp"
             android:fontFamily="monospace"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:minWidth="120dp"
+            android:gravity="center"
+            android:shadowColor="#AA000000"
+            android:shadowDx="2"
+            android:shadowDy="2"
+            android:shadowRadius="4"
+            android:letterSpacing="0.15"
+            android:layout_marginBottom="12dp" />
 
+        <!-- Number pad grid -->
         <GridLayout
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:columnCount="3"
-            android:layout_marginTop="16dp"
-            android:useDefaultMargins="true">
+            android:rowCount="4"
+            android:layout_marginBottom="10dp">
 
-            <include layout="@layout/view_channel_keypad_buttons" />
-        </GridLayout>
+            <!-- Row 1: 1, 2, 3 -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_1"
+                style="@style/DebrifyTvChipButton"
+                android:text="1"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginTop="12dp">
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_2"
+                style="@style/DebrifyTvChipButton"
+                android:text="2"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
 
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_3"
+                style="@style/DebrifyTvChipButton"
+                android:text="3"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
+
+            <!-- Row 2: 4, 5, 6 -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_4"
+                style="@style/DebrifyTvChipButton"
+                android:text="4"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_5"
+                style="@style/DebrifyTvChipButton"
+                android:text="5"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_6"
+                style="@style/DebrifyTvChipButton"
+                android:text="6"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
+
+            <!-- Row 3: 7, 8, 9 -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_7"
+                style="@style/DebrifyTvChipButton"
+                android:text="7"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_8"
+                style="@style/DebrifyTvChipButton"
+                android:text="8"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_9"
+                style="@style/DebrifyTvChipButton"
+                android:text="9"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
+
+            <!-- Row 4: Clear, 0, OK -->
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/channel_key_clear"
                 style="@style/DebrifyTvChipButton"
                 android:text="Clear"
-                android:layout_marginEnd="8dp" />
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_0"
+                style="@style/DebrifyTvChipButton"
+                android:text="0"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/channel_key_go"
                 style="@style/DebrifyTvChipButton"
-                android:text="Go" />
-        </LinearLayout>
+                android:text="OK"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:minWidth="56dp"
+                android:minHeight="48dp"
+                android:layout_margin="3dp" />
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/channel_key_close"
-            style="@style/DebrifyTvChipButton"
-            android:text="Close"
-            android:layout_marginTop="10dp" />
+        </GridLayout>
 
     </LinearLayout>
 

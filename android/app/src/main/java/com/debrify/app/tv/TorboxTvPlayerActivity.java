@@ -90,7 +90,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private static final long TITLE_FADE_DELAY_MS = 4000L;
     private static final long TITLE_FADE_DURATION_MS = 220L;
     private static final long CONTROLS_AUTO_HIDE_DELAY_MS = 4000L;
-    private static final int CHANNEL_JUMP_MAX_DIGITS = 4;
+    private static final int CHANNEL_JUMP_MAX_DIGITS = 10; // Support up to 10 digits
 
     private String provider;
     private PlayerView playerView;
@@ -142,7 +142,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private boolean controlsMenuVisible = false;
     private final Handler controlsMenuHandler = new Handler(Looper.getMainLooper());
-    private final Runnable hideControlsMenuRunnable = this::hideControlsMenu;
+    private final Runnable hideControlsMenuRunnable = () -> {
+        // Don't hide if user is actively navigating the controls
+        if (isFocusInControlsOverlay()) {
+            // Reschedule hide for later since user is still navigating
+            scheduleHideControlsMenu();
+        } else {
+            hideControlsMenu();
+        }
+    };
     private boolean reopenControlsMenuAfterSeek = false;
     private boolean resumePlaybackOnSeekbarClose = false;
     private View channelJumpOverlay;
@@ -492,6 +500,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
         }
 
+        // Focus listener to extend timer when navigating
+        View.OnFocusChangeListener extendTimerOnFocus = (v, hasFocus) -> {
+            if (hasFocus && controlsMenuVisible) {
+                // Reset timer when user navigates to a button
+                scheduleHideControlsMenu();
+            }
+        };
+
         if (pauseButton != null) {
             pauseButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             pauseButton.setOnClickListener(v -> {
@@ -502,12 +518,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     cancelScheduledHideControlsMenu();
                 }
             });
+            pauseButton.setOnFocusChangeListener(extendTimerOnFocus);
             updatePauseButtonLabel();
         }
 
         if (seekButton != null) {
             seekButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             seekButton.setOnClickListener(v -> handleControlAction("seek"));
+            seekButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
 
         if (audioButton != null) {
@@ -516,6 +534,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 showAudioSelectionDialog();
                 scheduleHideControlsMenu();
             });
+            audioButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
 
         if (subtitleButton != null) {
@@ -524,6 +543,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 showSubtitleSelectionDialog();
                 scheduleHideControlsMenu();
             });
+            subtitleButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
 
         if (aspectButton != null) {
@@ -532,6 +552,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 cycleAspectRatio();
                 scheduleHideControlsMenu();
             });
+            aspectButton.setOnFocusChangeListener(extendTimerOnFocus);
             updateAspectButtonLabel();
         }
 
@@ -541,21 +562,25 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 cyclePlaybackSpeed();
                 scheduleHideControlsMenu();
             });
+            speedButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
 
         if (guideButton != null) {
             guideButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             guideButton.setOnClickListener(v -> handleControlAction("guide"));
+            guideButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
 
         if (channelNextButton != null) {
             channelNextButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             channelNextButton.setOnClickListener(v -> handleControlAction("channel_next"));
+            channelNextButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
 
         if (nextButton != null) {
             nextButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             nextButton.setOnClickListener(v -> handleControlAction("stream_next"));
+            nextButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
 
         if (timeBar != null) {
@@ -896,26 +921,19 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         channelJumpInput = channelJumpOverlay.findViewById(R.id.channel_jump_input);
+        View goButton = channelJumpOverlay.findViewById(R.id.channel_key_go);
+        View clearButton = channelJumpOverlay.findViewById(R.id.channel_key_clear);
         channelJumpDefaultFocus = channelJumpOverlay.findViewById(R.id.channel_key_1);
 
-        View closeButton = channelJumpOverlay.findViewById(R.id.channel_key_close);
-        View clearButton = channelJumpOverlay.findViewById(R.id.channel_key_clear);
-        View goButton = channelJumpOverlay.findViewById(R.id.channel_key_go);
-        View backspaceButton = channelJumpOverlay.findViewById(R.id.channel_key_back);
-
-        if (closeButton != null) {
-            closeButton.setOnClickListener(v -> hideChannelJumpOverlay());
-        }
-        if (clearButton != null) {
-            clearButton.setOnClickListener(v -> clearChannelJumpInput());
-        }
         if (goButton != null) {
             goButton.setOnClickListener(v -> submitChannelJump());
         }
-        if (backspaceButton != null) {
-            backspaceButton.setOnClickListener(v -> removeChannelJumpDigit());
+
+        if (clearButton != null) {
+            clearButton.setOnClickListener(v -> clearChannelJumpInput());
         }
 
+        // Wire up number buttons 0-9
         int[] digitButtonIds = new int[] {
                 R.id.channel_key_0,
                 R.id.channel_key_1,
@@ -955,6 +973,53 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         channelJumpBuffer.append(digit);
         updateChannelJumpDisplay();
+
+        // Smart auto-selection: check if there's only one possible match
+        checkAndAutoSelectChannel();
+    }
+
+    private void checkAndAutoSelectChannel() {
+        if (channelJumpBuffer.length() == 0 || channelDirectoryEntries.isEmpty()) {
+            return;
+        }
+
+        String currentInput = channelJumpBuffer.toString();
+        int currentNumber;
+        try {
+            currentNumber = Integer.parseInt(currentInput);
+        } catch (NumberFormatException ex) {
+            return;
+        }
+
+        // Find exact match
+        ChannelEntry exactMatch = null;
+        // Find if any channel number starts with current input (e.g., 221, 222 start with "22")
+        boolean hasLongerMatches = false;
+
+        for (ChannelEntry entry : channelDirectoryEntries) {
+            String channelNumStr = String.valueOf(entry.number);
+
+            if (entry.number == currentNumber) {
+                exactMatch = entry;
+            }
+
+            // Check if this channel number starts with our input but is longer
+            if (channelNumStr.startsWith(currentInput) && channelNumStr.length() > currentInput.length()) {
+                hasLongerMatches = true;
+            }
+        }
+
+        // Auto-select if: we have an exact match AND no longer possible matches
+        if (exactMatch != null && !hasLongerMatches) {
+            final ChannelEntry finalMatch = exactMatch; // Make it final for lambda
+            // Wait a tiny bit so user sees the number, then auto-jump
+            channelJumpInput.postDelayed(() -> {
+                if (channelJumpVisible) {
+                    hideChannelJumpOverlay();
+                    requestChannelByEntry(finalMatch);
+                }
+            }, 200);
+        }
     }
 
     private void removeChannelJumpDigit() {
@@ -978,7 +1043,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         if (channelJumpBuffer.length() == 0) {
-            channelJumpInput.setText("--");
+            channelJumpInput.setText("_");
         } else {
             channelJumpInput.setText(channelJumpBuffer.toString());
         }
@@ -1004,11 +1069,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .alpha(1f)
                 .setDuration(180L)
                 .start();
-        View defaultFocus = channelJumpDefaultFocus != null
-                ? channelJumpDefaultFocus
-                : channelJumpOverlay.findViewById(R.id.channel_key_1);
-        if (defaultFocus != null) {
-            defaultFocus.requestFocus();
+        if (channelJumpDefaultFocus != null) {
+            channelJumpDefaultFocus.post(() -> {
+                if (channelJumpDefaultFocus != null) {
+                    channelJumpDefaultFocus.requestFocus();
+                }
+            });
         }
     }
 
