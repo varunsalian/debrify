@@ -430,8 +430,8 @@
 
     </FrameLayout>
 
-    <!-- Radial Menu Overlay -->
-    <include layout="@layout/view_radial_menu" />
+    <!-- Channel Jump Overlay -->
+    <include layout="@layout/view_channel_jump_overlay" />
 
     <!-- Custom Seekbar Overlay -->
     <include layout="@layout/view_custom_seekbar" />

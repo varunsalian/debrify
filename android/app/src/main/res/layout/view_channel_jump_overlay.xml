@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/channel_jump_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#B3000000"
+    android:visibility="gone"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:layout_width="260dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_gravity="center"
+        android:background="@drawable/channel_jump_panel_bg"
+        android:padding="18dp"
+        android:clipToPadding="false">
+
+        <TextView
+            android:id="@+id/channel_jump_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Jump to Channel"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:id="@+id/channel_jump_input"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="--"
+            android:textColor="#FF3B82F6"
+            android:textSize="26sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold" />
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="3"
+            android:layout_marginTop="16dp"
+            android:useDefaultMargins="true">
+
+            <include layout="@layout/view_channel_keypad_buttons" />
+        </GridLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="12dp">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_clear"
+                style="@style/DebrifyTvChipButton"
+                android:text="Clear"
+                android:layout_marginEnd="8dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/channel_key_go"
+                style="@style/DebrifyTvChipButton"
+                android:text="Go" />
+        </LinearLayout>
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/channel_key_close"
+            style="@style/DebrifyTvChipButton"
+            android:text="Close"
+            android:layout_marginTop="10dp" />
+
+    </LinearLayout>
+
+</FrameLayout>
