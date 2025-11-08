@@ -11,6 +11,7 @@ class TorrentSettingsPage extends StatefulWidget {
 class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
   bool _defaultTorrentsCsvEnabled = true;
   bool _defaultPirateBayEnabled = true;
+  bool _defaultYtsEnabled = true;
   int _maxTorrentsCsvResults = 50;
   bool _loading = true;
 
@@ -23,6 +24,7 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
   Future<void> _loadSettings() async {
     final torrentsCsvEnabled = await StorageService.getDefaultTorrentsCsvEnabled();
     final pirateBayEnabled = await StorageService.getDefaultPirateBayEnabled();
+    final ytsEnabled = await StorageService.getDefaultYtsEnabled();
     final maxTorrentsCsvResults = await StorageService.getMaxTorrentsCsvResults();
     
     // Ensure the max results value is valid for the dropdown
@@ -38,6 +40,7 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
     setState(() {
       _defaultTorrentsCsvEnabled = torrentsCsvEnabled;
       _defaultPirateBayEnabled = pirateBayEnabled;
+      _defaultYtsEnabled = ytsEnabled;
       _maxTorrentsCsvResults = validMaxResults;
       _loading = false;
     });
@@ -143,10 +146,7 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                               });
                             },
                           ),
-                          
                           const SizedBox(height: 12),
-                          
-                                                    // The Pirate Bay Setting
                           _buildEngineSetting(
                             title: 'Pirate Bay',
                             subtitle: 'Popular torrent site',
@@ -157,6 +157,19 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                                 _defaultPirateBayEnabled = value;
                               });
                               StorageService.setDefaultPirateBayEnabled(value);
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          _buildEngineSetting(
+                            title: 'YTS',
+                            subtitle: 'Movie-focused torrent API',
+                            icon: Icons.movie_creation_rounded,
+                            value: _defaultYtsEnabled,
+                            onChanged: (value) {
+                              setState(() {
+                                _defaultYtsEnabled = value;
+                              });
+                              StorageService.setDefaultYtsEnabled(value);
                             },
                           ),
                           
@@ -222,28 +235,35 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                            ),
                            const SizedBox(height: 16),
                            
-                           // Torrents CSV Max Results
-                           _buildMaxResultsDropdown(
-                             title: 'Max Results from Torrents CSV',
-                             value: _maxTorrentsCsvResults,
-                             onChanged: (value) async {
-                               await StorageService.setMaxTorrentsCsvResults(value);
-                               setState(() {
-                                 _maxTorrentsCsvResults = value;
-                               });
-                             },
-                           ),
-                           
-                           const SizedBox(height: 12),
-                           
-                           // The Pirate Bay Max Results (disabled)
-                           _buildMaxResultsDropdown(
-                             title: 'Max Results from Pirate Bay',
-                             value: 100,
-                             onChanged: null,
-                             enabled: false,
-                             options: const [100],
-                           ),
+                          // Torrents CSV Max Results
+                          _buildMaxResultsDropdown(
+                            title: 'Max Results from Torrents CSV',
+                            value: _maxTorrentsCsvResults,
+                            onChanged: (value) async {
+                              await StorageService.setMaxTorrentsCsvResults(value);
+                              setState(() {
+                                _maxTorrentsCsvResults = value;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          _buildMaxResultsDropdown(
+                            title: 'Max Results from Pirate Bay',
+                            value: 100,
+                            onChanged: null,
+                            enabled: false,
+                            options: const [100],
+                            subtitle: 'Fixed at 100 results',
+                          ),
+                          const SizedBox(height: 12),
+                          _buildMaxResultsDropdown(
+                            title: 'Max Results from YTS',
+                            value: 50,
+                            onChanged: null,
+                            enabled: false,
+                            options: const [50],
+                            subtitle: 'Fixed at 50 results',
+                          ),
                          ],
                        ),
                      ),
@@ -333,6 +353,7 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
     required Function(int)? onChanged,
     bool enabled = true,
     List<int> options = const [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500],
+    String? subtitle,
   }) {
     
     // Ensure the value is valid for the dropdown
@@ -375,9 +396,15 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Fixed at 100 results',
+                      subtitle ??
+                          (enabled
+                              ? 'Select how many results to fetch'
+                              : 'Fixed at $validValue results'),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant
+                            .withValues(alpha: 0.7),
                       ),
                     ),
                   ],
