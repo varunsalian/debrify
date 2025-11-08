@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import '../models/torrent.dart';
+import '../models/advanced_search_selection.dart';
 import '../services/torrent_service.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../services/download_service.dart';
+import '../services/torrentio_service.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
@@ -18,6 +20,7 @@ import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import '../widgets/shimmer.dart';
+import '../widgets/advanced_search_sheet.dart';
 
 class TorrentSearchScreen extends StatefulWidget {
   const TorrentSearchScreen({super.key});
@@ -59,6 +62,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _usePirateBay = true;
   bool _useYts = true;
   bool _showProvidersPanel = false;
+  AdvancedSearchSelection? _activeAdvancedSelection;
 
   // Sorting options
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
@@ -208,6 +212,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final fetchedTorrents = (result['torrents'] as List<Torrent>).toList(
         growable: false,
       );
+      List<Torrent> torrentioResults = const [];
+      if (_activeAdvancedSelection != null) {
+        try {
+          torrentioResults = await TorrentioService.fetchStreams(
+            _activeAdvancedSelection!,
+          );
+        } catch (e) {
+          debugPrint('TorrentSearchScreen: Torrentio search failed: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Torrentio search failed: ${e.toString().replaceAll('Exception: ', '')}',
+                ),
+                backgroundColor: const Color(0xFF1E293B),
+                behavior: SnackBarBehavior.floating,
+                margin: const EdgeInsets.all(16),
+              ),
+            );
+          }
+        }
+      }
+      final combinedTorrents =
+          _mergeTorrentLists(torrentioResults, fetchedTorrents);
       final Map<String, String> engineErrors = {};
       final rawErrors = result['engineErrors'];
       if (rawErrors is Map) {
@@ -221,7 +249,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
       }
       String nextErrorMessage = '';
-      if (engineErrors.isNotEmpty && fetchedTorrents.isEmpty) {
+      if (engineErrors.isNotEmpty && combinedTorrents.isEmpty) {
         final failedEngines = engineErrors.keys
             .map(_friendlyEngineName)
             .join(', ');
@@ -235,8 +263,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           torboxEnabled &&
           torboxKeyValue != null &&
           torboxKeyValue.isNotEmpty &&
-          fetchedTorrents.isNotEmpty) {
-        final uniqueHashes = fetchedTorrents
+          combinedTorrents.isNotEmpty) {
+        final uniqueHashes = combinedTorrents
             .map((torrent) => torrent.infohash.trim().toLowerCase())
             .where((hash) => hash.isNotEmpty)
             .toSet()
@@ -265,12 +293,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final bool realDebridActive =
           rdEnabled && rdKey != null && rdKey.isNotEmpty;
       bool showOnlyCached = false;
-      List<Torrent> filteredTorrents = fetchedTorrents;
+      List<Torrent> filteredTorrents = combinedTorrents;
       if (cacheCheckPreference &&
           torboxActive &&
           !realDebridActive &&
           torboxCacheMap != null) {
-        filteredTorrents = fetchedTorrents
+        filteredTorrents = combinedTorrents
             .where((torrent) {
               final hash = torrent.infohash.trim().toLowerCase();
               return torboxCacheMap![hash] ?? false;
@@ -285,7 +313,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       setState(() {
         _torrents = filteredTorrents;
-        _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
+        final counts = Map<String, int>.from(result['engineCounts'] as Map);
+        if (torrentioResults.isNotEmpty) {
+          counts['torrentio'] = torrentioResults.length;
+        }
+        _engineCounts = counts;
         _torboxCacheStatus = torboxCacheMap;
         _isLoading = false;
         _showingTorboxCachedOnly = showOnlyCached;
@@ -314,6 +346,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'The Pirate Bay';
       case 'yts':
         return 'YTS';
+      case 'torrentio':
+        return 'Torrentio';
       default:
         return name;
     }
@@ -327,6 +361,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'TPB';
       case 'torrents_csv':
         return 'TCSV';
+      case 'torrentio':
+        return 'TIO';
       default:
         return null;
     }
@@ -411,6 +447,125 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (_hasSearched && _searchController.text.trim().isNotEmpty) {
       _searchTorrents(_searchController.text);
     }
+  }
+
+  void _handleSearchFieldChanged(String value) {
+    final trimmed = value.trim();
+    if (_activeAdvancedSelection != null &&
+        trimmed != _activeAdvancedSelection!.displayQuery) {
+      setState(() {
+        _activeAdvancedSelection = null;
+      });
+    } else {
+      setState(() {});
+    }
+  }
+
+  Future<void> _openAdvancedSearchDialog() async {
+    final selection = await showModalBottomSheet<AdvancedSearchSelection>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AdvancedSearchSheet(
+        initialSelection: _activeAdvancedSelection,
+      ),
+    );
+
+    if (selection != null) {
+      setState(() {
+        _activeAdvancedSelection = selection;
+        _searchController.text = selection.displayQuery;
+      });
+      await _searchTorrents(selection.displayQuery);
+    }
+  }
+
+  Widget _buildAdvancedButton() {
+    final isActive = _activeAdvancedSelection != null;
+    return SizedBox(
+      height: 56,
+      width: 150,
+      child: Tooltip(
+        message: isActive
+            ? 'Advanced Torrentio search is active'
+            : 'Search via IMDb + Torrentio',
+        child: ElevatedButton.icon(
+          onPressed: _openAdvancedSearchDialog,
+          icon: Icon(
+            isActive ? Icons.auto_awesome_rounded : Icons.auto_awesome_outlined,
+            size: 18,
+          ),
+          label: Text(isActive ? 'Advanced*' : 'Advanced'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF3730A3),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Torrent> _mergeTorrentLists(
+    List<Torrent> preferred,
+    List<Torrent> secondary,
+  ) {
+    final Map<String, Torrent> deduped = {};
+    void add(List<Torrent> list) {
+      for (final torrent in list) {
+        final key = torrent.infohash.trim().toLowerCase();
+        if (key.isEmpty) continue;
+        deduped.putIfAbsent(key, () => torrent);
+      }
+    }
+
+    add(preferred);
+    add(secondary);
+    return deduped.values.toList(growable: false);
+  }
+
+  void _clearAdvancedSelection() {
+    if (_activeAdvancedSelection == null) return;
+    setState(() {
+      _activeAdvancedSelection = null;
+    });
+  }
+
+  Widget _buildActiveAdvancedIndicator() {
+    final selection = _activeAdvancedSelection;
+    if (selection == null) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFACC15).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFACC15).withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome_rounded, color: Color(0xFFFACC15), size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Advanced: ${selection.formattedLabel}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _clearAdvancedSelection,
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildProviderSummaryText(BuildContext context) {
@@ -523,6 +678,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       }
                     },
                   ),
+                  const SizedBox(height: 12),
+                  _buildAdvancedProviderHint(context),
                 ],
               ),
             ),
@@ -530,6 +687,33 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 ? CrossFadeState.showSecond
                 : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 220),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedProviderHint(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2937),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFACC15).withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome_rounded, color: Color(0xFFFACC15), size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Need IMDb-accurate results? Use Advanced search to pull Torrentio streams via IMDb ID, seasons, and episodes.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.white.withValues(alpha: 0.8)),
+            ),
           ),
         ],
       ),
@@ -3403,6 +3587,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (_useTorrentsCsv) selectedEngines.add('Torrents CSV');
       if (_usePirateBay) selectedEngines.add('The Pirate Bay');
       if (_useYts) selectedEngines.add('YTS');
+      if (_activeAdvancedSelection != null) {
+        selectedEngines.add('Torrentio (Advanced)');
+      }
 
       if (selectedEngines.isEmpty) {
         return 'No search engines selected';
@@ -3429,6 +3616,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (ytsCount > 0) {
       breakdowns.add('YTS: $ytsCount');
     }
+
+    final torrentioCount = _engineCounts['torrentio'] ?? 0;
+    if (torrentioCount > 0) {
+      breakdowns.add('Torrentio: $torrentioCount');
+    }
+
 
     if (breakdowns.isEmpty) {
       return 'No results found';
@@ -3485,100 +3678,110 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Search Input
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      curve: Curves.easeOutCubic,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: _searchFocused
-                            ? Border.all(
-                                color: const Color(0xFF6366F1),
-                                width: 1.6,
-                              )
-                            : null,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                (_searchFocused
-                                        ? const Color(0xFF6366F1)
-                                        : const Color(0xFF6366F1))
-                                    .withValues(
-                                      alpha: _searchFocused ? 0.45 : 0.3,
-                                    ),
-                            blurRadius: _searchFocused ? 16 : 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Shortcuts(
-                        shortcuts: const <ShortcutActivator, Intent>{
-                          SingleActivator(LogicalKeyboardKey.arrowDown):
-                              NextFocusIntent(),
-                          SingleActivator(LogicalKeyboardKey.arrowUp):
-                              PreviousFocusIntent(),
-                        },
-                        child: Actions(
-                          actions: <Type, Action<Intent>>{
-                            NextFocusIntent: CallbackAction<NextFocusIntent>(
-                              onInvoke: (intent) {
-                                FocusScope.of(context).nextFocus();
-                                return null;
-                              },
-                            ),
-                            PreviousFocusIntent:
-                                CallbackAction<PreviousFocusIntent>(
-                                  onInvoke: (intent) {
-                                    FocusScope.of(context).previousFocus();
-                                    return null;
-                                  },
-                                ),
-                          },
-                          child: TextField(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            onSubmitted: (query) => _searchTorrents(query),
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              hintText: 'Search all engines...',
-                              hintStyle: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                              prefixIcon: const Icon(
-                                Icons.search_rounded,
-                                color: Color(0xFF6366F1),
-                              ),
-                              suffixIcon: _searchController.text.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(
-                                        Icons.clear_rounded,
-                                        color: Color(0xFFEF4444),
-                                      ),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        setState(() {});
-                                        _searchFocusNode.requestFocus();
-                                      },
+                    // Search Input + Advanced action
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOutCubic,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: _searchFocused
+                                  ? Border.all(
+                                      color: const Color(0xFF6366F1),
+                                      width: 1.6,
                                     )
                                   : null,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor: Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHigh,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      (_searchFocused
+                                              ? const Color(0xFF6366F1)
+                                              : const Color(0xFF6366F1))
+                                          .withValues(
+                                            alpha: _searchFocused ? 0.45 : 0.3,
+                                          ),
+                                  blurRadius: _searchFocused ? 16 : 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Shortcuts(
+                              shortcuts: const <ShortcutActivator, Intent>{
+                                SingleActivator(LogicalKeyboardKey.arrowDown):
+                                    NextFocusIntent(),
+                                SingleActivator(LogicalKeyboardKey.arrowUp):
+                                    PreviousFocusIntent(),
+                              },
+                              child: Actions(
+                                actions: <Type, Action<Intent>>{
+                                  NextFocusIntent: CallbackAction<NextFocusIntent>(
+                                    onInvoke: (intent) {
+                                      FocusScope.of(context).nextFocus();
+                                      return null;
+                                    },
+                                  ),
+                                  PreviousFocusIntent:
+                                      CallbackAction<PreviousFocusIntent>(
+                                    onInvoke: (intent) {
+                                      FocusScope.of(context).previousFocus();
+                                      return null;
+                                    },
+                                  ),
+                                },
+                                child: TextField(
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  onSubmitted: (query) => _searchTorrents(query),
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search all engines...',
+                                    hintStyle: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.5),
+                                    ),
+                                    prefixIcon: const Icon(
+                                      Icons.search_rounded,
+                                      color: Color(0xFF6366F1),
+                                    ),
+                                    suffixIcon: _searchController.text.isNotEmpty
+                                        ? IconButton(
+                                            icon: const Icon(
+                                              Icons.clear_rounded,
+                                              color: Color(0xFFEF4444),
+                                            ),
+                                            onPressed: () {
+                                              _searchController.clear();
+                                              _handleSearchFieldChanged('');
+                                              _searchFocusNode.requestFocus();
+                                            },
+                                          )
+                                        : null,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    filled: true,
+                                    fillColor: Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHigh,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  onChanged: _handleSearchFieldChanged,
+                                ),
                               ),
                             ),
-                            onChanged: (value) => setState(() {}),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        _buildAdvancedButton(),
+                      ],
                     ),
+                    _buildActiveAdvancedIndicator(),
 
                     // Search Engine Toggles
                     const SizedBox(height: 16),
