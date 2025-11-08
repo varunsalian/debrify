@@ -106,10 +106,16 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
   bool _validateSeriesFields() {
     if (!_isSeries) return true;
     final season = int.tryParse(_seasonController.text.trim());
-    final episode = int.tryParse(_episodeController.text.trim());
-    if (season == null || episode == null) {
+    if (season == null) {
       setState(() {
-        _errorMessage = 'Season and episode are required for series.';
+        _errorMessage = 'Season is required for series.';
+      });
+      return false;
+    }
+    final episodeText = _episodeController.text.trim();
+    if (episodeText.isNotEmpty && int.tryParse(episodeText) == null) {
+      setState(() {
+        _errorMessage = 'Episode must be a number if provided.';
       });
       return false;
     }
@@ -121,7 +127,8 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
     int? episode;
     if (_isSeries) {
       season = int.tryParse(_seasonController.text.trim());
-      episode = int.tryParse(_episodeController.text.trim());
+      final episodeText = _episodeController.text.trim();
+      episode = episodeText.isEmpty ? 1 : int.tryParse(episodeText);
     }
 
     final selection = AdvancedSearchSelection(
