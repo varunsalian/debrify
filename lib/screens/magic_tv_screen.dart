@@ -4773,10 +4773,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             continue;
           }
 
-          final firstLink = rdLinks.first;
+          final torrentId = selection['torrentId']?.toString() ?? '';
+          List<String> newLinks = rdLinks
+              .where((link) => !_seenRestrictedLinks.contains(link))
+              .toList();
+          if (newLinks.isEmpty) {
+            newLinks = List<String>.from(rdLinks);
+          }
+          newLinks.shuffle(Random());
+          final String selectedLink = newLinks.first;
+          _seenRestrictedLinks.add(selectedLink);
+          if (torrentId.isNotEmpty) {
+            _seenLinkWithTorrentId.add('$torrentId|$selectedLink');
+          }
+
           Map<String, dynamic> unrestrict;
           try {
-            unrestrict = await DebridService.unrestrictLink(apiKey, firstLink);
+            unrestrict = await DebridService.unrestrictLink(apiKey, selectedLink);
           } catch (error) {
             debugPrint(
               'DebrifyTV: Real-Debrid unrestrict failed for candidate ${candidate.infohash}: $error',
