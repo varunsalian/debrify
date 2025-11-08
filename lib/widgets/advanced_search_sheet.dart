@@ -103,26 +103,25 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
     });
   }
 
-  void _submit() {
-    final imdbSelection = _selected;
-    if (imdbSelection == null) {
+  bool _validateSeriesFields() {
+    if (!_isSeries) return true;
+    final season = int.tryParse(_seasonController.text.trim());
+    final episode = int.tryParse(_episodeController.text.trim());
+    if (season == null || episode == null) {
       setState(() {
-        _errorMessage = 'Select a title from the IMDb results first.';
+        _errorMessage = 'Season and episode are required for series.';
       });
-      return;
+      return false;
     }
+    return true;
+  }
 
+  void _completeSelection(ImdbTitleResult imdbSelection) {
     int? season;
     int? episode;
     if (_isSeries) {
       season = int.tryParse(_seasonController.text.trim());
       episode = int.tryParse(_episodeController.text.trim());
-      if (season == null || episode == null) {
-        setState(() {
-          _errorMessage = 'Season and episode are required for series.';
-        });
-        return;
-      }
     }
 
     final selection = AdvancedSearchSelection(
@@ -259,8 +258,6 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
                             itemCount: _results.length,
                             itemBuilder: (context, index) {
                               final item = _results[index];
-                              final selected =
-                                  _selected?.imdbId == item.imdbId;
                               return ListTile(
                                 title: Text(
                                   item.title,
@@ -272,37 +269,23 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
                                     color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                 ),
-                                trailing: selected
-                                    ? const Icon(Icons.check_circle,
-                                        color: Color(0xFF34D399))
-                                    : null,
                                 onTap: () {
-                                  setState(() {
-                                    _selected = item;
-                                  });
+                                  if (!_validateSeriesFields()) {
+                                    return;
+                                  }
+                                  _completeSelection(item);
                                 },
                               );
                             },
                           ),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _submit,
-                      icon: const Icon(Icons.bolt_rounded),
-                      label: const Text('Search Torrentio'),
-                    ),
-                  ),
-                ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
               ),
             ],
           ),
