@@ -19,7 +19,8 @@ class YtsEngine extends SearchEngine {
   @override
   Future<List<Torrent>> search(String query) async {
     try {
-      final response = await http.get(Uri.parse(getSearchUrl(query)));
+      final url = '$baseUrl?query_term=${Uri.encodeComponent(query)}&limit=50';
+      final response = await http.get(Uri.parse(url));
       if (response.statusCode != 200) {
         throw Exception('Failed to load torrents from YTS. HTTP ${response.statusCode}');
       }
