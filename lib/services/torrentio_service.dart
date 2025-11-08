@@ -49,17 +49,10 @@ class TorrentioService {
         continue;
       }
 
-      final behaviorHints = stream['behaviorHints'];
-      final filename = behaviorHints is Map<String, dynamic>
-          ? (behaviorHints['filename']?.toString() ?? '')
-          : '';
-
       final title = (stream['title'] ?? '').toString();
-      final displayName = filename.isNotEmpty
-          ? filename
-          : title.isNotEmpty
-              ? title.replaceAll('\n', ' ')
-              : selection.title;
+      final displayName = title.isNotEmpty
+          ? title.replaceAll('\n', ' ')
+          : selection.title;
 
       final seeders = _parseWatchersCount(title);
       final sizeBytes = _parseSizeBytes(title);
