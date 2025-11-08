@@ -2830,35 +2830,41 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            if (!controlsMenuVisible && !focusInControls) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    int repeat = event.getRepeatCount();
-                    if (repeat >= SEEK_LONG_PRESS_THRESHOLD) {
-                        if (!seekbarVisible) {
-                            showSeekbar(false, false);
-                        }
-                    } else if (repeat == 0) {
-                        seekBy(SEEK_STEP_MS);
-                    }
-                }
-                return true;
+            if (focusInControls) {
+                // Focus is in menu, let normal navigation happen
+                return super.dispatchKeyEvent(event);
             }
+            // Not in menu, handle seeking
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                int repeat = event.getRepeatCount();
+                if (repeat >= SEEK_LONG_PRESS_THRESHOLD) {
+                    if (!seekbarVisible) {
+                        showSeekbar(false, false);
+                    }
+                } else if (repeat == 0) {
+                    seekBy(SEEK_STEP_MS);
+                }
+            }
+            return true;
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            if (!controlsMenuVisible && !focusInControls) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    int repeat = event.getRepeatCount();
-                    if (repeat >= SEEK_LONG_PRESS_THRESHOLD) {
-                        if (!seekbarVisible) {
-                            showSeekbar(false, false);
-                        }
-                    } else if (repeat == 0) {
-                        seekBy(-SEEK_STEP_MS);
-                    }
-                }
-                return true;
+            if (focusInControls) {
+                // Focus is in menu, let normal navigation happen
+                return super.dispatchKeyEvent(event);
             }
+            // Not in menu, handle seeking
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                int repeat = event.getRepeatCount();
+                if (repeat >= SEEK_LONG_PRESS_THRESHOLD) {
+                    if (!seekbarVisible) {
+                        showSeekbar(false, false);
+                    }
+                } else if (repeat == 0) {
+                    seekBy(-SEEK_STEP_MS);
+                }
+            }
+            return true;
         }
 
         return super.dispatchKeyEvent(event);
