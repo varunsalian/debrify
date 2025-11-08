@@ -9,6 +9,7 @@ class Torrent {
   final int completed;
   final int scrapedDate;
   final String? category; // Optional: PirateBay category (5xx = NSFW)
+  final String source;
 
   Torrent({
     required this.rowid,
@@ -21,9 +22,15 @@ class Torrent {
     required this.completed,
     required this.scrapedDate,
     this.category,
-  });
+    String? source,
+  }) : source = (source ?? '').trim().toLowerCase();
 
-  factory Torrent.fromJson(Map<String, dynamic> json) {
+  factory Torrent.fromJson(
+    Map<String, dynamic> json, {
+    String? source,
+  }) {
+    final dynamic rawSource =
+        json['source'] ?? json['provider'] ?? json['engine'] ?? source;
     return Torrent(
       rowid: json['rowid'] ?? 0,
       infohash: json['infohash'] ?? '',
@@ -35,6 +42,7 @@ class Torrent {
       completed: json['completed'] ?? 0,
       scrapedDate: json['scraped_date'] ?? 0,
       category: json['category']?.toString(),
+      source: rawSource?.toString(),
     );
   }
 
@@ -50,6 +58,7 @@ class Torrent {
       'completed': completed,
       'scraped_date': scrapedDate,
       if (category != null) 'category': category,
+      if (source.isNotEmpty) 'source': source,
     };
   }
 }

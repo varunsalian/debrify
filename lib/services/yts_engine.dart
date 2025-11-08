@@ -112,6 +112,7 @@ class YtsEngine extends SearchEngine {
               completed: 0,
               scrapedDate: nowUnix,
               category: genreLabel,
+              source: 'yts',
             ),
           );
         }

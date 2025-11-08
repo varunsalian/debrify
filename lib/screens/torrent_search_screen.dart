@@ -319,6 +319,67 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  String? _sourceTagLabel(String rawSource) {
+    switch (rawSource.trim().toLowerCase()) {
+      case 'yts':
+        return 'YTS';
+      case 'pirate_bay':
+        return 'TPB';
+      case 'torrents_csv':
+        return 'TCSV';
+      default:
+        return null;
+    }
+  }
+
+  Widget? _buildSourceTag(String rawSource) {
+    final label = _sourceTagLabel(rawSource);
+    if (label == null) return null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFACC15), Color(0xFFF59E0B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: const Color(0xFFFEF3C7).withValues(alpha: 0.7),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.star_rounded,
+            size: 13,
+            color: const Color(0xFF713F12).withValues(alpha: 0.85),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: Color(0xFF713F12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _setUseTorrentsCsv(bool value) {
     if (_useTorrentsCsv == value) return;
     setState(() {
@@ -4080,6 +4141,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildTorrentCard(Torrent torrent, int index) {
+    final sourceTag = _buildSourceTag(torrent.source);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -4121,6 +4183,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (sourceTag != null) ...[
+                  const SizedBox(width: 8),
+                  sourceTag,
+                ],
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: () => _copyMagnetLink(torrent.infohash),

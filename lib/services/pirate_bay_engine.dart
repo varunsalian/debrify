@@ -49,6 +49,7 @@ class PirateBayEngine extends SearchEngine {
       completed: 0, // Pirate Bay doesn't provide completed count
       scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       category: json['category']?.toString(), // Capture category (5xx = NSFW)
+      source: 'pirate_bay',
     );
   }
-} 
+}

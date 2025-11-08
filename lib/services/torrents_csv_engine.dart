@@ -67,7 +67,14 @@ class TorrentsCsvEngine extends SearchEngine {
           final data = json.decode(response.body);
           final torrentsList = data['torrents'] as List;
           final torrents =
-              torrentsList.map((json) => Torrent.fromJson(json)).toList();
+              torrentsList
+                  .map(
+                    (json) => Torrent.fromJson(
+                      (json as Map<String, dynamic>),
+                      source: 'torrents_csv',
+                    ),
+                  )
+                  .toList();
 
           allTorrents.addAll(torrents);
 
