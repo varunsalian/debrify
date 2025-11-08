@@ -14,6 +14,7 @@ class TorrentService {
   static Future<Map<String, dynamic>> searchAllEngines(String query, {
     bool useTorrentsCsv = true,
     bool usePirateBay = true,
+    bool useYts = true,
   }) async {
     final engines = SearchEngineFactory.getAllEngines();
     final engineNames = SearchEngineFactory.getAllEngineNames();
@@ -30,7 +31,8 @@ class TorrentService {
       final engineName = engineNames[i];
       
       if ((engineName == 'torrents_csv' && useTorrentsCsv) ||
-          (engineName == 'pirate_bay' && usePirateBay)) {
+          (engineName == 'pirate_bay' && usePirateBay) ||
+          (engineName == 'yts' && useYts)) {
         selectedEngines.add(engine);
         selectedEngineNames.add(engineName);
       }

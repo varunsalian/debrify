@@ -3190,7 +3190,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         );
         while (_queue.isNotEmpty && !_watchCancelled) {
           final item = _queue.removeAt(0);
-          final bool queueEmptyAfterPop = _queue.isEmpty;
           if (_watchCancelled) {
             break;
           }
@@ -4098,7 +4097,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               return null;
             }
             if (result != null) {
-              if (result.hasMore && !_watchCancelled && queueEmptyAfterPop) {
+              if (result.hasMore && !_watchCancelled) {
                 combinedList.add(item);
               }
               if (mounted && !_watchCancelled) {

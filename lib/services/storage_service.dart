@@ -23,6 +23,7 @@ class StorageService {
       'default_torrents_csv_enabled';
   static const String _defaultPirateBayEnabledKey =
       'default_pirate_bay_enabled';
+  static const String _defaultYtsEnabledKey = 'default_yts_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
@@ -181,6 +182,16 @@ class StorageService {
   static Future<void> setDefaultPirateBayEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_defaultPirateBayEnabledKey, enabled);
+  }
+
+  static Future<bool> getDefaultYtsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_defaultYtsEnabledKey) ?? true;
+  }
+
+  static Future<void> setDefaultYtsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_defaultYtsEnabledKey, enabled);
   }
 
   // Max results settings

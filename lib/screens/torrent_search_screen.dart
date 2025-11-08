@@ -32,11 +32,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _csvTileFocusNode = FocusNode();
   final FocusNode _pbTileFocusNode = FocusNode();
+  final FocusNode _ytsTileFocusNode = FocusNode();
   final FocusNode _csvSwitchFocusNode = FocusNode(skipTraversal: true);
   final FocusNode _pbSwitchFocusNode = FocusNode(skipTraversal: true);
+  final FocusNode _ytsSwitchFocusNode = FocusNode(skipTraversal: true);
   bool _searchFocused = false;
   bool _csvTileFocused = false;
   bool _pbTileFocused = false;
+  bool _ytsTileFocused = false;
   List<Torrent> _torrents = [];
   Map<String, int> _engineCounts = {};
   bool _isLoading = false;
@@ -53,6 +56,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Search engine toggles
   bool _useTorrentsCsv = true;
   bool _usePirateBay = true;
+  bool _useYts = true;
 
   // Sorting options
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
@@ -106,10 +110,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final defaultTorrentsCsv =
         await StorageService.getDefaultTorrentsCsvEnabled();
     final defaultPirateBay = await StorageService.getDefaultPirateBayEnabled();
+    final defaultYts = await StorageService.getDefaultYtsEnabled();
 
     setState(() {
       _useTorrentsCsv = defaultTorrentsCsv;
       _usePirateBay = defaultPirateBay;
+      _useYts = defaultYts;
     });
 
     // Focus the search field after a short delay to ensure UI is ready
@@ -144,8 +150,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _searchFocusNode.dispose();
     _csvTileFocusNode.dispose();
     _pbTileFocusNode.dispose();
+    _ytsTileFocusNode.dispose();
     _csvSwitchFocusNode.dispose();
     _pbSwitchFocusNode.dispose();
+    _ytsSwitchFocusNode.dispose();
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     _listAnimationController.dispose();
     super.dispose();
@@ -192,6 +200,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         query,
         useTorrentsCsv: _useTorrentsCsv,
         usePirateBay: _usePirateBay,
+        useYts: _useYts,
       );
       final fetchedTorrents = (result['torrents'] as List<Torrent>).toList(
         growable: false,
@@ -293,6 +302,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'Torrents CSV';
       case 'pirate_bay':
         return 'The Pirate Bay';
+      case 'yts':
+        return 'YTS';
       default:
         return name;
     }
@@ -312,6 +323,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (_usePirateBay == value) return;
     setState(() {
       _usePirateBay = value;
+    });
+    if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+      _searchTorrents(_searchController.text);
+    }
+  }
+
+  void _setUseYts(bool value) {
+    if (_useYts == value) return;
+    setState(() {
+      _useYts = value;
     });
     if (_hasSearched && _searchController.text.trim().isNotEmpty) {
       _searchTorrents(_searchController.text);
@@ -3111,6 +3132,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final List<String> selectedEngines = [];
       if (_useTorrentsCsv) selectedEngines.add('Torrents CSV');
       if (_usePirateBay) selectedEngines.add('The Pirate Bay');
+      if (_useYts) selectedEngines.add('YTS');
 
       if (selectedEngines.isEmpty) {
         return 'No search engines selected';
@@ -3131,6 +3153,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final pbCount = _engineCounts['pirate_bay'] ?? 0;
     if (pbCount > 0) {
       breakdowns.add('The Pirate Bay: $pbCount');
+    }
+
+    final ytsCount = _engineCounts['yts'] ?? 0;
+    if (ytsCount > 0) {
+      breakdowns.add('YTS: $ytsCount');
     }
 
     if (breakdowns.isEmpty) {
@@ -3306,157 +3333,232 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ],
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: FocusableActionDetector(
-                              focusNode: _csvTileFocusNode,
-                              shortcuts: _activateShortcuts,
-                              actions: <Type, Action<Intent>>{
-                                ActivateIntent: CallbackAction<ActivateIntent>(
-                                  onInvoke: (intent) {
-                                    _setUseTorrentsCsv(!_useTorrentsCsv);
-                                    return null;
-                                  },
-                                ),
-                              },
-                              onShowFocusHighlight: (visible) {
-                                if (_csvTileFocused != visible) {
-                                  setState(() => _csvTileFocused = visible);
-                                }
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                curve: Curves.easeOutCubic,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  color: _csvTileFocused
-                                      ? const Color(
-                                          0xFF3B82F6,
-                                        ).withValues(alpha: 0.18)
-                                      : Colors.transparent,
-                                  border: Border.all(
-                                    color: _csvTileFocused
-                                        ? const Color(
-                                            0xFF3B82F6,
-                                          ).withValues(alpha: 0.6)
-                                        : Colors.transparent,
-                                  ),
-                                ),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(10),
-                                  canRequestFocus: false,
-                                  onTap: () =>
-                                      _setUseTorrentsCsv(!_useTorrentsCsv),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 6,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FocusableActionDetector(
+                                  focusNode: _csvTileFocusNode,
+                                  shortcuts: _activateShortcuts,
+                                  actions: <Type, Action<Intent>>{
+                                    ActivateIntent: CallbackAction<ActivateIntent>(
+                                      onInvoke: (intent) {
+                                        _setUseTorrentsCsv(!_useTorrentsCsv);
+                                        return null;
+                                      },
                                     ),
-                                    child: Row(
-                                      children: [
-                                        Switch(
-                                          focusNode: _csvSwitchFocusNode,
-                                          value: _useTorrentsCsv,
-                                          onChanged: _setUseTorrentsCsv,
+                                  },
+                                  onShowFocusHighlight: (visible) {
+                                    if (_csvTileFocused != visible) {
+                                      setState(() => _csvTileFocused = visible);
+                                    }
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 150),
+                                    curve: Curves.easeOutCubic,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      color: _csvTileFocused
+                                          ? const Color(0xFF3B82F6)
+                                              .withValues(alpha: 0.18)
+                                          : Colors.transparent,
+                                      border: Border.all(
+                                        color: _csvTileFocused
+                                            ? const Color(0xFF3B82F6)
+                                                .withValues(alpha: 0.6)
+                                            : Colors.transparent,
+                                      ),
+                                    ),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(10),
+                                      canRequestFocus: false,
+                                      onTap: () =>
+                                          _setUseTorrentsCsv(!_useTorrentsCsv),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 6,
                                         ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'Torrents CSV',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium
-                                                ?.copyWith(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                        child: Row(
+                                          children: [
+                                            Switch(
+                                              focusNode: _csvSwitchFocusNode,
+                                              value: _useTorrentsCsv,
+                                              onChanged: _setUseTorrentsCsv,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Torrents CSV',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 24,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.outline.withValues(alpha: 0.3),
-                          ),
-                          Expanded(
-                            child: FocusableActionDetector(
-                              focusNode: _pbTileFocusNode,
-                              shortcuts: _activateShortcuts,
-                              actions: <Type, Action<Intent>>{
-                                ActivateIntent: CallbackAction<ActivateIntent>(
-                                  onInvoke: (intent) {
-                                    _setUsePirateBay(!_usePirateBay);
-                                    return null;
+                              Container(
+                                width: 1,
+                                height: 24,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline
+                                    .withValues(alpha: 0.3),
+                              ),
+                              Expanded(
+                                child: FocusableActionDetector(
+                                  focusNode: _pbTileFocusNode,
+                                  shortcuts: _activateShortcuts,
+                                  actions: <Type, Action<Intent>>{
+                                    ActivateIntent: CallbackAction<ActivateIntent>(
+                                      onInvoke: (intent) {
+                                        _setUsePirateBay(!_usePirateBay);
+                                        return null;
+                                      },
+                                    ),
                                   },
-                                ),
-                              },
-                              onShowFocusHighlight: (visible) {
-                                if (_pbTileFocused != visible) {
-                                  setState(() => _pbTileFocused = visible);
-                                }
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                curve: Curves.easeOutCubic,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  color: _pbTileFocused
-                                      ? const Color(
-                                          0xFF3B82F6,
-                                        ).withValues(alpha: 0.18)
-                                      : Colors.transparent,
-                                  border: Border.all(
-                                    color: _pbTileFocused
-                                        ? const Color(
-                                            0xFF3B82F6,
-                                          ).withValues(alpha: 0.6)
-                                        : Colors.transparent,
+                                  onShowFocusHighlight: (visible) {
+                                    if (_pbTileFocused != visible) {
+                                      setState(() => _pbTileFocused = visible);
+                                    }
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 150),
+                                    curve: Curves.easeOutCubic,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      color: _pbTileFocused
+                                          ? const Color(0xFF3B82F6)
+                                              .withValues(alpha: 0.18)
+                                          : Colors.transparent,
+                                      border: Border.all(
+                                        color: _pbTileFocused
+                                            ? const Color(0xFF3B82F6)
+                                                .withValues(alpha: 0.6)
+                                            : Colors.transparent,
+                                      ),
+                                    ),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(10),
+                                      canRequestFocus: false,
+                                      onTap: () =>
+                                          _setUsePirateBay(!_usePirateBay),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 6,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Switch(
+                                              focusNode: _pbSwitchFocusNode,
+                                              value: _usePirateBay,
+                                              onChanged: _setUsePirateBay,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Pirate Bay',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(10),
-                                  canRequestFocus: false,
-                                  onTap: () => _setUsePirateBay(!_usePirateBay),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 6,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Switch(
-                                          focusNode: _pbSwitchFocusNode,
-                                          value: _usePirateBay,
-                                          onChanged: _setUsePirateBay,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          FocusableActionDetector(
+                            focusNode: _ytsTileFocusNode,
+                            shortcuts: _activateShortcuts,
+                            actions: <Type, Action<Intent>>{
+                              ActivateIntent: CallbackAction<ActivateIntent>(
+                                onInvoke: (intent) {
+                                  _setUseYts(!_useYts);
+                                  return null;
+                                },
+                              ),
+                            },
+                            onShowFocusHighlight: (visible) {
+                              if (_ytsTileFocused != visible) {
+                                setState(() => _ytsTileFocused = visible);
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              curve: Curves.easeOutCubic,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                color: _ytsTileFocused
+                                    ? const Color(0xFF3B82F6)
+                                        .withValues(alpha: 0.18)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: _ytsTileFocused
+                                      ? const Color(0xFF3B82F6)
+                                          .withValues(alpha: 0.6)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                canRequestFocus: false,
+                                onTap: () => _setUseYts(!_useYts),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 6,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Switch(
+                                        focusNode: _ytsSwitchFocusNode,
+                                        value: _useYts,
+                                        onChanged: _setUseYts,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'YTS',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'Pirate Bay',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium
-                                                ?.copyWith(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
