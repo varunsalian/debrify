@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/torrent.dart';
@@ -25,7 +26,9 @@ class YtsEngine extends SearchEngine {
       final String url = isImdbQuery
           ? 'https://r.jina.ai/http://yts.mx/api/v2/movie_details.json?imdb_id=${Uri.encodeComponent(trimmed)}'
           : '$baseUrl?query_term=${Uri.encodeComponent(trimmed)}&limit=50';
-      final response = await http.get(Uri.parse(url));
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode != 200) {
         throw Exception('Failed to load torrents from YTS. HTTP ${response.statusCode}');
       }
@@ -119,6 +122,8 @@ class YtsEngine extends SearchEngine {
       }
 
       return torrents;
+    } on TimeoutException {
+      throw Exception('YTS search timed out. Please try again.');
     } catch (error, stack) {
       // Surface the root cause in logs while returning a user-friendly message
       // ignore: avoid_print

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/torrent.dart';
@@ -18,7 +19,9 @@ class PirateBayEngine extends SearchEngine {
   @override
   Future<List<Torrent>> search(String query) async {
     try {
-      final response = await http.get(Uri.parse(getSearchUrl(query)));
+      final response = await http
+          .get(Uri.parse(getSearchUrl(query)))
+          .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as List;
@@ -32,6 +35,8 @@ class PirateBayEngine extends SearchEngine {
       } else {
         throw Exception('Failed to load torrents from The Pirate Bay. Please try again.');
       }
+    } on TimeoutException {
+      throw Exception('Pirate Bay search timed out. Please try again.');
     } catch (e) {
       throw Exception('Network error while searching The Pirate Bay. Please check your connection.');
     }

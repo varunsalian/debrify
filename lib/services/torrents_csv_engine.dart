@@ -61,7 +61,9 @@ class TorrentsCsvEngine extends SearchEngine {
     try {
       while (pageCount < requestsNeeded) {
         final url = getSearchUrlWithPagination(query, nextId);
-        final response = await http.get(Uri.parse(url));
+        final response = await http
+            .get(Uri.parse(url))
+            .timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
@@ -102,6 +104,10 @@ class TorrentsCsvEngine extends SearchEngine {
       return TorrentsCsvSearchResult(
         torrents: allTorrents,
         pagesPulled: pageCount,
+      );
+    } on TimeoutException {
+      throw Exception(
+        'Torrents CSV search timed out. Please try again.',
       );
     } catch (e) {
       if (allTorrents.isNotEmpty) {
