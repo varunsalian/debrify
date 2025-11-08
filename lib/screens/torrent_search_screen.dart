@@ -481,21 +481,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildAdvancedButton() {
-    final isActive = _activeAdvancedSelection != null;
-    return SizedBox(
-      height: 56,
-      width: 150,
-      child: Tooltip(
-        message: isActive
-            ? 'Advanced Torrentio search is active'
-            : 'Search via IMDb + Torrentio',
+    final selection = _activeAdvancedSelection;
+    if (selection == null) {
+      return Tooltip(
+        message: 'Search via IMDb + Torrentio',
         child: ElevatedButton.icon(
           onPressed: _openAdvancedSearchDialog,
-          icon: Icon(
-            isActive ? Icons.auto_awesome_rounded : Icons.auto_awesome_outlined,
-            size: 18,
-          ),
-          label: Text(isActive ? 'Advanced*' : 'Advanced'),
+          icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+          label: const Text('Advanced'),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF3730A3),
             foregroundColor: Colors.white,
@@ -505,6 +498,38 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
           ),
         ),
+      );
+    }
+
+    return SizedBox(
+      height: 40,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: 'Advanced Torrentio search active',
+            child: ElevatedButton.icon(
+              onPressed: _openAdvancedSearchDialog,
+              icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+              label: const Text('Advanced*'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3730A3),
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 18),
+            color: Colors.white,
+            tooltip: 'Clear advanced search',
+            onPressed: _clearAdvancedSelection,
+          ),
+        ],
       ),
     );
   }
@@ -532,40 +557,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     setState(() {
       _activeAdvancedSelection = null;
     });
-  }
-
-  Widget _buildActiveAdvancedIndicator() {
-    final selection = _activeAdvancedSelection;
-    if (selection == null) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFACC15).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFACC15).withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.auto_awesome_rounded, color: Color(0xFFFACC15), size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Advanced: ${selection.formattedLabel}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: _clearAdvancedSelection,
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildProviderSummaryText(BuildContext context) {
@@ -3781,8 +3772,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         _buildAdvancedButton(),
                       ],
                     ),
-                    _buildActiveAdvancedIndicator(),
-
                     // Search Engine Toggles
                     const SizedBox(height: 16),
                     _buildProvidersAccordion(context),
