@@ -45,6 +45,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _isLoading = false;
   String _errorMessage = '';
   bool _hasSearched = false;
+  int _activeSearchRequestId = 0;
   String? _apiKey;
   String? _torboxApiKey;
   bool _torboxCacheCheckEnabled = false;
@@ -163,6 +164,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _searchTorrents(String query) async {
     if (query.trim().isEmpty) return;
 
+    final int requestId = ++_activeSearchRequestId;
     setState(() {
       _isLoading = true;
       _errorMessage = '';
@@ -277,6 +279,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         showOnlyCached = true;
       }
 
+      if (!mounted || requestId != _activeSearchRequestId) {
+        return;
+      }
+
       setState(() {
         _torrents = filteredTorrents;
         _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
@@ -290,6 +296,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _sortTorrents();
       _listAnimationController.forward();
     } catch (e) {
+      if (!mounted || requestId != _activeSearchRequestId) {
+        return;
+      }
       setState(() {
         _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
@@ -315,6 +324,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     setState(() {
       _useTorrentsCsv = value;
     });
+    StorageService.setDefaultTorrentsCsvEnabled(value);
     if (_hasSearched && _searchController.text.trim().isNotEmpty) {
       _searchTorrents(_searchController.text);
     }
@@ -325,6 +335,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     setState(() {
       _usePirateBay = value;
     });
+    StorageService.setDefaultPirateBayEnabled(value);
     if (_hasSearched && _searchController.text.trim().isNotEmpty) {
       _searchTorrents(_searchController.text);
     }
@@ -335,17 +346,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     setState(() {
       _useYts = value;
     });
+    StorageService.setDefaultYtsEnabled(value);
     if (_hasSearched && _searchController.text.trim().isNotEmpty) {
       _searchTorrents(_searchController.text);
     }
   }
 
   Widget _buildProviderSummaryText(BuildContext context) {
-    final enabled = <String>[];
-    if (_useTorrentsCsv) enabled.add('Torrents CSV');
-    if (_usePirateBay) enabled.add('Pirate Bay');
-    if (_useYts) enabled.add('YTS');
-    if (enabled.isEmpty) {
+    final enabledCount =
+        (_useTorrentsCsv ? 1 : 0) + (_usePirateBay ? 1 : 0) + (_useYts ? 1 : 0);
+    if (enabledCount == 0) {
       return Text(
         'No providers selected',
         style: Theme.of(context)
@@ -355,7 +365,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       );
     }
     return Text(
-      enabled.join(', '),
+      '$enabledCount enabled',
       style: Theme.of(context)
           .textTheme
           .bodySmall
