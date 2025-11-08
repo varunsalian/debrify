@@ -203,11 +203,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     try {
+      final imdbOverride = _activeAdvancedSelection?.imdbId;
       final result = await TorrentService.searchAllEngines(
         query,
         useTorrentsCsv: _useTorrentsCsv,
         usePirateBay: _usePirateBay,
         useYts: _useYts,
+        imdbIdOverride: (imdbOverride != null && imdbOverride.trim().isNotEmpty)
+            ? imdbOverride
+            : null,
       );
       final fetchedTorrents = (result['torrents'] as List<Torrent>).toList(
         growable: false,

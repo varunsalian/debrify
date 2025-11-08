@@ -11,10 +11,12 @@ class TorrentService {
     return await engine.search(query);
   }
 
-  static Future<Map<String, dynamic>> searchAllEngines(String query, {
+  static Future<Map<String, dynamic>> searchAllEngines(
+    String query, {
     bool useTorrentsCsv = true,
     bool usePirateBay = true,
     bool useYts = true,
+    String? imdbIdOverride,
   }) async {
     final engines = SearchEngineFactory.getAllEngines();
     final engineNames = SearchEngineFactory.getAllEngineNames();
@@ -47,12 +49,16 @@ class TorrentService {
     }
     
     // Search selected engines concurrently while tolerating per-engine failures
+    final override = imdbIdOverride?.trim();
+    final effectiveQuery =
+        override != null && override.isNotEmpty ? override : query;
+
     final List<Future<List<Torrent>>> futures = [];
     for (int i = 0; i < selectedEngines.length; i++) {
       final engine = selectedEngines[i];
       final engineName = selectedEngineNames[i];
       futures.add(
-        engine.search(query).then((result) {
+        engine.search(effectiveQuery).then((result) {
           engineCounts[engineName] = result.length;
           return result;
         }).catchError((error, _) {

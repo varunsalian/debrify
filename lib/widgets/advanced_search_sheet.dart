@@ -105,10 +105,10 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
 
   bool _validateSeriesFields() {
     if (!_isSeries) return true;
-    final season = int.tryParse(_seasonController.text.trim());
-    if (season == null) {
+    final seasonText = _seasonController.text.trim();
+    if (seasonText.isNotEmpty && int.tryParse(seasonText) == null) {
       setState(() {
-        _errorMessage = 'Season is required for series.';
+        _errorMessage = 'Season must be a number if provided.';
       });
       return false;
     }

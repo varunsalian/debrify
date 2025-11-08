@@ -9,70 +9,105 @@ import '../models/torrent.dart';
 
 class TorrentioService {
   static const String _baseUrl = 'https://torrentio.strem.fun';
+  static const int _maxSeasonProbes = 5;
 
   static Future<List<Torrent>> fetchStreams(
     AdvancedSearchSelection selection,
   ) async {
-    if (selection.isSeries &&
-        (selection.season == null || selection.episode == null)) {
-      throw Exception('Season and episode required for series search.');
-    }
-    final endpoint = selection.isSeries
-        ? '/stream/series/${selection.imdbId}:${selection.season}:${selection.episode}.json'
-        : '/stream/movie/${selection.imdbId}.json';
-    final uri = Uri.parse('$_baseUrl$endpoint');
-    debugPrint('TorrentioService: Fetching ${selection.imdbId} -> $uri');
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      debugPrint('TorrentioService: HTTP ${response.statusCode} body=${response.body}');
-      throw Exception('Torrentio responded with HTTP ${response.statusCode}');
-    }
-
-    final dynamic payload = json.decode(response.body);
-    if (payload is! Map<String, dynamic>) {
-      throw Exception('Unexpected Torrentio response');
-    }
-
-    final streams = payload['streams'];
-    if (streams is! List) {
-      return const [];
-    }
-
     final nowUnix = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final List<Torrent> torrents = [];
     int counter = 0;
 
-    for (final stream in streams) {
-      if (stream is! Map<String, dynamic>) continue;
-      final infoHash = (stream['infoHash'] ?? '').toString().trim();
-      if (infoHash.isEmpty) {
-        continue;
+    Future<List<dynamic>> _loadStreams(String endpoint) async {
+      final uri = Uri.parse('$_baseUrl$endpoint');
+      debugPrint('TorrentioService: Fetching ${selection.imdbId} -> $uri');
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        debugPrint(
+            'TorrentioService: HTTP ${response.statusCode} body=${response.body}');
+        throw Exception('Torrentio responded with HTTP ${response.statusCode}');
       }
 
-      final title = (stream['title'] ?? '').toString();
-      final displayName = title.isNotEmpty
-          ? title.replaceAll('\n', ' ')
-          : selection.title;
+      final dynamic payload = json.decode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        throw Exception('Unexpected Torrentio response');
+      }
 
-      final seeders = _parseWatchersCount(title);
-      final sizeBytes = _parseSizeBytes(title);
-
-      torrents.add(
-        Torrent(
-          rowid: -(++counter),
-          infohash: infoHash.toLowerCase(),
-          name: displayName,
-          sizeBytes: sizeBytes,
-          createdUnix: nowUnix,
-          seeders: seeders,
-          leechers: 0,
-          completed: 0,
-          scrapedDate: nowUnix,
-          category: selection.isSeries ? 'series' : 'movie',
-          source: 'torrentio',
-        ),
-      );
+      final streams = payload['streams'];
+      if (streams is! List) {
+        return const [];
+      }
+      return streams;
     }
+
+    void _appendStreams(List<dynamic> streams) {
+      for (final stream in streams) {
+        if (stream is! Map<String, dynamic>) continue;
+        final infoHash = (stream['infoHash'] ?? '').toString().trim();
+        if (infoHash.isEmpty) {
+          continue;
+        }
+
+        final title = (stream['title'] ?? '').toString();
+        final displayName = title.isNotEmpty
+            ? title.replaceAll('\n', ' ')
+            : selection.title;
+
+        final seeders = _parseWatchersCount(title);
+        final sizeBytes = _parseSizeBytes(title);
+
+        torrents.add(
+          Torrent(
+            rowid: -(++counter),
+            infohash: infoHash.toLowerCase(),
+            name: displayName,
+            sizeBytes: sizeBytes,
+            createdUnix: nowUnix,
+            seeders: seeders,
+            leechers: 0,
+            completed: 0,
+            scrapedDate: nowUnix,
+            category: selection.isSeries ? 'series' : 'movie',
+            source: 'torrentio',
+          ),
+        );
+      }
+    }
+
+    if (!selection.isSeries) {
+      final movieEndpoint = '/stream/movie/${selection.imdbId}.json';
+      final streams = await _loadStreams(movieEndpoint);
+      _appendStreams(streams);
+      debugPrint('TorrentioService: Parsed ${torrents.length} stream(s)');
+      return torrents;
+    }
+
+    final bool hasSeason = selection.season != null;
+    final int targetEpisode = hasSeason ? (selection.episode ?? 1) : 1;
+
+    if (hasSeason) {
+      final seriesEndpoint =
+          '/stream/series/${selection.imdbId}:${selection.season}:$targetEpisode.json';
+      final streams = await _loadStreams(seriesEndpoint);
+      _appendStreams(streams);
+      debugPrint('TorrentioService: Parsed ${torrents.length} stream(s)');
+      return torrents;
+    }
+
+    for (var seasonProbe = 1; seasonProbe <= _maxSeasonProbes; seasonProbe++) {
+      final endpoint =
+          '/stream/series/${selection.imdbId}:$seasonProbe:$targetEpisode.json';
+      final streams = await _loadStreams(endpoint);
+      if (streams.isEmpty) {
+        debugPrint(
+            'TorrentioService: Probe season $seasonProbe returned 0 streams, stopping.');
+        break;
+      }
+      debugPrint(
+          'TorrentioService: Probe season $seasonProbe returned ${streams.length} stream(s)');
+      _appendStreams(streams);
+    }
+
     debugPrint('TorrentioService: Parsed ${torrents.length} stream(s)');
     return torrents;
   }
