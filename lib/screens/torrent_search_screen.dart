@@ -482,54 +482,27 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Widget _buildAdvancedButton() {
     final selection = _activeAdvancedSelection;
-    if (selection == null) {
-      return Tooltip(
-        message: 'Search via IMDb + Torrentio',
-        child: ElevatedButton.icon(
-          onPressed: _openAdvancedSearchDialog,
-          icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-          label: const Text('Advanced'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF3730A3),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+    final label = selection == null ? 'Adv' : 'Adv*';
+    return Tooltip(
+      message: selection == null
+          ? 'Search via IMDb + Torrentio'
+          : 'Advanced Torrentio search active',
+      child: TextButton.icon(
+        onPressed: selection == null
+            ? _openAdvancedSearchDialog
+            : () async {
+                await _openAdvancedSearchDialog();
+              },
+        style: TextButton.styleFrom(
+          backgroundColor:
+              selection == null ? const Color(0xFF1E3A8A) : const Color(0xFF7C3AED),
+          foregroundColor: Colors.white,
+          minimumSize: const Size(64, 36),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         ),
-      );
-    }
-
-    return SizedBox(
-      height: 40,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Tooltip(
-            message: 'Advanced Torrentio search active',
-            child: ElevatedButton.icon(
-              onPressed: _openAdvancedSearchDialog,
-              icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-              label: const Text('Advanced*'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3730A3),
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 18),
-            color: Colors.white,
-            tooltip: 'Clear advanced search',
-            onPressed: _clearAdvancedSelection,
-          ),
-        ],
+        icon: const Icon(Icons.auto_awesome_outlined, size: 16),
+        label: Text(label, style: const TextStyle(fontSize: 12)),
       ),
     );
   }
