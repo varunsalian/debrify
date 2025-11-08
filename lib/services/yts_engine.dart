@@ -19,7 +19,12 @@ class YtsEngine extends SearchEngine {
   @override
   Future<List<Torrent>> search(String query) async {
     try {
-      final url = '$baseUrl?query_term=${Uri.encodeComponent(query)}&limit=50';
+      final String trimmed = query.trim();
+      final bool isImdbQuery = RegExp(r'^tt\d{7,}$', caseSensitive: false)
+          .hasMatch(trimmed);
+      final String url = isImdbQuery
+          ? 'https://r.jina.ai/http://yts.mx/api/v2/movie_details.json?imdb_id=${Uri.encodeComponent(trimmed)}'
+          : '$baseUrl?query_term=${Uri.encodeComponent(trimmed)}&limit=50';
       final response = await http.get(Uri.parse(url));
       if (response.statusCode != 200) {
         throw Exception('Failed to load torrents from YTS. HTTP ${response.statusCode}');
@@ -42,7 +47,9 @@ class YtsEngine extends SearchEngine {
       }
 
       final data = payload['data'] as Map<String, dynamic>?;
-      final movies = data?['movies'] as List<dynamic>?;
+      final List<dynamic>? movies = isImdbQuery
+          ? (data?['movie'] == null ? null : [data!['movie']])
+          : data?['movies'] as List<dynamic>?;
       if (movies == null || movies.isEmpty) {
         return const [];
       }
