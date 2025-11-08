@@ -57,6 +57,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _useTorrentsCsv = true;
   bool _usePirateBay = true;
   bool _useYts = true;
+  bool _showProvidersPanel = false;
 
   // Sorting options
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
@@ -337,6 +338,204 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (_hasSearched && _searchController.text.trim().isNotEmpty) {
       _searchTorrents(_searchController.text);
     }
+  }
+
+  Widget _buildProviderSummaryText(BuildContext context) {
+    final enabled = <String>[];
+    if (_useTorrentsCsv) enabled.add('Torrents CSV');
+    if (_usePirateBay) enabled.add('Pirate Bay');
+    if (_useYts) enabled.add('YTS');
+    if (enabled.isEmpty) {
+      return Text(
+        'No providers selected',
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: Theme.of(context).colorScheme.error),
+      );
+    }
+    return Text(
+      enabled.join(', '),
+      style: Theme.of(context)
+          .textTheme
+          .bodySmall
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    );
+  }
+
+  Widget _buildProvidersAccordion(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _showProvidersPanel = !_showProvidersPanel),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    _showProvidersPanel
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Search Providers',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  _buildProviderSummaryText(context),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  _buildProviderSwitch(
+                    context,
+                    label: 'Torrents CSV',
+                    value: _useTorrentsCsv,
+                    onToggle: _setUseTorrentsCsv,
+                    tileFocusNode: _csvTileFocusNode,
+                    switchFocusNode: _csvSwitchFocusNode,
+                    tileFocused: _csvTileFocused,
+                    onFocusChange: (visible) {
+                      if (_csvTileFocused != visible) {
+                        setState(() => _csvTileFocused = visible);
+                      }
+                    },
+                  ),
+                  Divider(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2)),
+                  _buildProviderSwitch(
+                    context,
+                    label: 'Pirate Bay',
+                    value: _usePirateBay,
+                    onToggle: _setUsePirateBay,
+                    tileFocusNode: _pbTileFocusNode,
+                    switchFocusNode: _pbSwitchFocusNode,
+                    tileFocused: _pbTileFocused,
+                    onFocusChange: (visible) {
+                      if (_pbTileFocused != visible) {
+                        setState(() => _pbTileFocused = visible);
+                      }
+                    },
+                  ),
+                  Divider(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2)),
+                  _buildProviderSwitch(
+                    context,
+                    label: 'YTS',
+                    value: _useYts,
+                    onToggle: _setUseYts,
+                    tileFocusNode: _ytsTileFocusNode,
+                    switchFocusNode: _ytsSwitchFocusNode,
+                    tileFocused: _ytsTileFocused,
+                    onFocusChange: (visible) {
+                      if (_ytsTileFocused != visible) {
+                        setState(() => _ytsTileFocused = visible);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            crossFadeState: _showProvidersPanel
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 220),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProviderSwitch(
+    BuildContext context, {
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onToggle,
+    required FocusNode tileFocusNode,
+    required FocusNode switchFocusNode,
+    required bool tileFocused,
+    required ValueChanged<bool> onFocusChange,
+  }) {
+    return FocusableActionDetector(
+      focusNode: tileFocusNode,
+      shortcuts: _activateShortcuts,
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            onToggle(!value);
+            return null;
+          },
+        ),
+      },
+      onShowFocusHighlight: onFocusChange,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: tileFocused
+              ? const Color(0xFF3B82F6).withValues(alpha: 0.18)
+              : Colors.transparent,
+          border: Border.all(
+            color: tileFocused
+                ? const Color(0xFF3B82F6).withValues(alpha: 0.6)
+                : Colors.transparent,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          canRequestFocus: false,
+          onTap: () => onToggle(!value),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: Row(
+              children: [
+                Switch(
+                  focusNode: switchFocusNode,
+                  value: value,
+                  onChanged: onToggle,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                        ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _copyMagnetLink(String infohash) {
@@ -3312,261 +3511,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
                     // Search Engine Toggles
                     const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B).withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF1E40AF,
-                            ).withValues(alpha: 0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FocusableActionDetector(
-                                  focusNode: _csvTileFocusNode,
-                                  shortcuts: _activateShortcuts,
-                                  actions: <Type, Action<Intent>>{
-                                    ActivateIntent: CallbackAction<ActivateIntent>(
-                                      onInvoke: (intent) {
-                                        _setUseTorrentsCsv(!_useTorrentsCsv);
-                                        return null;
-                                      },
-                                    ),
-                                  },
-                                  onShowFocusHighlight: (visible) {
-                                    if (_csvTileFocused != visible) {
-                                      setState(() => _csvTileFocused = visible);
-                                    }
-                                  },
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 150),
-                                    curve: Curves.easeOutCubic,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(10),
-                                      color: _csvTileFocused
-                                          ? const Color(0xFF3B82F6)
-                                              .withValues(alpha: 0.18)
-                                          : Colors.transparent,
-                                      border: Border.all(
-                                        color: _csvTileFocused
-                                            ? const Color(0xFF3B82F6)
-                                                .withValues(alpha: 0.6)
-                                            : Colors.transparent,
-                                      ),
-                                    ),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(10),
-                                      canRequestFocus: false,
-                                      onTap: () =>
-                                          _setUseTorrentsCsv(!_useTorrentsCsv),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 6,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Switch(
-                                              focusNode: _csvSwitchFocusNode,
-                                              value: _useTorrentsCsv,
-                                              onChanged: _setUseTorrentsCsv,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'Torrents CSV',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                width: 1,
-                                height: 24,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outline
-                                    .withValues(alpha: 0.3),
-                              ),
-                              Expanded(
-                                child: FocusableActionDetector(
-                                  focusNode: _pbTileFocusNode,
-                                  shortcuts: _activateShortcuts,
-                                  actions: <Type, Action<Intent>>{
-                                    ActivateIntent: CallbackAction<ActivateIntent>(
-                                      onInvoke: (intent) {
-                                        _setUsePirateBay(!_usePirateBay);
-                                        return null;
-                                      },
-                                    ),
-                                  },
-                                  onShowFocusHighlight: (visible) {
-                                    if (_pbTileFocused != visible) {
-                                      setState(() => _pbTileFocused = visible);
-                                    }
-                                  },
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 150),
-                                    curve: Curves.easeOutCubic,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(10),
-                                      color: _pbTileFocused
-                                          ? const Color(0xFF3B82F6)
-                                              .withValues(alpha: 0.18)
-                                          : Colors.transparent,
-                                      border: Border.all(
-                                        color: _pbTileFocused
-                                            ? const Color(0xFF3B82F6)
-                                                .withValues(alpha: 0.6)
-                                            : Colors.transparent,
-                                      ),
-                                    ),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(10),
-                                      canRequestFocus: false,
-                                      onTap: () =>
-                                          _setUsePirateBay(!_usePirateBay),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 6,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Switch(
-                                              focusNode: _pbSwitchFocusNode,
-                                              value: _usePirateBay,
-                                              onChanged: _setUsePirateBay,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'Pirate Bay',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          FocusableActionDetector(
-                            focusNode: _ytsTileFocusNode,
-                            shortcuts: _activateShortcuts,
-                            actions: <Type, Action<Intent>>{
-                              ActivateIntent: CallbackAction<ActivateIntent>(
-                                onInvoke: (intent) {
-                                  _setUseYts(!_useYts);
-                                  return null;
-                                },
-                              ),
-                            },
-                            onShowFocusHighlight: (visible) {
-                              if (_ytsTileFocused != visible) {
-                                setState(() => _ytsTileFocused = visible);
-                              }
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              curve: Curves.easeOutCubic,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                color: _ytsTileFocused
-                                    ? const Color(0xFF3B82F6)
-                                        .withValues(alpha: 0.18)
-                                    : Colors.transparent,
-                                border: Border.all(
-                                  color: _ytsTileFocused
-                                      ? const Color(0xFF3B82F6)
-                                          .withValues(alpha: 0.6)
-                                      : Colors.transparent,
-                                ),
-                              ),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(10),
-                                canRequestFocus: false,
-                                onTap: () => _setUseYts(!_useYts),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 6,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Switch(
-                                        focusNode: _ytsSwitchFocusNode,
-                                        value: _useYts,
-                                        onChanged: _setUseYts,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'YTS',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyMedium
-                                              ?.copyWith(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildProvidersAccordion(context),
                   ],
                 ),
               ),
