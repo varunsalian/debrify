@@ -445,21 +445,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun resolveAndPlay(index: Int, item: PlaybackItem) {
         android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - index: $index, resumeId: ${item.resumeId}, id: ${item.id}")
         setResolvingState(true)
-        thread {
-            val url = requestStreamFromFlutter(item, index)
-            runOnUiThread {
-                setResolvingState(false)
-                android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - received url: $url")
-                if (url.isNullOrEmpty()) {
-                    android.util.Log.e("AndroidTvPlayer", "resolveAndPlay - URL is null or empty!")
-                    Toast.makeText(this, "Unable to load stream", Toast.LENGTH_SHORT).show()
-                    return@runOnUiThread
-                }
-                // Update the item with resolved URL
-                payload?.items?.set(index, item.copy(url = url))
-                android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - starting playback with resolved URL")
-                startPlayback(payload!!.items[index])
+
+        // Request stream from Flutter with async callback
+        requestStreamFromFlutter(item, index) { url ->
+            android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - received url: $url")
+            setResolvingState(false)
+
+            if (url.isNullOrEmpty()) {
+                android.util.Log.e("AndroidTvPlayer", "resolveAndPlay - URL is null or empty!")
+                Toast.makeText(this, "Unable to load stream", Toast.LENGTH_SHORT).show()
+                return@requestStreamFromFlutter
             }
+
+            // Update the item with resolved URL
+            payload?.items?.set(index, item.copy(url = url))
+            android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - starting playback with resolved URL")
+            startPlayback(payload!!.items[index])
         }
     }
 
@@ -517,26 +518,41 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestStreamFromFlutter(item: PlaybackItem, index: Int): String? {
-        return try {
+    private fun requestStreamFromFlutter(item: PlaybackItem, index: Int, callback: (String?) -> Unit) {
+        try {
             val args = hashMapOf<String, Any?>(
                 "resumeId" to item.resumeId,
                 "itemId" to item.id,
                 "index" to index
             )
             android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - sending to Flutter: resumeId=${item.resumeId}, itemId=${item.id}, index=$index")
-            val result = MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
                 "requestTorrentStream",
-                args
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - Flutter returned: $result")
+                        val map = result as? Map<*, *>
+                        val url = map?.get("url") as? String
+                        android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - extracted URL: $url")
+                        callback(url)
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - error: $errorCode - $errorMessage")
+                        callback(null)
+                    }
+
+                    override fun notImplemented() {
+                        android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - not implemented")
+                        callback(null)
+                    }
+                }
             )
-            android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - Flutter returned: $result")
-            val map = result as? Map<*, *>
-            val url = map?.get("url") as? String
-            android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - extracted URL: $url")
-            url
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - exception: ${e.message}", e)
-            null
+            callback(null)
         }
     }
 
