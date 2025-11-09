@@ -1850,10 +1850,12 @@ private class MoviePlaylistAdapter(
             badgeView.text = if (group == MovieGroup.MAIN) "MAIN" else "EXTRA"
             titleView.text = item.title
 
-            val descriptionText = when {
-                !item.description.isNullOrBlank() -> item.description
-                else -> formatSize(item.sizeBytes)
-            }
+            val cleanedDescription = item.description
+                ?.trim()
+                ?.takeUnless { it.equals("null", ignoreCase = true) }
+
+            val descriptionText = cleanedDescription ?: formatSize(item.sizeBytes)
+
             if (!descriptionText.isNullOrBlank()) {
                 descriptionView.text = descriptionText
                 descriptionView.visibility = View.VISIBLE
