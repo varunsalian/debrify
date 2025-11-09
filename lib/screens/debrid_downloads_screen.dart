@@ -10,6 +10,7 @@ import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../widgets/stat_chip.dart';
 import 'video_player_screen.dart';
+import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
 import 'dart:ui'; // Added for ImageFilter
 
@@ -406,13 +407,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Check if it's actually a video using MIME type
         if (FileUtils.isVideoMimeType(mimeType)) {
           if (mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => VideoPlayerScreen(
-                  videoUrl: downloadLink,
-                  title: torrent.filename,
-                  subtitle: Formatters.formatFileSize(torrent.bytes),
-                ),
+            await VideoPlayerLauncher.push(
+              context,
+              VideoPlayerLaunchArgs(
+                videoUrl: downloadLink,
+                title: torrent.filename,
+                subtitle: Formatters.formatFileSize(torrent.bytes),
               ),
             );
           }
@@ -448,13 +448,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     // Check if it's a video file
     if (FileUtils.isVideoMimeType(download.mimeType)) {
       if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => VideoPlayerScreen(
-              videoUrl: download.download,
-              title: download.filename,
-              subtitle: Formatters.formatFileSize(download.filesize),
-            ),
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: download.download,
+            title: download.filename,
+            subtitle: Formatters.formatFileSize(download.filesize),
           ),
         );
       }
@@ -3395,15 +3394,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         initialVideoUrl = entries.first.url;
       }
 
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => VideoPlayerScreen(
-            videoUrl: initialVideoUrl,
-            title: torrent.filename,
-            subtitle: '${entries.length} files',
-            playlist: entries,
-            startIndex: 0,
-          ),
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: initialVideoUrl,
+          title: torrent.filename,
+          subtitle: '${entries.length} files',
+          playlist: entries,
+          startIndex: 0,
         ),
       );
     } catch (e) {
@@ -4011,13 +4009,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Check if it's actually a video using MIME type
         if (FileUtils.isVideoMimeType(mimeType)) {
           if (mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => VideoPlayerScreen(
-                  videoUrl: downloadLink,
-                  title: torrent.filename,
-                  subtitle: 'File ${index + 1}',
-                ),
+            await VideoPlayerLauncher.push(
+              context,
+              VideoPlayerLaunchArgs(
+                videoUrl: downloadLink,
+                title: torrent.filename,
+                subtitle: 'File ${index + 1}',
               ),
             );
           }

@@ -9,6 +9,7 @@ import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../services/download_service.dart';
 import '../services/torrentio_service.dart';
+import '../services/video_player_launcher.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
@@ -2154,13 +2155,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           file: file,
         );
         if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => VideoPlayerScreen(
-              videoUrl: streamUrl,
-              title: torrent.name,
-              subtitle: Formatters.formatFileSize(file.size),
-            ),
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: streamUrl,
+            title: torrent.name,
+            subtitle: Formatters.formatFileSize(file.size),
           ),
         );
       } catch (e) {
@@ -2273,15 +2273,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
 
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => VideoPlayerScreen(
-          videoUrl: initialUrl,
-          title: torrent.name,
-          subtitle: subtitle,
-          playlist: playlistEntries,
-          startIndex: startIndex,
-        ),
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialUrl,
+        title: torrent.name,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
       ),
     );
   }
@@ -2881,10 +2880,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           // Fallback to torrentName if fetch fails
         }
 
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) =>
-                VideoPlayerScreen(videoUrl: videoUrl, title: finalTitle),
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: videoUrl,
+            title: finalTitle,
           ),
         );
       } else {
@@ -3351,15 +3351,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // Fallback to torrentName if fetch fails
       }
 
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => VideoPlayerScreen(
-            videoUrl: initialVideoUrl,
-            title: finalTitle,
-            subtitle: '${entries.length} files',
-            playlist: entries.isNotEmpty ? entries : null,
-            startIndex: 0,
-          ),
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: initialVideoUrl,
+          title: finalTitle,
+          subtitle: '${entries.length} files',
+          playlist: entries.isNotEmpty ? entries : null,
+          startIndex: 0,
         ),
       );
     } catch (e) {
@@ -4754,138 +4753,145 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       : const Color(0xFF1F2937).withValues(alpha: 0.25);
                   final textColor = isCached ? Colors.white : Colors.white70;
 
-                  final button = Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: LinearGradient(
-                        colors: gradientColors,
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: shadowColor,
-                          spreadRadius: 0,
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.flash_on_rounded,
-                          color: textColor,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            'Torbox',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.2,
-                              color: textColor,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.expand_more_rounded,
-                          color: textColor.withValues(alpha: 0.7),
-                          size: 18,
-                        ),
-                      ],
-                    ),
-                  );
-
-                  return IgnorePointer(
-                    ignoring: !isCached,
-                    child: Opacity(
-                      opacity: isCached ? 1.0 : 0.55,
-                      child: GestureDetector(
+                  return Opacity(
+                    opacity: isCached ? 1.0 : 0.55,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        focusColor:
+                            const Color(0xFF7C3AED).withValues(alpha: 0.25),
                         onTap: isCached
                             ? () => _addToTorbox(torrent.infohash, torrent.name)
                             : null,
-                        child: button,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: LinearGradient(
+                              colors: gradientColors,
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: shadowColor,
+                                spreadRadius: 0,
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.flash_on_rounded,
+                                color: textColor,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Torbox',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.2,
+                                    color: textColor,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.expand_more_rounded,
+                                color: textColor.withValues(alpha: 0.7),
+                                size: 18,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   );
                 }
 
                 Widget buildRealDebridButton() {
-                  return GestureDetector(
-                    onTap: () =>
-                        _addToRealDebrid(torrent.infohash, torrent.name, index),
-                    onLongPress: () {
-                      _showFileSelectionDialog(
-                        torrent.infohash,
-                        torrent.name,
-                        index,
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      focusColor:
+                          const Color(0xFF6366F1).withValues(alpha: 0.25),
+                      onTap: () =>
+                          _addToRealDebrid(torrent.infohash, torrent.name, index),
+                      onLongPress: () {
+                        _showFileSelectionDialog(
+                          torrent.infohash,
+                          torrent.name,
+                          index,
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF1E40AF,
-                            ).withValues(alpha: 0.4),
-                            spreadRadius: 0,
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            Icons.cloud_download_rounded,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Real-Debrid',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.2,
-                                color: Colors.white,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(
+                                0xFF1E40AF,
+                              ).withValues(alpha: 0.4),
+                              spreadRadius: 0,
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
                             ),
-                          ),
-                          SizedBox(width: 4),
-                          Icon(
-                            Icons.expand_more_rounded,
-                            color: Colors.white70,
-                            size: 18,
-                          ),
-                        ],
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.cloud_download_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Real-Debrid',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                  color: Colors.white,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Icon(
+                              Icons.expand_more_rounded,
+                              color: Colors.white70,
+                              size: 18,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );

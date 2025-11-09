@@ -37,4 +37,33 @@
         <item name="android:layout_marginEnd">4dp</item>
         <item name="android:elevation">2dp</item>
     </style>
+
+    <style name="TvBadge">
+        <item name="android:background">@drawable/tv_badge_bg</item>
+        <item name="android:textColor">#E6FFFFFF</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <style name="TvChip">
+        <item name="android:background">@drawable/tv_chip_bg</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:paddingLeft">18dp</item>
+        <item name="android:paddingRight">18dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:foreground">?android:selectableItemBackground</item>
+        <item name="android:elevation">6dp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
 </resources>

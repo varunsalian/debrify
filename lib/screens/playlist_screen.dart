@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../services/storage_service.dart';
 import '../services/debrid_service.dart';
 import '../services/torbox_service.dart';
+import '../services/video_player_launcher.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
@@ -92,13 +93,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           if (downloadLink.isNotEmpty) {
             if (FileUtils.isVideoMimeType(mimeType)) {
               if (!mounted) return;
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => VideoPlayerScreen(
-                    videoUrl: downloadLink,
-                    title: finalTitle,
-                    rdTorrentId: rdTorrentId,
-                  ),
+              await VideoPlayerLauncher.push(
+                context,
+                VideoPlayerLaunchArgs(
+                  videoUrl: downloadLink,
+                  title: finalTitle,
+                  rdTorrentId: rdTorrentId,
                 ),
               );
             } else {
@@ -249,16 +249,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         if (entries.first.url.isNotEmpty) initialVideoUrl = entries.first.url;
 
         if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => VideoPlayerScreen(
-              videoUrl: initialVideoUrl,
-              title: title,
-              subtitle: '${entries.length} files',
-              playlist: entries,
-              startIndex: 0,
-              rdTorrentId: rdTorrentId,
-            ),
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: initialVideoUrl,
+            title: title,
+            subtitle: '${entries.length} files',
+            playlist: entries,
+            startIndex: 0,
+            rdTorrentId: rdTorrentId,
           ),
         );
       } catch (e) {
@@ -279,13 +278,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Fallback: open single video directly without playlist (for legacy items)
     final String url = (item['url'] as String?) ?? '';
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => VideoPlayerScreen(
-          videoUrl: url,
-          title: title,
-          rdTorrentId: rdTorrentId,
-        ),
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: url,
+        title: title,
+        rdTorrentId: rdTorrentId,
       ),
     );
   }
@@ -338,13 +336,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             (item['title'] as String?)?.isNotEmpty == true ? item['title'] as String : fallbackTitle;
 
         if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => VideoPlayerScreen(
-              videoUrl: streamUrl,
-              title: resolvedTitle,
-              subtitle: subtitle,
-            ),
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: streamUrl,
+            title: resolvedTitle,
+            subtitle: subtitle,
           ),
         );
       } catch (e) {
@@ -491,15 +488,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => VideoPlayerScreen(
-            videoUrl: initialUrl,
-            title: fallbackTitle,
-            subtitle: subtitle,
-            playlist: playlistEntries,
-            startIndex: startIndex,
-          ),
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: initialUrl,
+          title: fallbackTitle,
+          subtitle: subtitle,
+          playlist: playlistEntries,
+          startIndex: startIndex,
         ),
       );
     } catch (e) {

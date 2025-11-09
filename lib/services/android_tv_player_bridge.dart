@@ -12,6 +12,10 @@ typedef ChannelSwitchProvider = Future<Map<String, dynamic>?> Function();
 typedef ChannelByIdSwitchProvider = Future<Map<String, dynamic>?> Function(
     String channelId);
 typedef PlaybackFinishedCallback = Future<void> Function();
+typedef AndroidTvProgressCallback = Future<void> Function(
+    Map<String, dynamic> progress);
+typedef TorrentStreamProvider = Future<Map<String, dynamic>?> Function(
+    Map<String, dynamic> request);
 
 /// Bridge helper for launching native Android TV playback using ExoPlayer.
 ///
@@ -27,6 +31,9 @@ class AndroidTvPlayerBridge {
   static ChannelByIdSwitchProvider? _channelByIdSwitchProvider;
   static PlaybackFinishedCallback? _playbackFinishedCallback;
   static bool _handlerInitialized = false;
+  static AndroidTvProgressCallback? _torrentProgressCallback;
+  static PlaybackFinishedCallback? _torrentFinishedCallback;
+  static TorrentStreamProvider? _torrentStreamProvider;
   
   // Deprecated: use _streamNextProvider
   static StreamNextProvider? get _torboxNextProvider => _streamNextProvider;
@@ -106,6 +113,51 @@ class AndroidTvPlayerBridge {
               await finished();
             } catch (e, stack) {
               debugPrint('AndroidTvPlayerBridge: onFinished callback threw: $e\n$stack');
+            }
+          }
+          return null;
+        case 'torrentPlaybackProgress':
+          final handler = _torrentProgressCallback;
+          if (handler == null) {
+            return null;
+          }
+          final args = call.arguments;
+          if (args is Map) {
+            try {
+              await handler(Map<String, dynamic>.from(args));
+            } catch (e, stack) {
+              debugPrint('AndroidTvPlayerBridge: progress callback error $e\n$stack');
+            }
+          }
+          return null;
+        case 'torrentPlaybackFinished':
+          final finishedTorrent = _torrentFinishedCallback;
+          _torrentProgressCallback = null;
+          _torrentFinishedCallback = null;
+          _torrentStreamProvider = null;
+          if (finishedTorrent != null) {
+            try {
+              await finishedTorrent();
+            } catch (e, stack) {
+              debugPrint('AndroidTvPlayerBridge: torrent finished callback threw: $e\n$stack');
+            }
+          }
+          return null;
+        case 'requestTorrentStream':
+          final resolver = _torrentStreamProvider;
+          if (resolver == null) {
+            return null;
+          }
+          final args = call.arguments;
+          if (args is Map) {
+            try {
+              return await resolver(Map<String, dynamic>.from(args));
+            } catch (e, stack) {
+              debugPrint('AndroidTvPlayerBridge: stream provider error $e\n$stack');
+              throw PlatformException(
+                code: 'torrent_stream_failed',
+                message: e.toString(),
+              );
             }
           }
           return null;
@@ -291,5 +343,45 @@ class AndroidTvPlayerBridge {
     _channelSwitchProvider = null;
     _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
+  }
+
+  static Future<bool> launchTorrentPlayback({
+    required Map<String, dynamic> payload,
+    AndroidTvProgressCallback? onProgress,
+    PlaybackFinishedCallback? onFinished,
+    TorrentStreamProvider? onRequestStream,
+  }) async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+    if (payload.isEmpty) {
+      return false;
+    }
+
+    _ensureInitialized();
+    _torrentProgressCallback = onProgress;
+    _torrentFinishedCallback = onFinished;
+    _torrentStreamProvider = onRequestStream;
+
+    try {
+      final bool? launched = await _channel.invokeMethod<bool>(
+        'launchTorrentPlayback',
+        {
+          'payload': payload,
+        },
+      );
+      if (launched == true) {
+        return true;
+      }
+    } on PlatformException catch (e) {
+      debugPrint('AndroidTvPlayerBridge: torrent launch failed: ${e.code} - ${e.message}');
+    } catch (e) {
+      debugPrint('AndroidTvPlayerBridge: unexpected torrent launch error: $e');
+    }
+
+    _torrentProgressCallback = null;
+    _torrentFinishedCallback = null;
+    _torrentStreamProvider = null;
+    return false;
   }
 }

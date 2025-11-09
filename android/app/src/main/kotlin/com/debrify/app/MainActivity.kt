@@ -12,6 +12,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.ArrayList
+import org.json.JSONObject
+import org.json.JSONArray
 
 class MainActivity : FlutterActivity() {
 	private val CHANNEL = "com.debrify.app/downloader"
@@ -194,6 +196,16 @@ class MainActivity : FlutterActivity() {
                     }
                     handleLaunchTvPlayback(args, result, "real_debrid")
                 }
+                "launchTorrentPlayback" -> {
+                    android.util.Log.d("DebrifyTV", "MainActivity: Handling launchTorrentPlayback")
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments<Map<String, Any?>>()
+                    if (args == null) {
+                        result.error("bad_args", "Missing torrent payload", null)
+                        return@setMethodCallHandler
+                    }
+                    handleLaunchTorrentPlayback(args, result)
+                }
                 else -> {
                     android.util.Log.w("DebrifyTV", "MainActivity: Method not implemented: ${call.method}")
                     result.notImplemented()
@@ -303,6 +315,60 @@ class MainActivity : FlutterActivity() {
             android.util.Log.e("DebrifyTV", "MainActivity: ❌ Failed to start activity: ${e.message}")
             e.printStackTrace()
             result.error("launch_failed", e.message, null)
+        }
+    }
+
+    private fun handleLaunchTorrentPlayback(
+        args: Map<String, Any?>,
+        result: MethodChannel.Result,
+    ) {
+        val payload = args["payload"]
+        if (payload !is Map<*, *>) {
+            result.error("bad_args", "payload is required", null)
+            return
+        }
+
+        try {
+            val payloadJson = mapToJson(payload).toString()
+            val intent = Intent().apply {
+                setClassName(
+                    this@MainActivity,
+                    "com.debrify.app.tv.AndroidTvTorrentPlayerActivity",
+                )
+                putExtra("payload", payloadJson)
+            }
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            android.util.Log.e("DebrifyTV", "MainActivity: Failed to launch torrent playback", e)
+            result.error("launch_failed", e.message, null)
+        }
+    }
+
+    private fun mapToJson(map: Map<*, *>): org.json.JSONObject {
+        val json = org.json.JSONObject()
+        for ((key, value) in map) {
+            if (key == null) continue
+            json.put(key.toString(), valueToJson(value))
+        }
+        return json
+    }
+
+    private fun listToJson(list: List<*>): org.json.JSONArray {
+        val array = org.json.JSONArray()
+        for (value in list) {
+            array.put(valueToJson(value))
+        }
+        return array
+    }
+
+    private fun valueToJson(value: Any?): Any? {
+        return when (value) {
+            null -> org.json.JSONObject.NULL
+            is Map<*, *> -> mapToJson(value)
+            is List<*> -> listToJson(value)
+            is Number, is Boolean, is String -> value
+            else -> value.toString()
         }
     }
 }

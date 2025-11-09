@@ -512,7 +512,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     bool? hasTorbox,
   }) {
     if (_isAndroidTv) {
-      return const [3, 6];
+      final rd = hasRealDebrid ?? _hasRealDebridKey;
+      final tb = hasTorbox ?? _hasTorboxKey;
+      final indices = <int>[0, 1, 3]; // Torrent, Playlist, Debrify TV
+      if (rd) {
+        indices.add(4); // Real Debrid downloads
+      }
+      if (tb) {
+        indices.add(5); // Torbox downloads
+      }
+      indices.add(6); // Settings
+      return indices;
     }
 
     final rd = hasRealDebrid ?? _hasRealDebridKey;

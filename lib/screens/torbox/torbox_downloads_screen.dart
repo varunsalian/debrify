@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../models/torbox_file.dart';
 import '../../models/torbox_torrent.dart';
 import '../../services/torbox_service.dart';
+import '../../services/video_player_launcher.dart';
 import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
@@ -437,13 +438,12 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           file: file,
         );
         if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => VideoPlayerScreen(
-              videoUrl: streamUrl,
-              title: torrent.name,
-              subtitle: Formatters.formatFileSize(file.size),
-            ),
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: streamUrl,
+            title: torrent.name,
+            subtitle: Formatters.formatFileSize(file.size),
           ),
         );
       } catch (e) {
@@ -586,15 +586,14 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
 
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => VideoPlayerScreen(
-          videoUrl: initialUrl,
-          title: torrent.name,
-          subtitle: subtitle,
-          playlist: playlistEntries,
-          startIndex: startIndex,
-        ),
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialUrl,
+        title: torrent.name,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
       ),
     );
   }
