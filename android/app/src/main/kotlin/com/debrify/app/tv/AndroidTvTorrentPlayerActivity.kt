@@ -1193,6 +1193,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val params = ts.parameters.buildUpon()
                 if (override != null) {
                     params.setOverrideForType(override)
+                    params.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
                 } else {
                     params.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
                 }
