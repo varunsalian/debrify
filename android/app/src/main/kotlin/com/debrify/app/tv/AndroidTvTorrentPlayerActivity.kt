@@ -55,6 +55,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var nextText: TextView
     private lateinit var nextSubtext: TextView
     private val seasonTabs = mutableListOf<android.widget.TextView>()
+    private val movieTabs = mutableListOf<MovieTab>()
 
     // Seekbar
     private lateinit var seekbarOverlay: View
@@ -87,6 +88,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var videoDuration: Long = 0
     private var resizeModeIndex = 0
     private var playbackSpeedIndex = 2  // 1.0x
+    private var playlistMode: PlaylistMode = PlaylistMode.NONE
+    private var playlistAdapter: PlaylistOverlayAdapter? = null
+    private var seriesPlaylistAdapter: PlaylistAdapter? = null
+    private var moviePlaylistAdapter: MoviePlaylistAdapter? = null
+    private var movieGroups: MovieGroups? = null
 
     private val resizeModes = arrayOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
@@ -262,16 +268,57 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun setupPlaylist() {
         playlistView.layoutManager = LinearLayoutManager(this)
-        val adapter = PlaylistAdapter(payload!!.items) { index ->
+        playlistOverlay.visibility = View.GONE
+
+        val model = payload ?: return
+        val items = model.items
+        movieTabs.clear()
+        seasonTabs.clear()
+        seasonTabsContainer.removeAllViews()
+        seriesPlaylistAdapter = null
+        moviePlaylistAdapter = null
+        playlistAdapter = null
+        movieGroups = null
+        playlistMode = PlaylistMode.NONE
+
+        if (items.size <= 1) {
+            playlistView.adapter = null
+            seasonTabsContainer.visibility = View.GONE
+            return
+        }
+
+        when (model.contentType.lowercase(Locale.US)) {
+            "series" -> setupSeriesPlaylist(items)
+            else -> setupCollectionPlaylist(items)
+        }
+    }
+
+    private fun setupSeriesPlaylist(items: List<PlaybackItem>) {
+        val adapter = PlaylistAdapter(items) { index ->
             hidePlaylist()
             playItem(index)
         }
         playlistView.adapter = adapter
-
-        // Setup season tabs
+        playlistAdapter = adapter
+        seriesPlaylistAdapter = adapter
+        moviePlaylistAdapter = null
+        playlistMode = PlaylistMode.SERIES
         setupSeasonTabs(adapter)
+    }
 
-        playlistOverlay.visibility = View.GONE
+    private fun setupCollectionPlaylist(items: List<PlaybackItem>) {
+        val groups = computeMovieGroups(items)
+        val adapter = MoviePlaylistAdapter(items, groups) { index ->
+            hidePlaylist()
+            playItem(index)
+        }
+        playlistView.adapter = adapter
+        playlistAdapter = adapter
+        moviePlaylistAdapter = adapter
+        seriesPlaylistAdapter = null
+        movieGroups = groups
+        playlistMode = PlaylistMode.COLLECTION
+        setupCollectionTabs(adapter, groups)
     }
 
     private fun setupSeasonTabs(adapter: PlaylistAdapter) {
@@ -279,7 +326,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         seasonTabs.clear()
 
         val seasons = adapter.availableSeasons
-        if (seasons.isEmpty()) return
+        if (seasons.isEmpty()) {
+            seasonTabsContainer.visibility = View.GONE
+            return
+        }
+
+        seasonTabsContainer.visibility = View.VISIBLE
 
         // Add season tabs
         for (season in seasons) {
@@ -340,6 +392,79 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Scroll to top (unless explicitly disabled)
         if (scrollToTop) {
+            playlistView.scrollToPosition(0)
+        }
+    }
+
+    private fun setupCollectionTabs(adapter: MoviePlaylistAdapter, groups: MovieGroups) {
+        seasonTabs.clear()
+        movieTabs.clear()
+        seasonTabsContainer.removeAllViews()
+
+        val tabs = mutableListOf<MovieGroup>()
+        tabs.add(MovieGroup.MAIN)
+        if (groups.extras.isNotEmpty()) {
+            tabs.add(MovieGroup.EXTRAS)
+        }
+
+        if (tabs.size <= 1) {
+            seasonTabsContainer.visibility = View.GONE
+            // Ensure adapter still shows main group
+            adapter.showGroup(MovieGroup.MAIN, force = true)
+            return
+        }
+
+        seasonTabsContainer.visibility = View.VISIBLE
+
+        tabs.forEach { group ->
+            val label = if (group == MovieGroup.MAIN) {
+                "MAIN (${groups.main.size})"
+            } else {
+                "EXTRAS (${groups.extras.size})"
+            }
+            val tab = createMovieTab(label, group, adapter)
+            seasonTabsContainer.addView(tab)
+            movieTabs.add(MovieTab(tab, group))
+        }
+
+        selectMovieTab(MovieGroup.MAIN, adapter, scrollToTop = false, forceAdapterUpdate = true)
+    }
+
+    private fun createMovieTab(label: String, group: MovieGroup, adapter: MoviePlaylistAdapter): TextView {
+        val tab = TextView(this)
+        tab.text = label
+        tab.textSize = 14f
+        tab.setTextColor(0xFFFFFFFF.toInt())
+        tab.setPadding(32, 16, 32, 16)
+        tab.setBackgroundResource(R.drawable.season_tab_selector)
+        tab.isFocusable = true
+        tab.isFocusableInTouchMode = true
+
+        val params = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        params.marginEnd = 12
+        tab.layoutParams = params
+
+        tab.setOnClickListener {
+            selectMovieTab(group, adapter)
+        }
+
+        return tab
+    }
+
+    private fun selectMovieTab(
+        group: MovieGroup,
+        adapter: MoviePlaylistAdapter,
+        scrollToTop: Boolean = true,
+        forceAdapterUpdate: Boolean = false,
+    ) {
+        movieTabs.forEach { movieTab ->
+            movieTab.view.isSelected = movieTab.group == group
+        }
+        val changed = adapter.showGroup(group, force = forceAdapterUpdate)
+        if ((scrollToTop || changed) && adapter.itemCount > 0) {
             playlistView.scrollToPosition(0)
         }
     }
@@ -486,7 +611,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         updateTitle(item)
-        (playlistView.adapter as? PlaylistAdapter)?.setActiveIndex(currentIndex)
+        playlistAdapter?.setActiveIndex(currentIndex)
         restartProgressUpdates()
     }
 
@@ -627,6 +752,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Up button - show playlist
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            if (playlistMode == PlaylistMode.NONE) {
+                return super.dispatchKeyEvent(event)
+            }
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 showPlaylist()
             }
@@ -877,47 +1005,106 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Playlist
     private fun showPlaylist() {
+        if (playlistMode == PlaylistMode.NONE || playlistAdapter == null) {
+            return
+        }
+
         playlistVisible = true
         playlistOverlay.visibility = View.VISIBLE
 
-        // Reset season tab to current episode's season (only for series with seasons)
-        val adapter = playlistView.adapter as? PlaylistAdapter
-        val currentItem = payload?.items?.getOrNull(currentIndex)
-        val currentSeason = currentItem?.season
-
-        if (adapter != null && currentSeason != null && currentSeason > 0 && seasonTabs.isNotEmpty()) {
-            val seasons = adapter.availableSeasons
-            val tabIndex = seasons.indexOf(currentSeason)
-            if (tabIndex >= 0 && tabIndex < seasonTabs.size) {
-                // Don't scroll to top - we'll scroll to the current episode below
-                selectSeasonTab(tabIndex, adapter, scrollToTop = false)
-            }
+        when (playlistMode) {
+            PlaylistMode.SERIES -> alignSeriesTabsForCurrentEpisode()
+            PlaylistMode.COLLECTION -> alignMovieTabsForCurrentItem()
+            else -> Unit
         }
 
-        // Auto-scroll to current episode
-        if (adapter != null) {
-            val activePosition = adapter.getActiveItemPosition()
-            if (activePosition != -1) {
-                playlistView.post {
-                    // Scroll to position and focus the item
-                    playlistView.scrollToPosition(activePosition)
-
-                    // Post another runnable to focus the specific item after scroll
-                    playlistView.postDelayed({
-                        val viewHolder = playlistView.findViewHolderForAdapterPosition(activePosition)
-                        viewHolder?.itemView?.requestFocus() ?: playlistView.requestFocus()
-                    }, 100)
-                }
-            } else {
-                playlistView.post {
-                    playlistView.requestFocus()
-                }
+        val activePosition = playlistAdapter?.getActiveItemPosition() ?: -1
+        if (activePosition != -1) {
+            playlistView.post {
+                playlistView.scrollToPosition(activePosition)
+                playlistView.postDelayed({
+                    val viewHolder = playlistView.findViewHolderForAdapterPosition(activePosition)
+                    viewHolder?.itemView?.requestFocus() ?: playlistView.requestFocus()
+                }, 100)
             }
         } else {
             playlistView.post {
                 playlistView.requestFocus()
             }
         }
+    }
+
+    private fun alignSeriesTabsForCurrentEpisode() {
+        val adapter = seriesPlaylistAdapter ?: return
+        val currentSeason = payload?.items?.getOrNull(currentIndex)?.season ?: return
+        if (currentSeason <= 0 || seasonTabs.isEmpty()) return
+        val seasons = adapter.availableSeasons
+        val tabIndex = seasons.indexOf(currentSeason)
+        if (tabIndex >= 0 && tabIndex < seasonTabs.size) {
+            selectSeasonTab(tabIndex, adapter, scrollToTop = false)
+        }
+    }
+
+    private fun alignMovieTabsForCurrentItem() {
+        val adapter = moviePlaylistAdapter ?: return
+        val groups = movieGroups ?: return
+        val group = if (groups.extras.contains(currentIndex)) MovieGroup.EXTRAS else MovieGroup.MAIN
+        selectMovieTab(group, adapter, scrollToTop = false)
+    }
+
+    private fun computeMovieGroups(items: List<PlaybackItem>): MovieGroups {
+        if (items.isEmpty()) {
+            return MovieGroups(emptyList(), emptyList())
+        }
+
+        var maxSize = -1L
+        items.forEach { item ->
+            val size = item.sizeBytes ?: -1L
+            if (size > maxSize) {
+                maxSize = size
+            }
+        }
+
+        val threshold = if (maxSize > 0) (maxSize * 0.40).toLong() else -1L
+        val main = mutableListOf<Int>()
+        val extras = mutableListOf<Int>()
+
+        items.forEachIndexed { index, item ->
+            val size = item.sizeBytes ?: -1L
+            val isSmall = threshold > 0 && size > 0 && size < threshold
+            if (isSmall) {
+                extras.add(index)
+            } else {
+                main.add(index)
+            }
+        }
+
+        if (main.isEmpty()) {
+            main.addAll(extras)
+            extras.clear()
+        }
+
+        val yearRegex = Regex("\\b(19|20)\\d{2}\\b")
+        fun yearOf(index: Int): Int? {
+            val match = yearRegex.find(items[index].title)
+            return match?.value?.toIntOrNull()
+        }
+        fun sizeOf(index: Int): Long = items[index].sizeBytes ?: -1L
+
+        main.sortWith { a, b ->
+            val yearA = yearOf(a)
+            val yearB = yearOf(b)
+            when {
+                yearA != null && yearB != null && yearA != yearB -> yearA - yearB
+                else -> sizeOf(b).compareTo(sizeOf(a))
+            }
+        }
+
+        extras.sortWith { a, b ->
+            sizeOf(a).compareTo(sizeOf(b))
+        }
+
+        return MovieGroups(main, extras)
     }
 
     private fun hidePlaylist() {
@@ -1080,7 +1267,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Notify playlist adapter to update progress display (if playlist is visible)
         if (playlistVisible) {
-            (playlistView.adapter as? PlaylistAdapter)?.updateCurrentProgress()
+            playlistAdapter?.updateCurrentProgress()
         }
 
         val map = hashMapOf<String, Any?>(
@@ -1194,6 +1381,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 }
 
+private enum class PlaylistMode { NONE, SERIES, COLLECTION }
+
+private enum class MovieGroup { MAIN, EXTRAS }
+
+private data class MovieGroups(
+    val main: List<Int>,
+    val extras: List<Int>,
+)
+
+private data class MovieTab(
+    val view: TextView,
+    val group: MovieGroup,
+)
+
+private interface PlaylistOverlayAdapter {
+    fun setActiveIndex(index: Int)
+    fun updateCurrentProgress()
+    fun getActiveItemPosition(): Int
+}
+
 private data class PlaybackPayload(
     val title: String,
     val subtitle: String?,
@@ -1215,7 +1422,8 @@ private data class PlaybackItem(
     val resumePositionMs: Long,
     val durationMs: Long,
     val updatedAt: Long,
-    val resumeId: String?
+    val resumeId: String?,
+    val sizeBytes: Long?,
 ) {
     fun seasonEpisodeLabel(): String {
         return if (season != null && episode != null) {
@@ -1241,7 +1449,8 @@ private data class PlaybackItem(
                 resumePositionMs = obj.optLong("resumePositionMs", 0),
                 durationMs = obj.optLong("durationMs", 0),
                 updatedAt = obj.optLong("updatedAt", 0),
-                resumeId = obj.optString("resumeId", null)
+                resumeId = obj.optString("resumeId", null),
+                sizeBytes = if (obj.has("sizeBytes")) obj.optLong("sizeBytes") else null,
             )
         }
     }
@@ -1256,7 +1465,7 @@ private sealed class PlaylistListItem {
 private class PlaylistAdapter(
     private val items: List<PlaybackItem>,
     private val onItemClick: (Int) -> Unit
-) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), PlaylistOverlayAdapter {
     private var activeItemIndex = -1
     private val listItems = mutableListOf<PlaylistListItem>()
     private var selectedSeason: Int? = null
@@ -1343,7 +1552,7 @@ private class PlaylistAdapter(
 
     override fun getItemCount(): Int = listItems.size
 
-    fun setActiveIndex(index: Int) {
+    override fun setActiveIndex(index: Int) {
         val previousActivePosition = findPositionForItemIndex(activeItemIndex)
         activeItemIndex = index
         val newActivePosition = findPositionForItemIndex(activeItemIndex)
@@ -1356,7 +1565,7 @@ private class PlaylistAdapter(
         }
     }
 
-    fun updateCurrentProgress() {
+    override fun updateCurrentProgress() {
         // Notify the current playing item to update its progress display
         val position = findPositionForItemIndex(activeItemIndex)
         if (position != -1) {
@@ -1370,7 +1579,7 @@ private class PlaylistAdapter(
         }
     }
 
-    fun getActiveItemPosition(): Int {
+    override fun getActiveItemPosition(): Int {
         return findPositionForItemIndex(activeItemIndex)
     }
 
@@ -1539,5 +1748,226 @@ private class PlaylistAdapter(
     companion object {
         private const val VIEW_TYPE_HEADER = 0
         private const val VIEW_TYPE_EPISODE = 1
+    }
+}
+
+private class MoviePlaylistAdapter(
+    private val items: List<PlaybackItem>,
+    private val groups: MovieGroups,
+    private val onItemClick: (Int) -> Unit,
+) : RecyclerView.Adapter<MoviePlaylistAdapter.MovieViewHolder>(), PlaylistOverlayAdapter {
+
+    private var activeItemIndex = -1
+    private var currentGroup: MovieGroup = MovieGroup.MAIN
+    private val visibleIndices = mutableListOf<Int>()
+
+    init {
+        showGroup(MovieGroup.MAIN, force = true)
+    }
+
+    fun showGroup(group: MovieGroup, force: Boolean = false): Boolean {
+        if (!force && currentGroup == group) {
+            return false
+        }
+        currentGroup = group
+        rebuildVisibleItems()
+        notifyDataSetChanged()
+        return true
+    }
+
+    private fun rebuildVisibleItems() {
+        visibleIndices.clear()
+        val source = when (currentGroup) {
+            MovieGroup.MAIN -> groups.main
+            MovieGroup.EXTRAS -> groups.extras
+        }
+        visibleIndices.addAll(source)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MovieViewHolder {
+        val inflater = android.view.LayoutInflater.from(parent.context)
+        val view = inflater.inflate(R.layout.item_android_tv_playlist_entry, parent, false)
+        return MovieViewHolder(view, onItemClick)
+    }
+
+    override fun onBindViewHolder(holder: MovieViewHolder, position: Int) {
+        val itemIndex = visibleIndices.getOrNull(position) ?: return
+        val item = items[itemIndex]
+        val isActive = itemIndex == activeItemIndex
+        holder.bind(item, itemIndex, isActive, currentGroup)
+    }
+
+    override fun getItemCount(): Int = visibleIndices.size
+
+    override fun setActiveIndex(index: Int) {
+        val previousPosition = findPositionForItemIndex(activeItemIndex)
+        activeItemIndex = index
+        val newPosition = findPositionForItemIndex(activeItemIndex)
+
+        if (previousPosition != -1) {
+            notifyItemChanged(previousPosition)
+        }
+        if (newPosition != -1) {
+            notifyItemChanged(newPosition)
+        }
+    }
+
+    override fun updateCurrentProgress() {
+        val position = findPositionForItemIndex(activeItemIndex)
+        if (position != -1) {
+            notifyItemChanged(position)
+        }
+    }
+
+    override fun getActiveItemPosition(): Int {
+        return findPositionForItemIndex(activeItemIndex)
+    }
+
+    private fun findPositionForItemIndex(itemIndex: Int): Int {
+        return visibleIndices.indexOf(itemIndex)
+    }
+
+    class MovieViewHolder(
+        itemView: View,
+        private val onItemClick: (Int) -> Unit,
+    ) : RecyclerView.ViewHolder(itemView) {
+
+        private val container: View = itemView.findViewById(R.id.android_tv_playlist_item_container)
+        private val posterImageView: android.widget.ImageView = itemView.findViewById(R.id.android_tv_playlist_item_poster)
+        private val fallbackTextView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_fallback)
+        private val watchedOverlay: View = itemView.findViewById(R.id.android_tv_playlist_item_watched_overlay)
+        private val watchedIcon: TextView = itemView.findViewById(R.id.android_tv_playlist_item_watched_icon)
+        private val posterProgress: android.widget.ProgressBar = itemView.findViewById(R.id.android_tv_playlist_item_poster_progress)
+        private val badgeView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_badge)
+        private val playingView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_playing)
+        private val watchedView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_watched)
+        private val titleView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_title)
+        private val descriptionView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_description)
+        private val progressContainer: View = itemView.findViewById(R.id.android_tv_playlist_item_progress_container)
+        private val progressText: TextView = itemView.findViewById(R.id.android_tv_playlist_item_progress_text)
+
+        fun bind(item: PlaybackItem, itemIndex: Int, isActive: Boolean, group: MovieGroup) {
+            badgeView.text = if (group == MovieGroup.MAIN) "MAIN" else "EXTRA"
+            titleView.text = item.title
+
+            val descriptionText = when {
+                !item.description.isNullOrBlank() -> item.description
+                else -> formatSize(item.sizeBytes)
+            }
+            if (!descriptionText.isNullOrBlank()) {
+                descriptionView.text = descriptionText
+                descriptionView.visibility = View.VISIBLE
+            } else {
+                descriptionView.visibility = View.GONE
+            }
+
+            val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
+                ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
+            } else {
+                0
+            }
+
+            val isWatched = progressPercent >= 95
+            container.alpha = if (isWatched && !isActive) 0.4f else 1.0f
+
+            watchedOverlay.visibility = View.GONE
+            watchedIcon.visibility = View.GONE
+            watchedView.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
+            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
+
+            if (progressPercent in 6..94 && !isWatched) {
+                progressText.text = "$progressPercent% watched"
+                progressContainer.visibility = View.VISIBLE
+                posterProgress.max = 100
+                posterProgress.progress = progressPercent
+                posterProgress.visibility = View.VISIBLE
+            } else {
+                progressContainer.visibility = View.GONE
+                posterProgress.visibility = View.GONE
+            }
+
+            loadPosterImage(item, itemIndex, group)
+
+            container.isSelected = isActive
+            container.isFocusable = true
+            container.setOnClickListener {
+                onItemClick(itemIndex)
+            }
+        }
+
+        private fun loadPosterImage(item: PlaybackItem, itemIndex: Int, group: MovieGroup) {
+            val artwork = item.artwork
+            if (!artwork.isNullOrBlank()) {
+                com.bumptech.glide.Glide.with(itemView.context)
+                    .load(artwork)
+                    .centerCrop()
+                    .placeholder(android.R.color.transparent)
+                    .error(android.R.color.transparent)
+                    .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                        override fun onLoadFailed(
+                            e: com.bumptech.glide.load.engine.GlideException?,
+                            model: Any?,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            showFallback(itemIndex, group)
+                            return false
+                        }
+
+                        override fun onResourceReady(
+                            resource: android.graphics.drawable.Drawable,
+                            model: Any,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                            dataSource: com.bumptech.glide.load.DataSource,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            posterImageView.visibility = View.VISIBLE
+                            fallbackTextView.visibility = View.GONE
+                            return false
+                        }
+                    })
+                    .into(posterImageView)
+            } else {
+                showFallback(itemIndex, group)
+            }
+        }
+
+        private fun showFallback(itemIndex: Int, group: MovieGroup) {
+            posterImageView.visibility = View.GONE
+            fallbackTextView.visibility = View.VISIBLE
+            val positionNumber = if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
+                bindingAdapterPosition + 1
+            } else {
+                itemIndex + 1
+            }
+            fallbackTextView.text = positionNumber.coerceAtLeast(1).toString()
+            fallbackTextView.setBackgroundColor(getGroupColor(group))
+        }
+
+        private fun getGroupColor(group: MovieGroup): Int {
+            return if (group == MovieGroup.MAIN) {
+                0xFF6366F1.toInt()
+            } else {
+                0xFFF59E0B.toInt()
+            }
+        }
+
+        companion object {
+            private fun formatSize(sizeBytes: Long?): String? {
+                if (sizeBytes == null || sizeBytes <= 0) return null
+                val units = arrayOf("B", "KB", "MB", "GB", "TB")
+                var size = sizeBytes.toDouble()
+                var unit = 0
+                while (size >= 1024 && unit < units.lastIndex) {
+                    size /= 1024.0
+                    unit++
+                }
+                return if (unit == 0) {
+                    "${size.toInt()} ${units[unit]}"
+                } else {
+                    String.format(Locale.US, "%.1f %s", size, units[unit])
+                }
+            }
+        }
     }
 }
