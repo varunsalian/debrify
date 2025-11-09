@@ -769,8 +769,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun showPlaylist() {
         playlistVisible = true
         playlistOverlay.visibility = View.VISIBLE
-        playlistView.post {
-            playlistView.requestFocus()
+
+        // Auto-scroll to current episode
+        val adapter = playlistView.adapter as? PlaylistAdapter
+        if (adapter != null) {
+            val activePosition = adapter.getActiveItemPosition()
+            if (activePosition != -1) {
+                playlistView.post {
+                    playlistView.scrollToPosition(activePosition)
+                    playlistView.requestFocus()
+                }
+            } else {
+                playlistView.post {
+                    playlistView.requestFocus()
+                }
+            }
+        } else {
+            playlistView.post {
+                playlistView.requestFocus()
+            }
         }
     }
 
@@ -1033,6 +1050,7 @@ private data class PlaybackItem(
     val index: Int,
     val season: Int?,
     val episode: Int?,
+    val artwork: String?,
     val description: String?,
     val resumePositionMs: Long,
     val durationMs: Long,
@@ -1058,6 +1076,7 @@ private data class PlaybackItem(
                 index = obj.optInt("index", 0),
                 season = obj.optInt("season").takeIf { obj.has("season") },
                 episode = obj.optInt("episode").takeIf { obj.has("episode") },
+                artwork = obj.optString("artwork", null),
                 description = obj.optString("description", null),
                 resumePositionMs = obj.optLong("resumePositionMs", 0),
                 durationMs = obj.optLong("durationMs", 0),
@@ -1068,58 +1087,251 @@ private data class PlaybackItem(
     }
 }
 
+// Sealed class for playlist items (header or episode)
+private sealed class PlaylistListItem {
+    data class SeasonHeader(val season: Int, val episodeCount: Int) : PlaylistListItem()
+    data class Episode(val item: PlaybackItem, val itemIndex: Int) : PlaylistListItem()
+}
+
 private class PlaylistAdapter(
     private val items: List<PlaybackItem>,
     private val onItemClick: (Int) -> Unit
-) : RecyclerView.Adapter<PlaylistAdapter.PlaylistViewHolder>() {
-    private var activeIndex = 0
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private var activeItemIndex = -1
+    private val listItems = mutableListOf<PlaylistListItem>()
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PlaylistViewHolder {
-        val view = android.view.LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_android_tv_playlist_entry, parent, false)
-        return PlaylistViewHolder(view, onItemClick)
+    init {
+        buildGroupedList()
     }
 
-    override fun onBindViewHolder(holder: PlaylistViewHolder, position: Int) {
-        holder.bind(items[position], position == activeIndex, position)
+    private fun buildGroupedList() {
+        listItems.clear()
+
+        // Group episodes by season
+        val grouped = items.groupBy { it.season ?: 0 }
+        val sortedSeasons = grouped.keys.sorted()
+
+        for (season in sortedSeasons) {
+            val episodesInSeason = grouped[season] ?: continue
+
+            // Add season header
+            if (season > 0) {
+                listItems.add(PlaylistListItem.SeasonHeader(season, episodesInSeason.size))
+            }
+
+            // Add episodes
+            for (episode in episodesInSeason) {
+                val originalIndex = items.indexOf(episode)
+                listItems.add(PlaylistListItem.Episode(episode, originalIndex))
+            }
+        }
     }
 
-    override fun getItemCount(): Int = items.size
+    override fun getItemViewType(position: Int): Int {
+        return when (listItems[position]) {
+            is PlaylistListItem.SeasonHeader -> VIEW_TYPE_HEADER
+            is PlaylistListItem.Episode -> VIEW_TYPE_EPISODE
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = android.view.LayoutInflater.from(parent.context)
+        return when (viewType) {
+            VIEW_TYPE_HEADER -> {
+                val view = inflater.inflate(R.layout.item_android_tv_season_header, parent, false)
+                SeasonHeaderViewHolder(view)
+            }
+            VIEW_TYPE_EPISODE -> {
+                val view = inflater.inflate(R.layout.item_android_tv_playlist_entry, parent, false)
+                EpisodeViewHolder(view, onItemClick)
+            }
+            else -> throw IllegalArgumentException("Unknown view type: $viewType")
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (val item = listItems[position]) {
+            is PlaylistListItem.SeasonHeader -> {
+                (holder as SeasonHeaderViewHolder).bind(item.season, item.episodeCount)
+            }
+            is PlaylistListItem.Episode -> {
+                val isActive = item.itemIndex == activeItemIndex
+                (holder as EpisodeViewHolder).bind(item.item, item.itemIndex, isActive)
+            }
+        }
+    }
+
+    override fun getItemCount(): Int = listItems.size
 
     fun setActiveIndex(index: Int) {
-        val previous = activeIndex
-        activeIndex = index
-        notifyItemChanged(previous)
-        notifyItemChanged(activeIndex)
+        val previousActivePosition = findPositionForItemIndex(activeItemIndex)
+        activeItemIndex = index
+        val newActivePosition = findPositionForItemIndex(activeItemIndex)
+
+        if (previousActivePosition != -1) {
+            notifyItemChanged(previousActivePosition)
+        }
+        if (newActivePosition != -1) {
+            notifyItemChanged(newActivePosition)
+        }
     }
 
-    class PlaylistViewHolder(
+    private fun findPositionForItemIndex(itemIndex: Int): Int {
+        return listItems.indexOfFirst {
+            it is PlaylistListItem.Episode && it.itemIndex == itemIndex
+        }
+    }
+
+    fun getActiveItemPosition(): Int {
+        return findPositionForItemIndex(activeItemIndex)
+    }
+
+    // Season Header ViewHolder
+    class SeasonHeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val titleView: TextView = itemView.findViewById(R.id.season_header_title)
+        private val subtitleView: TextView = itemView.findViewById(R.id.season_header_subtitle)
+
+        fun bind(season: Int, episodeCount: Int) {
+            titleView.text = "SEASON $season"
+            subtitleView.text = "$episodeCount Episode${if (episodeCount != 1) "s" else ""}"
+        }
+    }
+
+    // Episode ViewHolder with image loading
+    class EpisodeViewHolder(
         itemView: View,
         private val onItemClick: (Int) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         private val container: View = itemView.findViewById(R.id.android_tv_playlist_item_container)
-        private val titleView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_title)
-        private val subtitleView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_subtitle)
+        private val posterImageView: android.widget.ImageView = itemView.findViewById(R.id.android_tv_playlist_item_poster)
+        private val fallbackTextView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_fallback)
+        private val posterProgress: android.widget.ProgressBar = itemView.findViewById(R.id.android_tv_playlist_item_poster_progress)
         private val badgeView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_badge)
         private val playingView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_playing)
+        private val titleView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_title)
+        private val descriptionView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_description)
+        private val progressContainer: View = itemView.findViewById(R.id.android_tv_playlist_item_progress_container)
+        private val progressText: TextView = itemView.findViewById(R.id.android_tv_playlist_item_progress_text)
 
-        init {
+        fun bind(item: PlaybackItem, itemIndex: Int, isActive: Boolean) {
+            // Episode badge
+            val badge = item.seasonEpisodeLabel().ifEmpty { "EP ${itemIndex + 1}" }
+            badgeView.text = badge
+
+            // Playing indicator
+            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
+
+            // Title from TVMaze (or fallback to item title)
+            titleView.text = item.title
+
+            // Description from TVMaze
+            if (!item.description.isNullOrBlank()) {
+                descriptionView.text = item.description
+                descriptionView.visibility = View.VISIBLE
+            } else {
+                descriptionView.visibility = View.GONE
+            }
+
+            // Progress indicator
+            if (item.durationMs > 0 && item.resumePositionMs > 0) {
+                val progressPercent = ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
+                if (progressPercent > 5 && progressPercent < 95) {
+                    progressText.text = "$progressPercent% watched"
+                    progressContainer.visibility = View.VISIBLE
+
+                    // Show progress on poster too
+                    posterProgress.max = 100
+                    posterProgress.progress = progressPercent
+                    posterProgress.visibility = View.VISIBLE
+                } else {
+                    progressContainer.visibility = View.GONE
+                    posterProgress.visibility = View.GONE
+                }
+            } else {
+                progressContainer.visibility = View.GONE
+                posterProgress.visibility = View.GONE
+            }
+
+            // Load poster image with Glide
+            loadPosterImage(item)
+
+            // Selection state
+            container.isSelected = isActive
+
+            // Click handling
             container.isFocusable = true
             container.setOnClickListener {
-                val position = bindingAdapterPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    onItemClick(position)
-                }
+                onItemClick(itemIndex)
             }
         }
 
-        fun bind(item: PlaybackItem, isActive: Boolean, position: Int) {
-            titleView.text = item.title
-            subtitleView.text = item.description ?: ""
-            val badge = item.seasonEpisodeLabel().ifEmpty { "Item ${position + 1}" }
-            badgeView.text = badge
-            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
-            container.isSelected = isActive
+        private fun loadPosterImage(item: PlaybackItem) {
+            val artwork = item.artwork
+
+            if (!artwork.isNullOrBlank()) {
+                // Load image with Glide
+                com.bumptech.glide.Glide.with(itemView.context)
+                    .load(artwork)
+                    .centerCrop()
+                    .placeholder(android.R.color.transparent)
+                    .error(android.R.color.transparent)
+                    .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                        override fun onLoadFailed(
+                            e: com.bumptech.glide.load.engine.GlideException?,
+                            model: Any?,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            showFallback(item)
+                            return false
+                        }
+
+                        override fun onResourceReady(
+                            resource: android.graphics.drawable.Drawable,
+                            model: Any,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                            dataSource: com.bumptech.glide.load.DataSource,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            posterImageView.visibility = View.VISIBLE
+                            fallbackTextView.visibility = View.GONE
+                            return false
+                        }
+                    })
+                    .into(posterImageView)
+            } else {
+                showFallback(item)
+            }
         }
+
+        private fun showFallback(item: PlaybackItem) {
+            posterImageView.visibility = View.GONE
+            fallbackTextView.visibility = View.VISIBLE
+
+            // Show episode number as fallback
+            val episodeNum = item.episode ?: (bindingAdapterPosition + 1)
+            fallbackTextView.text = "$episodeNum"
+
+            // Color based on season
+            val seasonColor = getSeasonColor(item.season ?: 1)
+            fallbackTextView.setBackgroundColor(seasonColor)
+        }
+
+        private fun getSeasonColor(season: Int): Int {
+            val colors = intArrayOf(
+                0xFF6366F1.toInt(), // Indigo
+                0xFF8B5CF6.toInt(), // Purple
+                0xFFEC4899.toInt(), // Pink
+                0xFFF59E0B.toInt(), // Amber
+                0xFF10B981.toInt(), // Emerald
+                0xFF06B6D4.toInt(), // Cyan
+            )
+            return colors[(season - 1) % colors.size]
+        }
+    }
+
+    companion object {
+        private const val VIEW_TYPE_HEADER = 0
+        private const val VIEW_TYPE_EPISODE = 1
     }
 }

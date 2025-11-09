@@ -3,70 +3,134 @@
     android:id="@+id/android_tv_playlist_item_container"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:layout_marginBottom="12dp"
+    android:orientation="horizontal"
+    android:padding="12dp"
+    android:layout_marginBottom="8dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
     android:background="@drawable/tv_glass_panel_bg"
     android:focusable="true"
-    android:focusableInTouchMode="true">
+    android:focusableInTouchMode="true"
+    android:gravity="center_vertical">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+    <!-- Episode Poster -->
+    <FrameLayout
+        android:layout_width="110dp"
+        android:layout_height="165dp">
 
+        <ImageView
+            android:id="@+id/android_tv_playlist_item_poster"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:background="#1A1A1A" />
+
+        <!-- Fallback Episode Number -->
         <TextView
-            android:id="@+id/android_tv_playlist_item_badge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            style="@style/TvBadge"
-            android:text="S01E01" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <TextView
-            android:id="@+id/android_tv_playlist_item_playing"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="▶ PLAYING"
-            android:textColor="#00FF99"
-            android:textSize="10sp"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.1"
+            android:id="@+id/android_tv_playlist_item_fallback"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:textColor="#FFFFFF"
+            android:textSize="48sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
             android:visibility="gone" />
+
+        <!-- Progress bar at bottom of poster -->
+        <ProgressBar
+            android:id="@+id/android_tv_playlist_item_poster_progress"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_gravity="bottom"
+            android:progressDrawable="@drawable/tv_progress_drawable"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- Episode Details -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="16dp">
+
+        <!-- Badge and Playing Indicator -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/android_tv_playlist_item_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                style="@style/TvBadge"
+                android:text="S01E01" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/android_tv_playlist_item_playing"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="▶ PLAYING"
+                android:textColor="#00FF99"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.08"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Episode Title (from TVMaze) -->
+        <TextView
+            android:id="@+id/android_tv_playlist_item_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:layout_marginTop="6dp"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+        <!-- Episode Description (from TVMaze) -->
+        <TextView
+            android:id="@+id/android_tv_playlist_item_description"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#99FFFFFF"
+            android:textSize="13sp"
+            android:lineSpacingMultiplier="1.2"
+            android:layout_marginTop="6dp"
+            android:maxLines="3"
+            android:ellipsize="end" />
+
+        <!-- Progress Indicator -->
+        <LinearLayout
+            android:id="@+id/android_tv_playlist_item_progress_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/android_tv_playlist_item_progress_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="45% watched"
+                android:textColor="#6366F1"
+                android:textSize="11sp"
+                android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/android_tv_playlist_item_title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="#FFFFFFFF"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:layout_marginTop="8dp"
-        android:maxLines="2"
-        android:ellipsize="end" />
-
-    <TextView
-        android:id="@+id/android_tv_playlist_item_subtitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="#B3FFFFFF"
-        android:textSize="14sp"
-        android:layout_marginTop="4dp"
-        android:maxLines="2"
-        android:ellipsize="end" />
-
-    <ProgressBar
-        android:id="@+id/android_tv_playlist_item_progress"
-        style="@android:style/Widget.ProgressBar.Horizontal"
-        android:layout_width="match_parent"
-        android:layout_height="3dp"
-        android:layout_marginTop="8dp"
-        android:progressDrawable="@drawable/tv_progress_drawable"
-        android:visibility="gone" />
 </LinearLayout>
