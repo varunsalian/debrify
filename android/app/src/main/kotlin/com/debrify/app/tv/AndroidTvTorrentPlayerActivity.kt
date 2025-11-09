@@ -328,7 +328,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return tab
     }
 
-    private fun selectSeasonTab(index: Int, adapter: PlaylistAdapter) {
+    private fun selectSeasonTab(index: Int, adapter: PlaylistAdapter, scrollToTop: Boolean = true) {
         // Update tab selection states
         seasonTabs.forEachIndexed { i, tab ->
             tab.isSelected = (i == index)
@@ -338,8 +338,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val season = adapter.availableSeasons.getOrNull(index)
         adapter.filterBySeason(season)
 
-        // Scroll to top
-        playlistView.scrollToPosition(0)
+        // Scroll to top (unless explicitly disabled)
+        if (scrollToTop) {
+            playlistView.scrollToPosition(0)
+        }
     }
 
     private fun setupControls() {
@@ -878,14 +880,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playlistVisible = true
         playlistOverlay.visibility = View.VISIBLE
 
-        // Auto-scroll to current episode
+        // Reset season tab to current episode's season
         val adapter = playlistView.adapter as? PlaylistAdapter
+        val currentItem = payload?.items?.getOrNull(currentIndex)
+        val currentSeason = currentItem?.season
+
+        if (adapter != null && currentSeason != null) {
+            val seasons = adapter.availableSeasons
+            val tabIndex = seasons.indexOf(currentSeason)
+            if (tabIndex >= 0 && tabIndex < seasonTabs.size) {
+                // Don't scroll to top - we'll scroll to the current episode below
+                selectSeasonTab(tabIndex, adapter, scrollToTop = false)
+            }
+        }
+
+        // Auto-scroll to current episode
         if (adapter != null) {
             val activePosition = adapter.getActiveItemPosition()
             if (activePosition != -1) {
                 playlistView.post {
+                    // Scroll to position and focus the item
                     playlistView.scrollToPosition(activePosition)
-                    playlistView.requestFocus()
+
+                    // Post another runnable to focus the specific item after scroll
+                    playlistView.postDelayed({
+                        val viewHolder = playlistView.findViewHolderForAdapterPosition(activePosition)
+                        viewHolder?.itemView?.requestFocus() ?: playlistView.requestFocus()
+                    }, 100)
                 }
             } else {
                 playlistView.post {
@@ -1409,9 +1430,12 @@ private class PlaylistAdapter(
             // Status indicators (Watched, Playing, or Progress)
             val isWatched = progressPercent >= 95
 
-            // Show watched overlay and icon on poster
-            watchedOverlay.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
-            watchedIcon.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
+            // Gray out watched episodes
+            container.alpha = if (isWatched && !isActive) 0.4f else 1.0f
+
+            // Hide overlay and icon (using gray out instead)
+            watchedOverlay.visibility = View.GONE
+            watchedIcon.visibility = View.GONE
 
             // Text badges
             watchedView.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
