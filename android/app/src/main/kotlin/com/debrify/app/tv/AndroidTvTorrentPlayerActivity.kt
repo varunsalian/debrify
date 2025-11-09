@@ -1050,6 +1050,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val position = if (completed) player?.duration ?: 0 else player?.currentPosition ?: 0
         val duration = player?.duration ?: 0
 
+        // Update the item's progress in the payload for live UI updates
+        val updatedItem = item.copy(
+            resumePositionMs = position,
+            durationMs = duration
+        )
+        model.items[currentIndex] = updatedItem
+
+        // Notify playlist adapter to update progress display (if playlist is visible)
+        if (playlistVisible) {
+            (playlistView.adapter as? PlaylistAdapter)?.updateCurrentProgress()
+        }
+
         val map = hashMapOf<String, Any?>(
             "contentType" to model.contentType,
             "itemIndex" to currentIndex,
@@ -1217,7 +1229,7 @@ private data class PlaybackItem(
 // Sealed class for playlist items (header or episode)
 private sealed class PlaylistListItem {
     data class SeasonHeader(val season: Int, val episodeCount: Int) : PlaylistListItem()
-    data class Episode(val item: PlaybackItem, val itemIndex: Int) : PlaylistListItem()
+    data class Episode(val itemIndex: Int) : PlaylistListItem()
 }
 
 private class PlaylistAdapter(
@@ -1267,7 +1279,7 @@ private class PlaylistAdapter(
             // Add episodes (already sorted at payload level)
             for (episode in episodesInSeason) {
                 val originalIndex = items.indexOf(episode)
-                listItems.add(PlaylistListItem.Episode(episode, originalIndex))
+                listItems.add(PlaylistListItem.Episode(originalIndex))
             }
         }
     }
@@ -1295,13 +1307,15 @@ private class PlaylistAdapter(
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        when (val item = listItems[position]) {
+        when (val listItem = listItems[position]) {
             is PlaylistListItem.SeasonHeader -> {
-                (holder as SeasonHeaderViewHolder).bind(item.season, item.episodeCount)
+                (holder as SeasonHeaderViewHolder).bind(listItem.season, listItem.episodeCount)
             }
             is PlaylistListItem.Episode -> {
-                val isActive = item.itemIndex == activeItemIndex
-                (holder as EpisodeViewHolder).bind(item.item, item.itemIndex, isActive)
+                val itemIndex = listItem.itemIndex
+                val item = items[itemIndex]  // Fetch current item from items list
+                val isActive = itemIndex == activeItemIndex
+                (holder as EpisodeViewHolder).bind(item, itemIndex, isActive)
             }
         }
     }
@@ -1318,6 +1332,14 @@ private class PlaylistAdapter(
         }
         if (newActivePosition != -1) {
             notifyItemChanged(newActivePosition)
+        }
+    }
+
+    fun updateCurrentProgress() {
+        // Notify the current playing item to update its progress display
+        val position = findPositionForItemIndex(activeItemIndex)
+        if (position != -1) {
+            notifyItemChanged(position)
         }
     }
 
@@ -1350,8 +1372,11 @@ private class PlaylistAdapter(
         private val container: View = itemView.findViewById(R.id.android_tv_playlist_item_container)
         private val posterImageView: android.widget.ImageView = itemView.findViewById(R.id.android_tv_playlist_item_poster)
         private val fallbackTextView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_fallback)
+        private val watchedOverlay: View = itemView.findViewById(R.id.android_tv_playlist_item_watched_overlay)
+        private val watchedIcon: TextView = itemView.findViewById(R.id.android_tv_playlist_item_watched_icon)
         private val posterProgress: android.widget.ProgressBar = itemView.findViewById(R.id.android_tv_playlist_item_poster_progress)
         private val badgeView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_badge)
+        private val watchedView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_watched)
         private val playingView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_playing)
         private val titleView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_title)
         private val descriptionView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_description)
@@ -1362,9 +1387,6 @@ private class PlaylistAdapter(
             // Episode badge
             val badge = item.seasonEpisodeLabel().ifEmpty { "EP ${itemIndex + 1}" }
             badgeView.text = badge
-
-            // Playing indicator
-            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
 
             // Title from TVMaze (or fallback to item title)
             titleView.text = item.title
@@ -1377,21 +1399,33 @@ private class PlaylistAdapter(
                 descriptionView.visibility = View.GONE
             }
 
-            // Progress indicator
-            if (item.durationMs > 0 && item.resumePositionMs > 0) {
-                val progressPercent = ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
-                if (progressPercent > 5 && progressPercent < 95) {
-                    progressText.text = "$progressPercent% watched"
-                    progressContainer.visibility = View.VISIBLE
+            // Calculate progress percentage
+            val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
+                ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
+            } else {
+                0
+            }
 
-                    // Show progress on poster too
-                    posterProgress.max = 100
-                    posterProgress.progress = progressPercent
-                    posterProgress.visibility = View.VISIBLE
-                } else {
-                    progressContainer.visibility = View.GONE
-                    posterProgress.visibility = View.GONE
-                }
+            // Status indicators (Watched, Playing, or Progress)
+            val isWatched = progressPercent >= 95
+
+            // Show watched overlay and icon on poster
+            watchedOverlay.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
+            watchedIcon.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
+
+            // Text badges
+            watchedView.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
+            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
+
+            // Progress indicator
+            if (progressPercent > 5 && progressPercent < 95 && !isWatched) {
+                progressText.text = "$progressPercent% watched"
+                progressContainer.visibility = View.VISIBLE
+
+                // Show progress on poster too
+                posterProgress.max = 100
+                posterProgress.progress = progressPercent
+                posterProgress.visibility = View.VISIBLE
             } else {
                 progressContainer.visibility = View.GONE
                 posterProgress.visibility = View.GONE

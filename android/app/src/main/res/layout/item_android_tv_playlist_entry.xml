@@ -37,6 +37,30 @@
             android:fontFamily="sans-serif-medium"
             android:visibility="gone" />
 
+        <!-- Watched overlay (dimming effect) -->
+        <View
+            android:id="@+id/android_tv_playlist_item_watched_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#AA000000"
+            android:visibility="gone" />
+
+        <!-- Watched checkmark icon -->
+        <TextView
+            android:id="@+id/android_tv_playlist_item_watched_icon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="✓"
+            android:textColor="#00FF99"
+            android:textSize="48sp"
+            android:textStyle="bold"
+            android:shadowColor="#000000"
+            android:shadowDx="2"
+            android:shadowDy="2"
+            android:shadowRadius="4"
+            android:visibility="gone" />
+
         <!-- Progress bar at bottom of poster -->
         <ProgressBar
             android:id="@+id/android_tv_playlist_item_poster_progress"
@@ -74,6 +98,18 @@
                 android:layout_width="0dp"
                 android:layout_height="1dp"
                 android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/android_tv_playlist_item_watched"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✓ WATCHED"
+                android:textColor="#888888"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.08"
+                android:visibility="gone"
+                android:layout_marginEnd="8dp" />
 
             <TextView
                 android:id="@+id/android_tv_playlist_item_playing"
