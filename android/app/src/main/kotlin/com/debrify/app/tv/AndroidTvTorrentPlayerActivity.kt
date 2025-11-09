@@ -146,11 +146,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 Player.STATE_ENDED -> {
                     sendProgress(completed = true)
                     val model = payload ?: return
-                    if (currentIndex + 1 < model.items.size) {
-                        showNextOverlay(model.items[currentIndex + 1])
+                    val nextIndex = getNextPlayableIndex(currentIndex)
+                    if (nextIndex != null) {
+                        showNextOverlay(model.items[nextIndex])
                         Handler(Looper.getMainLooper()).postDelayed({
                             hideNextOverlay()
-                            playItem(currentIndex + 1)
+                            playItem(nextIndex)
                         }, 1500)
                     } else {
                         finish()
@@ -616,9 +617,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun playNext() {
-        val model = payload ?: return
-        if (currentIndex + 1 < model.items.size) {
-            playItem(currentIndex + 1)
+        val nextIndex = getNextPlayableIndex(currentIndex)
+        if (nextIndex != null) {
+            playItem(nextIndex)
         } else {
             Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
         }
@@ -1050,6 +1051,42 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val groups = movieGroups ?: return
         val group = if (groups.extras.contains(currentIndex)) MovieGroup.EXTRAS else MovieGroup.MAIN
         selectMovieTab(group, adapter, scrollToTop = false)
+    }
+
+    private fun getNextPlayableIndex(fromIndex: Int): Int? {
+        val model = payload ?: return null
+        if (playlistMode != PlaylistMode.COLLECTION) {
+            val next = fromIndex + 1
+            return if (next < model.items.size) next else null
+        }
+
+        val groups = movieGroups ?: return null
+        val currentGroup = when {
+            groups.main.contains(fromIndex) -> MovieGroup.MAIN
+            groups.extras.contains(fromIndex) -> MovieGroup.EXTRAS
+            else -> null
+        }
+
+        val source = when (currentGroup) {
+            MovieGroup.MAIN -> groups.main
+            MovieGroup.EXTRAS -> groups.extras
+            else -> null
+        }
+
+        if (source.isNullOrEmpty()) {
+            return null
+        }
+
+        val positionInGroup = source.indexOf(fromIndex)
+        if (positionInGroup == -1) {
+            return null
+        }
+
+        return if (positionInGroup + 1 < source.size) {
+            source[positionInGroup + 1]
+        } else {
+            null
+        }
     }
 
     private fun computeMovieGroups(items: List<PlaybackItem>): MovieGroups {
