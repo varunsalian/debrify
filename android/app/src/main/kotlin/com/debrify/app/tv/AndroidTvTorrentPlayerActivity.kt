@@ -1094,12 +1094,31 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val itemObj = itemsJson.getJSONObject(i)
                 items.add(PlaybackItem.fromJson(itemObj))
             }
+
+            val requestedStartIndex = obj.optInt("startIndex", 0)
+            val startItem = items.getOrNull(requestedStartIndex)
+
+            // Sort items by season and episode for proper playback order
+            items.sortWith(compareBy(
+                { it.season ?: 0 },
+                { it.episode ?: 0 }
+            ))
+
+            // Find the new position of the start item after sorting
+            val actualStartIndex = if (startItem != null) {
+                items.indexOf(startItem).coerceAtLeast(0)
+            } else {
+                0
+            }
+
+            android.util.Log.d("AndroidTvPlayer", "parsePayload - requested start: $requestedStartIndex, actual after sort: $actualStartIndex, startItem: ${startItem?.title}")
+
             PlaybackPayload(
                 title = obj.optString("title"),
                 subtitle = obj.optString("subtitle"),
                 contentType = obj.optString("contentType", "single"),
                 items = items,
-                startIndex = obj.optInt("startIndex", 0),
+                startIndex = actualStartIndex,
                 seriesTitle = obj.optString("seriesTitle")
             )
         } catch (e: Exception) {
@@ -1245,11 +1264,8 @@ private class PlaylistAdapter(
                 listItems.add(PlaylistListItem.SeasonHeader(season, episodesInSeason.size))
             }
 
-            // Sort episodes by episode number before adding them
-            val sortedEpisodes = episodesInSeason.sortedBy { it.episode ?: 0 }
-
-            // Add episodes
-            for (episode in sortedEpisodes) {
+            // Add episodes (already sorted at payload level)
+            for (episode in episodesInSeason) {
                 val originalIndex = items.indexOf(episode)
                 listItems.add(PlaylistListItem.Episode(episode, originalIndex))
             }
