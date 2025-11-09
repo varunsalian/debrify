@@ -191,6 +191,27 @@ class VideoPlayerLauncher {
             );
           }
         }
+
+        if (resumeId != null && payload.items.isNotEmpty) {
+          final fallbackIndex = itemIndex.clamp(0, payload.items.length - 1).toInt();
+          final item = payload.items.firstWhere(
+            (i) => i.resumeId == resumeId,
+            orElse: () => payload.items[fallbackIndex],
+          );
+          final persistedUrl = progressUrl ??
+              (resumeId != null ? _resolvedStreamCache[resumeId] : null) ??
+              item.url;
+
+          await StorageService.saveVideoPlaybackState(
+            videoTitle: resumeId,
+            videoUrl: persistedUrl,
+            positionMs: positionMs,
+            durationMs: durationMs,
+            speed: speed,
+            aspect: aspect,
+          );
+        }
+
         return;
       }
 
