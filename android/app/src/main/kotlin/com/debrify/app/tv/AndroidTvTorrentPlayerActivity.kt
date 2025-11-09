@@ -880,12 +880,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playlistVisible = true
         playlistOverlay.visibility = View.VISIBLE
 
-        // Reset season tab to current episode's season
+        // Reset season tab to current episode's season (only for series with seasons)
         val adapter = playlistView.adapter as? PlaylistAdapter
         val currentItem = payload?.items?.getOrNull(currentIndex)
         val currentSeason = currentItem?.season
 
-        if (adapter != null && currentSeason != null) {
+        if (adapter != null && currentSeason != null && currentSeason > 0 && seasonTabs.isNotEmpty()) {
             val seasons = adapter.availableSeasons
             val tabIndex = seasons.indexOf(currentSeason)
             if (tabIndex >= 0 && tabIndex < seasonTabs.size) {
@@ -1530,7 +1530,9 @@ private class PlaylistAdapter(
                 0xFF10B981.toInt(), // Emerald
                 0xFF06B6D4.toInt(), // Cyan
             )
-            return colors[(season - 1) % colors.size]
+            // Ensure season is at least 1 to avoid negative index
+            val safeSeason = season.coerceAtLeast(1)
+            return colors[(safeSeason - 1) % colors.size]
         }
     }
 
