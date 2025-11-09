@@ -24,6 +24,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -219,7 +220,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             ?.setPreferredAudioLanguage("en")
             ?.build()!!
 
-        player = ExoPlayer.Builder(this)
+        val renderersFactory = DefaultRenderersFactory(this)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setEnableDecoderFallback(true)
+
+        player = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
             .setHandleAudioBecomingNoisy(true)
             .build()
