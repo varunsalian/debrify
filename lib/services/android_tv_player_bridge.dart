@@ -144,14 +144,18 @@ class AndroidTvPlayerBridge {
           }
           return null;
         case 'requestTorrentStream':
+          debugPrint('AndroidTvPlayerBridge: requestTorrentStream received - args: ${call.arguments}');
           final resolver = _torrentStreamProvider;
           if (resolver == null) {
+            debugPrint('AndroidTvPlayerBridge: ERROR - no torrent stream provider registered!');
             return null;
           }
           final args = call.arguments;
           if (args is Map) {
             try {
-              return await resolver(Map<String, dynamic>.from(args));
+              final result = await resolver(Map<String, dynamic>.from(args));
+              debugPrint('AndroidTvPlayerBridge: stream provider returned: ${result != null ? "success (url length: ${result['url']?.toString().length ?? 0})" : "null"}');
+              return result;
             } catch (e, stack) {
               debugPrint('AndroidTvPlayerBridge: stream provider error $e\n$stack');
               throw PlatformException(

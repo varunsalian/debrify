@@ -50,9 +50,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var subtitleOverlay: SubtitleView
     private lateinit var playlistOverlay: View
     private lateinit var playlistView: RecyclerView
+    private lateinit var seasonTabsContainer: android.widget.LinearLayout
     private lateinit var nextOverlay: View
     private lateinit var nextText: TextView
     private lateinit var nextSubtext: TextView
+    private val seasonTabs = mutableListOf<android.widget.TextView>()
 
     // Seekbar
     private lateinit var seekbarOverlay: View
@@ -193,6 +195,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleOverlay = findViewById(R.id.android_tv_subtitles_custom)
         playlistOverlay = findViewById(R.id.android_tv_playlist_overlay)
         playlistView = findViewById(R.id.android_tv_playlist)
+        seasonTabsContainer = findViewById(R.id.season_tabs_container)
         nextOverlay = findViewById(R.id.android_tv_next_overlay)
         nextText = findViewById(R.id.android_tv_next_text)
         nextSubtext = findViewById(R.id.android_tv_next_subtext)
@@ -264,7 +267,79 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             playItem(index)
         }
         playlistView.adapter = adapter
+
+        // Setup season tabs
+        setupSeasonTabs(adapter)
+
         playlistOverlay.visibility = View.GONE
+    }
+
+    private fun setupSeasonTabs(adapter: PlaylistAdapter) {
+        seasonTabsContainer.removeAllViews()
+        seasonTabs.clear()
+
+        val seasons = adapter.availableSeasons
+        if (seasons.isEmpty()) return
+
+        // Add season tabs
+        for (season in seasons) {
+            val tab = createSeasonTab("S$season", season, adapter)
+            seasonTabsContainer.addView(tab)
+            seasonTabs.add(tab)
+        }
+
+        // Default to the season of the currently playing episode
+        val currentSeason = payload?.items?.getOrNull(currentIndex)?.season
+        val defaultTabIndex = if (currentSeason != null) {
+            seasons.indexOf(currentSeason).takeIf { it >= 0 } ?: 0
+        } else {
+            0
+        }
+
+        if (seasonTabs.isNotEmpty()) {
+            selectSeasonTab(defaultTabIndex, adapter)
+        }
+    }
+
+    private fun createSeasonTab(label: String, season: Int?, adapter: PlaylistAdapter): TextView {
+        val tab = TextView(this)
+        tab.text = label
+        tab.textSize = 14f
+        tab.setTextColor(0xFFFFFFFF.toInt())
+        tab.setPadding(32, 16, 32, 16)
+        tab.setBackgroundResource(R.drawable.season_tab_selector)
+        tab.isFocusable = true
+        tab.isFocusableInTouchMode = true
+
+        val params = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        params.marginEnd = 12
+        tab.layoutParams = params
+
+        tab.setOnClickListener {
+            val index = seasonTabs.indexOf(tab)
+            if (index != -1) {
+                selectSeasonTab(index, adapter)
+            }
+        }
+
+        return tab
+    }
+
+    private fun selectSeasonTab(index: Int, adapter: PlaylistAdapter) {
+        // Update tab selection states
+        seasonTabs.forEachIndexed { i, tab ->
+            tab.isSelected = (i == index)
+        }
+
+        // Filter adapter to the selected season
+        val season = adapter.availableSeasons.getOrNull(index)
+        adapter.filterBySeason(season)
+
+        // Scroll to top
+        playlistView.scrollToPosition(0)
     }
 
     private fun setupControls() {
@@ -344,33 +419,45 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun playItem(index: Int) {
         val model = payload ?: return
-        if (index < 0 || index >= model.items.size) return
+        android.util.Log.d("AndroidTvPlayer", "playItem called - index: $index, total items: ${model.items.size}")
+
+        if (index < 0 || index >= model.items.size) {
+            android.util.Log.e("AndroidTvPlayer", "playItem - index out of bounds! index: $index, size: ${model.items.size}")
+            return
+        }
 
         currentIndex = index
         val item = model.items[index]
+        android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         pendingSeekMs = item.resumePositionMs
 
         // Check if URL needs to be resolved (lazy loading)
         if (item.url.isBlank()) {
+            android.util.Log.d("AndroidTvPlayer", "playItem - URL is blank, resolving...")
             resolveAndPlay(index, item)
             return
         }
 
+        android.util.Log.d("AndroidTvPlayer", "playItem - URL available, starting playback")
         startPlayback(item)
     }
 
     private fun resolveAndPlay(index: Int, item: PlaybackItem) {
+        android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - index: $index, resumeId: ${item.resumeId}, id: ${item.id}")
         setResolvingState(true)
         thread {
             val url = requestStreamFromFlutter(item, index)
             runOnUiThread {
                 setResolvingState(false)
+                android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - received url: $url")
                 if (url.isNullOrEmpty()) {
+                    android.util.Log.e("AndroidTvPlayer", "resolveAndPlay - URL is null or empty!")
                     Toast.makeText(this, "Unable to load stream", Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
                 // Update the item with resolved URL
                 payload?.items?.set(index, item.copy(url = url))
+                android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - starting playback with resolved URL")
                 startPlayback(payload!!.items[index])
             }
         }
@@ -437,13 +524,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "itemId" to item.id,
                 "index" to index
             )
+            android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - sending to Flutter: resumeId=${item.resumeId}, itemId=${item.id}, index=$index")
             val result = MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
                 "requestTorrentStream",
                 args
             )
+            android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - Flutter returned: $result")
             val map = result as? Map<*, *>
-            map?.get("url") as? String
+            val url = map?.get("url") as? String
+            android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - extracted URL: $url")
+            url
         } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - exception: ${e.message}", e)
             null
         }
     }
@@ -1099,12 +1191,24 @@ private class PlaylistAdapter(
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private var activeItemIndex = -1
     private val listItems = mutableListOf<PlaylistListItem>()
+    private var selectedSeason: Int? = null
 
-    init {
-        buildGroupedList()
+    val availableSeasons: List<Int> by lazy {
+        items.mapNotNull { it.season }.distinct().sorted()
     }
 
-    private fun buildGroupedList() {
+    init {
+        // Show all seasons initially
+        buildList(null)
+    }
+
+    fun filterBySeason(season: Int?) {
+        selectedSeason = season
+        buildList(season)
+        notifyDataSetChanged()
+    }
+
+    private fun buildList(filterSeason: Int?) {
         listItems.clear()
 
         // Group episodes by season
@@ -1112,15 +1216,24 @@ private class PlaylistAdapter(
         val sortedSeasons = grouped.keys.sorted()
 
         for (season in sortedSeasons) {
+            // Skip seasons that don't match filter
+            if (filterSeason != null && season != filterSeason) {
+                continue
+            }
+
             val episodesInSeason = grouped[season] ?: continue
 
-            // Add season header
-            if (season > 0) {
+            // Don't show season header when filtering (tabs show the season)
+            // Only show header when showing all seasons
+            if (filterSeason == null && season > 0) {
                 listItems.add(PlaylistListItem.SeasonHeader(season, episodesInSeason.size))
             }
 
+            // Sort episodes by episode number before adding them
+            val sortedEpisodes = episodesInSeason.sortedBy { it.episode ?: 0 }
+
             // Add episodes
-            for (episode in episodesInSeason) {
+            for (episode in sortedEpisodes) {
                 val originalIndex = items.indexOf(episode)
                 listItems.add(PlaylistListItem.Episode(episode, originalIndex))
             }
@@ -1261,6 +1374,7 @@ private class PlaylistAdapter(
             // Click handling
             container.isFocusable = true
             container.setOnClickListener {
+                android.util.Log.d("AndroidTvPlayer", "Episode clicked - itemIndex: $itemIndex, title: ${item.title}, season: ${item.season}, episode: ${item.episode}, id: ${item.id}, url: ${item.url}")
                 onItemClick(itemIndex)
             }
         }

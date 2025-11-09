@@ -4,19 +4,19 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:padding="12dp"
-    android:layout_marginBottom="8dp"
-    android:layout_marginStart="16dp"
-    android:layout_marginEnd="16dp"
-    android:background="@drawable/tv_glass_panel_bg"
+    android:padding="10dp"
+    android:layout_marginBottom="6dp"
+    android:layout_marginStart="12dp"
+    android:layout_marginEnd="12dp"
+    android:background="@drawable/tv_playlist_item_selector"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:gravity="center_vertical">
 
-    <!-- Episode Poster -->
+    <!-- Episode Poster (Compact size: 80x120dp) -->
     <FrameLayout
-        android:layout_width="110dp"
-        android:layout_height="165dp">
+        android:layout_width="80dp"
+        android:layout_height="120dp">
 
         <ImageView
             android:id="@+id/android_tv_playlist_item_poster"
@@ -32,7 +32,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:textColor="#FFFFFF"
-            android:textSize="48sp"
+            android:textSize="36sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
             android:visibility="gone" />
@@ -42,7 +42,7 @@
             android:id="@+id/android_tv_playlist_item_poster_progress"
             style="@android:style/Widget.ProgressBar.Horizontal"
             android:layout_width="match_parent"
-            android:layout_height="4dp"
+            android:layout_height="3dp"
             android:layout_gravity="bottom"
             android:progressDrawable="@drawable/tv_progress_drawable"
             android:visibility="gone" />
@@ -54,7 +54,7 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:layout_marginStart="16dp">
+        android:layout_marginStart="12dp">
 
         <!-- Badge and Playing Indicator -->
         <LinearLayout
@@ -81,7 +81,7 @@
                 android:layout_height="wrap_content"
                 android:text="▶ PLAYING"
                 android:textColor="#00FF99"
-                android:textSize="11sp"
+                android:textSize="10sp"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.08"
                 android:visibility="gone" />
@@ -93,23 +93,23 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="#FFFFFFFF"
-            android:textSize="16sp"
+            android:textSize="14sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
-            android:layout_marginTop="6dp"
-            android:maxLines="2"
+            android:layout_marginTop="4dp"
+            android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Episode Description (from TVMaze) -->
+        <!-- Episode Description (from TVMaze) - Reduced to 2 lines -->
         <TextView
             android:id="@+id/android_tv_playlist_item_description"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="#99FFFFFF"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:lineSpacingMultiplier="1.2"
-            android:layout_marginTop="6dp"
-            android:maxLines="3"
+            android:layout_marginTop="4dp"
+            android:maxLines="2"
             android:ellipsize="end" />
 
         <!-- Progress Indicator -->
@@ -119,7 +119,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:visibility="gone">
 
             <TextView
@@ -128,7 +128,7 @@
                 android:layout_height="wrap_content"
                 android:text="45% watched"
                 android:textColor="#6366F1"
-                android:textSize="11sp"
+                android:textSize="10sp"
                 android:fontFamily="sans-serif-medium" />
         </LinearLayout>
     </LinearLayout>

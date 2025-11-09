@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -480,26 +481,43 @@ class _AndroidTvPlaylistResolver {
   Future<Map<String, dynamic>?> handleRequest(
     Map<String, dynamic> request,
   ) async {
+    debugPrint('AndroidTvPlaylistResolver: handleRequest called with: $request');
+    debugPrint('AndroidTvPlaylistResolver: total entries: ${entries.length}');
+
     _LauncherEntry? target;
     final resumeId = request['resumeId'] as String?;
     final index = request['index'] as int?;
 
+    debugPrint('AndroidTvPlaylistResolver: looking for - resumeId: $resumeId, index: $index');
+
     if (resumeId != null) {
       target = entries.firstWhereOrNull((entry) => entry.resumeId == resumeId);
+      debugPrint('AndroidTvPlaylistResolver: found by resumeId: ${target != null}');
     }
     if (target == null && index != null && index >= 0 && index < entries.length) {
       target = entries[index];
+      debugPrint('AndroidTvPlaylistResolver: found by index: ${target != null}, entry: ${target?.entry.title}');
     }
     if (target == null) {
+      debugPrint('AndroidTvPlaylistResolver: ERROR - target not found!');
+      debugPrint('AndroidTvPlaylistResolver: Available entries:');
+      for (int i = 0; i < entries.length; i++) {
+        debugPrint('  [$i] resumeId=${entries[i].resumeId}, title=${entries[i].entry.title}');
+      }
       return null;
     }
 
+    debugPrint('AndroidTvPlaylistResolver: resolving entry for: ${target.entry.title}');
     final url = await resolveEntry(target.entry);
+    debugPrint('AndroidTvPlaylistResolver: resolved URL: ${url.isNotEmpty ? url.substring(0, min(50, url.length)) : "EMPTY"}');
+
     if (url.isEmpty) {
+      debugPrint('AndroidTvPlaylistResolver: ERROR - resolved URL is empty!');
       return null;
     }
 
     _cacheResolvedStream(target.resumeId, url);
+    debugPrint('AndroidTvPlaylistResolver: returning success - url length: ${url.length}');
     return {
       'url': url,
       'resumeId': target.resumeId,
@@ -563,10 +581,15 @@ class _AndroidTvPlaybackPayloadBuilder {
         originalIndex: i,
       );
 
+      // Use TVMaze episode title if available, otherwise fallback to entry title
+      final displayTitle = episodeInfo.episodeInfo?.title?.isNotEmpty == true
+          ? episodeInfo.episodeInfo!.title!
+          : entry.title;
+
       items.add(
         _AndroidTvPlaybackItem(
           id: entry.url.isNotEmpty ? entry.url : '${entry.title}_$i',
-          title: entry.title,
+          title: displayTitle,
           url: entry.url,
           index: i,
           season: episodeInfo.seriesInfo.season,

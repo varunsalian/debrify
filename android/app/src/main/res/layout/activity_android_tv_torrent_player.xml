@@ -87,15 +87,31 @@
             android:layout_height="match_parent"
             android:background="#AA000000" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/android_tv_playlist"
-            android:layout_width="480dp"
+        <LinearLayout
+            android:layout_width="500dp"
             android:layout_height="match_parent"
             android:layout_gravity="end"
-            android:padding="32dp"
-            android:background="@drawable/tv_playlist_scrim"
-            android:focusable="true"
-            android:focusableInTouchMode="true" />
+            android:orientation="vertical"
+            android:background="@drawable/tv_playlist_scrim">
+
+            <!-- Season Tabs -->
+            <include
+                android:id="@+id/season_tabs"
+                layout="@layout/view_season_tabs" />
+
+            <!-- Episode List -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/android_tv_playlist"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="16dp"
+                android:clipToPadding="false"
+                android:focusable="true"
+                android:focusableInTouchMode="true" />
+        </LinearLayout>
     </FrameLayout>
 
     <!-- Loading/Tuning Stream Overlay -->
