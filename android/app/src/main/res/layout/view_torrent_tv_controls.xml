@@ -108,7 +108,7 @@
                     android:id="@+id/debrify_next_button"
                     style="@style/DebrifyTvChipButton"
                     android:drawableStart="@drawable/ic_next_stream"
-                    android:text="Next Channel" />
+                    android:text="Next Episode" />
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/debrify_random_button"

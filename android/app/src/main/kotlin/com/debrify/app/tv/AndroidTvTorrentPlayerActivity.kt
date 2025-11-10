@@ -650,8 +650,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun updateTitle(item: PlaybackItem) {
         titleView.text = item.title
-        channelBadge.text = "TORRENT MODE"
-        channelBadge.visibility = View.VISIBLE
+        channelBadge.visibility = View.GONE
 
         titleContainer.visibility = View.VISIBLE
         titleContainer.alpha = 1f
