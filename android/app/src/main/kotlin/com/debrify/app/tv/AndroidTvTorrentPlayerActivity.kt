@@ -485,6 +485,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         speedButton = playerView.findViewById(R.id.debrify_speed_button)
         val guideButton: AppCompatButton? = playerView.findViewById(R.id.debrify_guide_button)
         val nextButton: AppCompatButton? = playerView.findViewById(R.id.debrify_next_button)
+        val randomButton: AppCompatButton? = playerView.findViewById(R.id.debrify_random_button)
 
         controlsOverlay?.visibility = View.GONE
         controlsOverlay?.alpha = 0f
@@ -548,6 +549,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             playNext()
         }
         nextButton?.onFocusChangeListener = extendTimerOnFocus
+
+        randomButton?.setOnClickListener {
+            hideControlsMenu()
+            playRandom()
+        }
+        randomButton?.onFocusChangeListener = extendTimerOnFocus
     }
 
     private fun playItem(index: Int) {
@@ -628,6 +635,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun playRandom() {
+        val model = payload ?: return
+        if (model.items.isEmpty()) {
+            Toast.makeText(this, "No items in playlist", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val randomIndex = (0 until model.items.size).random()
+        playItem(randomIndex)
     }
 
     private fun updateTitle(item: PlaybackItem) {

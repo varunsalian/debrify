@@ -13,7 +13,7 @@
         android:keepScreenOn="true"
         app:use_controller="true"
         app:resize_mode="fit"
-        app:controller_layout_id="@layout/view_debrify_tv_controls"
+        app:controller_layout_id="@layout/view_torrent_tv_controls"
         app:show_timeout="5000"
         app:surface_type="surface_view" />
 
