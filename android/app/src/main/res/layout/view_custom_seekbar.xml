@@ -93,15 +93,35 @@
                     android:fontFamily="monospace" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/seekbar_instruction"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="◄ ► scrub    ● confirm    ⌫ cancel"
-                android:textColor="#66FFFFFF"
-                android:textSize="11sp"
-                android:fontFamily="sans-serif" />
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="6dp">
+
+                <TextView
+                    android:id="@+id/seekbar_instruction"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="◄ ► scrub    ● confirm    ⌫ cancel"
+                    android:textColor="#66FFFFFF"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif"
+                    android:gravity="start" />
+
+                <TextView
+                    android:id="@+id/seekbar_speed_indicator"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="#00FF99"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
 
     </LinearLayout>

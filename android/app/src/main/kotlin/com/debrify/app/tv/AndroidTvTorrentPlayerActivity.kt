@@ -64,6 +64,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var seekbarHandle: View
     private lateinit var seekbarCurrentTime: TextView
     private lateinit var seekbarTotalTime: TextView
+    private lateinit var seekbarSpeedIndicator: TextView
+    private var seekbarBackgroundWidth: Int = 0
+    private var currentSeekSpeed: Float = 1.0f
 
     // Controls
     private var controlsOverlay: View? = null
@@ -212,6 +215,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         seekbarHandle = findViewById(R.id.seekbar_handle)
         seekbarCurrentTime = findViewById(R.id.seekbar_current_time)
         seekbarTotalTime = findViewById(R.id.seekbar_total_time)
+        seekbarSpeedIndicator = findViewById(R.id.seekbar_speed_indicator)
     }
 
     private fun setupPlayer() {
@@ -949,6 +953,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             player?.pause()
         }
 
+        // Reset cached values
+        seekbarBackgroundWidth = 0
+        currentSeekSpeed = 1.0f
+        seekbarSpeedIndicator.visibility = View.GONE
+
         updateSeekbarUI()
 
         seekbarVisible = true
@@ -964,6 +973,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!seekbarVisible) return
 
         seekbarVisible = false
+        seekbarSpeedIndicator.visibility = View.GONE
         seekbarOverlay.animate()
             .alpha(0f)
             .setDuration(150)
@@ -981,22 +991,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun getAcceleratedSeekStep(repeatCount: Int): Long {
-        return when {
-            repeatCount < 3 -> 10_000L      // 0-2: 10 seconds
-            repeatCount < 8 -> 30_000L      // 3-7: 30 seconds
-            repeatCount < 15 -> 60_000L     // 8-14: 1 minute
-            else -> 300_000L                // 15+: 5 minutes
-        }
+        val baseStep = 10_000L          // 10 seconds
+        val acceleration = 2_000L       // 2 seconds per repeat
+        val maxStep = 120_000L          // 2 minutes cap
+
+        val calculatedStep = baseStep + (repeatCount * acceleration)
+        return calculatedStep.coerceAtMost(maxStep)
     }
 
     private fun seekBackward(stepMs: Long = 10_000L) {
         seekbarPosition = (seekbarPosition - stepMs).coerceAtLeast(0)
+        updateSeekSpeed(stepMs)
         updateSeekbarUI()
     }
 
     private fun seekForward(stepMs: Long = 10_000L) {
         seekbarPosition = (seekbarPosition + stepMs).coerceAtMost(videoDuration)
+        updateSeekSpeed(stepMs)
         updateSeekbarUI()
+    }
+
+    private fun updateSeekSpeed(stepMs: Long) {
+        currentSeekSpeed = stepMs / 10_000f  // Base is 10s = 1x
+
+        if (currentSeekSpeed > 1.0f) {
+            seekbarSpeedIndicator.text = String.format("→ %.1fx", currentSeekSpeed)
+            seekbarSpeedIndicator.visibility = View.VISIBLE
+        } else {
+            seekbarSpeedIndicator.visibility = View.GONE
+        }
     }
 
     private fun updateSeekbarUI() {
@@ -1007,21 +1030,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             seekbarPosition.toFloat() / videoDuration.toFloat()
         } else 0f
 
+        // Cache the background width on first use
         val seekbarBackground = findViewById<View>(R.id.seekbar_background)
-        seekbarBackground?.post {
-            val totalWidth = seekbarBackground.width
-            if (totalWidth > 0) {
-                val progressWidth = (totalWidth * progressPercent).toInt()
-
-                val progressParams = seekbarProgress.layoutParams
-                progressParams.width = progressWidth
-                seekbarProgress.layoutParams = progressParams
-
-                val handleSize = seekbarHandle.width
-                val handleX = progressWidth - (handleSize / 2f)
-                seekbarHandle.translationX = handleX
+        if (seekbarBackgroundWidth == 0 && seekbarBackground != null) {
+            seekbarBackground.post {
+                seekbarBackgroundWidth = seekbarBackground.width
+                updateSeekbarPosition(progressPercent)
             }
+        } else {
+            updateSeekbarPosition(progressPercent)
         }
+    }
+
+    private fun updateSeekbarPosition(progressPercent: Float) {
+        if (seekbarBackgroundWidth <= 0) return
+
+        val progressWidth = (seekbarBackgroundWidth * progressPercent).toInt()
+
+        // Update progress bar width
+        val progressParams = seekbarProgress.layoutParams
+        progressParams.width = progressWidth
+        seekbarProgress.layoutParams = progressParams
+
+        // Smoothly animate handle position
+        val handleSize = seekbarHandle.width
+        val handleX = progressWidth - (handleSize / 2f)
+        seekbarHandle.animate()
+            .translationX(handleX)
+            .setDuration(0)  // Instant for responsiveness
+            .start()
     }
 
     private fun seekBy(offsetMs: Long) {
