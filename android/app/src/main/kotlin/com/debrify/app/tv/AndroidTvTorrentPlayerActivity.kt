@@ -715,11 +715,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (event.action == KeyEvent.ACTION_DOWN) {
                 when (keyCode) {
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        seekBackward()
+                        val step = getAcceleratedSeekStep(event.repeatCount)
+                        seekBackward(step)
                         return true
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        seekForward()
+                        val step = getAcceleratedSeekStep(event.repeatCount)
+                        seekForward(step)
                         return true
                     }
                     KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -978,13 +980,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         hideSeekbar()
     }
 
-    private fun seekBackward() {
-        seekbarPosition = (seekbarPosition - 10_000L).coerceAtLeast(0)
+    private fun getAcceleratedSeekStep(repeatCount: Int): Long {
+        return when {
+            repeatCount < 3 -> 10_000L      // 0-2: 10 seconds
+            repeatCount < 8 -> 30_000L      // 3-7: 30 seconds
+            repeatCount < 15 -> 60_000L     // 8-14: 1 minute
+            else -> 300_000L                // 15+: 5 minutes
+        }
+    }
+
+    private fun seekBackward(stepMs: Long = 10_000L) {
+        seekbarPosition = (seekbarPosition - stepMs).coerceAtLeast(0)
         updateSeekbarUI()
     }
 
-    private fun seekForward() {
-        seekbarPosition = (seekbarPosition + 10_000L).coerceAtMost(videoDuration)
+    private fun seekForward(stepMs: Long = 10_000L) {
+        seekbarPosition = (seekbarPosition + stepMs).coerceAtMost(videoDuration)
         updateSeekbarUI()
     }
 
