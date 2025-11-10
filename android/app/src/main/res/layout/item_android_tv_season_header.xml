@@ -3,30 +3,52 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="24dp"
-    android:paddingBottom="12dp"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp">
+    android:paddingTop="32dp"
+    android:paddingBottom="16dp"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp">
 
-    <TextView
-        android:id="@+id/season_header_title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="SEASON 1"
-        android:textColor="#FFFFFFFF"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.05"
-        android:fontFamily="sans-serif-medium" />
+    <!-- Decorative line -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="3dp"
+        android:background="@drawable/season_header_accent"
+        android:layout_marginBottom="12dp" />
 
-    <TextView
-        android:id="@+id/season_header_subtitle"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="10 Episodes"
-        android:textColor="#99FFFFFF"
-        android:textSize="13sp"
-        android:layout_marginTop="2dp"
-        android:fontFamily="sans-serif" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/season_header_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SEASON 1"
+                android:textColor="#F9FAFB"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.02"
+                android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:id="@+id/season_header_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="10 Episodes"
+                android:textColor="#6B7280"
+                android:textSize="14sp"
+                android:layout_marginTop="4dp"
+                android:fontFamily="sans-serif" />
+        </LinearLayout>
+
+    </LinearLayout>
 
 </LinearLayout>

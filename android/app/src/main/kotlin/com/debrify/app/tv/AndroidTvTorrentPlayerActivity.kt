@@ -1532,6 +1532,7 @@ private data class PlaybackItem(
     val updatedAt: Long,
     val resumeId: String?,
     val sizeBytes: Long?,
+    val rating: Double?,
 ) {
     fun seasonEpisodeLabel(): String {
         return if (season != null && episode != null) {
@@ -1559,6 +1560,7 @@ private data class PlaybackItem(
                 updatedAt = obj.optLong("updatedAt", 0),
                 resumeId = obj.optString("resumeId", null),
                 sizeBytes = if (obj.has("sizeBytes")) obj.optLong("sizeBytes") else null,
+                rating = if (obj.has("rating")) obj.optDouble("rating") else null,
             )
         }
     }
@@ -1720,6 +1722,9 @@ private class PlaylistAdapter(
         private val descriptionView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_description)
         private val progressContainer: View = itemView.findViewById(R.id.android_tv_playlist_item_progress_container)
         private val progressText: TextView = itemView.findViewById(R.id.android_tv_playlist_item_progress_text)
+        private val ratingBadge: View = itemView.findViewById(R.id.android_tv_playlist_item_rating_badge)
+        private val ratingText: TextView = itemView.findViewById(R.id.android_tv_playlist_item_rating_text)
+        private val durationView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_duration)
 
         fun bind(item: PlaybackItem, itemIndex: Int, isActive: Boolean) {
             // Episode badge
@@ -1735,6 +1740,23 @@ private class PlaylistAdapter(
                 descriptionView.visibility = View.VISIBLE
             } else {
                 descriptionView.visibility = View.GONE
+            }
+
+            // IMDB Rating
+            if (item.rating != null && item.rating > 0) {
+                ratingText.text = String.format("%.1f", item.rating)
+                ratingBadge.visibility = View.VISIBLE
+            } else {
+                ratingBadge.visibility = View.GONE
+            }
+
+            // Duration (convert ms to minutes)
+            if (item.durationMs > 0) {
+                val durationMinutes = (item.durationMs / 60000).toInt()
+                durationView.text = "• ${durationMinutes}m"
+                durationView.visibility = View.VISIBLE
+            } else {
+                durationView.visibility = View.GONE
             }
 
             // Calculate progress percentage

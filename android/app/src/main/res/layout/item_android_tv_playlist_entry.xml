@@ -4,26 +4,36 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:padding="10dp"
-    android:layout_marginBottom="6dp"
-    android:layout_marginStart="12dp"
-    android:layout_marginEnd="12dp"
+    android:padding="12dp"
+    android:layout_marginBottom="8dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
     android:background="@drawable/tv_playlist_item_selector"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:gravity="center_vertical">
+    android:gravity="center_vertical"
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
-    <!-- Episode Poster (Compact size: 80x120dp) -->
+    <!-- Episode Poster with Gradient Overlay -->
     <FrameLayout
-        android:layout_width="80dp"
-        android:layout_height="120dp">
+        android:layout_width="100dp"
+        android:layout_height="140dp"
+        android:elevation="2dp">
 
+        <!-- Poster Image -->
         <ImageView
             android:id="@+id/android_tv_playlist_item_poster"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="centerCrop"
             android:background="#1A1A1A" />
+
+        <!-- Subtle gradient overlay for depth -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/playlist_poster_gradient" />
 
         <!-- Fallback Episode Number -->
         <TextView
@@ -32,17 +42,17 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:textColor="#FFFFFF"
-            android:textSize="36sp"
+            android:textSize="40sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
             android:visibility="gone" />
 
-        <!-- Watched overlay (dimming effect) -->
+        <!-- Watched overlay -->
         <View
             android:id="@+id/android_tv_playlist_item_watched_overlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#AA000000"
+            android:background="#BB000000"
             android:visibility="gone" />
 
         <!-- Watched checkmark icon -->
@@ -53,12 +63,12 @@
             android:layout_gravity="center"
             android:text="✓"
             android:textColor="#00FF99"
-            android:textSize="48sp"
+            android:textSize="56sp"
             android:textStyle="bold"
             android:shadowColor="#000000"
             android:shadowDx="2"
             android:shadowDy="2"
-            android:shadowRadius="4"
+            android:shadowRadius="6"
             android:visibility="gone" />
 
         <!-- Progress bar at bottom of poster -->
@@ -66,10 +76,45 @@
             android:id="@+id/android_tv_playlist_item_poster_progress"
             style="@android:style/Widget.ProgressBar.Horizontal"
             android:layout_width="match_parent"
-            android:layout_height="3dp"
+            android:layout_height="4dp"
             android:layout_gravity="bottom"
             android:progressDrawable="@drawable/tv_progress_drawable"
             android:visibility="gone" />
+
+        <!-- IMDB Rating Badge -->
+        <LinearLayout
+            android:id="@+id/android_tv_playlist_item_rating_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="6dp"
+            android:background="@drawable/rating_badge_background"
+            android:orientation="horizontal"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:gravity="center_vertical"
+            android:elevation="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⭐"
+                android:textSize="11sp"
+                android:layout_marginEnd="2dp" />
+
+            <TextView
+                android:id="@+id/android_tv_playlist_item_rating_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="8.5"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
     </FrameLayout>
 
     <!-- Episode Details -->
@@ -78,14 +123,15 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:layout_marginStart="12dp">
+        android:layout_marginStart="16dp">
 
-        <!-- Badge and Playing Indicator -->
+        <!-- Top Row: Badge and Status -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
 
             <TextView
                 android:id="@+id/android_tv_playlist_item_badge"
@@ -93,6 +139,18 @@
                 android:layout_height="wrap_content"
                 style="@style/TvBadge"
                 android:text="S01E01" />
+
+            <!-- Duration/Runtime -->
+            <TextView
+                android:id="@+id/android_tv_playlist_item_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="• 45m"
+                android:textColor="#99FFFFFF"
+                android:textSize="11sp"
+                android:fontFamily="sans-serif"
+                android:layout_marginStart="8dp"
+                android:visibility="gone" />
 
             <View
                 android:layout_width="0dp"
@@ -104,7 +162,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="✓ WATCHED"
-                android:textColor="#888888"
+                android:textColor="#6B7280"
                 android:textSize="10sp"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.08"
@@ -116,47 +174,55 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="▶ PLAYING"
-                android:textColor="#00FF99"
+                android:textColor="#10B981"
                 android:textSize="10sp"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.08"
+                android:textStyle="bold"
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- Episode Title (from TVMaze) -->
+        <!-- Episode Title -->
         <TextView
             android:id="@+id/android_tv_playlist_item_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFFFF"
-            android:textSize="14sp"
+            android:textColor="#F9FAFB"
+            android:textSize="15sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
-            android:layout_marginTop="4dp"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:layout_marginBottom="6dp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:lineSpacingMultiplier="1.15" />
 
-        <!-- Episode Description (from TVMaze) - Reduced to 2 lines -->
+        <!-- Episode Description -->
         <TextView
             android:id="@+id/android_tv_playlist_item_description"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#99FFFFFF"
+            android:textColor="#9CA3AF"
             android:textSize="12sp"
-            android:lineSpacingMultiplier="1.2"
-            android:layout_marginTop="4dp"
+            android:fontFamily="sans-serif"
+            android:lineSpacingMultiplier="1.3"
+            android:layout_marginBottom="6dp"
             android:maxLines="2"
             android:ellipsize="end" />
 
         <!-- Progress Indicator -->
         <LinearLayout
             android:id="@+id/android_tv_playlist_item_progress_container"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="6dp"
             android:visibility="gone">
+
+            <View
+                android:layout_width="4dp"
+                android:layout_height="4dp"
+                android:background="@drawable/progress_dot"
+                android:layout_marginEnd="6dp" />
 
             <TextView
                 android:id="@+id/android_tv_playlist_item_progress_text"
@@ -164,8 +230,9 @@
                 android:layout_height="wrap_content"
                 android:text="45% watched"
                 android:textColor="#6366F1"
-                android:textSize="10sp"
-                android:fontFamily="sans-serif-medium" />
+                android:textSize="11sp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
 
