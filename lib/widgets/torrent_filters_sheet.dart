@@ -14,12 +14,41 @@ class TorrentFiltersSheet extends StatefulWidget {
 class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
   late Set<QualityTier> _selectedQualities;
   late Set<RipSourceCategory> _selectedSources;
+  final FocusNode _clearButtonFocusNode = FocusNode();
+  final FocusNode _closeButtonFocusNode = FocusNode();
+  final FocusNode _applyButtonFocusNode = FocusNode();
+  final List<FocusNode> _qualityChipFocusNodes = [];
+  final List<FocusNode> _ripChipFocusNodes = [];
 
   @override
   void initState() {
     super.initState();
     _selectedQualities = widget.initialState.qualities.toSet();
     _selectedSources = widget.initialState.ripSources.toSet();
+
+    // Create focus nodes for quality chips
+    for (int i = 0; i < _qualityOptions.length; i++) {
+      _qualityChipFocusNodes.add(FocusNode(debugLabel: 'quality-chip-$i'));
+    }
+
+    // Create focus nodes for rip source chips
+    for (int i = 0; i < _ripOptions.length; i++) {
+      _ripChipFocusNodes.add(FocusNode(debugLabel: 'rip-chip-$i'));
+    }
+  }
+
+  @override
+  void dispose() {
+    _clearButtonFocusNode.dispose();
+    _closeButtonFocusNode.dispose();
+    _applyButtonFocusNode.dispose();
+    for (final node in _qualityChipFocusNodes) {
+      node.dispose();
+    }
+    for (final node in _ripChipFocusNodes) {
+      node.dispose();
+    }
+    super.dispose();
   }
 
   void _toggleQuality(QualityTier tier) {
@@ -85,19 +114,25 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextButton(
-                        onPressed:
-                            _selectedQualities.isEmpty &&
-                                _selectedSources.isEmpty
-                            ? null
-                            : _clearAll,
-                        child: const Text('Clear'),
+                      Focus(
+                        focusNode: _clearButtonFocusNode,
+                        child: TextButton(
+                          onPressed:
+                              _selectedQualities.isEmpty &&
+                                  _selectedSources.isEmpty
+                              ? null
+                              : _clearAll,
+                          child: const Text('Clear'),
+                        ),
                       ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white70,
+                      Focus(
+                        focusNode: _closeButtonFocusNode,
+                        child: IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white70,
+                          ),
                         ),
                       ),
                     ],
@@ -123,24 +158,33 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                         spacing: 8,
                         runSpacing: 8,
                         children: _qualityOptions
+                            .asMap()
+                            .entries
                             .map(
-                              (option) => FilterChip(
-                                label: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(option.title),
-                                    Text(
-                                      option.subtitle,
-                                      style: const TextStyle(fontSize: 10),
+                              (entry) {
+                                final index = entry.key;
+                                final option = entry.value;
+                                return Focus(
+                                  focusNode: _qualityChipFocusNodes[index],
+                                  child: FilterChip(
+                                    label: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(option.title),
+                                        Text(
+                                          option.subtitle,
+                                          style: const TextStyle(fontSize: 10),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                selected: _selectedQualities.contains(
-                                  option.value,
-                                ),
-                                onSelected: (_) => _toggleQuality(option.value),
-                              ),
+                                    selected: _selectedQualities.contains(
+                                      option.value,
+                                    ),
+                                    onSelected: (_) => _toggleQuality(option.value),
+                                  ),
+                                );
+                              },
                             )
                             .toList(),
                       ),
@@ -158,24 +202,33 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                         spacing: 8,
                         runSpacing: 8,
                         children: _ripOptions
+                            .asMap()
+                            .entries
                             .map(
-                              (option) => FilterChip(
-                                label: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(option.title),
-                                    Text(
-                                      option.subtitle,
-                                      style: const TextStyle(fontSize: 10),
+                              (entry) {
+                                final index = entry.key;
+                                final option = entry.value;
+                                return Focus(
+                                  focusNode: _ripChipFocusNodes[index],
+                                  child: FilterChip(
+                                    label: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(option.title),
+                                        Text(
+                                          option.subtitle,
+                                          style: const TextStyle(fontSize: 10),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                selected: _selectedSources.contains(
-                                  option.value,
-                                ),
-                                onSelected: (_) => _toggleSource(option.value),
-                              ),
+                                    selected: _selectedSources.contains(
+                                      option.value,
+                                    ),
+                                    onSelected: (_) => _toggleSource(option.value),
+                                  ),
+                                );
+                              },
                             )
                             .toList(),
                       ),
@@ -186,18 +239,21 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _apply,
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: const Color(0xFF2563EB),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                child: Focus(
+                  focusNode: _applyButtonFocusNode,
+                  child: ElevatedButton.icon(
+                    onPressed: _apply,
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: const Color(0xFF2563EB),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Apply Filters'),
                   ),
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('Apply Filters'),
                 ),
               ),
             ],

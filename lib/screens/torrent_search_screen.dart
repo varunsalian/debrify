@@ -10,6 +10,7 @@ import '../services/storage_service.dart';
 import '../services/download_service.dart';
 import '../services/torrentio_service.dart';
 import '../services/video_player_launcher.dart';
+import '../services/android_native_downloader.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
@@ -42,10 +43,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _csvSwitchFocusNode = FocusNode(skipTraversal: true);
   final FocusNode _pbSwitchFocusNode = FocusNode(skipTraversal: true);
   final FocusNode _ytsSwitchFocusNode = FocusNode(skipTraversal: true);
+  final FocusNode _providerAccordionFocusNode = FocusNode();
+  final FocusNode _advancedButtonFocusNode = FocusNode();
+  final FocusNode _sortDirectionFocusNode = FocusNode();
+  final FocusNode _filterButtonFocusNode = FocusNode();
+  final FocusNode _clearFiltersButtonFocusNode = FocusNode();
   bool _searchFocused = false;
   bool _csvTileFocused = false;
   bool _pbTileFocused = false;
   bool _ytsTileFocused = false;
+  bool _providerAccordionFocused = false;
+  bool _advancedButtonFocused = false;
+  bool _sortDirectionFocused = false;
+  bool _filterButtonFocused = false;
+  bool _clearFiltersButtonFocused = false;
   List<Torrent> _torrents = [];
   List<Torrent> _allTorrents = [];
   Map<String, int> _engineCounts = {};
@@ -61,6 +72,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _realDebridIntegrationEnabled = true;
   bool _torboxIntegrationEnabled = true;
   bool _showingTorboxCachedOnly = false;
+  bool _isTelevision = false;
+  final List<FocusNode> _cardFocusNodes = [];
+  final List<bool> _cardFocusStates = [];
 
   // Search engine toggles
   bool _useTorrentsCsv = true;
@@ -107,8 +121,44 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       });
     });
 
+    _providerAccordionFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _providerAccordionFocused = _providerAccordionFocusNode.hasFocus;
+      });
+    });
+
+    _advancedButtonFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _advancedButtonFocused = _advancedButtonFocusNode.hasFocus;
+      });
+    });
+
+    _sortDirectionFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _sortDirectionFocused = _sortDirectionFocusNode.hasFocus;
+      });
+    });
+
+    _filterButtonFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _filterButtonFocused = _filterButtonFocusNode.hasFocus;
+      });
+    });
+
+    _clearFiltersButtonFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _clearFiltersButtonFocused = _clearFiltersButtonFocusNode.hasFocus;
+      });
+    });
+
     _listAnimationController.forward();
     _loadDefaultSettings();
+    _detectTelevision();
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     _loadApiKeys();
     StorageService.getTorboxCacheCheckEnabled().then((enabled) {
@@ -117,6 +167,111 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _torboxCacheCheckEnabled = enabled;
       });
     });
+  }
+
+  Future<void> _detectTelevision() async {
+    final isTv = await AndroidNativeDownloader.isTelevision();
+    if (mounted) {
+      setState(() {
+        _isTelevision = isTv;
+      });
+    }
+  }
+
+  void _ensureFocusNodes() {
+    // Dispose old focus nodes if list shrunk
+    while (_cardFocusNodes.length > _torrents.length) {
+      _cardFocusNodes.removeLast().dispose();
+      _cardFocusStates.removeLast();
+    }
+
+    // Add new focus nodes if list grew
+    while (_cardFocusNodes.length < _torrents.length) {
+      final index = _cardFocusNodes.length;
+      final node = FocusNode(debugLabel: 'torrent-card-$index');
+      node.addListener(() {
+        if (!mounted) return;
+        setState(() {
+          _cardFocusStates[index] = node.hasFocus;
+        });
+        if (node.hasFocus) {
+          // Auto-scroll to focused card
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            // Will be handled by Scrollable.ensureVisible in the widget
+          });
+        }
+      });
+      _cardFocusNodes.add(node);
+      _cardFocusStates.add(false);
+    }
+  }
+
+  bool get _bothServicesEnabled {
+    return _realDebridIntegrationEnabled &&
+        _torboxIntegrationEnabled &&
+        _apiKey != null &&
+        _apiKey!.isNotEmpty &&
+        _torboxApiKey != null &&
+        _torboxApiKey!.isNotEmpty;
+  }
+
+  void _handleTorrentCardActivated(Torrent torrent, int index) {
+    if (_bothServicesEnabled) {
+      // Show dialog to choose service
+      _showServiceSelectionDialog(torrent, index);
+    } else if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+      // Direct to Real-Debrid
+      _addToRealDebrid(torrent.infohash, torrent.name, index);
+    } else if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+      // Direct to Torbox
+      _addToTorbox(torrent.infohash, torrent.name);
+    } else {
+      // No service configured
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please configure Real-Debrid or Torbox in Settings'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showServiceSelectionDialog(Torrent torrent, int index) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        title: const Text(
+          'Add Torrent',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
+              title: const Text('Torbox', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.of(context).pop('torbox'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
+              title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.of(context).pop('debrid'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == 'torbox') {
+      _addToTorbox(torrent.infohash, torrent.name);
+    } else if (result == 'debrid') {
+      _addToRealDebrid(torrent.infohash, torrent.name, index);
+    }
   }
 
   Future<void> _loadDefaultSettings() async {
@@ -167,6 +322,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _csvSwitchFocusNode.dispose();
     _pbSwitchFocusNode.dispose();
     _ytsSwitchFocusNode.dispose();
+    _providerAccordionFocusNode.dispose();
+    _advancedButtonFocusNode.dispose();
+    _sortDirectionFocusNode.dispose();
+    _filterButtonFocusNode.dispose();
+    _clearFiltersButtonFocusNode.dispose();
+    for (final node in _cardFocusNodes) {
+      node.dispose();
+    }
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     _listAnimationController.dispose();
     super.dispose();
@@ -496,29 +659,49 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Widget _buildAdvancedButton() {
     final selection = _activeAdvancedSelection;
     final label = selection == null ? 'Adv' : 'Adv*';
-    return Tooltip(
-      message: selection == null
-          ? 'Search via IMDb + Torrentio'
-          : 'Advanced Torrentio search active',
-      child: TextButton.icon(
-        onPressed: selection == null
-            ? _openAdvancedSearchDialog
-            : () async {
-                await _openAdvancedSearchDialog();
-              },
-        style: TextButton.styleFrom(
-          backgroundColor: selection == null
-              ? const Color(0xFF1E3A8A)
-              : const Color(0xFF7C3AED),
-          foregroundColor: Colors.white,
-          minimumSize: const Size(64, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          shape: RoundedRectangleBorder(
+    return Focus(
+      focusNode: _advancedButtonFocusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter)) {
+          _openAdvancedSearchDialog();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Tooltip(
+        message: selection == null
+            ? 'Search via IMDb + Torrentio'
+            : 'Advanced Torrentio search active',
+        child: Container(
+          decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
+            border: _advancedButtonFocused
+                ? Border.all(color: Colors.white, width: 2)
+                : null,
+          ),
+          child: TextButton.icon(
+            onPressed: selection == null
+                ? _openAdvancedSearchDialog
+                : () async {
+                    await _openAdvancedSearchDialog();
+                  },
+            style: TextButton.styleFrom(
+              backgroundColor: selection == null
+                  ? const Color(0xFF1E3A8A)
+                  : const Color(0xFF7C3AED),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(64, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            icon: const Icon(Icons.auto_awesome_outlined, size: 16),
+            label: Text(label, style: const TextStyle(fontSize: 12)),
           ),
         ),
-        icon: const Icon(Icons.auto_awesome_outlined, size: 16),
-        label: Text(label, style: const TextStyle(fontSize: 12)),
       ),
     );
   }
@@ -573,35 +756,57 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         color: const Color(0xFF1E293B).withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+          color: _providerAccordionFocused
+              ? const Color(0xFF3B82F6).withValues(alpha: 0.6)
+              : const Color(0xFF3B82F6).withValues(alpha: 0.2),
+          width: _providerAccordionFocused ? 2 : 1,
         ),
       ),
       child: Column(
         children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () =>
-                setState(() => _showProvidersPanel = !_showProvidersPanel),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Icon(
-                    _showProvidersPanel
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Search Providers',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+          FocusableActionDetector(
+            focusNode: _providerAccordionFocusNode,
+            shortcuts: _activateShortcuts,
+            actions: <Type, Action<Intent>>{
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (intent) {
+                  setState(() => _showProvidersPanel = !_showProvidersPanel);
+                  return null;
+                },
+              ),
+            },
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              canRequestFocus: false,
+              onTap: () =>
+                  setState(() => _showProvidersPanel = !_showProvidersPanel),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: _providerAccordionFocused
+                      ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                      : Colors.transparent,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(
+                      _showProvidersPanel
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                  ),
-                  const Spacer(),
-                  _buildProviderSummaryText(context),
-                ],
+                    const SizedBox(width: 8),
+                    Text(
+                      'Search Providers',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    _buildProviderSummaryText(context),
+                  ],
+                ),
               ),
             ),
           ),
@@ -869,7 +1074,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _allTorrents = sortedTorrents;
       _torrentMetadata = metadata;
       _torrents = filtered;
+      _ensureFocusNodes();
     });
+
+    // Auto-focus first result on TV after search
+    if (_isTelevision && _cardFocusNodes.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _cardFocusNodes.isNotEmpty) {
+          _cardFocusNodes[0].requestFocus();
+        }
+      });
+    }
   }
 
   List<Torrent> _applyFiltersToList(
@@ -998,6 +1213,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         filtersOverride: result,
         metadataMap: _torrentMetadata,
       );
+      _ensureFocusNodes();
     });
   }
 
@@ -1006,6 +1222,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     setState(() {
       _filters = const TorrentFilterState.empty();
       _torrents = List<Torrent>.from(_allTorrents);
+      _ensureFocusNodes();
     });
   }
 
@@ -4455,66 +4672,111 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    IconButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _sortAscending = !_sortAscending;
-                                        });
-                                        _sortTorrents();
+                                    Focus(
+                                      focusNode: _sortDirectionFocusNode,
+                                      onKeyEvent: (node, event) {
+                                        if (event is KeyDownEvent &&
+                                            (event.logicalKey == LogicalKeyboardKey.select ||
+                                                event.logicalKey == LogicalKeyboardKey.enter)) {
+                                          setState(() {
+                                            _sortAscending = !_sortAscending;
+                                          });
+                                          _sortTorrents();
+                                          return KeyEventResult.handled;
+                                        }
+                                        return KeyEventResult.ignored;
                                       },
-                                      icon: Icon(
-                                        _sortAscending
-                                            ? Icons.arrow_upward
-                                            : Icons.arrow_downward,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                        size: 16,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(
-                                        minWidth: 24,
-                                        minHeight: 24,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: _sortDirectionFocused
+                                              ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                              : null,
+                                        ),
+                                        child: IconButton(
+                                          onPressed: () {
+                                            setState(() {
+                                              _sortAscending = !_sortAscending;
+                                            });
+                                            _sortTorrents();
+                                          },
+                                          icon: Icon(
+                                            _sortAscending
+                                                ? Icons.arrow_upward
+                                                : Icons.arrow_downward,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                            size: 16,
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 24,
+                                            minHeight: 24,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    IconButton(
-                                      onPressed:
-                                          (_allTorrents.isEmpty &&
-                                              !_hasActiveFilters)
-                                          ? null
-                                          : _openFiltersSheet,
-                                      icon: Stack(
-                                        clipBehavior: Clip.none,
-                                        children: [
-                                          Icon(
-                                            Icons.filter_list_rounded,
-                                            color:
-                                                (_allTorrents.isEmpty &&
-                                                    !_hasActiveFilters)
-                                                ? Theme.of(
-                                                    context,
-                                                  ).disabledColor
-                                                : Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                            size: 18,
-                                          ),
-                                          if (_hasActiveFilters)
-                                            Positioned(
-                                              right: -2,
-                                              top: -2,
-                                              child: Container(
-                                                width: 8,
-                                                height: 8,
-                                                decoration: const BoxDecoration(
-                                                  color: Color(0xFF38BDF8),
-                                                  shape: BoxShape.circle,
-                                                ),
+                                    Focus(
+                                      focusNode: _filterButtonFocusNode,
+                                      onKeyEvent: (node, event) {
+                                        if (event is KeyDownEvent &&
+                                            (event.logicalKey == LogicalKeyboardKey.select ||
+                                                event.logicalKey == LogicalKeyboardKey.enter)) {
+                                          if (!(_allTorrents.isEmpty && !_hasActiveFilters)) {
+                                            _openFiltersSheet();
+                                          }
+                                          return KeyEventResult.handled;
+                                        }
+                                        return KeyEventResult.ignored;
+                                      },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: _filterButtonFocused
+                                              ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                              : null,
+                                        ),
+                                        child: IconButton(
+                                          onPressed:
+                                              (_allTorrents.isEmpty &&
+                                                  !_hasActiveFilters)
+                                              ? null
+                                              : _openFiltersSheet,
+                                          icon: Stack(
+                                            clipBehavior: Clip.none,
+                                            children: [
+                                              Icon(
+                                                Icons.filter_list_rounded,
+                                                color:
+                                                    (_allTorrents.isEmpty &&
+                                                        !_hasActiveFilters)
+                                                    ? Theme.of(
+                                                        context,
+                                                      ).disabledColor
+                                                    : Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                size: 18,
                                               ),
-                                            ),
-                                        ],
+                                              if (_hasActiveFilters)
+                                                Positioned(
+                                                  right: -2,
+                                                  top: -2,
+                                                  child: Container(
+                                                    width: 8,
+                                                    height: 8,
+                                                    decoration: const BoxDecoration(
+                                                      color: Color(0xFF38BDF8),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          tooltip: 'Filter results',
+                                        ),
                                       ),
-                                      tooltip: 'Filter results',
                                     ),
                                   ],
                                 ),
@@ -4551,11 +4813,31 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                               ),
                                             )
                                             .toList(),
-                                        TextButton(
-                                          onPressed: _clearAllFilters,
-                                          child: const Text(
-                                            'Clear filters',
-                                            style: TextStyle(fontSize: 11),
+                                        Focus(
+                                          focusNode: _clearFiltersButtonFocusNode,
+                                          onKeyEvent: (node, event) {
+                                            if (event is KeyDownEvent &&
+                                                (event.logicalKey == LogicalKeyboardKey.select ||
+                                                    event.logicalKey == LogicalKeyboardKey.enter)) {
+                                              _clearAllFilters();
+                                              return KeyEventResult.handled;
+                                            }
+                                            return KeyEventResult.ignored;
+                                          },
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: _clearFiltersButtonFocused
+                                                  ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                                  : null,
+                                            ),
+                                            child: TextButton(
+                                              onPressed: _clearAllFilters,
+                                              child: const Text(
+                                                'Clear filters',
+                                                style: TextStyle(fontSize: 11),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -4626,7 +4908,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Widget _buildTorrentCard(Torrent torrent, int index) {
     final sourceTag = _buildSourceTag(torrent.source);
-    return Container(
+    final isFocused = index < _cardFocusStates.length && _cardFocusStates[index];
+
+    Widget cardContent = Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -4638,13 +4922,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: _isTelevision && isFocused
+            ? Border.all(color: const Color(0xFFE50914), width: 3)
+            : null,
+        boxShadow: _isTelevision && isFocused
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFE50914).withValues(alpha: 0.4),
+                  blurRadius: 24,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -4663,28 +4959,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: _isTelevision && isFocused ? null : 2,
+                    overflow: _isTelevision && isFocused ? null : TextOverflow.ellipsis,
                   ),
                 ),
                 if (sourceTag != null) ...[const SizedBox(width: 8), sourceTag],
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () => _copyMagnetLink(torrent.infohash),
-                  tooltip: 'Copy magnet link',
-                  icon: const Icon(Icons.copy_rounded, size: 18),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFF1D2A3F),
-                    foregroundColor: const Color(0xFF60A5FA),
-                    padding: const EdgeInsets.all(10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                if (!_isTelevision) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => _copyMagnetLink(torrent.infohash),
+                    tooltip: 'Copy magnet link',
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFF1D2A3F),
+                      foregroundColor: const Color(0xFF60A5FA),
+                      padding: const EdgeInsets.all(10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 12),
@@ -4738,9 +5036,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             const SizedBox(height: 12),
 
-            // Action Buttons
-            LayoutBuilder(
-              builder: (context, constraints) {
+            // Action Buttons (Hidden on TV since we use smart action on card click)
+            if (!_isTelevision)
+              LayoutBuilder(
+                builder: (context, constraints) {
                 final isCompactLayout = constraints.maxWidth < 360;
 
                 Widget buildTorboxButton() {
@@ -4936,14 +5235,63 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   );
                 }
 
-                final Widget singleButton = torboxButton ?? realDebridButton!;
-                return SizedBox(width: double.infinity, child: singleButton);
-              },
-            ),
+                  final Widget singleButton = torboxButton ?? realDebridButton!;
+                  return SizedBox(width: double.infinity, child: singleButton);
+                },
+              ),
+            // TV hint
+            if (_isTelevision && isFocused) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Press OK to add torrent',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
         ),
       ),
     );
+
+    // Wrap with Focus widget for TV navigation
+    if (_isTelevision && index < _cardFocusNodes.length) {
+      return Focus(
+        focusNode: _cardFocusNodes[index],
+        onKeyEvent: (node, event) {
+          // Handle OK/Select/Enter press
+          if (event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.select ||
+                  event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.space)) {
+            _handleTorrentCardActivated(torrent, index);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Builder(
+          builder: (context) {
+            if (isFocused) {
+              // Auto-scroll when focused
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                Scrollable.ensureVisible(
+                  context,
+                  alignment: 0.2,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                );
+              });
+            }
+            return cardContent;
+          },
+        ),
+      );
+    }
+
+    return cardContent;
   }
 }
 
@@ -4973,7 +5321,7 @@ class _TorboxPlaylistItem {
   });
 }
 
-class _DebridActionTile extends StatelessWidget {
+class _DebridActionTile extends StatefulWidget {
   final IconData icon;
   final Color color;
   final String title;
@@ -4991,23 +5339,55 @@ class _DebridActionTile extends StatelessWidget {
   });
 
   @override
+  State<_DebridActionTile> createState() => _DebridActionTileState();
+}
+
+class _DebridActionTileState extends State<_DebridActionTile> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.45,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF111827),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF1F2937)),
+    return Focus(
+      onFocusChange: (focused) {
+        if (mounted) {
+          setState(() {
+            _focused = focused;
+          });
+        }
+      },
+      onKeyEvent: (node, event) {
+        if (widget.enabled &&
+            event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: InkWell(
+        onTap: widget.enabled ? widget.onTap : null,
+        borderRadius: BorderRadius.circular(16),
+        child: Opacity(
+          opacity: widget.enabled ? 1.0 : 0.45,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _focused
+                    ? widget.color
+                    : const Color(0xFF1F2937),
+                width: _focused ? 2 : 1,
+              ),
             boxShadow: [
               BoxShadow(
-                color: color.withValues(alpha: 0.14),
-                blurRadius: 16,
+                color: widget.color.withValues(alpha: _focused ? 0.3 : 0.14),
+                blurRadius: _focused ? 20 : 16,
                 offset: const Offset(0, 10),
               ),
             ],
@@ -5019,13 +5399,13 @@ class _DebridActionTile extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [color, color.withValues(alpha: 0.6)],
+                    colors: [widget.color, widget.color.withValues(alpha: 0.6)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: Colors.white, size: 22),
+                child: Icon(widget.icon, color: Colors.white, size: 22),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -5034,7 +5414,7 @@ class _DebridActionTile extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      title,
+                      widget.title,
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -5042,7 +5422,7 @@ class _DebridActionTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      subtitle,
+                      widget.subtitle,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.white.withValues(alpha: 0.7),
                         height: 1.22,
@@ -5055,6 +5435,7 @@ class _DebridActionTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

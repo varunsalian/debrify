@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,6 +7,7 @@ import '../services/storage_service.dart';
 import '../services/debrid_service.dart';
 import '../services/torbox_service.dart';
 import '../services/video_player_launcher.dart';
+import '../services/android_native_downloader.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
@@ -25,6 +28,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   late final FocusNode _searchFocusNode;
   String _searchTerm = '';
   bool _searchFocused = false;
+  bool _isTelevision = false;
+  bool _searchVisible = false;
 
   @override
   void initState() {
@@ -39,6 +44,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           _searchFocused = _searchFocusNode.hasFocus;
         });
       });
+    _detectTelevision();
+  }
+
+  Future<void> _detectTelevision() async {
+    final isTv = await AndroidNativeDownloader.isTelevision();
+    if (mounted) {
+      setState(() {
+        _isTelevision = isTv;
+      });
+    }
   }
 
   Future<List<Map<String, dynamic>>> _syncAndLoadPlaylist() async {
@@ -837,107 +852,156 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Row(
                           children: [
-                            const Text(
-                              'Your Playlist',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w700,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Your Playlist',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    headerSubtitle,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.7),
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              headerSubtitle,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontSize: 15,
+                            if (_isTelevision && _searchTerm.isEmpty && !_searchVisible)
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.search_rounded,
+                                  color: Colors.white70,
+                                  size: 28,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchVisible = true;
+                                  });
+                                  // Request focus after the widget is visible
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    _searchFocusNode.requestFocus();
+                                  });
+                                },
                               ),
-                            ),
                           ],
                         ),
                       ),
                     ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Shortcuts(
-                          shortcuts: const <ShortcutActivator, Intent>{
-                            SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-                            SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-                          },
-                          child: Actions(
-                            actions: <Type, Action<Intent>>{
-                              NextFocusIntent: CallbackAction<NextFocusIntent>(
-                                onInvoke: (intent) {
-                                  FocusScope.of(context).nextFocus();
-                                  return null;
-                                },
-                              ),
-                              PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-                                onInvoke: (intent) {
-                                  FocusScope.of(context).previousFocus();
-                                  return null;
-                                },
-                              ),
+                    if (!_isTelevision || _searchVisible)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Shortcuts(
+                            shortcuts: const <ShortcutActivator, Intent>{
+                              SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+                              SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
                             },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 160),
-                              curve: Curves.easeOutCubic,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: _searchFocused
-                                      ? const Color(0xFFE50914)
-                                      : Colors.transparent,
-                                  width: 1.6,
+                            child: Actions(
+                              actions: <Type, Action<Intent>>{
+                                NextFocusIntent: CallbackAction<NextFocusIntent>(
+                                  onInvoke: (intent) {
+                                    FocusScope.of(context).nextFocus();
+                                    return null;
+                                  },
                                 ),
-                                boxShadow: _searchFocused
-                                    ? [
-                                        BoxShadow(
-                                          color: const Color(0xFFE50914).withValues(alpha: 0.25),
-                                          blurRadius: 18,
-                                          offset: const Offset(0, 8),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: TextField(
-                                focusNode: _searchFocusNode,
-                                controller: _searchController,
-                                textInputAction: TextInputAction.search,
-                                decoration: InputDecoration(
-                                  hintText: 'Search playlist...',
-                                  hintStyle: const TextStyle(color: Colors.white54),
-                                  prefixIcon: const Icon(
-                                    Icons.search_rounded,
-                                    color: Colors.white60,
-                                  ),
-                                  suffixIcon: _searchTerm.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          icon: const Icon(Icons.close_rounded, color: Colors.white60),
-                                          onPressed: () {
-                                            _searchController.clear();
-                                            _searchFocusNode.requestFocus();
-                                          },
-                                        ),
-                                  filled: true,
-                                  fillColor: Colors.white.withValues(alpha: 0.08),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                    borderSide: BorderSide.none,
-                                  ),
+                                PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+                                  onInvoke: (intent) {
+                                    FocusScope.of(context).previousFocus();
+                                    return null;
+                                  },
                                 ),
-                                style: const TextStyle(color: Colors.white),
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 160),
+                                curve: Curves.easeOutCubic,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: _searchFocused
+                                        ? const Color(0xFFE50914)
+                                        : Colors.transparent,
+                                    width: 1.6,
+                                  ),
+                                  boxShadow: _searchFocused
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFFE50914).withValues(alpha: 0.25),
+                                            blurRadius: 18,
+                                            offset: const Offset(0, 8),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: TextField(
+                                  focusNode: _searchFocusNode,
+                                  controller: _searchController,
+                                  textInputAction: TextInputAction.search,
+                                  onSubmitted: (_) {
+                                    if (_isTelevision && _searchTerm.isEmpty) {
+                                      setState(() {
+                                        _searchVisible = false;
+                                      });
+                                      FocusScope.of(context).unfocus();
+                                    }
+                                  },
+                                  decoration: InputDecoration(
+                                    hintText: 'Search playlist...',
+                                    hintStyle: const TextStyle(color: Colors.white54),
+                                    prefixIcon: const Icon(
+                                      Icons.search_rounded,
+                                      color: Colors.white60,
+                                    ),
+                                    suffixIcon: _searchTerm.isEmpty
+                                        ? (_isTelevision
+                                            ? IconButton(
+                                                icon: const Icon(Icons.close_rounded, color: Colors.white60),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _searchVisible = false;
+                                                  });
+                                                  FocusScope.of(context).unfocus();
+                                                },
+                                              )
+                                            : null)
+                                        : IconButton(
+                                            icon: const Icon(Icons.close_rounded, color: Colors.white60),
+                                            onPressed: () {
+                                              _searchController.clear();
+                                              if (_isTelevision) {
+                                                setState(() {
+                                                  _searchVisible = false;
+                                                });
+                                                FocusScope.of(context).unfocus();
+                                              } else {
+                                                _searchFocusNode.requestFocus();
+                                              }
+                                            },
+                                          ),
+                                    filled: true,
+                                    fillColor: Colors.white.withValues(alpha: 0.08),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                     const SliverToBoxAdapter(child: SizedBox(height: 24)),
                     if (filteredItems.isEmpty)
                       SliverFillRemaining(
@@ -998,46 +1062,83 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     else
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final item = filteredItems[index];
-                              final String title = (item['title'] as String?) ?? 'Video';
-                              final String? posterUrl = item['posterUrl'] as String?;
-                              final int? sizeBytes = _asInt(item['sizeBytes']);
-                              final String? sizeLabel =
-                                  sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
-                              final int? addedAt = _asInt(item['addedAt']);
-                              final String? addedLabel = (addedAt != null && addedAt > 0)
-                                  ? 'Added ${Formatters.formatDate(addedAt)}'
-                                  : null;
-                              final String providerLabel = _prettifyProvider(item['provider'] as String?);
-                              final String kindLabel = _prettifyKind(item['kind'] as String?);
-                              final String? subtitle = item['seriesTitle'] as String?;
-                              final metadata = <String>[
-                                if (providerLabel.isNotEmpty) providerLabel,
-                                if (kindLabel.isNotEmpty) kindLabel,
-                                if (sizeLabel != null) sizeLabel,
-                              ];
+                        sliver: _isTelevision
+                            ? SliverGrid(
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 5,
+                                  childAspectRatio: 0.62,
+                                  crossAxisSpacing: 20,
+                                  mainAxisSpacing: 28,
+                                ),
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final item = filteredItems[index];
+                                    final String title = (item['title'] as String?) ?? 'Video';
+                                    final String? posterUrl = item['posterUrl'] as String?;
+                                    final int? sizeBytes = _asInt(item['sizeBytes']);
+                                    final String? sizeLabel =
+                                        sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
+                                    final String providerLabel = _prettifyProvider(item['provider'] as String?);
+                                    final String kindLabel = _prettifyKind(item['kind'] as String?);
+                                    final String? subtitle = item['seriesTitle'] as String?;
+                                    final metadata = <String>[
+                                      if (providerLabel.isNotEmpty) providerLabel,
+                                      if (kindLabel.isNotEmpty) kindLabel,
+                                      if (sizeLabel != null) sizeLabel,
+                                    ];
 
-                              return Padding(
-                                padding: EdgeInsets.only(
-                                  bottom: index == filteredItems.length - 1 ? 0 : 20,
+                                    return _TvPlaylistCard(
+                                      title: title,
+                                      subtitle: subtitle,
+                                      posterUrl: posterUrl,
+                                      metadata: metadata,
+                                      onPlay: () => _playItem(item),
+                                      onRemove: () => _removeItem(item),
+                                    );
+                                  },
+                                  childCount: filteredItems.length,
                                 ),
-                                child: _PlaylistCard(
-                                  title: title,
-                                  subtitle: subtitle,
-                                  posterUrl: posterUrl,
-                                  metadata: metadata,
-                                  addedLabel: addedLabel,
-                                  onPlay: () => _playItem(item),
-                                  onRemove: () => _removeItem(item),
+                              )
+                            : SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final item = filteredItems[index];
+                                    final String title = (item['title'] as String?) ?? 'Video';
+                                    final String? posterUrl = item['posterUrl'] as String?;
+                                    final int? sizeBytes = _asInt(item['sizeBytes']);
+                                    final String? sizeLabel =
+                                        sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
+                                    final int? addedAt = _asInt(item['addedAt']);
+                                    final String? addedLabel = (addedAt != null && addedAt > 0)
+                                        ? 'Added ${Formatters.formatDate(addedAt)}'
+                                        : null;
+                                    final String providerLabel = _prettifyProvider(item['provider'] as String?);
+                                    final String kindLabel = _prettifyKind(item['kind'] as String?);
+                                    final String? subtitle = item['seriesTitle'] as String?;
+                                    final metadata = <String>[
+                                      if (providerLabel.isNotEmpty) providerLabel,
+                                      if (kindLabel.isNotEmpty) kindLabel,
+                                      if (sizeLabel != null) sizeLabel,
+                                    ];
+
+                                    return Padding(
+                                      padding: EdgeInsets.only(
+                                        bottom: index == filteredItems.length - 1 ? 0 : 20,
+                                      ),
+                                      child: _PlaylistCard(
+                                        title: title,
+                                        subtitle: subtitle,
+                                        posterUrl: posterUrl,
+                                        metadata: metadata,
+                                        addedLabel: addedLabel,
+                                        onPlay: () => _playItem(item),
+                                        onRemove: () => _removeItem(item),
+                                      ),
+                                    );
+                                  },
+                                  childCount: filteredItems.length,
                                 ),
-                              );
-                            },
-                            childCount: filteredItems.length,
-                          ),
-                        ),
+                              ),
                       ),
                   ],
                 ),
@@ -1822,4 +1923,338 @@ int? _asIntMapValue(dynamic data, String key) {
     if (value is num) return value.toInt();
   }
   return null;
+}
+
+// TV-optimized vertical poster card
+class _TvPlaylistCard extends StatefulWidget {
+  final String title;
+  final String? subtitle;
+  final String? posterUrl;
+  final List<String> metadata;
+  final VoidCallback onPlay;
+  final VoidCallback onRemove;
+
+  const _TvPlaylistCard({
+    required this.title,
+    this.subtitle,
+    this.posterUrl,
+    this.metadata = const <String>[],
+    required this.onPlay,
+    required this.onRemove,
+  });
+
+  @override
+  State<_TvPlaylistCard> createState() => _TvPlaylistCardState();
+}
+
+class _TvPlaylistCardState extends State<_TvPlaylistCard> {
+  late final FocusNode _focusNode;
+  bool _focused = false;
+  Timer? _longPressTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode(
+      debugLabel: 'tv-playlist-card-${widget.title}',
+      onKeyEvent: _handleKeyEvent,
+    )..addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TvPlaylistCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.title != oldWidget.title) {
+      _focusNode.debugLabel = 'tv-playlist-card-${widget.title}';
+    }
+  }
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    _focusNode.removeListener(_handleFocusChange);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (!mounted) return;
+    setState(() {
+      _focused = _focusNode.hasFocus;
+    });
+    if (_focusNode.hasFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.1,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+        );
+      });
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final isActivateKey = event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space;
+
+    if (!isActivateKey) {
+      return KeyEventResult.ignored;
+    }
+
+    if (event is KeyDownEvent) {
+      // Start long press timer
+      _longPressTimer?.cancel();
+      _longPressTimer = Timer(const Duration(milliseconds: 800), () {
+        // Long press detected - show delete dialog
+        _handleDelete();
+      });
+      return KeyEventResult.handled;
+    } else if (event is KeyUpEvent) {
+      // Cancel timer and play if it was a short press
+      if (_longPressTimer?.isActive == true) {
+        _longPressTimer?.cancel();
+        widget.onPlay();
+      }
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  Future<void> _handleDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        title: const Text(
+          'Remove from playlist?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '"${widget.title}" will be removed from your playlist. You can always add it again later.',
+          style: const TextStyle(color: Colors.white70, fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFE50914),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      widget.onRemove();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final highlightColor = theme.colorScheme.primary;
+
+    return Focus(
+      focusNode: _focusNode,
+      child: AnimatedScale(
+        scale: _focused ? 1.08 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: _focused
+                ? Border.all(color: highlightColor, width: 3)
+                : null,
+            boxShadow: _focused
+                ? [
+                    BoxShadow(
+                      color: highlightColor.withValues(alpha: 0.4),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onPlay,
+              borderRadius: BorderRadius.circular(12),
+              canRequestFocus: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Poster
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                      child: _buildPoster(),
+                    ),
+                  ),
+                  // Info section
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                widget.title,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.2,
+                                ),
+                                maxLines: _focused ? null : 2,
+                                overflow: _focused ? null : TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (_focused)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 18,
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (widget.subtitle != null && widget.subtitle!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.subtitle!,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.65),
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        if (widget.metadata.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: widget.metadata.take(2).map(
+                              (label) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  label,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ).toList(),
+                          ),
+                        ],
+                        if (_focused) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'OK to play • Long press OK to delete',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.45),
+                              fontSize: 10,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPoster() {
+    if (widget.posterUrl == null || widget.posterUrl!.isEmpty) {
+      return _buildFallbackPoster();
+    }
+
+    return Image.network(
+      widget.posterUrl!,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      errorBuilder: (context, error, stackTrace) => _buildFallbackPoster(),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return _buildFallbackPoster();
+      },
+    );
+  }
+
+  Widget _buildFallbackPoster() {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF1D4ED8),
+            Color(0xFF9333EA),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.movie_rounded,
+          size: 48,
+          color: Colors.white.withValues(alpha: 0.5),
+        ),
+      ),
+    );
+  }
 }
