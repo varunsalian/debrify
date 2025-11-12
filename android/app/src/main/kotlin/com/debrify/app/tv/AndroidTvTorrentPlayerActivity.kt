@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -98,6 +99,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var seriesPlaylistAdapter: PlaylistAdapter? = null
     private var moviePlaylistAdapter: MoviePlaylistAdapter? = null
     private var movieGroups: MovieGroups? = null
+    private var lastBackPressTime: Long = 0
 
     private val resizeModes = arrayOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
@@ -194,6 +196,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setupSeekbar()
         setupPlaylist()
         setupControls()
+        setupBackPressHandler()
 
         // Start playback
         playItem(currentIndex)
@@ -1467,6 +1470,34 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         player?.pause()
     }
 
+    private fun setupBackPressHandler() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // If playlist is visible, hide it first
+                if (playlistOverlay.visibility == View.VISIBLE) {
+                    hidePlaylist()
+                    return
+                }
+
+                // Double-back to exit confirmation
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastBackPressTime < BACK_PRESS_INTERVAL_MS) {
+                    // Second back press within time window - exit
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                } else {
+                    // First back press - show message
+                    lastBackPressTime = currentTime
+                    Toast.makeText(
+                        this@AndroidTvTorrentPlayerActivity,
+                        "Press back again to exit",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        })
+    }
+
     override fun onDestroy() {
         // Clear all handlers
         progressHandler.removeCallbacksAndMessages(null)
@@ -1508,6 +1539,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val CONTROLS_AUTO_HIDE_DELAY_MS = 4000L
         private const val SEEK_STEP_MS = 10_000L
         private const val SEEK_LONG_PRESS_THRESHOLD = 3
+        private const val BACK_PRESS_INTERVAL_MS = 2000L  // 2 seconds
     }
 }
 
