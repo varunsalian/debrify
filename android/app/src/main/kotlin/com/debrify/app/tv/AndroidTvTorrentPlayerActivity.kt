@@ -307,6 +307,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "series" -> setupSeriesPlaylist(items)
             else -> setupCollectionPlaylist(items)
         }
+
+        setupPlaylistNavigation()
     }
 
     private fun setupSeriesPlaylist(items: List<PlaybackItem>) {
@@ -444,6 +446,58 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         selectMovieTab(MovieGroup.MAIN, adapter, scrollToTop = false, forceAdapterUpdate = true)
+    }
+
+    private fun setupPlaylistNavigation() {
+        playlistView.setOnKeyListener { _, keyCode, event ->
+            if (!playlistVisible) return@setOnKeyListener false
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    movePlaylistFocus(1)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    movePlaylistFocus(-1)
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun movePlaylistFocus(delta: Int) {
+        val adapter = playlistView.adapter ?: return
+        val focusedChild = playlistView.focusedChild ?: return
+        val currentPosition = playlistView.getChildAdapterPosition(focusedChild)
+        if (currentPosition == RecyclerView.NO_POSITION) return
+        val targetPosition = (currentPosition + delta).coerceIn(0, adapter.itemCount - 1)
+        if (targetPosition == currentPosition) return
+
+        val targetHolder = playlistView.findViewHolderForAdapterPosition(targetPosition)
+        if (targetHolder != null) {
+            targetHolder.itemView.requestFocus()
+        } else {
+            // Scroll to position and wait for layout to complete
+            playlistView.smoothScrollToPosition(targetPosition)
+
+            // Use ViewTreeObserver to wait for layout
+            playlistView.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                private var attempts = 0
+                private val maxAttempts = 10
+
+                override fun onGlobalLayout() {
+                    attempts++
+                    val holder = playlistView.findViewHolderForAdapterPosition(targetPosition)
+                    if (holder != null) {
+                        holder.itemView.requestFocus()
+                        playlistView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    } else if (attempts >= maxAttempts) {
+                        playlistView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    }
+                }
+            })
+        }
     }
 
     private fun createMovieTab(label: String, group: MovieGroup, adapter: MoviePlaylistAdapter): TextView {
@@ -754,6 +808,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 return true
             }
             return super.dispatchKeyEvent(event)
+        }
+
+        if (controlsMenuVisible && keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN) {
+            hideControlsMenu()
+            return true
         }
 
         val focusInControls = isFocusInControlsOverlay()
