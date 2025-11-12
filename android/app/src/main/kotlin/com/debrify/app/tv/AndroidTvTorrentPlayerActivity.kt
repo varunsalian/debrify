@@ -280,7 +280,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun setupPlaylist() {
-        playlistView.layoutManager = LinearLayoutManager(this)
+        playlistView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         playlistOverlay.visibility = View.GONE
 
         val model = payload ?: return
@@ -1661,7 +1661,7 @@ private class PlaylistAdapter(
                 SeasonHeaderViewHolder(view)
             }
             VIEW_TYPE_EPISODE -> {
-                val view = inflater.inflate(R.layout.item_android_tv_playlist_entry, parent, false)
+                val view = inflater.inflate(R.layout.item_android_tv_playlist_entry_horizontal, parent, false)
                 EpisodeViewHolder(view, onItemClick)
             }
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
@@ -1732,6 +1732,7 @@ private class PlaylistAdapter(
         private val onItemClick: (Int) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         private val container: View = itemView.findViewById(R.id.android_tv_playlist_item_container)
+        private val selectionOverlay: View? = itemView.findViewById(R.id.selection_overlay)
         private val posterImageView: android.widget.ImageView = itemView.findViewById(R.id.android_tv_playlist_item_poster)
         private val fallbackTextView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_fallback)
         private val watchedOverlay: View = itemView.findViewById(R.id.android_tv_playlist_item_watched_overlay)
@@ -1827,6 +1828,11 @@ private class PlaylistAdapter(
             container.setOnClickListener {
                 android.util.Log.d("AndroidTvPlayer", "Episode clicked - itemIndex: $itemIndex, title: ${item.title}, season: ${item.season}, episode: ${item.episode}, id: ${item.id}, url: ${item.url}")
                 onItemClick(itemIndex)
+            }
+
+            // Focus handling for selection overlay
+            container.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+                selectionOverlay?.visibility = if (hasFocus) View.VISIBLE else View.GONE
             }
         }
 
@@ -1938,7 +1944,7 @@ private class MoviePlaylistAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MovieViewHolder {
         val inflater = android.view.LayoutInflater.from(parent.context)
-        val view = inflater.inflate(R.layout.item_android_tv_playlist_entry, parent, false)
+        val view = inflater.inflate(R.layout.item_android_tv_playlist_entry_horizontal, parent, false)
         return MovieViewHolder(view, onItemClick)
     }
 
@@ -1985,6 +1991,7 @@ private class MoviePlaylistAdapter(
     ) : RecyclerView.ViewHolder(itemView) {
 
         private val container: View = itemView.findViewById(R.id.android_tv_playlist_item_container)
+        private val selectionOverlay: View? = itemView.findViewById(R.id.selection_overlay)
         private val posterImageView: android.widget.ImageView = itemView.findViewById(R.id.android_tv_playlist_item_poster)
         private val fallbackTextView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_fallback)
         private val watchedOverlay: View = itemView.findViewById(R.id.android_tv_playlist_item_watched_overlay)
@@ -2046,6 +2053,11 @@ private class MoviePlaylistAdapter(
             container.isFocusable = true
             container.setOnClickListener {
                 onItemClick(itemIndex)
+            }
+
+            // Focus handling for selection overlay
+            container.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+                selectionOverlay?.visibility = if (hasFocus) View.VISIBLE else View.GONE
             }
         }
 

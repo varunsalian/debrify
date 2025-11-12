@@ -75,40 +75,43 @@
         android:paddingRight="48dp"
         android:paddingBottom="24dp" />
 
-    <!-- Playlist Browser Overlay (slide from right) -->
+    <!-- Playlist Browser Overlay (horizontal at bottom) -->
     <FrameLayout
         android:id="@+id/android_tv_playlist_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone">
 
+        <!-- Dark gradient background -->
         <View
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#AA000000" />
+            android:background="@drawable/playlist_overlay_gradient" />
 
         <LinearLayout
-            android:layout_width="500dp"
-            android:layout_height="match_parent"
-            android:layout_gravity="end"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
             android:orientation="vertical"
-            android:background="@drawable/tv_playlist_scrim">
+            android:paddingStart="48dp"
+            android:paddingEnd="48dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="24dp">
 
             <!-- Season Tabs -->
             <include
                 android:id="@+id/season_tabs"
                 layout="@layout/view_season_tabs" />
 
-            <!-- Episode List -->
+            <!-- Horizontal Episode List -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/android_tv_playlist"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
                 android:paddingBottom="16dp"
                 android:clipToPadding="false"
+                android:clipChildren="false"
                 android:focusable="true"
                 android:focusableInTouchMode="true" />
         </LinearLayout>
