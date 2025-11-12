@@ -222,6 +222,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         trackSelector = DefaultTrackSelector(this)
         trackSelector?.parameters = trackSelector?.buildUponParameters()
             ?.setPreferredAudioLanguage("en")
+            ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             ?.build()!!
 
         val renderersFactory = DefaultRenderersFactory(this)
