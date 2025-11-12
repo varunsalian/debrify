@@ -80,6 +80,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Player
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
+    private var subtitleListener: Player.Listener? = null
 
     // State
     private var payload: PlaybackPayload? = null
@@ -153,7 +154,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     val nextIndex = getNextPlayableIndex(currentIndex)
                     if (nextIndex != null) {
                         showNextOverlay(model.items[nextIndex])
-                        Handler(Looper.getMainLooper()).postDelayed({
+                        progressHandler.postDelayed({
                             hideNextOverlay()
                             playItem(nextIndex)
                         }, 1500)
@@ -241,11 +242,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playerView.subtitleView?.visibility = View.GONE
 
         // Connect subtitle output to custom view
-        player?.addListener(object : Player.Listener {
+        subtitleListener = object : Player.Listener {
             override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
                 subtitleOverlay.setCues(cueGroup.cues)
             }
-        })
+        }
+        player?.addListener(subtitleListener!!)
 
         // Setup subtitle styling
         subtitleOverlay.setApplyEmbeddedStyles(false)
@@ -1466,16 +1468,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Clear all handlers
         progressHandler.removeCallbacksAndMessages(null)
         titleHandler.removeCallbacksAndMessages(null)
         controlsHandler.removeCallbacksAndMessages(null)
 
+        // Clear player and listeners
         player?.let {
             sendProgress(completed = false)
             it.removeListener(playbackListener)
+            subtitleListener?.let { listener -> it.removeListener(listener) }
             it.release()
         }
         player = null
+        subtitleListener = null
+        trackSelector = null
+
+        // Clear adapters to release lambda references
+        playlistView.adapter = null
+        playlistAdapter = null
+        seriesPlaylistAdapter = null
+        moviePlaylistAdapter = null
+
+        // Clear tab references
+        seasonTabs.clear()
+        movieTabs.clear()
+
+        // Clear view listeners
+        seekbarOverlay.setOnKeyListener(null)
+
         sendFinished()
         super.onDestroy()
     }
