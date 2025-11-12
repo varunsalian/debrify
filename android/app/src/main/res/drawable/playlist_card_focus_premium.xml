@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Outer glow -->
+    <item
+        android:left="-8dp"
+        android:top="-8dp"
+        android:right="-4dp"
+        android:bottom="-2dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="180dp"
+                android:centerColor="#603B82F6"
+                android:endColor="#00000000" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+
+    <!-- Bright border -->
+    <item
+        android:left="0dp"
+        android:top="0dp"
+        android:right="4dp"
+        android:bottom="6dp">
+        <shape android:shape="rectangle">
+            <stroke
+                android:width="3dp"
+                android:color="#60A5FA" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+
+    <!-- Inner glow/brightness overlay -->
+    <item
+        android:left="3dp"
+        android:top="3dp"
+        android:right="7dp"
+        android:bottom="9dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#153B82F6" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</layer-list>

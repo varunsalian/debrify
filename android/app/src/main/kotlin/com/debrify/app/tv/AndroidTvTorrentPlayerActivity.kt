@@ -449,54 +449,146 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun setupPlaylistNavigation() {
-        playlistView.setOnKeyListener { _, keyCode, event ->
-            if (!playlistVisible) return@setOnKeyListener false
-            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    movePlaylistFocus(1)
-                    true
+        android.util.Log.d("PlaylistNav", "setupPlaylistNavigation: Setting up navigation")
+
+        // Trap LEFT/RIGHT focus inside RecyclerView, but allow UP/DOWN for season tabs
+        playlistView.setOnKeyListener { view, keyCode, event ->
+            if (!playlistVisible) {
+                android.util.Log.d("PlaylistNav", "Key event but playlist not visible: keyCode=$keyCode")
+                return@setOnKeyListener false
+            }
+
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        val focusedChild = playlistView.focusedChild
+                        val currentPos = if (focusedChild != null) {
+                            playlistView.getChildAdapterPosition(focusedChild)
+                        } else {
+                            -1
+                        }
+                        val itemCount = playlistView.adapter?.itemCount ?: 0
+                        android.util.Log.d("PlaylistNav", "DPAD_RIGHT pressed - currentPos=$currentPos, itemCount=$itemCount")
+
+                        // If we have a valid position and not at the end
+                        if (currentPos >= 0 && currentPos < itemCount - 1) {
+                            // Move focus to next item
+                            movePlaylistFocus(1)
+                            true  // Consume the event to prevent focus escape
+                        } else {
+                            android.util.Log.d("PlaylistNav", "At end of list, consuming event")
+                            true  // At end, consume to prevent focus escape
+                        }
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        val focusedChild = playlistView.focusedChild
+                        val currentPos = if (focusedChild != null) {
+                            playlistView.getChildAdapterPosition(focusedChild)
+                        } else {
+                            -1
+                        }
+                        android.util.Log.d("PlaylistNav", "DPAD_LEFT pressed - currentPos=$currentPos")
+
+                        // If we have a valid position and not at the start
+                        if (currentPos > 0) {
+                            // Move focus to previous item
+                            movePlaylistFocus(-1)
+                            true  // Consume the event to prevent focus escape
+                        } else {
+                            android.util.Log.d("PlaylistNav", "At start of list, consuming event")
+                            true  // At start, consume to prevent focus escape
+                        }
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        android.util.Log.d("PlaylistNav", "UP/DOWN pressed - allowing navigation to season tabs")
+                        false  // Allow UP/DOWN to navigate to season tabs
+                    }
+                    else -> false
                 }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    movePlaylistFocus(-1)
-                    true
+            } else {
+                false
+            }
+        }
+
+        // Add global focus change listener for debugging
+        playlistView.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus, newFocus ->
+            if (playlistVisible) {
+                val oldPos = if (oldFocus != null && oldFocus.parent == playlistView) {
+                    playlistView.getChildAdapterPosition(oldFocus)
+                } else {
+                    -1
                 }
-                else -> false
+                val newPos = if (newFocus != null && newFocus.parent == playlistView) {
+                    playlistView.getChildAdapterPosition(newFocus)
+                } else {
+                    -1
+                }
+                android.util.Log.d("PlaylistNav", "Focus changed: oldPos=$oldPos -> newPos=$newPos, newFocus=$newFocus")
+                // Note: Removed focus escape recovery - LEFT/RIGHT trapping prevents unintended escapes,
+                // and we want to allow intentional UP/DOWN navigation to season tabs
             }
         }
     }
 
     private fun movePlaylistFocus(delta: Int) {
+        android.util.Log.d("PlaylistNav", "movePlaylistFocus: delta=$delta")
         val adapter = playlistView.adapter ?: return
-        val focusedChild = playlistView.focusedChild ?: return
-        val currentPosition = playlistView.getChildAdapterPosition(focusedChild)
-        if (currentPosition == RecyclerView.NO_POSITION) return
-        val targetPosition = (currentPosition + delta).coerceIn(0, adapter.itemCount - 1)
-        if (targetPosition == currentPosition) return
+        val layoutManager = playlistView.layoutManager as? LinearLayoutManager ?: return
 
+        // Get current focused position
+        val focusedChild = playlistView.focusedChild
+        val currentPosition = if (focusedChild != null) {
+            playlistView.getChildAdapterPosition(focusedChild)
+        } else {
+            layoutManager.findFirstVisibleItemPosition()
+        }
+
+        android.util.Log.d("PlaylistNav", "movePlaylistFocus: currentPosition=$currentPosition")
+        if (currentPosition == RecyclerView.NO_POSITION) {
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: NO_POSITION, aborting")
+            return
+        }
+
+        // Calculate target position
+        val targetPosition = (currentPosition + delta).coerceIn(0, adapter.itemCount - 1)
+        android.util.Log.d("PlaylistNav", "movePlaylistFocus: targetPosition=$targetPosition")
+
+        if (targetPosition == currentPosition) {
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Same position, aborting")
+            return
+        }
+
+        // Check if target is already visible
         val targetHolder = playlistView.findViewHolderForAdapterPosition(targetPosition)
-        if (targetHolder != null) {
+        if (targetHolder != null && targetHolder.itemView.parent != null) {
+            // Item is visible, focus it directly
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Target visible, focusing directly")
             targetHolder.itemView.requestFocus()
         } else {
-            // Scroll to position and wait for layout to complete
-            playlistView.smoothScrollToPosition(targetPosition)
+            // Item is not visible, scroll to it
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Target not visible, scrolling")
+            layoutManager.scrollToPositionWithOffset(targetPosition, 0)
 
-            // Use ViewTreeObserver to wait for layout
-            playlistView.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
-                private var attempts = 0
-                private val maxAttempts = 10
-
-                override fun onGlobalLayout() {
-                    attempts++
-                    val holder = playlistView.findViewHolderForAdapterPosition(targetPosition)
-                    if (holder != null) {
-                        holder.itemView.requestFocus()
-                        playlistView.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                    } else if (attempts >= maxAttempts) {
-                        playlistView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+            // Use multiple post calls to ensure layout is complete
+            playlistView.post {
+                playlistView.post {
+                    playlistView.post {
+                        val holder = playlistView.findViewHolderForAdapterPosition(targetPosition)
+                        if (holder != null && holder.itemView.parent != null) {
+                            android.util.Log.d("PlaylistNav", "movePlaylistFocus: After scroll, focusing target")
+                            holder.itemView.requestFocus()
+                        } else {
+                            // Final fallback: find first visible and focus it
+                            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Failed to find target, using fallback")
+                            val fallbackPosition = layoutManager.findFirstCompletelyVisibleItemPosition()
+                            if (fallbackPosition != RecyclerView.NO_POSITION) {
+                                android.util.Log.d("PlaylistNav", "movePlaylistFocus: Focusing fallback position $fallbackPosition")
+                                playlistView.findViewHolderForAdapterPosition(fallbackPosition)?.itemView?.requestFocus()
+                            }
+                        }
                     }
                 }
-            })
+            }
         }
     }
 
@@ -1141,7 +1233,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Playlist
     private fun showPlaylist() {
+        android.util.Log.d("PlaylistNav", "showPlaylist: Starting - playlistMode=$playlistMode")
+
         if (playlistMode == PlaylistMode.NONE || playlistAdapter == null) {
+            android.util.Log.d("PlaylistNav", "showPlaylist: Exiting early - no playlist adapter")
             return
         }
 
@@ -1155,16 +1250,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         val activePosition = playlistAdapter?.getActiveItemPosition() ?: -1
+        android.util.Log.d("PlaylistNav", "showPlaylist: activePosition=$activePosition, adapter.itemCount=${playlistView.adapter?.itemCount}")
+
         if (activePosition != -1) {
             playlistView.post {
+                android.util.Log.d("PlaylistNav", "showPlaylist: Scrolling to position $activePosition")
                 playlistView.scrollToPosition(activePosition)
                 playlistView.postDelayed({
                     val viewHolder = playlistView.findViewHolderForAdapterPosition(activePosition)
-                    viewHolder?.itemView?.requestFocus() ?: playlistView.requestFocus()
+                    android.util.Log.d("PlaylistNav", "showPlaylist: ViewHolder found=${viewHolder != null} for position $activePosition")
+                    if (viewHolder != null) {
+                        android.util.Log.d("PlaylistNav", "showPlaylist: Requesting focus on viewHolder at position $activePosition")
+                        viewHolder.itemView.requestFocus()
+                    } else {
+                        android.util.Log.d("PlaylistNav", "showPlaylist: Requesting focus on playlistView itself")
+                        playlistView.requestFocus()
+                    }
                 }, 100)
             }
         } else {
             playlistView.post {
+                android.util.Log.d("PlaylistNav", "showPlaylist: No active position, requesting focus on playlistView")
                 playlistView.requestFocus()
             }
         }
@@ -1773,6 +1879,26 @@ private class PlaylistAdapter(
         }
     }
 
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isEmpty() || PAYLOAD_PROGRESS_UPDATE !in payloads) {
+            super.onBindViewHolder(holder, position, payloads)
+            return
+        }
+
+        // Handle progress-only update
+        when (val listItem = listItems[position]) {
+            is PlaylistListItem.Episode -> {
+                val itemIndex = listItem.itemIndex
+                val item = items[itemIndex]
+                val isActive = itemIndex == activeItemIndex
+                (holder as EpisodeViewHolder).updateProgress(item, isActive)
+            }
+            else -> {
+                // Not an episode, do nothing
+            }
+        }
+    }
+
     override fun getItemCount(): Int = listItems.size
 
     override fun setActiveIndex(index: Int) {
@@ -1789,10 +1915,10 @@ private class PlaylistAdapter(
     }
 
     override fun updateCurrentProgress() {
-        // Notify the current playing item to update its progress display
+        // Notify the current playing item to update its progress display with payload
         val position = findPositionForItemIndex(activeItemIndex)
         if (position != -1) {
-            notifyItemChanged(position)
+            notifyItemChanged(position, PAYLOAD_PROGRESS_UPDATE)
         }
     }
 
@@ -1922,8 +2048,40 @@ private class PlaylistAdapter(
             }
 
             // Focus handling for selection overlay
-            container.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+            container.onFocusChangeListener = View.OnFocusChangeListener { view, hasFocus ->
+                android.util.Log.d("PlaylistNav", "EpisodeViewHolder focus changed - itemIndex=$itemIndex, hasFocus=$hasFocus, position=${bindingAdapterPosition}")
                 selectionOverlay?.visibility = if (hasFocus) View.VISIBLE else View.GONE
+            }
+        }
+
+        fun updateProgress(item: PlaybackItem, isActive: Boolean) {
+            // Only update progress-related views, not the entire item
+            val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
+                ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
+            } else {
+                0
+            }
+
+            val isWatched = progressPercent >= 95
+
+            // Update alpha for watched state
+            container.alpha = if (isWatched && !isActive) 0.4f else 1.0f
+
+            // Update status indicators
+            watchedView.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
+            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
+
+            // Update progress indicator
+            if (progressPercent > 5 && progressPercent < 95 && !isWatched) {
+                progressText.text = "$progressPercent% watched"
+                progressContainer.visibility = View.VISIBLE
+
+                posterProgress.max = 100
+                posterProgress.progress = progressPercent
+                posterProgress.visibility = View.VISIBLE
+            } else {
+                progressContainer.visibility = View.GONE
+                posterProgress.visibility = View.GONE
             }
         }
 
@@ -1997,6 +2155,7 @@ private class PlaylistAdapter(
     companion object {
         private const val VIEW_TYPE_HEADER = 0
         private const val VIEW_TYPE_EPISODE = 1
+        private const val PAYLOAD_PROGRESS_UPDATE = "progress_update"
     }
 }
 
@@ -2046,6 +2205,19 @@ private class MoviePlaylistAdapter(
         holder.bind(item, itemIndex, isActive, currentGroup)
     }
 
+    override fun onBindViewHolder(holder: MovieViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isEmpty() || PAYLOAD_PROGRESS_UPDATE !in payloads) {
+            super.onBindViewHolder(holder, position, payloads)
+            return
+        }
+
+        // Handle progress-only update
+        val itemIndex = visibleIndices.getOrNull(position) ?: return
+        val item = items[itemIndex]
+        val isActive = itemIndex == activeItemIndex
+        holder.updateProgress(item, isActive)
+    }
+
     override fun getItemCount(): Int = visibleIndices.size
 
     override fun setActiveIndex(index: Int) {
@@ -2064,8 +2236,12 @@ private class MoviePlaylistAdapter(
     override fun updateCurrentProgress() {
         val position = findPositionForItemIndex(activeItemIndex)
         if (position != -1) {
-            notifyItemChanged(position)
+            notifyItemChanged(position, PAYLOAD_PROGRESS_UPDATE)
         }
+    }
+
+    companion object {
+        private const val PAYLOAD_PROGRESS_UPDATE = "progress_update"
     }
 
     override fun getActiveItemPosition(): Int {
@@ -2146,9 +2322,56 @@ private class MoviePlaylistAdapter(
                 onItemClick(itemIndex)
             }
 
-            // Focus handling for selection overlay
-            container.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
-                selectionOverlay?.visibility = if (hasFocus) View.VISIBLE else View.GONE
+            // Focus handling with smooth animations
+            container.onFocusChangeListener = View.OnFocusChangeListener { view, hasFocus ->
+                android.util.Log.d("PlaylistNav", "MovieViewHolder focus changed - itemIndex=$itemIndex, hasFocus=$hasFocus, position=${bindingAdapterPosition}")
+                if (hasFocus) {
+                    // Scale up and show glow
+                    view.animate()
+                        .scaleX(1.08f)
+                        .scaleY(1.08f)
+                        .setDuration(200)
+                        .start()
+                    selectionOverlay?.visibility = View.VISIBLE
+                } else {
+                    // Scale back down and hide glow
+                    view.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .setDuration(150)
+                        .start()
+                    selectionOverlay?.visibility = View.GONE
+                }
+            }
+        }
+
+        fun updateProgress(item: PlaybackItem, isActive: Boolean) {
+            // Only update progress-related views, not the entire item
+            val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
+                ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
+            } else {
+                0
+            }
+
+            val isWatched = progressPercent >= 95
+
+            // Update alpha for watched state
+            container.alpha = if (isWatched && !isActive) 0.4f else 1.0f
+
+            // Update status indicators
+            watchedView.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
+            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
+
+            // Update progress indicator
+            if (progressPercent in 6..94 && !isWatched) {
+                progressText.text = "$progressPercent% watched"
+                progressContainer.visibility = View.VISIBLE
+                posterProgress.max = 100
+                posterProgress.progress = progressPercent
+                posterProgress.visibility = View.VISIBLE
+            } else {
+                progressContainer.visibility = View.GONE
+                posterProgress.visibility = View.GONE
             }
         }
 
