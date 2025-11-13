@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/torrent_filter_state.dart';
 
@@ -19,6 +20,8 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
   final FocusNode _applyButtonFocusNode = FocusNode();
   final List<FocusNode> _qualityChipFocusNodes = [];
   final List<FocusNode> _ripChipFocusNodes = [];
+  final List<bool> _qualityChipFocusStates = [];
+  final List<bool> _ripChipFocusStates = [];
 
   @override
   void initState() {
@@ -28,13 +31,38 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
 
     // Create focus nodes for quality chips
     for (int i = 0; i < _qualityOptions.length; i++) {
-      _qualityChipFocusNodes.add(FocusNode(debugLabel: 'quality-chip-$i'));
+      final node = FocusNode(debugLabel: 'quality-chip-$i');
+      node.addListener(() {
+        if (mounted) {
+          setState(() {
+            _qualityChipFocusStates[i] = node.hasFocus;
+          });
+        }
+      });
+      _qualityChipFocusNodes.add(node);
+      _qualityChipFocusStates.add(false);
     }
 
     // Create focus nodes for rip source chips
     for (int i = 0; i < _ripOptions.length; i++) {
-      _ripChipFocusNodes.add(FocusNode(debugLabel: 'rip-chip-$i'));
+      final node = FocusNode(debugLabel: 'rip-chip-$i');
+      node.addListener(() {
+        if (mounted) {
+          setState(() {
+            _ripChipFocusStates[i] = node.hasFocus;
+          });
+        }
+      });
+      _ripChipFocusNodes.add(node);
+      _ripChipFocusStates.add(false);
     }
+
+    // Auto-focus first quality chip after sheet is fully built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _qualityChipFocusNodes.isNotEmpty) {
+        _qualityChipFocusNodes[0].requestFocus();
+      }
+    });
   }
 
   @override
@@ -116,6 +144,18 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                     children: [
                       Focus(
                         focusNode: _clearButtonFocusNode,
+                        onKeyEvent: (node, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.select ||
+                                  event.logicalKey == LogicalKeyboardKey.enter ||
+                                  event.logicalKey == LogicalKeyboardKey.space)) {
+                            if (_selectedQualities.isNotEmpty || _selectedSources.isNotEmpty) {
+                              _clearAll();
+                              return KeyEventResult.handled;
+                            }
+                          }
+                          return KeyEventResult.ignored;
+                        },
                         child: TextButton(
                           onPressed:
                               _selectedQualities.isEmpty &&
@@ -127,6 +167,16 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                       ),
                       Focus(
                         focusNode: _closeButtonFocusNode,
+                        onKeyEvent: (node, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.select ||
+                                  event.logicalKey == LogicalKeyboardKey.enter ||
+                                  event.logicalKey == LogicalKeyboardKey.space)) {
+                            Navigator.of(context).pop();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
                         child: IconButton(
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(
@@ -164,24 +214,46 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                               (entry) {
                                 final index = entry.key;
                                 final option = entry.value;
+                                final isFocused = _qualityChipFocusStates[index];
                                 return Focus(
                                   focusNode: _qualityChipFocusNodes[index],
-                                  child: FilterChip(
-                                    label: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(option.title),
-                                        Text(
-                                          option.subtitle,
-                                          style: const TextStyle(fontSize: 10),
-                                        ),
-                                      ],
+                                  onKeyEvent: (node, event) {
+                                    if (event is KeyDownEvent &&
+                                        (event.logicalKey == LogicalKeyboardKey.select ||
+                                            event.logicalKey == LogicalKeyboardKey.enter ||
+                                            event.logicalKey == LogicalKeyboardKey.space)) {
+                                      _toggleQuality(option.value);
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: isFocused
+                                          ? Border.all(
+                                              color: const Color(0xFF3B82F6),
+                                              width: 2,
+                                            )
+                                          : null,
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    selected: _selectedQualities.contains(
-                                      option.value,
+                                    child: FilterChip(
+                                      label: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(option.title),
+                                          Text(
+                                            option.subtitle,
+                                            style: const TextStyle(fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                      selected: _selectedQualities.contains(
+                                        option.value,
+                                      ),
+                                      onSelected: (_) => _toggleQuality(option.value),
                                     ),
-                                    onSelected: (_) => _toggleQuality(option.value),
                                   ),
                                 );
                               },
@@ -208,24 +280,46 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                               (entry) {
                                 final index = entry.key;
                                 final option = entry.value;
+                                final isFocused = _ripChipFocusStates[index];
                                 return Focus(
                                   focusNode: _ripChipFocusNodes[index],
-                                  child: FilterChip(
-                                    label: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(option.title),
-                                        Text(
-                                          option.subtitle,
-                                          style: const TextStyle(fontSize: 10),
-                                        ),
-                                      ],
+                                  onKeyEvent: (node, event) {
+                                    if (event is KeyDownEvent &&
+                                        (event.logicalKey == LogicalKeyboardKey.select ||
+                                            event.logicalKey == LogicalKeyboardKey.enter ||
+                                            event.logicalKey == LogicalKeyboardKey.space)) {
+                                      _toggleSource(option.value);
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: isFocused
+                                          ? Border.all(
+                                              color: const Color(0xFF3B82F6),
+                                              width: 2,
+                                            )
+                                          : null,
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    selected: _selectedSources.contains(
-                                      option.value,
+                                    child: FilterChip(
+                                      label: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(option.title),
+                                          Text(
+                                            option.subtitle,
+                                            style: const TextStyle(fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                      selected: _selectedSources.contains(
+                                        option.value,
+                                      ),
+                                      onSelected: (_) => _toggleSource(option.value),
                                     ),
-                                    onSelected: (_) => _toggleSource(option.value),
                                   ),
                                 );
                               },
@@ -241,6 +335,16 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                 width: double.infinity,
                 child: Focus(
                   focusNode: _applyButtonFocusNode,
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent &&
+                        (event.logicalKey == LogicalKeyboardKey.select ||
+                            event.logicalKey == LogicalKeyboardKey.enter ||
+                            event.logicalKey == LogicalKeyboardKey.space)) {
+                      _apply();
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
                   child: ElevatedButton.icon(
                     onPressed: _apply,
                     style: ElevatedButton.styleFrom(
