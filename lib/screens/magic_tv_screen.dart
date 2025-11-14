@@ -3324,6 +3324,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             useTorrentsCsv: true,
             usePirateBay: true,
             useYts: false,
+            useSolidTorrents: false,
           );
         }).toList();
 
@@ -3877,6 +3878,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               useTorrentsCsv: true,
               usePirateBay: true,
               useYts: false,
+              useSolidTorrents: false,
             ),
           )
           .toList();

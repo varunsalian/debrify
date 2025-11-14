@@ -12,7 +12,9 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
   bool _defaultTorrentsCsvEnabled = true;
   bool _defaultPirateBayEnabled = true;
   bool _defaultYtsEnabled = true;
+  bool _defaultSolidTorrentsEnabled = true;
   int _maxTorrentsCsvResults = 50;
+  int _maxSolidTorrentsResults = 100;
   bool _loading = true;
 
   @override
@@ -25,23 +27,35 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
     final torrentsCsvEnabled = await StorageService.getDefaultTorrentsCsvEnabled();
     final pirateBayEnabled = await StorageService.getDefaultPirateBayEnabled();
     final ytsEnabled = await StorageService.getDefaultYtsEnabled();
+    final solidTorrentsEnabled = await StorageService.getDefaultSolidTorrentsEnabled();
     final maxTorrentsCsvResults = await StorageService.getMaxTorrentsCsvResults();
-    
+    final maxSolidTorrentsResults = await StorageService.getMaxSolidTorrentsResults();
+
     // Ensure the max results value is valid for the dropdown
     final validOptions = [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500];
-    int validMaxResults = maxTorrentsCsvResults;
+    int validMaxTorrentsCsvResults = maxTorrentsCsvResults;
     if (!validOptions.contains(maxTorrentsCsvResults)) {
       // Find the closest valid option
-      validMaxResults = validOptions.reduce((a, b) => (a - maxTorrentsCsvResults).abs() < (b - maxTorrentsCsvResults).abs() ? a : b);
+      validMaxTorrentsCsvResults = validOptions.reduce((a, b) => (a - maxTorrentsCsvResults).abs() < (b - maxTorrentsCsvResults).abs() ? a : b);
       // Save the corrected value back to storage
-      await StorageService.setMaxTorrentsCsvResults(validMaxResults);
+      await StorageService.setMaxTorrentsCsvResults(validMaxTorrentsCsvResults);
     }
-    
+
+    int validMaxSolidTorrentsResults = maxSolidTorrentsResults;
+    if (!validOptions.contains(maxSolidTorrentsResults)) {
+      // Find the closest valid option
+      validMaxSolidTorrentsResults = validOptions.reduce((a, b) => (a - maxSolidTorrentsResults).abs() < (b - maxSolidTorrentsResults).abs() ? a : b);
+      // Save the corrected value back to storage
+      await StorageService.setMaxSolidTorrentsResults(validMaxSolidTorrentsResults);
+    }
+
     setState(() {
       _defaultTorrentsCsvEnabled = torrentsCsvEnabled;
       _defaultPirateBayEnabled = pirateBayEnabled;
       _defaultYtsEnabled = ytsEnabled;
-      _maxTorrentsCsvResults = validMaxResults;
+      _defaultSolidTorrentsEnabled = solidTorrentsEnabled;
+      _maxTorrentsCsvResults = validMaxTorrentsCsvResults;
+      _maxSolidTorrentsResults = validMaxSolidTorrentsResults;
       _loading = false;
     });
   }
@@ -172,7 +186,20 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                               StorageService.setDefaultYtsEnabled(value);
                             },
                           ),
-                          
+                          const SizedBox(height: 12),
+                          _buildEngineSetting(
+                            title: 'SolidTorrents',
+                            subtitle: 'Comprehensive torrent database with pagination',
+                            icon: Icons.storage_rounded,
+                            value: _defaultSolidTorrentsEnabled,
+                            onChanged: (value) {
+                              setState(() {
+                                _defaultSolidTorrentsEnabled = value;
+                              });
+                              StorageService.setDefaultSolidTorrentsEnabled(value);
+                            },
+                          ),
+
                           const SizedBox(height: 16),
                           
                           // Info message
@@ -263,6 +290,17 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                             enabled: false,
                             options: const [50],
                             subtitle: 'Fixed at 50 results',
+                          ),
+                          const SizedBox(height: 12),
+                          _buildMaxResultsDropdown(
+                            title: 'Max Results from SolidTorrents',
+                            value: _maxSolidTorrentsResults,
+                            onChanged: (value) async {
+                              await StorageService.setMaxSolidTorrentsResults(value);
+                              setState(() {
+                                _maxSolidTorrentsResults = value;
+                              });
+                            },
                           ),
                          ],
                        ),

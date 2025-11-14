@@ -2,12 +2,14 @@ import 'search_engine.dart';
 import 'torrents_csv_engine.dart';
 import 'pirate_bay_engine.dart';
 import 'yts_engine.dart';
+import 'solid_torrents_engine.dart';
 
 class SearchEngineFactory {
   static final Map<String, SearchEngine> _engines = {
     'torrents_csv': const TorrentsCsvEngine(),
     'pirate_bay': const PirateBayEngine(),
     'yts': const YtsEngine(),
+    'solid_torrents': const SolidTorrentsEngine(),
   };
 
   static SearchEngine getEngine(String name) {

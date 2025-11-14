@@ -18,7 +18,8 @@ abstract class SearchEngine {
 enum SearchEngineType {
   torrentsCsv('torrents_csv', 'Torrents CSV', 'https://torrents-csv.com/service/search'),
   pirateBay('pirate_bay', 'The Pirate Bay', 'https://apibay.org/q.php'),
-  yts('yts', 'YTS', 'https://yts.mx/api/v2/list_movies.json');
+  yts('yts', 'YTS', 'https://yts.mx/api/v2/list_movies.json'),
+  solidTorrents('solid_torrents', 'SolidTorrents', 'https://solidtorrents.to/api/v1/search');
 
   const SearchEngineType(this.name, this.displayName, this.baseUrl);
 

@@ -16,6 +16,7 @@ class TorrentService {
     bool useTorrentsCsv = true,
     bool usePirateBay = true,
     bool useYts = true,
+    bool useSolidTorrents = true,
     String? imdbIdOverride,
   }) async {
     final engines = SearchEngineFactory.getAllEngines();
@@ -34,7 +35,8 @@ class TorrentService {
       
       if ((engineName == 'torrents_csv' && useTorrentsCsv) ||
           (engineName == 'pirate_bay' && usePirateBay) ||
-          (engineName == 'yts' && useYts)) {
+          (engineName == 'yts' && useYts) ||
+          (engineName == 'solid_torrents' && useSolidTorrents)) {
         selectedEngines.add(engine);
         selectedEngineNames.add(engineName);
       }

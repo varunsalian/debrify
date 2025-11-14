@@ -40,9 +40,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _csvTileFocusNode = FocusNode();
   final FocusNode _pbTileFocusNode = FocusNode();
   final FocusNode _ytsTileFocusNode = FocusNode();
+  final FocusNode _solidTorrentsTileFocusNode = FocusNode();
   final FocusNode _csvSwitchFocusNode = FocusNode(skipTraversal: true);
   final FocusNode _pbSwitchFocusNode = FocusNode(skipTraversal: true);
   final FocusNode _ytsSwitchFocusNode = FocusNode(skipTraversal: true);
+  final FocusNode _solidTorrentsSwitchFocusNode = FocusNode(skipTraversal: true);
   final FocusNode _providerAccordionFocusNode = FocusNode();
   final FocusNode _advancedButtonFocusNode = FocusNode();
   final FocusNode _sortDirectionFocusNode = FocusNode();
@@ -52,6 +54,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _csvTileFocused = false;
   bool _pbTileFocused = false;
   bool _ytsTileFocused = false;
+  bool _solidTorrentsTileFocused = false;
   bool _providerAccordionFocused = false;
   bool _advancedButtonFocused = false;
   bool _sortDirectionFocused = false;
@@ -80,6 +83,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _useTorrentsCsv = true;
   bool _usePirateBay = true;
   bool _useYts = true;
+  bool _useSolidTorrents = true;
   bool _showProvidersPanel = false;
   AdvancedSearchSelection? _activeAdvancedSelection;
 
@@ -292,11 +296,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         await StorageService.getDefaultTorrentsCsvEnabled();
     final defaultPirateBay = await StorageService.getDefaultPirateBayEnabled();
     final defaultYts = await StorageService.getDefaultYtsEnabled();
+    final defaultSolidTorrents = await StorageService.getDefaultSolidTorrentsEnabled();
 
     setState(() {
       _useTorrentsCsv = defaultTorrentsCsv;
       _usePirateBay = defaultPirateBay;
       _useYts = defaultYts;
+      _useSolidTorrents = defaultSolidTorrents;
     });
 
     // Focus the search field after a short delay to ensure UI is ready
@@ -394,6 +400,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         useTorrentsCsv: _useTorrentsCsv,
         usePirateBay: _usePirateBay,
         useYts: _useYts,
+        useSolidTorrents: _useSolidTorrents,
         imdbIdOverride: (imdbOverride != null && imdbOverride.trim().isNotEmpty)
             ? imdbOverride
             : null,
@@ -538,6 +545,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'The Pirate Bay';
       case 'yts':
         return 'YTS';
+      case 'solid_torrents':
+        return 'SolidTorrents';
       case 'torrentio':
         return 'Torrentio';
       default:
@@ -553,6 +562,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'TPB';
       case 'torrents_csv':
         return 'TCSV';
+      case 'solid_torrents':
+        return 'ST';
       case 'torrentio':
         return 'TIO';
       default:
@@ -636,6 +647,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _useYts = value;
     });
     StorageService.setDefaultYtsEnabled(value);
+    if (_hasSearched && _searchController.text.trim().isNotEmpty) {
+      _searchTorrents(_searchController.text);
+    }
+  }
+
+  void _setUseSolidTorrents(bool value) {
+    if (_useSolidTorrents == value) return;
+    setState(() {
+      _useSolidTorrents = value;
+    });
+    StorageService.setDefaultSolidTorrentsEnabled(value);
     if (_hasSearched && _searchController.text.trim().isNotEmpty) {
       _searchTorrents(_searchController.text);
     }
@@ -748,7 +770,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Widget _buildProviderSummaryText(BuildContext context) {
     final enabledCount =
-        (_useTorrentsCsv ? 1 : 0) + (_usePirateBay ? 1 : 0) + (_useYts ? 1 : 0);
+        (_useTorrentsCsv ? 1 : 0) + (_usePirateBay ? 1 : 0) + (_useYts ? 1 : 0) + (_useSolidTorrents ? 1 : 0);
     if (enabledCount == 0) {
       return Text(
         'No providers selected',
@@ -881,6 +903,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     onFocusChange: (visible) {
                       if (_ytsTileFocused != visible) {
                         setState(() => _ytsTileFocused = visible);
+                      }
+                    },
+                  ),
+                  Divider(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.2),
+                  ),
+                  _buildProviderSwitch(
+                    context,
+                    label: 'SolidTorrents',
+                    value: _useSolidTorrents,
+                    onToggle: _setUseSolidTorrents,
+                    tileFocusNode: _solidTorrentsTileFocusNode,
+                    switchFocusNode: _solidTorrentsSwitchFocusNode,
+                    tileFocused: _solidTorrentsTileFocused,
+                    onFocusChange: (visible) {
+                      if (_solidTorrentsTileFocused != visible) {
+                        setState(() => _solidTorrentsTileFocused = visible);
                       }
                     },
                   ),
@@ -3991,6 +4032,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (_useTorrentsCsv) selectedEngines.add('Torrents CSV');
       if (_usePirateBay) selectedEngines.add('The Pirate Bay');
       if (_useYts) selectedEngines.add('YTS');
+      if (_useSolidTorrents) selectedEngines.add('SolidTorrents');
       if (_activeAdvancedSelection != null) {
         selectedEngines.add('Torrentio (Advanced)');
       }
@@ -4019,6 +4061,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final ytsCount = _engineCounts['yts'] ?? 0;
     if (ytsCount > 0) {
       breakdowns.add('YTS: $ytsCount');
+    }
+
+    final solidTorrentsCount = _engineCounts['solid_torrents'] ?? 0;
+    if (solidTorrentsCount > 0) {
+      breakdowns.add('SolidTorrents: $solidTorrentsCount');
     }
 
     final torrentioCount = _engineCounts['torrentio'] ?? 0;

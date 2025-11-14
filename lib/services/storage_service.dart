@@ -24,7 +24,10 @@ class StorageService {
   static const String _defaultPirateBayEnabledKey =
       'default_pirate_bay_enabled';
   static const String _defaultYtsEnabledKey = 'default_yts_enabled';
+  static const String _defaultSolidTorrentsEnabledKey =
+      'default_solid_torrents_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
+  static const String _maxSolidTorrentsResultsKey = 'max_solid_torrents_results';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
   static const String _debrifyTvShowChannelNameKey =
@@ -194,6 +197,16 @@ class StorageService {
     await prefs.setBool(_defaultYtsEnabledKey, enabled);
   }
 
+  static Future<bool> getDefaultSolidTorrentsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_defaultSolidTorrentsEnabledKey) ?? true;
+  }
+
+  static Future<void> setDefaultSolidTorrentsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_defaultSolidTorrentsEnabledKey, enabled);
+  }
+
   // Max results settings
   static Future<int> getMaxTorrentsCsvResults() async {
     final prefs = await SharedPreferences.getInstance();
@@ -205,6 +218,18 @@ class StorageService {
     // Clamp between 25 and 500
     final clampedValue = maxResults.clamp(25, 500);
     await prefs.setInt(_maxTorrentsCsvResultsKey, clampedValue);
+  }
+
+  static Future<int> getMaxSolidTorrentsResults() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_maxSolidTorrentsResultsKey) ?? 100; // Default to 100
+  }
+
+  static Future<void> setMaxSolidTorrentsResults(int maxResults) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Clamp between 25 and 500
+    final clampedValue = maxResults.clamp(25, 500);
+    await prefs.setInt(_maxSolidTorrentsResultsKey, clampedValue);
   }
 
   // Enhanced Playback State methods
