@@ -63,6 +63,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   List<Torrent> _torrents = [];
   List<Torrent> _allTorrents = [];
   Map<String, int> _engineCounts = {};
+  Map<String, String> _engineErrors = {};
   Map<String, _TorrentMetadata> _torrentMetadata = {};
   bool _isLoading = false;
   String _errorMessage = '';
@@ -517,6 +518,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           counts['torrentio'] = torrentioResults.length;
         }
         _engineCounts = counts;
+        _engineErrors = engineErrors;
         _torboxCacheStatus = torboxCacheMap;
         _isLoading = false;
         _showingTorboxCachedOnly = showOnlyCached;
@@ -4021,59 +4023,91 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  String _buildEngineBreakdownText() {
-    if (_engineCounts.isEmpty) {
-      // Show which engines are selected
-      final List<String> selectedEngines = [];
-      if (_useTorrentsCsv) selectedEngines.add('Torrents CSV');
-      if (_usePirateBay) selectedEngines.add('The Pirate Bay');
-      if (_useYts) selectedEngines.add('YTS');
-      if (_useSolidTorrents) selectedEngines.add('SolidTorrents');
-      if (_activeAdvancedSelection != null) {
-        selectedEngines.add('Torrentio (Advanced)');
+  Widget _buildEngineStatusChips(BuildContext context) {
+    final List<Widget> chips = [];
+
+    final engines = [
+      {'key': 'torrents_csv', 'short': 'TCSV', 'name': 'Torrents CSV'},
+      {'key': 'pirate_bay', 'short': 'TPB', 'name': 'Pirate Bay'},
+      {'key': 'yts', 'short': 'YTS', 'name': 'YTS'},
+      {'key': 'solid_torrents', 'short': 'ST', 'name': 'SolidTorrents'},
+      {'key': 'torrentio', 'short': 'TIO', 'name': 'Torrentio'},
+    ];
+
+    for (final engine in engines) {
+      final key = engine['key'] as String;
+      final short = engine['short'] as String;
+      final count = _engineCounts[key] ?? 0;
+      final hasError = _engineErrors.containsKey(key);
+
+      if (count > 0 || hasError) {
+        chips.add(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: hasError
+                  ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3)
+                  : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: hasError
+                    ? Theme.of(context).colorScheme.error.withValues(alpha: 0.5)
+                    : Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  hasError ? Icons.error_outline : Icons.check_circle,
+                  size: 14,
+                  color: hasError
+                      ? Theme.of(context).colorScheme.error
+                      : Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  short,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: hasError
+                        ? Theme.of(context).colorScheme.onErrorContainer
+                        : Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
+                if (!hasError && count > 0) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '$count',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
       }
-
-      if (selectedEngines.isEmpty) {
-        return 'No search engines selected';
-      }
-
-      return 'From ${selectedEngines.join(' and ')}';
     }
 
-    final List<String> breakdowns = [];
-
-    // Add Torrents CSV count
-    final csvCount = _engineCounts['torrents_csv'] ?? 0;
-    if (csvCount > 0) {
-      breakdowns.add('Torrents CSV: $csvCount');
+    if (chips.isEmpty) {
+      return Text(
+        'No results',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+        ),
+      );
     }
 
-    // Add Pirate Bay count
-    final pbCount = _engineCounts['pirate_bay'] ?? 0;
-    if (pbCount > 0) {
-      breakdowns.add('The Pirate Bay: $pbCount');
-    }
-
-    final ytsCount = _engineCounts['yts'] ?? 0;
-    if (ytsCount > 0) {
-      breakdowns.add('YTS: $ytsCount');
-    }
-
-    final solidTorrentsCount = _engineCounts['solid_torrents'] ?? 0;
-    if (solidTorrentsCount > 0) {
-      breakdowns.add('SolidTorrents: $solidTorrentsCount');
-    }
-
-    final torrentioCount = _engineCounts['torrentio'] ?? 0;
-    if (torrentioCount > 0) {
-      breakdowns.add('Torrentio: $torrentioCount');
-    }
-
-    if (breakdowns.isEmpty) {
-      return 'No results found';
-    }
-
-    return breakdowns.join(' • ');
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: chips,
+    );
   }
 
   @override
@@ -4568,44 +4602,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   ),
                                 ],
                               ),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.2,
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.2,
+                                          ),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Icon(
+                                          Icons.search_rounded,
+                                          color: Colors.white,
+                                          size: 14,
+                                        ),
                                       ),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Icon(
-                                      Icons.search_rounded,
-                                      color: Colors.white,
-                                      size: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      () {
-                                        final baseText =
-                                            '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'} Found • ${_buildEngineBreakdownText()}';
-                                        if (_showingTorboxCachedOnly) {
-                                          return '$baseText • Torbox cached only';
-                                        }
-                                        if (_torboxCacheStatus != null &&
-                                            _torboxCacheCheckEnabled) {
-                                          return '$baseText • Torbox cache check';
-                                        }
-                                        return baseText;
-                                      }(),
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'}${_showingTorboxCachedOnly ? ' (Torbox cached)' : ''}',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ),
+                                  const SizedBox(height: 6),
+                                  _buildEngineStatusChips(context),
                                 ],
                               ),
                             ),
