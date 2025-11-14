@@ -47,6 +47,7 @@ dependencies:
   saf_stream: ^0.12.0
   connectivity_plus: ^6.0.3
   window_manager: ^0.3.8
+  app_links: ^6.3.2
 
 
   

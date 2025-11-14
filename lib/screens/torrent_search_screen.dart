@@ -102,6 +102,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   @override
   void initState() {
     super.initState();
+
+    // Expose post-torrent action handler via bridge for deep links
+    MainPageBridge.handleRealDebridResult = (result, torrentName, apiKey) async {
+      if (!mounted) return;
+      await _handlePostTorrentAction(result, torrentName, apiKey, -1);
+    };
+
+    // Expose Torbox post-action handler via bridge for deep links
+    MainPageBridge.handleTorboxResult = (torrent) async {
+      if (!mounted) return;
+      await _showTorboxPostAddOptions(torrent);
+    };
+
     _listAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -331,6 +344,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       node.dispose();
     }
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
+    MainPageBridge.handleRealDebridResult = null;
+    MainPageBridge.handleTorboxResult = null;
     _listAnimationController.dispose();
     super.dispose();
   }

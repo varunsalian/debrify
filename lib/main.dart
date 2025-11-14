@@ -21,6 +21,9 @@ import 'widgets/premium_top_nav.dart';
 import 'services/main_page_bridge.dart';
 import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
+import 'services/deep_link_service.dart';
+import 'services/magnet_link_handler.dart';
+import 'models/torbox_torrent.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
 
@@ -408,6 +411,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         }
       });
     });
+
+    // Initialize deep link service for magnet links
+    _initializeDeepLinking();
   }
 
   @override
@@ -417,7 +423,45 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxAction = null;
     _animationController.dispose();
+    DeepLinkService().dispose();
     super.dispose();
+  }
+
+  /// Initialize deep linking for magnet links
+  void _initializeDeepLinking() {
+    final deepLinkService = DeepLinkService();
+
+    // Set the callback for handling magnet links
+    deepLinkService.onMagnetLinkReceived = (magnetUri) async {
+      if (!mounted) return;
+
+      // Create handler with callbacks
+      final handler = MagnetLinkHandler(
+        context: context,
+        onRealDebridResult: (result, torrentName, apiKey) async {
+          // Use the same post-action flow as torrent search
+          await MainPageBridge.handleRealDebridResult?.call(result, torrentName, apiKey);
+        },
+        onRealDebridAdded: (torrent) {
+          // Fallback: Open RealDebrid tab with the added torrent
+          MainPageBridge.openDebridOptions?.call(torrent);
+        },
+        onTorboxResult: (torrent) async {
+          // Use the same post-action flow as torrent search
+          await MainPageBridge.handleTorboxResult?.call(torrent);
+        },
+        onTorboxAdded: (torrent) {
+          // Fallback: Navigate to Torbox tab
+          MainPageBridge.switchTab?.call(5); // Torbox tab index
+        },
+      );
+
+      // Handle the magnet link
+      await handler.handleMagnetLink(magnetUri);
+    };
+
+    // Initialize the service
+    deepLinkService.initialize();
   }
 
   void _onItemTapped(int index) {
