@@ -853,77 +853,68 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Column(
                 children: [
-                  const SizedBox(height: 8),
-                  _buildProviderSwitch(
-                    context,
-                    label: 'Torrents CSV',
-                    value: _useTorrentsCsv,
-                    onToggle: _setUseTorrentsCsv,
-                    tileFocusNode: _csvTileFocusNode,
-                    switchFocusNode: _csvSwitchFocusNode,
-                    tileFocused: _csvTileFocused,
-                    onFocusChange: (visible) {
-                      if (_csvTileFocused != visible) {
-                        setState(() => _csvTileFocused = visible);
-                      }
-                    },
-                  ),
-                  Divider(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.2),
-                  ),
-                  _buildProviderSwitch(
-                    context,
-                    label: 'Pirate Bay',
-                    value: _usePirateBay,
-                    onToggle: _setUsePirateBay,
-                    tileFocusNode: _pbTileFocusNode,
-                    switchFocusNode: _pbSwitchFocusNode,
-                    tileFocused: _pbTileFocused,
-                    onFocusChange: (visible) {
-                      if (_pbTileFocused != visible) {
-                        setState(() => _pbTileFocused = visible);
-                      }
-                    },
-                  ),
-                  Divider(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.2),
-                  ),
-                  _buildProviderSwitch(
-                    context,
-                    label: 'YTS',
-                    value: _useYts,
-                    onToggle: _setUseYts,
-                    tileFocusNode: _ytsTileFocusNode,
-                    switchFocusNode: _ytsSwitchFocusNode,
-                    tileFocused: _ytsTileFocused,
-                    onFocusChange: (visible) {
-                      if (_ytsTileFocused != visible) {
-                        setState(() => _ytsTileFocused = visible);
-                      }
-                    },
-                  ),
-                  Divider(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.2),
-                  ),
-                  _buildProviderSwitch(
-                    context,
-                    label: 'SolidTorrents',
-                    value: _useSolidTorrents,
-                    onToggle: _setUseSolidTorrents,
-                    tileFocusNode: _solidTorrentsTileFocusNode,
-                    switchFocusNode: _solidTorrentsSwitchFocusNode,
-                    tileFocused: _solidTorrentsTileFocused,
-                    onFocusChange: (visible) {
-                      if (_solidTorrentsTileFocused != visible) {
-                        setState(() => _solidTorrentsTileFocused = visible);
-                      }
-                    },
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildProviderSwitch(
+                        context,
+                        label: 'Torrents CSV',
+                        value: _useTorrentsCsv,
+                        onToggle: _setUseTorrentsCsv,
+                        tileFocusNode: _csvTileFocusNode,
+                        switchFocusNode: _csvSwitchFocusNode,
+                        tileFocused: _csvTileFocused,
+                        onFocusChange: (visible) {
+                          if (_csvTileFocused != visible) {
+                            setState(() => _csvTileFocused = visible);
+                          }
+                        },
+                      ),
+                      _buildProviderSwitch(
+                        context,
+                        label: 'Pirate Bay',
+                        value: _usePirateBay,
+                        onToggle: _setUsePirateBay,
+                        tileFocusNode: _pbTileFocusNode,
+                        switchFocusNode: _pbSwitchFocusNode,
+                        tileFocused: _pbTileFocused,
+                        onFocusChange: (visible) {
+                          if (_pbTileFocused != visible) {
+                            setState(() => _pbTileFocused = visible);
+                          }
+                        },
+                      ),
+                      _buildProviderSwitch(
+                        context,
+                        label: 'YTS',
+                        value: _useYts,
+                        onToggle: _setUseYts,
+                        tileFocusNode: _ytsTileFocusNode,
+                        switchFocusNode: _ytsSwitchFocusNode,
+                        tileFocused: _ytsTileFocused,
+                        onFocusChange: (visible) {
+                          if (_ytsTileFocused != visible) {
+                            setState(() => _ytsTileFocused = visible);
+                          }
+                        },
+                      ),
+                      _buildProviderSwitch(
+                        context,
+                        label: 'SolidTorrents',
+                        value: _useSolidTorrents,
+                        onToggle: _setUseSolidTorrents,
+                        tileFocusNode: _solidTorrentsTileFocusNode,
+                        switchFocusNode: _solidTorrentsSwitchFocusNode,
+                        tileFocused: _solidTorrentsTileFocused,
+                        onFocusChange: (visible) {
+                          if (_solidTorrentsTileFocused != visible) {
+                            setState(() => _solidTorrentsTileFocused = visible);
+                          }
+                        },
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   _buildAdvancedProviderHint(context),
@@ -997,39 +988,44 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
-        width: double.infinity,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          color: tileFocused
-              ? const Color(0xFF3B82F6).withValues(alpha: 0.18)
-              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          color: value
+              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6)
+              : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           border: Border.all(
             color: tileFocused
-                ? const Color(0xFF3B82F6).withValues(alpha: 0.6)
-                : Colors.transparent,
+                ? Theme.of(context).colorScheme.primary
+                : value
+                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)
+                    : Colors.transparent,
+            width: tileFocused ? 2 : 1,
           ),
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           canRequestFocus: false,
           onTap: () => onToggle(!value),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Switch(
-                  focusNode: switchFocusNode,
-                  value: value,
-                  onChanged: onToggle,
+                Icon(
+                  value ? Icons.check_circle : Icons.circle_outlined,
+                  size: 18,
+                  color: value
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: value
+                        ? Theme.of(context).colorScheme.onPrimaryContainer
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: value ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
               ],
