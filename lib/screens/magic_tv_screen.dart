@@ -24,6 +24,7 @@ import '../services/torbox_service.dart';
 import '../services/torrent_service.dart';
 import '../services/torrents_csv_engine.dart';
 import '../services/pirate_bay_engine.dart';
+import '../services/solid_torrents_engine.dart';
 import '../services/debrify_tv_zip_importer.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
@@ -246,9 +247,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   String _status = '';
   List<_DebrifyTvChannel> _channels = <_DebrifyTvChannel>[];
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
-  static const int _channelTorrentsCsvMaxResultsSmall = 100;
-  static const int _channelTorrentsCsvMaxResultsLarge = 25;
-  static const int _channelCsvParallelism = 4;
+  // These are now loaded from settings dynamically
+  int _channelTorrentsCsvMaxResultsSmall = 100;
+  int _channelTorrentsCsvMaxResultsLarge = 25;
+  int _channelSolidTorrentsMaxResultsSmall = 100;
+  int _channelSolidTorrentsMaxResultsLarge = 100;
+  int _channelCsvParallelism = 4;
+  int _keywordThreshold = 10;
+  int _minTorrentsPerKeyword = 5;
+
+  // Engine toggles
+  bool _useTorrentsCsv = true;
+  bool _usePirateBay = true;
+  bool _useYts = false;
+  bool _useSolidTorrents = false;
+
+  // Quick Play limits
+  int _quickPlayTorrentsCsvMax = 500;
+  int _quickPlaySolidTorrentsMax = 200;
+  int _quickPlayMaxKeywords = 5;
+
   static const int _playbackTorrentThreshold = 1000;
   static const int _maxTorrentsPerKeywordPlayback = 25;
   static const int _minimumTorrentsForChannel = 5;
@@ -490,6 +508,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         await StorageService.getTorboxIntegrationEnabled();
     final torboxKey = await StorageService.getTorboxApiKey();
 
+    // Load Debrify TV search settings
+    final useTorrentsCsv = await StorageService.getDebrifyTvUseTorrentsCsv();
+    final usePirateBay = await StorageService.getDebrifyTvUsePirateBay();
+    final useYts = await StorageService.getDebrifyTvUseYts();
+    final useSolidTorrents = await StorageService.getDebrifyTvUseSolidTorrents();
+    final channelSmallTorrentsCsvMax = await StorageService.getDebrifyTvChannelSmallTorrentsCsvMax();
+    final channelSmallSolidTorrentsMax = await StorageService.getDebrifyTvChannelSmallSolidTorrentsMax();
+    final channelLargeTorrentsCsvMax = await StorageService.getDebrifyTvChannelLargeTorrentsCsvMax();
+    final channelLargeSolidTorrentsMax = await StorageService.getDebrifyTvChannelLargeSolidTorrentsMax();
+    final channelBatchSize = await StorageService.getDebrifyTvChannelBatchSize();
+    final keywordThreshold = await StorageService.getDebrifyTvKeywordThreshold();
+    final minTorrentsPerKeyword = await StorageService.getDebrifyTvMinTorrentsPerKeyword();
+    final quickPlayTorrentsCsvMax = await StorageService.getDebrifyTvQuickPlayTorrentsCsvMax();
+    final quickPlaySolidTorrentsMax = await StorageService.getDebrifyTvQuickPlaySolidTorrentsMax();
+    final quickPlayMaxKeywords = await StorageService.getDebrifyTvQuickPlayMaxKeywords();
+
     final rdAvailable =
         rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
     final torboxAvailable =
@@ -524,6 +558,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _quickHideBackButton = hideBackButton;
         _quickAvoidNsfw = avoidNsfw;
         _quickProvider = defaultProvider;
+
+        // Update search settings
+        _useTorrentsCsv = useTorrentsCsv;
+        _usePirateBay = usePirateBay;
+        _useYts = useYts;
+        _useSolidTorrents = useSolidTorrents;
+        _channelTorrentsCsvMaxResultsSmall = channelSmallTorrentsCsvMax;
+        _channelTorrentsCsvMaxResultsLarge = channelLargeTorrentsCsvMax;
+        _channelSolidTorrentsMaxResultsSmall = channelSmallSolidTorrentsMax;
+        _channelSolidTorrentsMaxResultsLarge = channelLargeSolidTorrentsMax;
+        _channelCsvParallelism = channelBatchSize;
+        _keywordThreshold = keywordThreshold;
+        _minTorrentsPerKeyword = minTorrentsPerKeyword;
+        _quickPlayTorrentsCsvMax = quickPlayTorrentsCsvMax;
+        _quickPlaySolidTorrentsMax = quickPlaySolidTorrentsMax;
+        _quickPlayMaxKeywords = quickPlayMaxKeywords;
       });
     }
 
@@ -600,6 +650,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final channelAvoidNsfw = channel.avoidNsfw;
     final csvEngine = const TorrentsCsvEngine();
     final pirateEngine = const PirateBayEngine();
+    final solidEngine = const SolidTorrentsEngine();
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final accumulator = <String, CachedTorrent>{};
@@ -633,8 +684,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final pirateFutures = <String, Future<List<Torrent>>>{};
+    final solidFutures = <String, Future<List<Torrent>>>{};
+
+    final bool usePirate = _usePirateBay;
+    final bool useSolid = _useSolidTorrents;
+    final int solidMaxResults = normalizedKeywords.length < _keywordThreshold
+        ? _channelSolidTorrentsMaxResultsSmall
+        : _channelSolidTorrentsMaxResultsLarge;
+
     for (final keyword in keywordsToWarm) {
-      pirateFutures[keyword] = pirateEngine.search(keyword);
+      if (usePirate) {
+        pirateFutures[keyword] = pirateEngine.search(keyword);
+      }
+      if (useSolid) {
+        solidFutures[keyword] = solidEngine.searchWithConfig(
+          keyword,
+          maxResults: solidMaxResults,
+        ).then((result) => result.torrents);
+      }
     }
 
     bool anySuccess = accumulator.isNotEmpty;
@@ -648,13 +715,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final futures = batch.map((keyword) async {
         return await _warmKeyword(
           keyword: keyword,
+          useTorrentsCsv: _useTorrentsCsv,
           csvEngine: csvEngine,
           pirateFuture: pirateFutures[keyword],
+          solidFuture: solidFutures[keyword],
           accumulator: accumulator,
           stats: stats,
           now: now,
           totalKeywords: normalizedKeywords.length,
           avoidNsfw: channelAvoidNsfw, // Use channel's NSFW setting
+          minTorrentsPerKeyword: _minTorrentsPerKeyword,
         );
       }).toList();
 
@@ -706,43 +776,42 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<_KeywordWarmResult?> _warmKeyword({
     required String keyword,
+    required bool useTorrentsCsv,
     required TorrentsCsvEngine csvEngine,
     required Future<List<Torrent>>? pirateFuture,
+    required Future<List<Torrent>>? solidFuture,
     required Map<String, CachedTorrent> accumulator,
     required Map<String, KeywordStat> stats,
     required int now,
     required int totalKeywords,
     required bool avoidNsfw, // Use channel's NSFW setting
+    required int minTorrentsPerKeyword,
   }) async {
     String? csvFailure;
     TorrentsCsvSearchResult csvResult;
-    try {
-      csvResult = await csvEngine.searchWithConfig(
-        keyword,
-        maxResults: totalKeywords < 10
-            ? _channelTorrentsCsvMaxResultsSmall
-            : _channelTorrentsCsvMaxResultsLarge,
-      );
-    } catch (e) {
-      debugPrint(
-        'DebrifyTV: Cache warm Torrents CSV failed for "$keyword": $e',
-      );
+    if (useTorrentsCsv) {
+      try {
+        csvResult = await csvEngine.searchWithConfig(
+          keyword,
+          maxResults: totalKeywords < _keywordThreshold
+              ? _channelTorrentsCsvMaxResultsSmall
+              : _channelTorrentsCsvMaxResultsLarge,
+        );
+      } catch (e) {
+        debugPrint(
+          'DebrifyTV: Cache warm Torrents CSV failed for "$keyword": $e',
+        );
+        csvResult = TorrentsCsvSearchResult(
+          torrents: const <Torrent>[],
+          pagesPulled: 0,
+        );
+        csvFailure =
+            'Torrents CSV is unavailable right now. Please try again later.';
+      }
+    } else {
       csvResult = TorrentsCsvSearchResult(
         torrents: const <Torrent>[],
         pagesPulled: 0,
-      );
-      csvFailure =
-          'Torrents CSV is unavailable right now. Please try again later.';
-      return _KeywordWarmResult(
-        keyword: keyword,
-        addedHashes: const <String>{},
-        stat: (stats[keyword] ?? KeywordStat.initial()).copyWith(
-          totalFetched: 0,
-          lastSearchedAt: now,
-          pagesPulled: 0,
-          pirateBayHits: 0,
-        ),
-        failureMessage: csvFailure,
       );
     }
 
@@ -758,9 +827,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           'The Pirate Bay search failed. Some torrents may be missing.';
     }
 
+    List<Torrent> solidResult = const <Torrent>[];
+    String? solidFailure;
+    try {
+      if (solidFuture != null) {
+        solidResult = await solidFuture;
+      }
+    } catch (e) {
+      debugPrint('DebrifyTV: Cache warm SolidTorrents failed for "$keyword": $e');
+      solidFailure =
+          'SolidTorrents search failed. Some torrents may be missing.';
+    }
+
     // Apply NSFW filter to search results before caching
     List<Torrent> csvTorrents = csvResult.torrents;
     List<Torrent> pirateTorrents = pirateResult;
+    List<Torrent> solidTorrents = solidResult;
 
     if (avoidNsfw) {
       final csvBefore = csvTorrents.length;
@@ -779,13 +861,41 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return true;
       }).toList();
 
-      final totalBefore = csvBefore + pirateBefore;
-      final totalAfter = csvTorrents.length + pirateTorrents.length;
+      final solidBefore = solidTorrents.length;
+      solidTorrents = solidTorrents.where((torrent) {
+        if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+          return false;
+        }
+        return true;
+      }).toList();
+
+      final totalBefore = csvBefore + pirateBefore + solidBefore;
+      final totalAfter = csvTorrents.length + pirateTorrents.length + solidTorrents.length;
       if (totalBefore != totalAfter) {
         debugPrint(
           'DebrifyTV: Cache NSFW filter for "$keyword": $totalBefore → $totalAfter torrents',
         );
       }
+    }
+
+    // Check minimum torrents per keyword threshold
+    final totalTorrents = csvTorrents.length + pirateTorrents.length + solidTorrents.length;
+    if (totalTorrents < minTorrentsPerKeyword) {
+      debugPrint(
+        'DebrifyTV: Skipping keyword "$keyword" – only $totalTorrents torrent(s), minimum is $minTorrentsPerKeyword',
+      );
+      final stat = (stats[keyword] ?? KeywordStat.initial()).copyWith(
+        totalFetched: 0,
+        lastSearchedAt: now,
+        pagesPulled: csvResult.pagesPulled,
+        pirateBayHits: pirateResult.length,
+      );
+      return _KeywordWarmResult(
+        keyword: keyword,
+        addedHashes: const <String>{},
+        stat: stat,
+        failureMessage: 'Too few torrents for "$keyword" (found $totalTorrents, need $minTorrentsPerKeyword)',
+      );
     }
 
     final keywordHashes = <String>{};
@@ -820,6 +930,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
     }
 
+    for (final torrent in solidTorrents) {
+      final hash = _normalizeInfohash(torrent.infohash);
+      if (hash.isEmpty) {
+        continue;
+      }
+      keywordHashes.add(hash);
+      _accumulateCachedTorrent(
+        accumulator: accumulator,
+        infohash: hash,
+        torrent: torrent,
+        keyword: keyword,
+        source: 'solid_torrents',
+      );
+    }
+
     final updatedStats = stats[keyword] ?? KeywordStat.initial();
     final stat = updatedStats.copyWith(
       totalFetched: keywordHashes.length,
@@ -833,7 +958,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       failureMessage = csvFailure;
     } else if (pirateFailure != null) {
       failureMessage = pirateFailure;
-    } else if (csvResult.torrents.isEmpty && pirateResult.isEmpty) {
+    } else if (solidFailure != null) {
+      failureMessage = solidFailure;
+    } else if (csvResult.torrents.isEmpty && pirateResult.isEmpty && solidResult.isEmpty) {
       failureMessage = 'No torrents found for "$keyword" yet.';
     }
 
@@ -1020,7 +1147,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final int effectiveUniverse = max(1, totalKeywordUniverse ?? keywordCount);
-    final bool useExpandedCsvFetch = effectiveUniverse < 10;
+    final bool useExpandedCsvFetch = effectiveUniverse < _keywordThreshold;
     final int maxResultsConfig = useExpandedCsvFetch
         ? _channelTorrentsCsvMaxResultsSmall
         : _channelTorrentsCsvMaxResultsLarge;
@@ -2892,13 +3019,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       return;
     }
-    if (keywords.length > 5) {
+    if (keywords.length > _quickPlayMaxKeywords) {
       setState(() {
         _status =
-            'Quick Play supports up to 5 keywords. Create a channel for larger sets.';
+            'Quick Play supports up to $_quickPlayMaxKeywords keywords. Create a channel for larger sets.';
       });
       _showSnack(
-        'Quick Play supports up to 5 keywords. Create a channel for bigger combos.',
+        'Quick Play supports up to $_quickPlayMaxKeywords keywords. Create a channel for bigger combos.',
         color: Colors.orange,
       );
       debugPrint(
@@ -3142,16 +3269,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Silent approach - no progress logging needed
 
-    // Pull the full result set (500 max) up front using limited parallelism
-    const int initialMaxResults = 500;
+    // Pull the full result set up front using limited parallelism
+    final int initialMaxResults = _quickPlayTorrentsCsvMax;
+    final int initialSolidMaxResults = _quickPlaySolidTorrentsMax;
     _originalMaxCap = await StorageService.getMaxTorrentsCsvResults();
+    final int originalSolidCap = await StorageService.getMaxSolidTorrentsResults();
     if (_originalMaxCap != initialMaxResults) {
       debugPrint(
         'DebrifyTV: Temporarily setting Torrents CSV max from $_originalMaxCap to $initialMaxResults for Real Debrid search',
       );
     }
+    if (originalSolidCap != initialSolidMaxResults) {
+      debugPrint(
+        'DebrifyTV: Temporarily setting SolidTorrents max from $originalSolidCap to $initialSolidMaxResults for Real Debrid search',
+      );
+    }
     try {
       await StorageService.setMaxTorrentsCsvResults(initialMaxResults);
+      await StorageService.setMaxSolidTorrentsResults(initialSolidMaxResults);
 
       // Require RD API key early so we can prefetch as soon as results arrive
       final String? apiKeyEarlyRaw = await StorageService.getApiKey();
@@ -3321,10 +3456,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           debugPrint('DebrifyTV: Searching engines for "$kw"...');
           return TorrentService.searchAllEngines(
             kw,
-            useTorrentsCsv: true,
-            usePirateBay: true,
-            useYts: false,
-            useSolidTorrents: false,
+            useTorrentsCsv: _useTorrentsCsv,
+            usePirateBay: _usePirateBay,
+            useYts: _useYts,
+            useSolidTorrents: _useSolidTorrents,
           );
         }).toList();
 
@@ -3522,6 +3657,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } finally {
       final restoreTo = _originalMaxCap ?? 50;
       await StorageService.setMaxTorrentsCsvResults(restoreTo);
+      await StorageService.setMaxSolidTorrentsResults(originalSolidCap);
       if (restoreTo != initialMaxResults) {
         debugPrint(
           'DebrifyTV: Restored Torrents CSV max to $restoreTo after Real Debrid search',
@@ -3866,19 +4002,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     log('🌐 Torbox: searching for cached torrents...');
     final originalCap = await StorageService.getMaxTorrentsCsvResults();
+    final originalSolidCap = await StorageService.getMaxSolidTorrentsResults();
     final Map<String, Torrent> dedup = <String, Torrent>{};
 
     try {
-      await StorageService.setMaxTorrentsCsvResults(500);
+      await StorageService.setMaxTorrentsCsvResults(_quickPlayTorrentsCsvMax);
+      await StorageService.setMaxSolidTorrentsResults(_quickPlaySolidTorrentsMax);
 
       final futures = keywords
           .map(
             (kw) => TorrentService.searchAllEngines(
               kw,
-              useTorrentsCsv: true,
-              usePirateBay: true,
-              useYts: false,
-              useSolidTorrents: false,
+              useTorrentsCsv: _useTorrentsCsv,
+              usePirateBay: _usePirateBay,
+              useYts: _useYts,
+              useSolidTorrents: _useSolidTorrents,
             ),
           )
           .toList();
@@ -4198,6 +4336,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     } finally {
       await StorageService.setMaxTorrentsCsvResults(originalCap);
+      await StorageService.setMaxSolidTorrentsResults(originalSolidCap);
       _closeProgressDialog();
       if (mounted) {
         setState(() {

@@ -5,6 +5,7 @@ import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
 import '../widgets/shimmer.dart';
+import 'settings/debrify_tv_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
@@ -135,6 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
       onOpenTorrentSettings: _openTorrentSettings,
+      onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
@@ -145,6 +147,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const TorrentSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openDebrifyTvSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const DebrifyTvSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -281,6 +291,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 class _SettingsLayout extends StatelessWidget {
   final _ConnectionsSummary connections;
   final Future<void> Function() onOpenTorrentSettings;
+  final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
@@ -288,6 +299,7 @@ class _SettingsLayout extends StatelessWidget {
   const _SettingsLayout({
     required this.connections,
     required this.onOpenTorrentSettings,
+    required this.onOpenDebrifyTvSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
     required this.onDangerAction,
@@ -313,6 +325,12 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Torrent Settings',
                 subtitle: 'Search engines, filters, and sorting',
                 onTap: onOpenTorrentSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.live_tv_rounded,
+                title: 'Debrify TV Settings',
+                subtitle: 'Search engines, limits, and channel configuration',
+                onTap: onOpenDebrifyTvSettings,
               ),
             ],
           ),
