@@ -418,11 +418,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         } catch (e) {
           debugPrint('TorrentSearchScreen: Torrentio search failed: $e');
           if (mounted) {
+            String errorMsg = e.toString().replaceAll('Exception: ', '');
+            if (errorMsg.contains('SocketException') || errorMsg.contains('Failed host lookup')) {
+              errorMsg = 'Network error. Please check your connection.';
+            } else if (errorMsg.contains('TimeoutException')) {
+              errorMsg = 'Torrentio search timed out. Please try again.';
+            } else if (errorMsg.length > 80) {
+              errorMsg = 'Torrentio search failed. Please try again.';
+            }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  'Torrentio search failed: ${e.toString().replaceAll('Exception: ', '')}',
-                ),
+                content: Text('Torrentio: $errorMsg'),
                 backgroundColor: const Color(0xFF1E293B),
                 behavior: SnackBarBehavior.floating,
                 margin: const EdgeInsets.all(16),
@@ -533,7 +539,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       }
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        // Format the error for display
+        String errorMsg = e.toString().replaceAll('Exception: ', '');
+        if (errorMsg.contains('SocketException') || errorMsg.contains('Failed host lookup')) {
+          errorMsg = 'Network error. Please check your connection.';
+        } else if (errorMsg.contains('TimeoutException')) {
+          errorMsg = 'Search timed out. Please try again.';
+        } else if (errorMsg.length > 100) {
+          errorMsg = 'Search failed. Please try again.';
+        }
+        _errorMessage = errorMsg;
         _isLoading = false;
       });
     }
@@ -1464,7 +1479,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  e.toString().replaceAll('Exception: ', ''),
+                  _formatRealDebridError(e),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
@@ -1858,7 +1873,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  e.toString().replaceAll('Exception: ', ''),
+                  _formatRealDebridError(e),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
@@ -1904,12 +1919,39 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final error = (response['error'] ?? '').toString();
         if (error == 'DOWNLOAD_NOT_CACHED') {
           _showTorboxSnack(
-            'Torrent is not cached on Torbox yet. Disable "add only if cached" in future to force add.',
+            'This torrent is not cached on Torbox. Please try a different torrent.',
+            isError: true,
+          );
+        } else if (error.contains('INVALID_API_KEY') || error.contains('UNAUTHORIZED')) {
+          _showTorboxSnack(
+            'Invalid API key. Please check your Torbox settings.',
+            isError: true,
+          );
+        } else if (error.contains('ALREADY_ADDED')) {
+          _showTorboxSnack(
+            'This torrent is already in your Torbox account.',
+            isError: true,
+          );
+        } else if (error.contains('MAGNET_INVALID')) {
+          _showTorboxSnack(
+            'Invalid torrent. Please try a different one.',
+            isError: true,
+          );
+        } else if (error.contains('QUOTA_EXCEEDED') || error.contains('LIMIT_REACHED')) {
+          _showTorboxSnack(
+            'Your Torbox account has reached its limit. Please upgrade or remove old torrents.',
+            isError: true,
+          );
+        } else if (error.contains('SERVICE_UNAVAILABLE') || error.contains('MAINTENANCE')) {
+          _showTorboxSnack(
+            'Torbox service is temporarily unavailable. Please try again later.',
             isError: true,
           );
         } else {
+          // For any other error, format it nicely
+          final friendlyError = _formatTorboxError(error);
           _showTorboxSnack(
-            error.isEmpty ? 'Failed to cache torrent on Torbox.' : error,
+            friendlyError.isEmpty ? 'Failed to add torrent to Torbox.' : friendlyError,
             isError: true,
           );
         }
@@ -2606,7 +2648,100 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   String _formatTorboxError(Object error) {
     final raw = error.toString();
-    return raw.replaceFirst('Exception: ', '').trim();
+
+    // Strip common prefixes
+    String cleaned = raw
+        .replaceFirst('Exception: ', '')
+        .replaceFirst('Error: ', '')
+        .trim();
+
+    // Handle common API error patterns
+    if (cleaned.contains('SocketException') || cleaned.contains('Failed host lookup')) {
+      return 'Network error. Please check your connection.';
+    }
+    if (cleaned.contains('TimeoutException') || cleaned.contains('timed out')) {
+      return 'Request timed out. Please try again.';
+    }
+    if (cleaned.contains('401') || cleaned.contains('Unauthorized')) {
+      return 'Invalid API key. Please check your Torbox settings.';
+    }
+    if (cleaned.contains('403') || cleaned.contains('Forbidden')) {
+      return 'Access denied. Your Torbox account may not have permission.';
+    }
+    if (cleaned.contains('404') || cleaned.contains('Not found')) {
+      return 'Torrent not found on Torbox.';
+    }
+    if (cleaned.contains('429') || cleaned.contains('Too many requests')) {
+      return 'Too many requests. Please wait a moment and try again.';
+    }
+    if (cleaned.contains('500') || cleaned.contains('502') || cleaned.contains('503')) {
+      return 'Torbox service is temporarily unavailable. Please try again later.';
+    }
+
+    // If it's too technical or long, provide a generic message
+    if (cleaned.length > 100 || cleaned.contains('dart:') || cleaned.contains('at Object')) {
+      return 'An unexpected error occurred. Please try again.';
+    }
+
+    return cleaned.isEmpty ? 'An error occurred' : cleaned;
+  }
+
+  String _formatRealDebridError(Object error) {
+    final raw = error.toString();
+
+    // Strip common prefixes
+    String cleaned = raw
+        .replaceFirst('Exception: ', '')
+        .replaceFirst('Error: ', '')
+        .replaceFirst('Failed to add torrent to Real Debrid: ', '')
+        .trim();
+
+    // Handle common network errors
+    if (cleaned.contains('SocketException') || cleaned.contains('Failed host lookup')) {
+      return 'Network error. Please check your connection.';
+    }
+    if (cleaned.contains('TimeoutException') || cleaned.contains('timed out')) {
+      return 'Request timed out. Please try again.';
+    }
+
+    // Handle Real-Debrid specific errors
+    if (cleaned.contains('Invalid API key') || cleaned.contains('401') || cleaned.contains('Unauthorized')) {
+      return 'Invalid API key. Please check your Real-Debrid settings.';
+    }
+    if (cleaned.contains('Account locked') || cleaned.contains('403') || cleaned.contains('Forbidden')) {
+      return 'Account locked or access denied. Please check your Real-Debrid account.';
+    }
+    if (cleaned.contains('not readily available') || cleaned.contains('File is not available')) {
+      return 'This file is not cached on Real-Debrid. Please try a different torrent.';
+    }
+    if (cleaned.contains('No files found') || cleaned.contains('files_are_mandatory')) {
+      return 'No valid files found in this torrent.';
+    }
+    if (cleaned.contains('magnet_error') || cleaned.contains('Invalid magnet')) {
+      return 'Invalid torrent magnet link. Please try a different torrent.';
+    }
+    if (cleaned.contains('torrent_too_big') || cleaned.contains('too big')) {
+      return 'Torrent is too large. Please try a smaller torrent.';
+    }
+    if (cleaned.contains('permission_denied') || cleaned.contains('need_premium')) {
+      return 'Premium account required. Please upgrade your Real-Debrid account.';
+    }
+    if (cleaned.contains('404') || cleaned.contains('Not found')) {
+      return 'Torrent not found on Real-Debrid.';
+    }
+    if (cleaned.contains('429') || cleaned.contains('Too many')) {
+      return 'Too many requests. Please wait a moment and try again.';
+    }
+    if (cleaned.contains('500') || cleaned.contains('502') || cleaned.contains('503') || cleaned.contains('service_unavailable')) {
+      return 'Real-Debrid service is temporarily unavailable. Please try again later.';
+    }
+
+    // If it's too technical or long, provide a generic message
+    if (cleaned.length > 100 || cleaned.contains('dart:') || cleaned.contains('at Object')) {
+      return 'An unexpected error occurred. Please try again.';
+    }
+
+    return cleaned.isEmpty ? 'Failed to add torrent to Real-Debrid' : cleaned;
   }
 
   int? _asIntMapValue(dynamic data, String key) {

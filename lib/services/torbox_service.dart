@@ -307,17 +307,28 @@ class TorboxService {
         'TorboxService: createtorrent status=${response.statusCode} body=$body',
       );
 
-      if (response.statusCode != 200) {
-        throw Exception(
-          'Torbox createtorrent failed (${response.statusCode}): $body',
-        );
-      }
-
+      // Parse the response body first
       final Map<String, dynamic> payload =
           json.decode(body) as Map<String, dynamic>;
-      final bool success = payload['success'] as bool? ?? false;
-      if (!success) {
+
+      // For 400 errors, the body contains useful error info (like DOWNLOAD_NOT_CACHED)
+      // Return the payload so the caller can check the error field
+      if (response.statusCode == 400) {
         return payload;
+      }
+
+      // For other non-200 status codes, throw specific errors
+      if (response.statusCode != 200) {
+        if (response.statusCode == 401) {
+          throw Exception('Invalid Torbox API key');
+        } else if (response.statusCode == 403) {
+          throw Exception('Access denied by Torbox');
+        } else if (response.statusCode == 429) {
+          throw Exception('Too many requests to Torbox. Please wait and try again');
+        } else if (response.statusCode >= 500) {
+          throw Exception('Torbox service is temporarily unavailable');
+        }
+        throw Exception('Failed to add torrent to Torbox');
       }
 
       return payload;
@@ -366,9 +377,18 @@ class TorboxService {
       }
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'Torbox requestdl failed (${response.statusCode}): ${response.body}',
-        );
+        if (response.statusCode == 401) {
+          throw Exception('Invalid Torbox API key');
+        } else if (response.statusCode == 403) {
+          throw Exception('Access denied by Torbox');
+        } else if (response.statusCode == 404) {
+          throw Exception('File not found on Torbox');
+        } else if (response.statusCode == 429) {
+          throw Exception('Too many requests to Torbox. Please wait and try again');
+        } else if (response.statusCode >= 500) {
+          throw Exception('Torbox service is temporarily unavailable');
+        }
+        throw Exception('Failed to get download link from Torbox');
       }
 
       final Map<String, dynamic> payload =
