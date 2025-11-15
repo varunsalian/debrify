@@ -178,6 +178,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _showChannelBadge = true;
   Timer? _channelBadgeTimer;
 
+  // Title badge auto-hide
+  bool _showTitleBadge = true;
+  Timer? _titleBadgeTimer;
+
   _DoubleTapRipple? _ripple;
   bool _panIgnore = false;
   int _currentIndex = 0;
@@ -413,6 +417,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // Show channel badge when player is ready (if enabled)
             if (widget.showChannelName && _channelBadgeText != null) {
               _showChannelBadgeWithTimer();
+            }
+            // Show title badge when player is ready (if enabled and in Debrify TV)
+            if (widget.showVideoTitle && widget.showChannelName) {
+              _showTitleBadgeWithTimer();
             }
           }
         },
@@ -1333,6 +1341,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
     _channelBadgeTimer?.cancel();
+    _titleBadgeTimer?.cancel();
     _controlsVisible.dispose();
     _seekHud.dispose();
     _verticalHud.dispose();
@@ -1744,6 +1753,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (widget.showChannelName && _channelBadgeText != null) {
         _showChannelBadgeWithTimer();
       }
+      // Show title badge when controls appear (if enabled and in Debrify TV)
+      if (widget.showVideoTitle && widget.showChannelName) {
+        _showTitleBadgeWithTimer();
+      }
     }
   }
 
@@ -1759,6 +1772,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (mounted) {
         setState(() {
           _showChannelBadge = false;
+        });
+      }
+    });
+  }
+
+  void _showTitleBadgeWithTimer() {
+    // Cancel any existing timer
+    _titleBadgeTimer?.cancel();
+    // Show the badge
+    setState(() {
+      _showTitleBadge = true;
+    });
+    // Hide after 4 seconds (matching Android TV behavior)
+    _titleBadgeTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) {
+        setState(() {
+          _showTitleBadge = false;
         });
       }
     });
@@ -2314,6 +2344,100 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitleBadge(String title) {
+    return Container(
+      padding: const EdgeInsets.only(left: 12, right: 14, top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        // Layered background for glassy blur effect
+        boxShadow: [
+          // Outer glow/shadow
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 12,
+            spreadRadius: 2,
+          ),
+        ],
+        // Multiple gradients stacked to create frosted glass effect
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.black.withOpacity(0.85), // Main frosted glass
+            Colors.black.withOpacity(0.8),
+          ],
+        ),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Subtle left accent line with gradient
+          Container(
+            width: 1.5,
+            height: 20,
+            margin: const EdgeInsets.only(right: 10),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF66FF00), // Neon green
+                  Color(0xFF4CAF50), // Green
+                  Color(0xFF00BCD4), // Cyan
+                ],
+              ),
+              borderRadius: BorderRadius.all(Radius.circular(1)),
+            ),
+          ),
+          // Play icon
+          const Text(
+            '▶',
+            style: TextStyle(
+              color: Color(0xFF66FF00),
+              fontSize: 12,
+              height: 1.0,
+              shadows: [
+                Shadow(
+                  color: Color(0x40000000),
+                  offset: Offset(0, 1),
+                  blurRadius: 3,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Video title
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320),
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xE6FFFFFF), // 90% opacity white
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                height: 1.0,
+                shadows: [
+                  Shadow(
+                    color: Color(0x40000000),
+                    offset: Offset(0, 1),
+                    blurRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -2877,6 +3001,21 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                 ),
               // Transition overlay above video
               if (_rainbowActive) _buildTransitionOverlay(),
+              // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
+              if (widget.showVideoTitle && widget.showChannelName)
+                Positioned(
+                  top: 20,
+                  left: 20,
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: AnimatedOpacity(
+                      opacity: _showTitleBadge ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeInOut,
+                      child: _buildTitleBadge(_getCurrentEpisodeTitle()),
+                    ),
+                  ),
+                ),
               // Channel Badge with Glassy Blur Effect (top-right)
               if (widget.showChannelName &&
                   channelBadgeText != null &&
@@ -2998,10 +3137,10 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                       child: IgnorePointer(
                         ignoring: !visible,
                         child: _Controls(
-                          title: widget.showVideoTitle
+                          title: widget.showVideoTitle && !widget.showChannelName
                               ? _getCurrentEpisodeTitle()
                               : '',
-                          subtitle: widget.showVideoTitle
+                          subtitle: widget.showVideoTitle && !widget.showChannelName
                               ? _getCurrentEpisodeSubtitle()
                               : null,
                           enhancedMetadata: _getEnhancedMetadata(),
