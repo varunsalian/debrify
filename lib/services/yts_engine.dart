@@ -28,7 +28,7 @@ class YtsEngine extends SearchEngine {
           : '$baseUrl?query_term=${Uri.encodeComponent(trimmed)}&limit=50';
       final response = await http
           .get(Uri.parse(url))
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) {
         throw Exception('Failed to load torrents from YTS. HTTP ${response.statusCode}');
       }

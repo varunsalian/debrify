@@ -65,6 +65,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Map<String, int> _engineCounts = {};
   Map<String, String> _engineErrors = {};
   Map<String, _TorrentMetadata> _torrentMetadata = {};
+  String? _selectedEngineFilter; // null means show all
   bool _isLoading = false;
   String _errorMessage = '';
   bool _hasSearched = false;
@@ -367,6 +368,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _hasSearched = true;
       _torboxCacheStatus = null;
       _showingTorboxCachedOnly = false;
+      _selectedEngineFilter = null; // Reset engine filter on new search
     });
 
     // Hide keyboard
@@ -1162,12 +1164,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     Map<String, _TorrentMetadata>? metadataMap,
   }) {
     final TorrentFilterState activeFilters = filtersOverride ?? _filters;
+
+    // First apply engine filter if active
+    List<Torrent> engineFiltered = source;
+    if (_selectedEngineFilter != null) {
+      engineFiltered = source
+          .where((torrent) => torrent.source == _selectedEngineFilter)
+          .toList();
+    }
+
+    // Then apply other filters
     if (activeFilters.isEmpty) {
-      return List<Torrent>.from(source);
+      return List<Torrent>.from(engineFiltered);
     }
 
     final meta = metadataMap ?? _torrentMetadata;
-    return source
+    return engineFiltered
         .where((torrent) {
           final info = meta[torrent.infohash];
           if (activeFilters.qualities.isNotEmpty) {
@@ -1185,6 +1197,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           return true;
         })
         .toList(growable: false);
+  }
+
+  void _applyEngineFilter() {
+    // Re-apply filters and sorting with the new engine filter
+    final filtered = _applyFiltersToList(_allTorrents, metadataMap: _torrentMetadata);
+    setState(() {
+      _torrents = filtered;
+      _ensureFocusNodes();
+    });
   }
 
   Map<String, _TorrentMetadata> _buildTorrentMetadataMap(
@@ -4176,53 +4197,75 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final hasError = _engineErrors.containsKey(key);
 
       if (count > 0 || hasError) {
+        final isSelected = _selectedEngineFilter == key;
         chips.add(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: hasError
-                  ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3)
-                  : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
+          GestureDetector(
+            onTap: hasError ? null : () {
+              setState(() {
+                // Toggle filter: if already selected, deselect (show all)
+                _selectedEngineFilter = isSelected ? null : key;
+                // Apply filter to current torrents
+                _applyEngineFilter();
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
                 color: hasError
-                    ? Theme.of(context).colorScheme.error.withValues(alpha: 0.5)
-                    : Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  hasError ? Icons.error_outline : Icons.check_circle,
-                  size: 14,
+                    ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3)
+                    : isSelected
+                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.8)
+                        : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
                   color: hasError
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.primary,
+                      ? Theme.of(context).colorScheme.error.withValues(alpha: 0.5)
+                      : isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                  width: isSelected ? 2 : 1,
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  short,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    hasError ? Icons.error_outline : isSelected ? Icons.filter_alt : Icons.check_circle,
+                    size: 14,
                     color: hasError
-                        ? Theme.of(context).colorScheme.onErrorContainer
-                        : Theme.of(context).colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
+                        ? Theme.of(context).colorScheme.error
+                        : isSelected
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Theme.of(context).colorScheme.primary,
                   ),
-                ),
-                if (!hasError && count > 0) ...[
                   const SizedBox(width: 4),
                   Text(
-                    '$count',
+                    short,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
-                      fontSize: 10,
+                      color: hasError
+                          ? Theme.of(context).colorScheme.onErrorContainer
+                          : isSelected
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.onPrimaryContainer,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                      fontSize: 11,
                     ),
                   ),
+                  if (!hasError && count > 0) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      '$count',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.9)
+                            : Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                        fontSize: 10,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );

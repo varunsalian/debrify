@@ -63,7 +63,7 @@ class TorrentsCsvEngine extends SearchEngine {
         final url = getSearchUrlWithPagination(query, nextId);
         final response = await http
             .get(Uri.parse(url))
-            .timeout(const Duration(seconds: 5));
+            .timeout(const Duration(seconds: 10));
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);

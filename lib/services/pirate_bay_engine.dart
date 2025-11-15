@@ -21,7 +21,7 @@ class PirateBayEngine extends SearchEngine {
     try {
       final response = await http
           .get(Uri.parse(getSearchUrl(query)))
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as List;
