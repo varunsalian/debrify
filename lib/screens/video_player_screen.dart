@@ -3001,38 +3001,6 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                 ),
               // Transition overlay above video
               if (_rainbowActive) _buildTransitionOverlay(),
-              // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
-              if (widget.showVideoTitle && widget.showChannelName)
-                Positioned(
-                  top: 20,
-                  left: 20,
-                  child: IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: _showTitleBadge ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeInOut,
-                      child: _buildTitleBadge(_getCurrentEpisodeTitle()),
-                    ),
-                  ),
-                ),
-              // Channel Badge with Glassy Blur Effect (top-right)
-              if (widget.showChannelName &&
-                  channelBadgeText != null &&
-                  channelBadgeText.isNotEmpty)
-                Positioned(
-                  top: 20,
-                  right: 20,
-                  child: IgnorePointer(
-                    ignoring: true,
-                    child: AnimatedOpacity(
-                      opacity: _showChannelBadge ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeInOut,
-                      child: _buildChannelBadge(channelBadgeText),
-                    ),
-                  ),
-                ),
               // Double-tap ripple
               if (_ripple != null)
                 IgnorePointer(
@@ -3197,6 +3165,40 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                       ),
                     );
                   },
+                ),
+              // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
+              // Placed after controls to appear on top
+              if (widget.showVideoTitle && widget.showChannelName)
+                Positioned(
+                  top: 20,
+                  left: 20,
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: AnimatedOpacity(
+                      opacity: _showTitleBadge ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeInOut,
+                      child: _buildTitleBadge(_getCurrentEpisodeTitle()),
+                    ),
+                  ),
+                ),
+              // Channel Badge with Glassy Blur Effect (top-right)
+              // Placed after controls to appear on top
+              if (widget.showChannelName &&
+                  channelBadgeText != null &&
+                  channelBadgeText.isNotEmpty)
+                Positioned(
+                  top: 20,
+                  right: 20,
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: AnimatedOpacity(
+                      opacity: _showChannelBadge ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeInOut,
+                      child: _buildChannelBadge(channelBadgeText),
+                    ),
+                  ),
                 ),
             ],
           ),
