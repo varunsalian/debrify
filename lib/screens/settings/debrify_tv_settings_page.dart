@@ -240,11 +240,11 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   _buildEngineSetting(
-                    title: 'YTS (Proxy)',
-                    subtitle: '50 results/page • Uses Jina.ai proxy',
+                    title: 'YTS',
+                    subtitle: '50 results/page',
                     icon: Icons.movie_creation_rounded,
                     value: _useYts,
-                    isProxy: true,
+                    isProxy: false,
                     onChanged: (value) async {
                       setState(() => _useYts = value);
                       await StorageService.setDebrifyTvUseYts(value);
@@ -252,11 +252,11 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   _buildEngineSetting(
-                    title: 'SolidTorrents (Proxy)',
-                    subtitle: '100 results/page • Uses Jina.ai proxy',
+                    title: 'SolidTorrents',
+                    subtitle: '100 results/page',
                     icon: Icons.storage_rounded,
                     value: _useSolidTorrents,
-                    isProxy: true,
+                    isProxy: false,
                     onChanged: (value) async {
                       setState(() => _useSolidTorrents = value);
                       await StorageService.setDebrifyTvUseSolidTorrents(value);
