@@ -292,7 +292,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   int _quickRandomStartPercent = _randomStartPercentDefault;
   bool _quickHideSeekbar = true;
   bool _quickShowChannelName = true;
-  bool _quickShowVideoTitle = false;
+  bool _quickShowVideoTitle = true;
   bool _quickHideOptions = true;
   bool _quickHideBackButton = true;
   bool _quickAvoidNsfw = true;
@@ -3618,6 +3618,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         hideSeekbar: _quickHideSeekbar,
                         showChannelName: _quickShowChannelName,
                         channelName: null,
+                        channelNumber: null,
                         showVideoTitle: _quickShowVideoTitle,
                         hideOptions: _quickHideOptions,
                         requestMagicNext: requestMagicNext,
@@ -3940,6 +3941,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideSeekbar: _quickHideSeekbar,
             showChannelName: _quickShowChannelName,
             channelName: null,
+            channelNumber: null,
             showVideoTitle: _quickShowVideoTitle,
             hideOptions: _quickHideOptions,
             requestMagicNext: requestMagicNext,
@@ -4313,6 +4315,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               hideSeekbar: _hideSeekbar,
               showChannelName: _showChannelName,
               channelName: null,
+              channelNumber: null,
               showVideoTitle: _showVideoTitle,
               hideOptions: _hideOptions,
               requestMagicNext: requestTorboxNext,
@@ -4580,6 +4583,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideSeekbar: _hideSeekbar,
             showChannelName: _showChannelName,
             channelName: channelName,
+            channelNumber: channelNumber,
             showVideoTitle: _showVideoTitle,
             hideOptions: _hideOptions,
             requestMagicNext: requestMagicNext,
@@ -5420,6 +5424,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             hideSeekbar: _hideSeekbar,
             showChannelName: _showChannelName,
             channelName: channelName,
+            channelNumber: channelNumber,
             showVideoTitle: _showVideoTitle,
             hideOptions: _hideOptions,
             requestMagicNext: requestTorboxNext,
@@ -5567,6 +5572,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   hideSeekbar: _quickHideSeekbar,
                   showChannelName: _quickShowChannelName,
                   channelName: null,
+                  channelNumber: null,
                   showVideoTitle: _quickShowVideoTitle,
                   hideOptions: _quickHideOptions,
                 ),
@@ -5789,20 +5795,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ],
             const SizedBox(height: 8),
             _SwitchRow(
-              title: 'Show channel name',
-              subtitle: 'Display the active channel in the player corner',
-              value: showChannelName,
-              onChanged: (v) => setShowChannelName(v),
-            ),
-            const SizedBox(height: 8),
-            _SwitchRow(
-              title: 'Show video title',
-              subtitle: 'Display video title and subtitle in player controls',
-              value: showVideoTitle,
-              onChanged: (v) => setShowVideoTitle(v),
-            ),
-            const SizedBox(height: 8),
-            _SwitchRow(
               title: 'Hide all options',
               subtitle:
                   'Hide all bottom controls (next, audio, etc.) - back button stays',
@@ -5849,7 +5841,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _quickRandomStartPercent = _randomStartPercentDefault;
                       _quickHideSeekbar = true;
                       _quickShowChannelName = true;
-                      _quickShowVideoTitle = false;
+                      _quickShowVideoTitle = true;
                       _quickHideOptions = true;
                       _quickHideBackButton = true;
                       _quickAvoidNsfw = true;
@@ -5871,7 +5863,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     await StorageService.saveDebrifyTvStartRandom(true);
                     await StorageService.saveDebrifyTvHideSeekbar(true);
                     await StorageService.saveDebrifyTvShowChannelName(true);
-                    await StorageService.saveDebrifyTvShowVideoTitle(false);
+                    await StorageService.saveDebrifyTvShowVideoTitle(true);
                     await StorageService.saveDebrifyTvHideOptions(true);
                     await StorageService.saveDebrifyTvHideBackButton(true);
                     await StorageService.saveDebrifyTvProvider(defaultProvider);

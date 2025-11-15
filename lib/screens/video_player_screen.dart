@@ -50,6 +50,7 @@ class VideoPlayerScreen extends StatefulWidget {
   // Channel name badge overlay
   final bool showChannelName;
   final String? channelName;
+  final int? channelNumber;
   // Show video title in player controls
   final bool showVideoTitle;
   // Hide all bottom options (next, audio, etc.) - back button stays
@@ -72,6 +73,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.hideSeekbar = false,
     this.showChannelName = false,
     this.channelName,
+    this.channelNumber,
     this.showVideoTitle = true,
     this.hideOptions = false,
     this.hideBackButton = false,
@@ -171,6 +173,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Timer? _hideTimer;
   bool _isSeekingWithSlider = false;
+
+  // Channel badge auto-hide
+  bool _showChannelBadge = true;
+  Timer? _channelBadgeTimer;
 
   _DoubleTapRipple? _ripple;
   bool _panIgnore = false;
@@ -274,7 +280,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (widget.channelName != null && widget.channelName!.trim().isNotEmpty) {
       _currentChannelName = widget.channelName;
     }
-    _currentChannelNumber = null;
+    _currentChannelNumber = widget.channelNumber;
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // Default to landscape when entering the player
@@ -402,7 +408,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       configuration: mk.PlayerConfiguration(
         ready: () {
           _isReady = true;
-          if (mounted) setState(() {});
+          if (mounted) {
+            setState(() {});
+            // Show channel badge when player is ready (if enabled)
+            if (widget.showChannelName && _channelBadgeText != null) {
+              _showChannelBadgeWithTimer();
+            }
+          }
         },
       ),
     );
@@ -1010,6 +1022,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _currentChannelNumber = channelNumber;
         }
       });
+      // Show channel badge when switching channels
+      if (widget.showChannelName && _channelBadgeText != null) {
+        _showChannelBadgeWithTimer();
+      }
     }
 
     if (nextUrl.isEmpty) {
@@ -1316,6 +1332,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
+    _channelBadgeTimer?.cancel();
     _controlsVisible.dispose();
     _seekHud.dispose();
     _verticalHud.dispose();
@@ -1723,7 +1740,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _controlsVisible.value = !_controlsVisible.value;
     if (_controlsVisible.value) {
       _scheduleAutoHide();
+      // Show channel badge when controls appear (if enabled)
+      if (widget.showChannelName && _channelBadgeText != null) {
+        _showChannelBadgeWithTimer();
+      }
     }
+  }
+
+  void _showChannelBadgeWithTimer() {
+    // Cancel any existing timer
+    _channelBadgeTimer?.cancel();
+    // Show the badge
+    setState(() {
+      _showChannelBadge = true;
+    });
+    // Hide after 4 seconds (matching Android TV behavior)
+    _channelBadgeTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) {
+        setState(() {
+          _showChannelBadge = false;
+        });
+      }
+    });
   }
 
   Future<void> _handleDoubleTap(TapDownDetails details) async {
@@ -2153,6 +2191,130 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildChannelBadge(String badgeText) {
+    // Parse channel number and name from badgeText (format: "CH 05 • HBO MAX" or just "HBO MAX")
+    String? channelNumber;
+    String? channelName;
+
+    if (badgeText.contains('•')) {
+      final parts = badgeText.split('•');
+      if (parts.length == 2) {
+        // Remove "CH " prefix if exists and just keep the number
+        final numberPart = parts[0].trim().replaceFirst('CH ', '');
+        channelNumber = numberPart;
+        channelName = parts[1].trim();
+      }
+    } else {
+      // Just channel name, no number
+      channelName = badgeText;
+    }
+
+    return Container(
+      padding: const EdgeInsets.only(left: 14, right: 16, top: 10, bottom: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        // Layered background for glassy blur effect
+        boxShadow: [
+          // Outer glow/shadow
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 12,
+            spreadRadius: 2,
+          ),
+        ],
+        // Multiple gradients stacked to create frosted glass effect
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.black.withOpacity(0.85), // Main frosted glass
+            Colors.black.withOpacity(0.8),
+          ],
+        ),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Subtle left accent line with gradient
+          Container(
+            width: 2,
+            height: 24,
+            margin: const EdgeInsets.only(right: 12),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF66FF00), // Neon green
+                  Color(0xFF4CAF50), // Green
+                  Color(0xFF00BCD4), // Cyan
+                ],
+              ),
+              borderRadius: BorderRadius.all(Radius.circular(1)),
+            ),
+          ),
+          // Channel number (if exists)
+          if (channelNumber != null) ...[
+            Text(
+              channelNumber,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+                shadows: [
+                  Shadow(
+                    color: Color(0x40000000),
+                    offset: Offset(0, 1),
+                    blurRadius: 3,
+                  ),
+                ],
+              ),
+            ),
+            // Separator dot
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                '•',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.53),
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+          // Channel name
+          if (channelName != null)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
+              child: Text(
+                channelName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xE6FFFFFF), // 90% opacity white
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  shadows: [
+                    Shadow(
+                      color: Color(0x40000000),
+                      offset: Offset(0, 1),
+                      blurRadius: 2,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -2715,28 +2877,20 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                 ),
               // Transition overlay above video
               if (_rainbowActive) _buildTransitionOverlay(),
+              // Channel Badge with Glassy Blur Effect (top-right)
               if (widget.showChannelName &&
                   channelBadgeText != null &&
                   channelBadgeText.isNotEmpty)
                 Positioned(
-                  bottom: 22,
-                  right: 22,
+                  top: 20,
+                  right: 20,
                   child: IgnorePointer(
                     ignoring: true,
-                    child: Text(
-                      channelBadgeText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black54,
-                            blurRadius: 6,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
+                    child: AnimatedOpacity(
+                      opacity: _showChannelBadge ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeInOut,
+                      child: _buildChannelBadge(channelBadgeText),
                     ),
                   ),
                 ),

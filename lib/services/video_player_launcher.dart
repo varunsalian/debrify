@@ -42,6 +42,7 @@ class VideoPlayerLaunchArgs {
   final bool hideSeekbar;
   final bool showChannelName;
   final String? channelName;
+  final int? channelNumber;
   final bool showVideoTitle;
   final bool hideOptions;
   final bool hideBackButton;
@@ -61,6 +62,7 @@ class VideoPlayerLaunchArgs {
     this.hideSeekbar = false,
     this.showChannelName = false,
     this.channelName,
+    this.channelNumber,
     this.showVideoTitle = true,
     this.hideOptions = false,
     this.hideBackButton = false,
@@ -82,6 +84,7 @@ class VideoPlayerLaunchArgs {
       hideSeekbar: hideSeekbar,
       showChannelName: showChannelName,
       channelName: channelName,
+      channelNumber: channelNumber,
       showVideoTitle: showVideoTitle,
       hideOptions: hideOptions,
       hideBackButton: hideBackButton,
