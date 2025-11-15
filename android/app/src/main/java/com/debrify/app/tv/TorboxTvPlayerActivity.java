@@ -101,7 +101,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private long currentTargetBufferMs = DEFAULT_TARGET_BUFFER_MS;
     private TextView titleView;
     private TextView hintView;
-    private TextView channelBadgeView;
+    private View titleBadgeContainer;
+    private TextView titleBadgeText;
+    private Runnable titleBadgeFadeOutRunnable;
+    private View channelBadgeContainer;
+    private TextView channelNumberView;
+    private TextView channelNameView;
+    private Runnable channelBadgeFadeOutRunnable;
     private View controlsOverlay;
     private View timeContainer;
     private View buttonsRow;
@@ -246,7 +252,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         playerView = findViewById(R.id.player_view);
         titleView = findViewById(R.id.player_title);
         hintView = findViewById(R.id.player_hint);
-        channelBadgeView = findViewById(R.id.player_channel_badge);
+        titleBadgeContainer = findViewById(R.id.player_title_badge_container);
+        titleBadgeText = findViewById(R.id.player_title_badge_text);
+        channelBadgeContainer = findViewById(R.id.player_channel_badge_container);
+        channelNumberView = findViewById(R.id.player_channel_number);
+        channelNameView = findViewById(R.id.player_channel_name);
         nextOverlay = findViewById(R.id.player_next_overlay);
         nextText = findViewById(R.id.player_next_text);
         nextSubtext = findViewById(R.id.player_next_subtext);
@@ -297,7 +307,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         
         String initialUrl = intent.getStringExtra("initialUrl");
         String initialTitle = intent.getStringExtra("initialTitle");
-        
+
         android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: initialUrl=" + (initialUrl != null ? initialUrl.substring(0, Math.min(50, initialUrl.length())) : "null") + "...");
         android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: initialTitle=" + initialTitle);
         
@@ -335,8 +345,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         setupSearchOverlay(intent);
-        runOnUiThread(() -> updateChannelBadge(currentChannelName));
-        
+        runOnUiThread(() -> {
+            updateChannelBadge(currentChannelName);
+            updateTitleBadge(initialTitle);
+        });
+
         setupBackPressHandler();
 
         initialisePlayer();
@@ -458,9 +471,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void applyUiPreferences(@Nullable String initialTitle) {
-        if (showVideoTitle) {
-            showTitleTemporarily(initialTitle);
-        } else if (titleView != null) {
+        // Old centered title is replaced by the new badge, always hide it
+        if (titleView != null) {
             cancelTitleFade();
             titleView.setVisibility(View.GONE);
         }
@@ -684,6 +696,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
         }
         updatePauseButtonLabel();
+
+        // Show channel badge when controls appear (if enabled and has valid channel info)
+        if (showChannelName && (currentChannelNumber > 0 || !currentChannelName.isEmpty())) {
+            showChannelBadgeWithAnimation();
+        }
+
+        // Show title badge when controls appear (if enabled and has valid title)
+        if (showVideoTitle && titleBadgeText != null && titleBadgeText.getText() != null
+                && !titleBadgeText.getText().toString().isEmpty()) {
+            showTitleBadgeWithAnimation();
+        }
     }
 
     private void hideControlsMenu() {
@@ -1548,7 +1571,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void updateTitle(@Nullable String title) {
-        showTitleTemporarily(title);
+        // Don't show the old centered title anymore, only use the new badge
+        // showTitleTemporarily(title);
+        updateTitleBadge(title);
     }
 
     private void maybeSeekRandomly() {
@@ -2949,12 +2974,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void updateChannelBadge(@Nullable String name) {
-        if (channelBadgeView == null) {
+        if (channelBadgeContainer == null || channelNumberView == null || channelNameView == null) {
             return;
         }
 
         if (!showChannelName) {
-            channelBadgeView.setVisibility(View.GONE);
+            hideChannelBadge();
             return;
         }
 
@@ -2962,22 +2987,191 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         boolean hasNumber = currentChannelNumber > 0;
 
         if (!hasNumber && displayName.isEmpty()) {
-            channelBadgeView.setVisibility(View.GONE);
+            hideChannelBadge();
             return;
         }
 
-        StringBuilder builder = new StringBuilder();
+        // Set channel number
         if (hasNumber) {
-            builder.append(String.format(Locale.US, "CH %02d", currentChannelNumber));
-            if (!displayName.isEmpty()) {
-                builder.append("  •  ");
-            }
-        }
-        if (!displayName.isEmpty()) {
-            builder.append(displayName.toUpperCase(Locale.US));
+            channelNumberView.setText(String.valueOf(currentChannelNumber));
+            channelNumberView.setVisibility(View.VISIBLE);
+        } else {
+            channelNumberView.setVisibility(View.GONE);
         }
 
-        channelBadgeView.setText(builder.toString());
-        channelBadgeView.setVisibility(View.VISIBLE);
+        // Set channel name
+        if (!displayName.isEmpty()) {
+            channelNameView.setText(displayName);
+            channelNameView.setVisibility(View.VISIBLE);
+        } else {
+            channelNameView.setVisibility(View.GONE);
+        }
+
+        // Show with slide-up animation
+        showChannelBadgeWithAnimation();
+    }
+
+    private void showChannelBadgeWithAnimation() {
+        if (channelBadgeContainer == null) {
+            return;
+        }
+
+        // Cancel any pending fade-out
+        if (channelBadgeFadeOutRunnable != null) {
+            channelBadgeContainer.removeCallbacks(channelBadgeFadeOutRunnable);
+        }
+
+        // Reset state and make visible
+        channelBadgeContainer.setVisibility(View.VISIBLE);
+        channelBadgeContainer.setAlpha(0f);
+        channelBadgeContainer.setTranslationY(-40f);
+
+        // Slide down and fade in animation
+        channelBadgeContainer.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(400)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.5f))
+                .start();
+
+        // Schedule auto-fade to match controls timeout
+        channelBadgeFadeOutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                fadeOutChannelBadge();
+            }
+        };
+        channelBadgeContainer.postDelayed(channelBadgeFadeOutRunnable, CONTROLS_AUTO_HIDE_DELAY_MS);
+    }
+
+    private void fadeOutChannelBadge() {
+        if (channelBadgeContainer == null) {
+            return;
+        }
+
+        // Smooth fade out over 1 second
+        channelBadgeContainer.animate()
+                .alpha(0f)
+                .setDuration(1000)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.2f))
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (channelBadgeContainer != null) {
+                            channelBadgeContainer.setVisibility(View.GONE);
+                        }
+                    }
+                })
+                .start();
+    }
+
+    private void hideChannelBadge() {
+        if (channelBadgeContainer == null) {
+            return;
+        }
+
+        // Cancel any pending animations/callbacks
+        if (channelBadgeFadeOutRunnable != null) {
+            channelBadgeContainer.removeCallbacks(channelBadgeFadeOutRunnable);
+        }
+        channelBadgeContainer.animate().cancel();
+        channelBadgeContainer.setVisibility(View.GONE);
+    }
+
+    private void updateTitleBadge(@Nullable String videoTitle) {
+        if (titleBadgeContainer == null || titleBadgeText == null) {
+            return;
+        }
+
+        if (!showVideoTitle) {
+            hideTitleBadge();
+            return;
+        }
+
+        String displayTitle = videoTitle != null ? videoTitle.trim() : "";
+
+        // Remove file extensions (case-insensitive)
+        if (!displayTitle.isEmpty()) {
+            displayTitle = displayTitle.replaceAll("(?i)\\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|ts|m2ts|vob|3gp|ogv|divx)$", "");
+            displayTitle = displayTitle.trim();
+        }
+
+        if (displayTitle.isEmpty()) {
+            hideTitleBadge();
+            return;
+        }
+
+        // Set title text
+        titleBadgeText.setText(displayTitle);
+
+        // Show with slide-down animation
+        showTitleBadgeWithAnimation();
+    }
+
+    private void showTitleBadgeWithAnimation() {
+        if (titleBadgeContainer == null) {
+            return;
+        }
+
+        // Cancel any pending fade-out
+        if (titleBadgeFadeOutRunnable != null) {
+            titleBadgeContainer.removeCallbacks(titleBadgeFadeOutRunnable);
+        }
+
+        // Reset state and make visible
+        titleBadgeContainer.setVisibility(View.VISIBLE);
+        titleBadgeContainer.setAlpha(0f);
+        titleBadgeContainer.setTranslationY(-40f);
+
+        // Slide down and fade in animation
+        titleBadgeContainer.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(400)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.5f))
+                .start();
+
+        // Schedule auto-fade to match controls timeout
+        titleBadgeFadeOutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                fadeOutTitleBadge();
+            }
+        };
+        titleBadgeContainer.postDelayed(titleBadgeFadeOutRunnable, CONTROLS_AUTO_HIDE_DELAY_MS);
+    }
+
+    private void fadeOutTitleBadge() {
+        if (titleBadgeContainer == null) {
+            return;
+        }
+
+        // Smooth fade out over 1 second
+        titleBadgeContainer.animate()
+                .alpha(0f)
+                .setDuration(1000)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.2f))
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (titleBadgeContainer != null) {
+                            titleBadgeContainer.setVisibility(View.GONE);
+                        }
+                    }
+                })
+                .start();
+    }
+
+    private void hideTitleBadge() {
+        if (titleBadgeContainer == null) {
+            return;
+        }
+
+        // Cancel any pending animations/callbacks
+        if (titleBadgeFadeOutRunnable != null) {
+            titleBadgeContainer.removeCallbacks(titleBadgeFadeOutRunnable);
+        }
+        titleBadgeContainer.animate().cancel();
+        titleBadgeContainer.setVisibility(View.GONE);
     }
 }

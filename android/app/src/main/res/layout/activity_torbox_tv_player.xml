@@ -48,24 +48,140 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/player_channel_badge"
+    <!-- Auto-Fade Video Title Badge with Glassy Blur Effect -->
+    <LinearLayout
+        android:id="@+id/player_title_badge_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="20dp"
-        android:textColor="#99FFFFFF"
-        android:textSize="13sp"
-        android:fontFamily="monospace"
-        android:shadowColor="#AA000000"
-        android:shadowDx="1"
-        android:shadowDy="1"
-        android:shadowRadius="4"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:letterSpacing="0.05"
-        android:alpha="0.85"
-        android:visibility="gone" />
+        android:layout_gravity="top|start"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:background="@drawable/channel_badge_blur_background"
+        android:elevation="8dp"
+        android:translationY="-40dp"
+        android:alpha="0"
+        android:visibility="gone">
+
+        <!-- Subtle left accent line -->
+        <View
+            android:layout_width="1.5dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/channel_badge_accent_gradient" />
+
+        <!-- Play icon -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="▶"
+            android:textColor="#66FF00"
+            android:textSize="12sp"
+            android:includeFontPadding="false"
+            android:layout_marginEnd="8dp"
+            android:shadowColor="#40000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
+
+        <!-- Video title -->
+        <TextView
+            android:id="@+id/player_title_badge_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Video Title"
+            android:textColor="#E6FFFFFF"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif"
+            android:maxWidth="320dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:shadowColor="#40000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="2" />
+
+    </LinearLayout>
+
+    <!-- Auto-Fade Channel Badge with Glassy Blur Effect -->
+    <LinearLayout
+        android:id="@+id/player_channel_badge_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginEnd="20dp"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:background="@drawable/channel_badge_blur_background"
+        android:elevation="8dp"
+        android:translationY="-40dp"
+        android:alpha="0"
+        android:visibility="gone">
+
+        <!-- Subtle left accent line -->
+        <View
+            android:layout_width="1.5dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/channel_badge_accent_gradient" />
+
+        <!-- Channel number -->
+        <TextView
+            android:id="@+id/player_channel_number"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="5"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.03"
+            android:includeFontPadding="false"
+            android:shadowColor="#40000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
+
+        <!-- Separator dot -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="7dp"
+            android:layout_marginEnd="7dp"
+            android:text="•"
+            android:textColor="#88FFFFFF"
+            android:textSize="10sp"
+            android:includeFontPadding="false" />
+
+        <!-- Channel name -->
+        <TextView
+            android:id="@+id/player_channel_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="HBO Max"
+            android:textColor="#E6FFFFFF"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif"
+            android:maxWidth="120dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:shadowColor="#40000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="2" />
+
+    </LinearLayout>
 
     <!-- YouTube-style Top Loading Bar -->
     <FrameLayout

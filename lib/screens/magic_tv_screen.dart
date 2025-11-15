@@ -282,7 +282,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   int _randomStartPercent = _randomStartPercentDefault;
   bool _hideSeekbar = true;
   bool _showChannelName = true;
-  bool _showVideoTitle = false;
+  bool _showVideoTitle = true;
   bool _hideOptions = true;
   bool _hideBackButton = true;
   String _provider = _providerRealDebrid;
@@ -5859,7 +5859,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _randomStartPercent = _randomStartPercentDefault;
                       _hideSeekbar = true;
                       _showChannelName = true;
-                      _showVideoTitle = false;
+                      _showVideoTitle = true;
                       _hideOptions = true;
                       _hideBackButton = true;
                       _provider = defaultProvider;
