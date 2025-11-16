@@ -16,6 +16,8 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   final _passwordController = TextEditingController();
 
   bool _pikpakEnabled = false;
+  bool _showVideosOnly = true;
+  bool _ignoreSmallVideos = true;
   bool _isConnected = false;
   bool _isConnecting = false;
   bool _loading = true;
@@ -35,6 +37,8 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
   Future<void> _loadSettings() async {
     final enabled = await StorageService.getPikPakEnabled();
+    final showVideosOnly = await StorageService.getPikPakShowVideosOnly();
+    final ignoreSmallVideos = await StorageService.getPikPakIgnoreSmallVideos();
     final email = await StorageService.getPikPakEmail();
     final isAuth = await PikPakApiService.instance.isAuthenticated();
 
@@ -42,6 +46,8 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
     setState(() {
       _pikpakEnabled = enabled;
+      _showVideosOnly = showVideosOnly;
+      _ignoreSmallVideos = ignoreSmallVideos;
       _emailController.text = email ?? '';
       _isConnected = isAuth;
       _loading = false;
@@ -200,6 +206,68 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                   value
                       ? 'PikPak integration enabled'
                       : 'PikPak integration disabled',
+                  isError: false,
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Show Videos Only Toggle
+          Card(
+            child: SwitchListTile(
+              title: const Text(
+                'Show Only Video Files',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: Text(
+                _showVideosOnly
+                    ? 'Only video files are shown in folders'
+                    : 'All file types are shown in folders',
+                style: const TextStyle(fontSize: 13),
+              ),
+              value: _showVideosOnly,
+              onChanged: (value) async {
+                await StorageService.setPikPakShowVideosOnly(value);
+                setState(() {
+                  _showVideosOnly = value;
+                });
+                _showSnackBar(
+                  value
+                      ? 'Now showing only video files'
+                      : 'Now showing all file types',
+                  isError: false,
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Ignore Small Videos Toggle
+          Card(
+            child: SwitchListTile(
+              title: const Text(
+                'Ignore Videos Under 100MB',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: Text(
+                _ignoreSmallVideos
+                    ? 'Videos smaller than 100MB are hidden'
+                    : 'All video sizes are shown',
+                style: const TextStyle(fontSize: 13),
+              ),
+              value: _ignoreSmallVideos,
+              onChanged: (value) async {
+                await StorageService.setPikPakIgnoreSmallVideos(value);
+                setState(() {
+                  _ignoreSmallVideos = value;
+                });
+                _showSnackBar(
+                  value
+                      ? 'Now hiding videos under 100MB'
+                      : 'Now showing all video sizes',
                   isError: false,
                 );
               },

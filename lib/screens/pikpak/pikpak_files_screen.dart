@@ -20,6 +20,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   bool _initialLoad = true;
   String _errorMessage = '';
   bool _pikpakEnabled = false;
+  bool _showVideosOnly = true;
+  bool _ignoreSmallVideos = true;
   String? _email;
 
   // Folder navigation state
@@ -40,12 +42,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   Future<void> _loadSettings() async {
     final enabled = await StorageService.getPikPakEnabled();
+    final showVideosOnly = await StorageService.getPikPakShowVideosOnly();
+    final ignoreSmallVideos = await StorageService.getPikPakIgnoreSmallVideos();
     final email = await PikPakApiService.instance.getEmail();
 
     if (!mounted) return;
 
     setState(() {
       _pikpakEnabled = enabled;
+      _showVideosOnly = showVideosOnly;
+      _ignoreSmallVideos = ignoreSmallVideos;
       _email = email;
     });
 
@@ -67,9 +73,45 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
       if (!mounted) return;
 
+      // Filter files based on settings
+      List<Map<String, dynamic>> filteredFiles = files;
+
+      // Filter by file type (videos only)
+      if (_showVideosOnly) {
+        filteredFiles = filteredFiles.where((file) {
+          final kind = file['kind'] ?? '';
+          final mimeType = file['mime_type'] ?? '';
+          // Always show folders, only filter non-folder items
+          return kind == 'drive#folder' || mimeType.startsWith('video/');
+        }).toList();
+      }
+
+      // Filter by size (ignore videos under 100MB)
+      if (_ignoreSmallVideos) {
+        filteredFiles = filteredFiles.where((file) {
+          final kind = file['kind'] ?? '';
+          final mimeType = file['mime_type'] ?? '';
+          final size = file['size'];
+
+          // Always show folders
+          if (kind == 'drive#folder') return true;
+
+          // For videos, check size
+          if (mimeType.startsWith('video/')) {
+            if (size == null) return true; // Show if size is unknown
+            final sizeBytes = int.tryParse(size.toString()) ?? 0;
+            final sizeMB = sizeBytes / (1024 * 1024);
+            return sizeMB >= 100; // Only show videos 100MB or larger
+          }
+
+          // Show non-video files if videos-only filter is off
+          return true;
+        }).toList();
+      }
+
       setState(() {
         _files.clear();
-        _files.addAll(files);
+        _files.addAll(filteredFiles);
         _isLoading = false;
         _initialLoad = false;
       });

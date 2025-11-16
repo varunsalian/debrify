@@ -52,6 +52,8 @@ class StorageService {
   static const String _pikpakDeviceIdKey = 'pikpak_device_id';
   static const String _pikpakCaptchaTokenKey = 'pikpak_captcha_token';
   static const String _pikpakUserIdKey = 'pikpak_user_id';
+  static const String _pikpakShowVideosOnlyKey = 'pikpak_show_videos_only';
+  static const String _pikpakIgnoreSmallVideosKey = 'pikpak_ignore_small_videos';
 
   // Debrify TV search engine settings
   static const String _debrifyTvUseTorrentsCsvKey = 'debrify_tv_use_torrents_csv';
@@ -1327,6 +1329,28 @@ class StorageService {
   static Future<String?> getPikPakUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_pikpakUserIdKey);
+  }
+
+  // PikPak Show Videos Only
+  static Future<bool> getPikPakShowVideosOnly() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_pikpakShowVideosOnlyKey) ?? true; // Default to true
+  }
+
+  static Future<void> setPikPakShowVideosOnly(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pikpakShowVideosOnlyKey, value);
+  }
+
+  // PikPak Ignore Small Videos (under 100MB)
+  static Future<bool> getPikPakIgnoreSmallVideos() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_pikpakIgnoreSmallVideosKey) ?? true; // Default to true
+  }
+
+  static Future<void> setPikPakIgnoreSmallVideos(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pikpakIgnoreSmallVideosKey, value);
   }
 }
 
