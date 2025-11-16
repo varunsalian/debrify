@@ -27,6 +27,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   // Folder navigation state
   String? _currentFolderId;
   String _currentFolderName = 'My Files';
+  final List<({String? id, String name})> _navigationStack = [];
 
   @override
   void initState() {
@@ -129,6 +130,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   void _navigateIntoFolder(String folderId, String folderName) {
     setState(() {
+      // Push current folder to stack before navigating
+      _navigationStack.add((id: _currentFolderId, name: _currentFolderName));
       _currentFolderId = folderId;
       _currentFolderName = folderName;
     });
@@ -137,8 +140,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   void _navigateUp() {
     setState(() {
-      _currentFolderId = null;
-      _currentFolderName = 'My Files';
+      // Pop from stack to go back one level
+      if (_navigationStack.isNotEmpty) {
+        final previous = _navigationStack.removeLast();
+        _currentFolderId = previous.id;
+        _currentFolderName = previous.name;
+      } else {
+        // Already at root
+        _currentFolderId = null;
+        _currentFolderName = 'My Files';
+      }
     });
     _loadFiles();
   }
