@@ -313,6 +313,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   String? _activeApiKey;
   final Set<String> _inflightInfohashes = {};
   bool _isAndroidTv = false;
+  bool _showSearchBar = false;
   late final FocusNode _channelSearchFocusNode;
 
   // Progress UI state
@@ -5684,17 +5685,103 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   backgroundColor: Colors.redAccent,
                 ),
                 const Spacer(),
+                // Search button
+                _TvCompactButton(
+                  onPressed: () {
+                    setState(() {
+                      _showSearchBar = !_showSearchBar;
+                      if (_showSearchBar) {
+                        // Focus on search field when showing
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          _channelSearchFocusNode.requestFocus();
+                        });
+                      } else {
+                        // Clear search when hiding
+                        _channelSearchController.clear();
+                        _channelSearchTerm = '';
+                      }
+                    });
+                  },
+                  icon: Icons.search_rounded,
+                  label: null, // Icon only for search
+                  backgroundColor: const Color(0xFF9333EA), // Purple color
+                ),
+                const SizedBox(width: 12),
                 // Settings button
                 _TvCompactButton(
                   onPressed: _showGlobalSettingsDialog,
                   icon: Icons.settings_rounded,
                   label: null, // Icon only for settings
-                  backgroundColor: Colors.white.withOpacity(0.1),
+                  backgroundColor: const Color(0xFF64748B), // Slate gray color
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          // Search field for TV (only show when toggled)
+          if (_showSearchBar) ...[
+            const SizedBox(height: 16),
+            Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search_rounded,
+                    color: Colors.white.withOpacity(0.5),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      focusNode: _channelSearchFocusNode,
+                      controller: _channelSearchController,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Search channels...',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 16,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _channelSearchTerm = value;
+                        });
+                      },
+                    ),
+                  ),
+                  if (_channelSearchTerm.isNotEmpty)
+                    IconButton(
+                      icon: Icon(
+                        Icons.clear_rounded,
+                        color: Colors.white.withOpacity(0.5),
+                        size: 20,
+                      ),
+                      onPressed: () {
+                        _channelSearchController.clear();
+                        setState(() {
+                          _channelSearchTerm = '';
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
           // Channel grid
           Expanded(
             child: filteredChannels.isEmpty
@@ -5766,9 +5853,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV Channel Card (Grid item)
   Widget _buildTvChannelCard(_DebrifyTvChannel channel) {
+    print('[TV] Building TV channel card for: ${channel.name}');
     return _TvFocusableCard(
-      onPressed: () => _watchChannel(channel),
-      onLongPress: () => _showTvChannelOptionsMenu(channel),
+      onPressed: () {
+        print('[TV] Card onPressed for channel: ${channel.name}');
+        _watchChannel(channel);
+      },
+      onLongPress: () {
+        print('[TV] Card onLongPress callback triggered for channel: ${channel.name}');
+        _showTvChannelOptionsMenu(channel);
+      },
       showLongPressHint: true,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -5815,9 +5909,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV Channel Options Menu (Edit/Delete)
   Future<void> _showTvChannelOptionsMenu(_DebrifyTvChannel channel) async {
+    print('[TV] _showTvChannelOptionsMenu called for channel: ${channel.name}');
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        print('[TV] Building options dialog for channel: ${channel.name}');
         return AlertDialog(
           backgroundColor: const Color(0xFF0F0F0F),
           shape: RoundedRectangleBorder(
@@ -8126,39 +8222,89 @@ class _TvFocusableCard extends StatefulWidget {
 
 class _TvFocusableCardState extends State<_TvFocusableCard> {
   bool _isFocused = false;
+  Timer? _longPressTimer;
+  bool _longPressTriggered = false;
+  DateTime? _lastLongPressTime;
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Focus(
       onFocusChange: (focused) {
+        print('[TvFocusableCard] Focus changed: $focused');
         setState(() {
           _isFocused = focused;
         });
+        if (!focused) {
+          _longPressTimer?.cancel();
+          _longPressTriggered = false;
+        }
       },
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          // Check for long press buttons FIRST (menu/options buttons)
-          if (event.logicalKey == LogicalKeyboardKey.contextMenu ||
-              event.logicalKey == LogicalKeyboardKey.gameButtonMode ||
-              event.logicalKey == LogicalKeyboardKey.info) {
-            // Long press action (Edit/Delete menu)
-            if (widget.onLongPress != null) {
-              widget.onLongPress!();
-              return KeyEventResult.handled;
+        // Handle Select/Enter button press
+        if (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter) {
+
+          if (event is KeyDownEvent) {
+            print('[TvFocusableCard] Select/Enter key DOWN - starting long press timer');
+            _longPressTriggered = false;
+
+            // Start timer for long press (800ms)
+            _longPressTimer?.cancel();
+            _longPressTimer = Timer(const Duration(milliseconds: 800), () {
+              print('[TvFocusableCard] Long press detected! Triggering onLongPress');
+              _longPressTriggered = true;
+              _lastLongPressTime = DateTime.now();
+              if (widget.onLongPress != null) {
+                widget.onLongPress!();
+              }
+            });
+
+            return KeyEventResult.handled;
+          } else if (event is KeyUpEvent) {
+            print('[TvFocusableCard] Select/Enter key UP');
+            _longPressTimer?.cancel();
+
+            // Check if we recently triggered a long press (within last 500ms)
+            final timeSinceLongPress = _lastLongPressTime != null
+                ? DateTime.now().difference(_lastLongPressTime!).inMilliseconds
+                : 999999;
+
+            // If not a long press and not immediately after closing dialog, trigger regular press
+            if (!_longPressTriggered && timeSinceLongPress > 500) {
+              print('[TvFocusableCard] Short press - triggering onPressed');
+              widget.onPressed();
+            } else if (timeSinceLongPress <= 500) {
+              print('[TvFocusableCard] Ignoring key up - too soon after long press dialog');
             }
-          }
-          // Regular select/enter for playing
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
-            widget.onPressed();
+            _longPressTriggered = false;
+
             return KeyEventResult.handled;
           }
         }
+
+        if (event is KeyDownEvent) {
+          print('[TvFocusableCard] Other key pressed: ${event.logicalKey.keyLabel} (${event.logicalKey.keyId})');
+        }
+
         return KeyEventResult.ignored;
       },
       child: GestureDetector(
-        onTap: widget.onPressed,
-        onLongPress: widget.onLongPress,
+        onTap: () {
+          print('[TvFocusableCard] GestureDetector onTap triggered');
+          widget.onPressed();
+        },
+        onLongPress: widget.onLongPress != null
+            ? () {
+                print('[TvFocusableCard] GestureDetector onLongPress triggered!');
+                widget.onLongPress!();
+              }
+            : null,
         child: Stack(
           children: [
             AnimatedContainer(
