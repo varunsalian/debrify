@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'deep_link_service.dart';
 import 'debrid_service.dart';
 import 'torbox_service.dart';
+import 'pikpak_api_service.dart';
 import 'storage_service.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
@@ -11,6 +12,7 @@ class MagnetLinkHandler {
   final BuildContext context;
   final Function(RDTorrent torrent)? onRealDebridAdded;
   final Function(TorboxTorrent torrent)? onTorboxAdded;
+  final Function()? onPikPakAdded;
   final Function(Map<String, dynamic> result, String torrentName, String apiKey)? onRealDebridResult;
   final Function(TorboxTorrent torrent)? onTorboxResult;
 
@@ -18,6 +20,7 @@ class MagnetLinkHandler {
     required this.context,
     this.onRealDebridAdded,
     this.onTorboxAdded,
+    this.onPikPakAdded,
     this.onRealDebridResult,
     this.onTorboxResult,
   });
@@ -38,32 +41,36 @@ class MagnetLinkHandler {
     final services = await DeepLinkService.getConfiguredServices();
 
     if (!services.hasAny) {
-      _showError('No debrid service configured.\nPlease configure RealDebrid or Torbox in Settings.');
+      _showError('No debrid service configured.\nPlease configure RealDebrid, Torbox, or PikPak in Settings.');
       return;
     }
 
-    // If both services are configured, show selection dialog
-    if (services.hasBoth) {
-      _showServiceSelectionDialog(magnetUri, infohash, torrentName);
+    // If multiple services are configured, show selection dialog
+    if (services.hasMultiple) {
+      _showServiceSelectionDialog(magnetUri, infohash, torrentName, services);
     } else if (services.hasOnlyRealDebrid) {
       // Auto-select RealDebrid
       await _addToRealDebrid(magnetUri, infohash, torrentName);
     } else if (services.hasOnlyTorbox) {
       // Auto-select Torbox
       await _addToTorbox(magnetUri, infohash, torrentName);
+    } else if (services.hasOnlyPikPak) {
+      // Auto-select PikPak
+      await _addToPikPak(magnetUri, infohash, torrentName);
     }
   }
 
-  /// Show dialog to select between RealDebrid and Torbox
+  /// Show dialog to select between services
   void _showServiceSelectionDialog(
     String magnetUri,
     String infohash,
     String torrentName,
+    ConfiguredServices services,
   ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select Debrid Service'),
+        title: const Text('Select Service'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,22 +89,33 @@ class MagnetLinkHandler {
           ],
         ),
         actions: [
-          TextButton.icon(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _addToRealDebrid(magnetUri, infohash, torrentName);
-            },
-            icon: const Icon(Icons.cloud_download),
-            label: const Text('RealDebrid'),
-          ),
-          TextButton.icon(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _addToTorbox(magnetUri, infohash, torrentName);
-            },
-            icon: const Icon(Icons.storage),
-            label: const Text('Torbox'),
-          ),
+          if (services.hasRealDebrid)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _addToRealDebrid(magnetUri, infohash, torrentName);
+              },
+              icon: const Icon(Icons.cloud_download),
+              label: const Text('RealDebrid'),
+            ),
+          if (services.hasTorbox)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _addToTorbox(magnetUri, infohash, torrentName);
+              },
+              icon: const Icon(Icons.flash_on),
+              label: const Text('Torbox'),
+            ),
+          if (services.hasPikPak)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _addToPikPak(magnetUri, infohash, torrentName);
+              },
+              icon: const Icon(Icons.cloud_circle),
+              label: const Text('PikPak'),
+            ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
@@ -219,6 +237,49 @@ class MagnetLinkHandler {
       if (!context.mounted) return;
       Navigator.of(context).pop(); // Close loading dialog
       _showError('Error adding to Torbox: $e');
+    }
+  }
+
+  /// Add magnet link to PikPak
+  Future<void> _addToPikPak(
+    String magnetUri,
+    String infohash,
+    String torrentName,
+  ) async {
+    // Check if authenticated
+    final isAuth = await PikPakApiService.instance.isAuthenticated();
+    if (!isAuth) {
+      _showError('PikPak not configured. Please login in Settings.');
+      return;
+    }
+
+    _showLoadingDialog(torrentName, 'PikPak');
+
+    try {
+      final result = await PikPakApiService.instance.addOfflineDownload(magnetUri);
+
+      if (!context.mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+
+      // Extract file name from response
+      String? fileName;
+      if (result['file'] != null) {
+        fileName = result['file']['name'] ?? torrentName;
+      } else if (result['task'] != null) {
+        fileName = result['task']['name'] ?? torrentName;
+      } else {
+        fileName = torrentName;
+      }
+
+      _showSuccess('Successfully added to PikPak: $fileName');
+
+      if (onPikPakAdded != null) {
+        onPikPakAdded!();
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      _showError('Error adding to PikPak: $e');
     }
   }
 

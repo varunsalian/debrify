@@ -124,6 +124,7 @@ class DeepLinkService {
     final torboxKey = await StorageService.getTorboxApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
 
     final hasRealDebrid = rdKey != null &&
                           rdKey.isNotEmpty &&
@@ -135,6 +136,7 @@ class DeepLinkService {
     return ConfiguredServices(
       hasRealDebrid: hasRealDebrid,
       hasTorbox: hasTorbox,
+      hasPikPak: pikpakEnabled,
     );
   }
 
@@ -150,14 +152,20 @@ class DeepLinkService {
 class ConfiguredServices {
   final bool hasRealDebrid;
   final bool hasTorbox;
+  final bool hasPikPak;
 
   ConfiguredServices({
     required this.hasRealDebrid,
     required this.hasTorbox,
+    required this.hasPikPak,
   });
 
-  bool get hasAny => hasRealDebrid || hasTorbox;
+  bool get hasAny => hasRealDebrid || hasTorbox || hasPikPak;
+  bool get hasMultiple => [hasRealDebrid, hasTorbox, hasPikPak].where((e) => e).length > 1;
+  bool get hasOnlyRealDebrid => hasRealDebrid && !hasTorbox && !hasPikPak;
+  bool get hasOnlyTorbox => !hasRealDebrid && hasTorbox && !hasPikPak;
+  bool get hasOnlyPikPak => !hasRealDebrid && !hasTorbox && hasPikPak;
+
+  // Legacy getters for backward compatibility
   bool get hasBoth => hasRealDebrid && hasTorbox;
-  bool get hasOnlyRealDebrid => hasRealDebrid && !hasTorbox;
-  bool get hasOnlyTorbox => !hasRealDebrid && hasTorbox;
 }
