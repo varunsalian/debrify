@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'screens/torrent_search_screen.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/torbox/torbox_downloads_screen.dart';
+import 'screens/pikpak/pikpak_files_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/magic_tv_screen.dart';
@@ -295,6 +296,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _initialSetupHandled = false;
   bool _rdIntegrationEnabled = true;
   bool _tbIntegrationEnabled = true;
+  bool _pikpakEnabled = false;
   bool _isAndroidTv = false;
 
   final List<Widget> _pages = [
@@ -304,6 +306,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const DebrifyTVScreen(),
     const DebridDownloadsScreen(),
     const TorboxDownloadsScreen(),
+    const PikPakFilesScreen(),
     const SettingsScreen(),
   ];
 
@@ -314,6 +317,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Debrify TV',
     'Real Debrid',
     'Torbox',
+    'PikPak',
     'Settings',
   ];
 
@@ -324,6 +328,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.tv_rounded,
     Icons.cloud_download_rounded,
     Icons.flash_on_rounded,
+    Icons.cloud_circle_rounded,
     Icons.settings_rounded,
   ];
 
@@ -504,6 +509,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final torboxKey = await StorageService.getTorboxApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
 
     if (!mounted) return;
 
@@ -515,6 +521,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       hasTorbox: hasTorbox,
       realDebridEnabled: rdEnabled,
       torboxEnabled: torboxEnabled,
+      pikpakEnabled: pikpakEnabled,
     );
   }
 
@@ -523,10 +530,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool hasTorbox,
     required bool realDebridEnabled,
     required bool torboxEnabled,
+    required bool pikpakEnabled,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
       hasTorbox: hasTorbox,
+      pikpakEnabled: pikpakEnabled,
     );
 
     int nextIndex = _selectedIndex;
@@ -538,6 +547,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _hasTorboxKey == hasTorbox &&
         _rdIntegrationEnabled == realDebridEnabled &&
         _tbIntegrationEnabled == torboxEnabled &&
+        _pikpakEnabled == pikpakEnabled &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -547,6 +557,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _hasTorboxKey = hasTorbox;
       _rdIntegrationEnabled = realDebridEnabled;
       _tbIntegrationEnabled = torboxEnabled;
+      _pikpakEnabled = pikpakEnabled;
       _selectedIndex = nextIndex;
     });
   }
@@ -554,10 +565,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   List<int> _computeVisibleNavIndices({
     bool? hasRealDebrid,
     bool? hasTorbox,
+    bool? pikpakEnabled,
   }) {
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
       final tb = hasTorbox ?? _hasTorboxKey;
+      final pikpak = pikpakEnabled ?? _pikpakEnabled;
       final indices = <int>[0, 1, 3]; // Torrent, Playlist, Debrify TV
       if (rd) {
         indices.add(4); // Real Debrid downloads
@@ -565,20 +578,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       if (tb) {
         indices.add(5); // Torbox downloads
       }
-      indices.add(6); // Settings
+      if (pikpak) {
+        indices.add(6); // PikPak
+      }
+      indices.add(7); // Settings
       return indices;
     }
 
     final rd = hasRealDebrid ?? _hasRealDebridKey;
     final tb = hasTorbox ?? _hasTorboxKey;
-    if (!rd && !tb) {
-      return const [0, 6];
+    final pikpak = pikpakEnabled ?? _pikpakEnabled;
+    if (!rd && !tb && !pikpak) {
+      return [0, 7];
     }
 
     final indices = <int>[0, 1, 2, 3];
     if (rd) indices.add(4);
     if (tb) indices.add(5);
-    indices.add(6);
+    if (pikpak) indices.add(6);
+    indices.add(7);
     return indices;
   }
 

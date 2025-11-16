@@ -57,6 +57,8 @@ class VideoPlayerScreen extends StatefulWidget {
   final bool hideOptions;
   // Hide back button - use device back gesture or escape key
   final bool hideBackButton;
+  // HTTP headers for authenticated streaming (e.g., PikPak, private CDNs)
+  final Map<String, String>? httpHeaders;
 
   const VideoPlayerScreen({
     Key? key,
@@ -77,6 +79,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.showVideoTitle = true,
     this.hideOptions = false,
     this.hideBackButton = false,
+    this.httpHeaders,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -432,7 +435,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Only open the player if we have a valid URL
     if (initialUrl.isNotEmpty) {
-      _player.open(mk.Media(initialUrl)).then((_) async {
+      _player.open(mk.Media(initialUrl, httpHeaders: widget.httpHeaders)).then((_) async {
         // Wait for the video to load and duration to be available
         await _waitForVideoReady();
         // Random start takes precedence over resume
@@ -498,6 +501,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _completedSub = _player.stream.completed.listen((done) {
       if (done) _onPlaybackEnded();
     });
+
     _autosaveTimer = Timer.periodic(
       const Duration(seconds: 6),
       (_) => _saveResume(debounced: true),
@@ -932,7 +936,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             });
           }
           
-          await _player.open(mk.Media(url), play: true);
+          await _player.open(mk.Media(url, httpHeaders: widget.httpHeaders), play: true);
           _currentStreamUrl = url;
           // If advanced option is enabled, jump to a random timestamp for Debrify TV items
           if (widget.startFromRandom) {
@@ -1053,7 +1057,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     try {
-      await _player.open(mk.Media(nextUrl), play: true);
+      await _player.open(mk.Media(nextUrl, httpHeaders: widget.httpHeaders), play: true);
       _currentStreamUrl = nextUrl;
     } catch (e) {
       debugPrint('Player: Failed to open next channel stream: $e');
@@ -1202,7 +1206,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _currentStreamUrl = videoUrl;
 
-    await _player.open(mk.Media(videoUrl), play: autoplay);
+    await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: autoplay);
     // Wait for the video to load and duration to be available
     await _waitForVideoReady();
     await _maybeRestoreResume();

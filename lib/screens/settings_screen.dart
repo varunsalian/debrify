@@ -6,6 +6,7 @@ import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
 import '../widgets/shimmer.dart';
 import 'settings/debrify_tv_settings_page.dart';
+import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
@@ -137,6 +138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
+      onOpenPikPakSettings: _openPikPakSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
@@ -155,6 +157,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const DebrifyTvSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openPikPakSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PikPakSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -292,6 +302,7 @@ class _SettingsLayout extends StatelessWidget {
   final _ConnectionsSummary connections;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
+  final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
@@ -300,6 +311,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.connections,
     required this.onOpenTorrentSettings,
     required this.onOpenDebrifyTvSettings,
+    required this.onOpenPikPakSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
     required this.onDangerAction,
@@ -331,6 +343,12 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Debrify TV Settings',
                 subtitle: 'Search engines, limits, and channel configuration',
                 onTap: onOpenDebrifyTvSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.cloud_circle_rounded,
+                title: 'PikPak Settings',
+                subtitle: 'Configure PikPak cloud storage integration',
+                onTap: onOpenPikPakSettings,
               ),
             ],
           ),

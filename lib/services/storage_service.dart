@@ -43,6 +43,16 @@ class StorageService {
       'debrify_tv_random_start_percent';
   static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
 
+  // PikPak API settings
+  static const String _pikpakEnabledKey = 'pikpak_enabled';
+  static const String _pikpakEmailKey = 'pikpak_email';
+  static const String _pikpakPasswordKey = 'pikpak_password';
+  static const String _pikpakAccessTokenKey = 'pikpak_access_token';
+  static const String _pikpakRefreshTokenKey = 'pikpak_refresh_token';
+  static const String _pikpakDeviceIdKey = 'pikpak_device_id';
+  static const String _pikpakCaptchaTokenKey = 'pikpak_captcha_token';
+  static const String _pikpakUserIdKey = 'pikpak_user_id';
+
   // Debrify TV search engine settings
   static const String _debrifyTvUseTorrentsCsvKey = 'debrify_tv_use_torrents_csv';
   static const String _debrifyTvUsePirateBayKey = 'debrify_tv_use_pirate_bay';
@@ -1218,6 +1228,105 @@ class StorageService {
   static Future<void> setDebrifyTvMinTorrentsPerKeyword(int value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_debrifyTvMinTorrentsPerKeywordKey, value.clamp(1, 50));
+  }
+
+  // PikPak API Settings
+  static Future<bool> getPikPakEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_pikpakEnabledKey) ?? false;
+  }
+
+  static Future<void> setPikPakEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pikpakEnabledKey, value);
+  }
+
+  static Future<String?> getPikPakEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakEmailKey);
+  }
+
+  static Future<void> setPikPakEmail(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakEmailKey, email);
+  }
+
+  static Future<String?> getPikPakPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakPasswordKey);
+  }
+
+  static Future<void> setPikPakPassword(String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakPasswordKey, password);
+  }
+
+  static Future<String?> getPikPakAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakAccessTokenKey);
+  }
+
+  static Future<void> setPikPakAccessToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakAccessTokenKey, token);
+  }
+
+  static Future<String?> getPikPakRefreshToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakRefreshTokenKey);
+  }
+
+  static Future<void> setPikPakRefreshToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakRefreshTokenKey, token);
+  }
+
+  static Future<void> clearPikPakAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pikpakEmailKey);
+    await prefs.remove(_pikpakPasswordKey);
+    await prefs.remove(_pikpakAccessTokenKey);
+    await prefs.remove(_pikpakRefreshTokenKey);
+    await prefs.remove(_pikpakDeviceIdKey);
+    await prefs.remove(_pikpakCaptchaTokenKey);
+    await prefs.remove(_pikpakUserIdKey);
+    await prefs.setBool(_pikpakEnabledKey, false);
+  }
+
+  // PikPak Device ID and Captcha Token
+  static Future<void> setPikPakDeviceId(String deviceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakDeviceIdKey, deviceId);
+  }
+
+  static Future<String?> getPikPakDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakDeviceIdKey);
+  }
+
+  static Future<void> setPikPakCaptchaToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakCaptchaTokenKey, token);
+  }
+
+  static Future<String?> getPikPakCaptchaToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakCaptchaTokenKey);
+  }
+
+  static Future<void> clearPikPakCaptchaToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pikpakCaptchaTokenKey);
+  }
+
+  static Future<void> setPikPakUserId(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakUserIdKey, userId);
+  }
+
+  static Future<String?> getPikPakUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakUserIdKey);
   }
 }
 

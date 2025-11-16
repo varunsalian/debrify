@@ -8,6 +8,7 @@ import '../services/torrent_service.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../services/download_service.dart';
+import '../services/pikpak_api_service.dart';
 import '../services/torrentio_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/android_native_downloader.dart';
@@ -76,6 +77,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Map<String, bool>? _torboxCacheStatus;
   bool _realDebridIntegrationEnabled = true;
   bool _torboxIntegrationEnabled = true;
+  bool _pikpakEnabled = false;
   bool _showingTorboxCachedOnly = false;
   bool _isTelevision = false;
   final List<FocusNode> _cardFocusNodes = [];
@@ -324,12 +326,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final torboxKey = await StorageService.getTorboxApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
     if (!mounted) return;
     setState(() {
       _apiKey = rdKey;
       _torboxApiKey = torboxKey;
       _realDebridIntegrationEnabled = rdEnabled;
       _torboxIntegrationEnabled = torboxEnabled;
+      _pikpakEnabled = pikpakEnabled;
     });
   }
 
@@ -380,12 +384,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       StorageService.getRealDebridIntegrationEnabled(),
       StorageService.getTorboxIntegrationEnabled(),
       StorageService.getApiKey(),
+      StorageService.getPikPakEnabled(),
     ]);
     final bool cacheCheckPreference = results[0] as bool;
     final String? torboxKey = results[1] as String?;
     final bool rdEnabled = results[2] as bool;
     final bool torboxEnabled = results[3] as bool;
     final String? rdKey = results[4] as String?;
+    final bool pikpakEnabled = results[5] as bool;
     if (mounted) {
       setState(() {
         _torboxCacheCheckEnabled = cacheCheckPreference;
@@ -393,6 +399,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _realDebridIntegrationEnabled = rdEnabled;
         _torboxIntegrationEnabled = torboxEnabled;
         _apiKey = rdKey;
+        _pikpakEnabled = pikpakEnabled;
       });
     }
 
@@ -1354,6 +1361,78 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'CAM / TS';
       case RipSourceCategory.other:
         return 'Other';
+    }
+  }
+
+  Future<void> _sendToPikPak(String infohash, String torrentName) async {
+    try {
+      final magnet = 'magnet:?xt=urn:btih:$infohash&dn=${Uri.encodeComponent(torrentName)}';
+
+      final pikpak = PikPakApiService.instance;
+      final result = await pikpak.addOfflineDownload(magnet);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF22C55E),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.check_circle, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Added to PikPak: ${result['file']?['name'] ?? result['name'] ?? torrentName}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      print('Error sending to PikPak: $e');
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.error, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Failed to add to PikPak: ${e.toString()}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 
@@ -5462,6 +5541,74 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   );
                 }
 
+                Widget buildPikPakButton() {
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      focusColor:
+                          const Color(0xFF0088CC).withValues(alpha: 0.25),
+                      onTap: () =>
+                          _sendToPikPak(torrent.infohash, torrent.name),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0088CC), Color(0xFF229ED9)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(
+                                0xFF0088CC,
+                              ).withValues(alpha: 0.4),
+                              spreadRadius: 0,
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.telegram,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'PikPak',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                  color: Colors.white,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Icon(
+                              Icons.expand_more_rounded,
+                              color: Colors.white70,
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
                 final Widget? torboxButton =
                     (_torboxIntegrationEnabled &&
                         _torboxApiKey != null &&
@@ -5474,37 +5621,63 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         _apiKey!.isNotEmpty)
                     ? buildRealDebridButton()
                     : null;
+                final Widget? pikpakButton = _pikpakEnabled
+                    ? buildPikPakButton()
+                    : null;
 
-                if (torboxButton == null && realDebridButton == null) {
+                if (torboxButton == null && realDebridButton == null && pikpakButton == null) {
                   return const SizedBox.shrink();
                 }
+
+                // Count active buttons
+                final int buttonCount = [torboxButton, realDebridButton, pikpakButton]
+                    .where((button) => button != null)
+                    .length;
 
                 if (isCompactLayout) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (torboxButton != null) torboxButton,
-                      if (torboxButton != null && realDebridButton != null)
+                      if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
                         const SizedBox(height: 8),
                       if (realDebridButton != null) realDebridButton,
+                      if (realDebridButton != null && pikpakButton != null)
+                        const SizedBox(height: 8),
+                      if (pikpakButton != null) pikpakButton,
                     ],
                   );
                 }
 
-                if (torboxButton != null && realDebridButton != null) {
+                // For non-compact layouts, show buttons in a row
+                if (buttonCount == 3) {
                   return Row(
                     children: [
-                      Expanded(child: torboxButton),
+                      Expanded(child: torboxButton!),
                       const SizedBox(width: 8),
-                      Expanded(child: realDebridButton),
+                      Expanded(child: realDebridButton!),
+                      const SizedBox(width: 8),
+                      Expanded(child: pikpakButton!),
                     ],
                   );
-                }
-
-                  final Widget singleButton = torboxButton ?? realDebridButton!;
+                } else if (buttonCount == 2) {
+                  return Row(
+                    children: [
+                      if (torboxButton != null) Expanded(child: torboxButton),
+                      if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
+                        const SizedBox(width: 8),
+                      if (realDebridButton != null) Expanded(child: realDebridButton),
+                      if (realDebridButton != null && pikpakButton != null)
+                        const SizedBox(width: 8),
+                      if (pikpakButton != null) Expanded(child: pikpakButton),
+                    ],
+                  );
+                } else {
+                  final Widget singleButton = torboxButton ?? realDebridButton ?? pikpakButton!;
                   return SizedBox(width: double.infinity, child: singleButton);
-                },
-              ),
+                }
+              },
+            ),
             // TV hint
             if (_isTelevision && isFocused) ...[
               const SizedBox(height: 12),
