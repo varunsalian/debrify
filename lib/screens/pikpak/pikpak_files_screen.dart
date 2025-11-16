@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/video_player_launcher.dart';
 import '../../utils/formatters.dart';
-import '../video_player_screen.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
   const PikPakFilesScreen({super.key});
@@ -209,13 +209,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       // Links ready - play the video
       if (!mounted) return;
 
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => VideoPlayerScreen(
-            videoUrl: streamingUrl,
-            title: freshFileData['name'] ?? 'Video',
-            httpHeaders: {}, // Empty - auth is in URL query params
-          ),
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: streamingUrl,
+          title: freshFileData['name'] ?? 'Video',
         ),
       );
     } catch (e) {
