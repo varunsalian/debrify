@@ -6483,7 +6483,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     bool avoidNsfw = _quickAvoidNsfw;
     String? error;
-    final TextEditingController controller = _keywordsController;
+    // Create a separate controller for Quick Play to avoid sharing state with edit dialog
+    final TextEditingController controller = TextEditingController();
     final FocusNode keywordFocusNode = FocusNode(
       debugLabel: 'QuickPlayKeywordsField',
       onKeyEvent: (node, event) {
@@ -6590,6 +6591,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _quickAvoidNsfw = avoidNsfw;
                         _quickProvider = _provider;
                       });
+                      // Copy keywords from Quick Play controller to main controller for _watch()
+                      _keywordsController.text = keywords;
                     }
 
                     Navigator.of(dialogContext).pop();
@@ -6605,6 +6608,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
 
     keywordFocusNode.dispose();
+    controller.dispose();
   }
 
   Future<void> _showGlobalSettingsDialog() async {
