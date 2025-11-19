@@ -896,9 +896,17 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
+    final text = widget.controller.text;
+    final selection = widget.controller.selection;
+    final textLength = text.length;
+    final isTextEmpty = textLength == 0;
 
-    // Allow escape from TextField with up/down arrows when text is empty
-    // or with back button (escape key)
+    // Check if selection is valid
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final isAtStart = !isSelectionValid || (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd = !isSelectionValid || (selection.baseOffset == textLength && selection.extentOffset == textLength);
+
+    // Allow escape from TextField with back button (escape key)
     if (key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.browserBack) {
@@ -909,25 +917,25 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
       }
     }
 
-    // Navigate away with arrow keys when at beginning/end of text
+    // Navigate up: always allow if text is empty or cursor at start
     if (key == LogicalKeyboardKey.arrowUp) {
-      final selection = widget.controller.selection;
-      if (selection.baseOffset == 0 && selection.extentOffset == 0) {
+      if (isTextEmpty || isAtStart) {
         final ctx = node.context;
         if (ctx != null) {
-          FocusScope.of(ctx).previousFocus();
+          // Use directional focus to go to element above
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
           return KeyEventResult.handled;
         }
       }
     }
 
+    // Navigate down: always allow if text is empty or cursor at end
     if (key == LogicalKeyboardKey.arrowDown) {
-      final selection = widget.controller.selection;
-      final textLength = widget.controller.text.length;
-      if (selection.baseOffset == textLength && selection.extentOffset == textLength) {
+      if (isTextEmpty || isAtEnd) {
         final ctx = node.context;
         if (ctx != null) {
-          FocusScope.of(ctx).nextFocus();
+          // Use directional focus to go to element below
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
           return KeyEventResult.handled;
         }
       }
