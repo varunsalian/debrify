@@ -698,7 +698,10 @@ class _AndroidTvPlaybackPayloadBuilder {
       return null;
     }
     try {
-      final playlist = SeriesPlaylist.fromPlaylistEntries(entries);
+      final playlist = SeriesPlaylist.fromPlaylistEntries(
+        entries,
+        collectionTitle: args.title, // Pass collection/torrent title as fallback
+      );
       try {
         await playlist.fetchEpisodeInfo();
       } catch (_) {}

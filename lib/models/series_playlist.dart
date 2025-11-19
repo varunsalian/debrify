@@ -1,6 +1,38 @@
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import '../utils/series_parser.dart';
 import '../screens/video_player_screen.dart';
 import '../services/episode_info_service.dart';
+
+/// Represents a group of duplicate episodes
+class DuplicateGroup {
+  final int season;
+  final int episode;
+  final List<int> indices;
+  final List<int> fileSizes;
+
+  DuplicateGroup({
+    required this.season,
+    required this.episode,
+    required this.indices,
+    required this.fileSizes,
+  });
+
+  /// Get index of the largest file
+  int get largestFileIndex {
+    if (fileSizes.isEmpty) return indices.first;
+
+    int maxSize = 0;
+    int maxIndex = 0;
+    for (int i = 0; i < fileSizes.length; i++) {
+      if (fileSizes[i] > maxSize) {
+        maxSize = fileSizes[i];
+        maxIndex = i;
+      }
+    }
+    return indices[maxIndex];
+  }
+}
 
 class EpisodeInfo {
   final String? title;
@@ -73,7 +105,7 @@ class SeriesEpisode {
   final String url;
   final String title;
   final String filename;
-  final SeriesInfo seriesInfo;
+  SeriesInfo seriesInfo; // Not final to allow TVMaze updates
   final int originalIndex;
   EpisodeInfo? episodeInfo;
 
@@ -91,12 +123,17 @@ class SeriesEpisode {
     if (episodeInfo?.title != null && episodeInfo!.title!.isNotEmpty) {
       return episodeInfo!.title!;
     }
-    
+
+    // For Season 0 content (extras, alternate versions), use the episodeTitle
+    if (seriesInfo.season == 0 && seriesInfo.episodeTitle != null && seriesInfo.episodeTitle!.isNotEmpty) {
+      return seriesInfo.episodeTitle!;
+    }
+
     // Fallback to episode number for series
     if (seriesInfo.isSeries && seriesInfo.season != null && seriesInfo.episode != null) {
       return 'Episode ${seriesInfo.episode}';
     }
-    
+
     // Final fallback to filename/title
     return title;
   }
@@ -163,14 +200,64 @@ class SeriesPlaylist {
     }
   }
 
-  static SeriesPlaylist fromPlaylistEntries(List<PlaylistEntry> entries) {
+  static SeriesPlaylist fromPlaylistEntries(
+    List<PlaylistEntry> entries, {
+    List<int>? fileSizes,
+    String? collectionTitle,
+  }) {
+    debugPrint('SeriesPlaylist: Processing ${entries.length} entries${collectionTitle != null ? ", collection: \"$collectionTitle\"" : ""}');
+
     final filenames = entries.map((e) => e.title).toList();
-    final seriesInfos = SeriesParser.parsePlaylist(filenames);
-    final isSeries = SeriesParser.isSeriesPlaylist(filenames);
+
+    // Log first 2 filenames for debugging
+    if (filenames.length >= 2) {
+      debugPrint('SeriesPlaylist: Samples: [0] ${filenames[0]}, [1] ${filenames[1]}${filenames.length > 2 ? " ... +${filenames.length - 2} more" : ""}');
+    } else if (filenames.length == 1) {
+      debugPrint('SeriesPlaylist: Single file: ${filenames[0]}');
+    }
+
+    // Filter out SAMPLE files first
+    final validIndices = <int>[];
+    final validEntries = <PlaylistEntry>[];
+    final validFilenames = <String>[];
+    final validFileSizes = <int>[];
+
+    for (int i = 0; i < entries.length; i++) {
+      if (!SeriesParser.isSampleFile(filenames[i])) {
+        validIndices.add(i);
+        validEntries.add(entries[i]);
+        validFilenames.add(filenames[i]);
+        if (fileSizes != null && i < fileSizes.length) {
+          validFileSizes.add(fileSizes[i]);
+        } else {
+          validFileSizes.add(0); // Default size if not provided
+        }
+      } else {
+        debugPrint('SeriesPlaylist: Filtering out SAMPLE file: ${filenames[i]}');
+      }
+    }
+
+    if (validEntries.isEmpty) {
+      debugPrint('SeriesPlaylist: No valid entries after filtering samples');
+      return SeriesPlaylist(
+        seriesTitle: null,
+        seasons: [],
+        allEpisodes: [],
+        isSeries: false,
+      );
+    }
+
+    // Parse with file sizes for duplicate resolution
+    final seriesInfos = SeriesParser.parsePlaylist(validFilenames, fileSizes: validFileSizes);
+    final analysis = SeriesParser.analyzePlaylistConfidence(validFilenames);
+    final isSeries = analysis.classification == PlaylistClassification.SERIES;
+
+    debugPrint('SeriesPlaylist: Playlist classification: ${analysis.classification} (confidence: ${analysis.confidenceScore})');
 
     if (!isSeries) {
+      debugPrint('SeriesPlaylist: Treating as movie collection');
       // Treat as movie collection: single season with all entries
-      final episodes = entries.asMap().entries.map((entry) {
+      final episodes = validEntries.asMap().entries.map((entry) {
         final index = entry.key;
         final entryData = entry.value;
         return SeriesEpisode(
@@ -178,7 +265,7 @@ class SeriesPlaylist {
           title: entryData.title,
           filename: entryData.title,
           seriesInfo: seriesInfos[index],
-          originalIndex: index,
+          originalIndex: validIndices[index],
         );
       }).toList();
 
@@ -196,32 +283,169 @@ class SeriesPlaylist {
       );
     }
 
-    // Group episodes by season
-    final seasonMap = <int, List<SeriesEpisode>>{};
-    String? seriesTitle;
+    // Detect and resolve duplicates
+    final duplicateGroups = _detectDuplicates(seriesInfos, validFileSizes);
+    final indicesToKeep = <int>{};
+    final duplicateIndicesToMoveSeason0 = <int, String>{}; // index -> original S##E## label
 
-    for (int i = 0; i < entries.length; i++) {
-      final entry = entries[i];
-      final seriesInfo = seriesInfos[i];
-      
+    for (final group in duplicateGroups.values) {
+      if (group.indices.length > 1) {
+        final keepIndex = group.largestFileIndex;
+        indicesToKeep.add(keepIndex);
+        debugPrint('SeriesPlaylist: Found duplicate S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')} - keeping largest (index $keepIndex, ${validFileSizes[keepIndex]} bytes)');
+
+        // Track other duplicates to move to Season 0
+        for (final idx in group.indices) {
+          if (idx != keepIndex) {
+            final label = 'S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')}';
+            duplicateIndicesToMoveSeason0[idx] = label;
+            debugPrint('SeriesPlaylist: Will move duplicate to Season 0: ${validFilenames[idx]}');
+          }
+        }
+      } else {
+        indicesToKeep.add(group.indices.first);
+      }
+    }
+
+    // Also keep entries that aren't duplicates
+    for (int i = 0; i < seriesInfos.length; i++) {
+      final info = seriesInfos[i];
+      if (!info.isSeries || info.season == null || info.episode == null) {
+        indicesToKeep.add(i);
+      }
+    }
+
+    // MULTI-STRATEGY SERIES TITLE EXTRACTION
+    // Try multiple methods to get the correct series title
+
+    String? extractedTitle;
+    String? collectionDerivedTitle;
+
+    // Strategy 1: Extract common title from ALL filenames
+    debugPrint('SeriesPlaylist: Attempting common title extraction from ${validFilenames.length} files');
+    extractedTitle = SeriesParser.extractCommonSeriesTitle(validFilenames);
+
+    if (extractedTitle != null) {
+      debugPrint('SeriesPlaylist: Extracted common title from filenames: "$extractedTitle"');
+    }
+
+    // Strategy 2: Prepare collection-derived title
+    if (collectionTitle != null) {
+      collectionDerivedTitle = SeriesParser.cleanCollectionTitle(collectionTitle);
+      if (SeriesParser.isValidSeriesTitle(collectionDerivedTitle)) {
+        debugPrint('SeriesPlaylist: Cleaned collection title: "$collectionDerivedTitle"');
+      } else {
+        debugPrint('SeriesPlaylist: Collection title invalid after cleaning: "$collectionDerivedTitle"');
+        collectionDerivedTitle = null;
+      }
+    }
+
+    // Strategy 3: Decision logic - choose the best title
+    String? seriesTitle;
+    if (extractedTitle != null && SeriesParser.isValidSeriesTitle(extractedTitle)) {
+      // Extracted title is valid, use it
+      seriesTitle = extractedTitle;
+      debugPrint('SeriesPlaylist: Using extracted title: "$seriesTitle"');
+    } else if (collectionDerivedTitle != null) {
+      // Fallback to collection title
+      seriesTitle = collectionDerivedTitle;
+      debugPrint('SeriesPlaylist: Using collection title: "$seriesTitle" (original: "$collectionTitle")');
+    } else if (extractedTitle != null) {
+      // Last resort: use extracted even if validation is weak
+      seriesTitle = extractedTitle;
+      debugPrint('SeriesPlaylist: Using extracted title (weak validation): "$seriesTitle"');
+    } else {
+      // No title available
+      seriesTitle = null;
+      debugPrint('SeriesPlaylist: No valid title found from filenames or collection');
+    }
+
+    // Group episodes by season, handling Season 0 for special content
+    final seasonMap = <int, List<SeriesEpisode>>{};
+    int season0Counter = 1;
+
+    for (int i = 0; i < validEntries.length; i++) {
+      if (!indicesToKeep.contains(i)) {
+        debugPrint('SeriesPlaylist: Skipping duplicate at index $i');
+        continue;
+      }
+
+      final entry = validEntries[i];
+      var seriesInfo = seriesInfos[i];
+
+      // Check if this is special content (pass parsedInfo to avoid false positives)
+      final specialType = SeriesParser.getSpecialContentType(
+        validFilenames[i],
+        parsedInfo: seriesInfo,
+      );
+      if (specialType != null) {
+        debugPrint('SeriesPlaylist: Moving \'$specialType\' to Season 0: ${validFilenames[i]}');
+        // Update series info to Season 0
+        seriesInfo = seriesInfo.copyWith(
+          season: 0,
+          episode: season0Counter++,
+          episodeTitle: specialType,
+        );
+      }
+
       if (seriesInfo.isSeries && seriesInfo.season != null) {
         final seasonNumber = seriesInfo.season!;
-        seriesTitle ??= seriesInfo.title;
-        
+        // Title extraction is now handled by multi-strategy logic above
+        // No need to extract per-file anymore
+
         seasonMap.putIfAbsent(seasonNumber, () => []);
         seasonMap[seasonNumber]!.add(SeriesEpisode(
           url: entry.url,
           title: entry.title,
           filename: entry.title,
           seriesInfo: seriesInfo,
-          originalIndex: i,
+          originalIndex: validIndices[i],
         ));
       }
     }
 
+    // Add duplicate files to Season 0 as Alternate Versions
+    // Start episode numbering after any existing Season 0 content
+    if (duplicateIndicesToMoveSeason0.isNotEmpty) {
+      seasonMap.putIfAbsent(0, () => []);
+      final existingSeason0Count = seasonMap[0]!.length;
+      int alternateEpisodeNum = existingSeason0Count + 1;
+
+      for (final entry in duplicateIndicesToMoveSeason0.entries) {
+        final idx = entry.key;
+        final originalLabel = entry.value;
+        final playlistEntry = validEntries[idx];
+        final originalInfo = seriesInfos[idx];
+
+        // Create episode title with original label and filename for reference
+        final episodeTitle = 'Alternate Version - $originalLabel (${validFilenames[idx]})';
+
+        final alternateSeriesInfo = originalInfo.copyWith(
+          season: 0,
+          episode: alternateEpisodeNum,
+          episodeTitle: episodeTitle,
+        );
+
+        seasonMap[0]!.add(SeriesEpisode(
+          url: playlistEntry.url,
+          title: playlistEntry.title,
+          filename: playlistEntry.title,
+          seriesInfo: alternateSeriesInfo,
+          originalIndex: validIndices[idx],
+        ));
+
+        debugPrint('SeriesPlaylist: Added alternate version to S00E${alternateEpisodeNum.toString().padLeft(2, '0')}: $episodeTitle');
+        alternateEpisodeNum++;
+      }
+    }
+
+    // Title selection is now handled by multi-strategy logic above
+    // No need for collection title fallback here
+
     if (seasonMap.isEmpty) {
       // Detected as series but no season numbers were parsed; fallback to a single implicit season.
-      final fallbackEpisodes = entries.asMap().entries.map((entry) {
+      debugPrint('SeriesPlaylist: No seasons detected, using fallback to Season 1');
+      final fallbackEpisodes = validEntries.asMap().entries.map((entry) {
         final index = entry.key;
         final entryData = entry.value;
         final info = seriesInfos[index];
@@ -258,7 +482,7 @@ class SeriesPlaylist {
             group: fallbackInfo.group,
             isSeries: true,
           ),
-          originalIndex: index,
+          originalIndex: validIndices[index],
         );
       }).toList();
 
@@ -310,34 +534,110 @@ class SeriesPlaylist {
 
   /// Fetch episode information for all episodes in the playlist
   Future<void> fetchEpisodeInfo() async {
-    if (!isSeries || seriesTitle == null) {
+    if (!isSeries) {
+      debugPrint('SeriesPlaylist: Not a series, skipping TVMaze fetch');
       return;
     }
+
+    // Try to extract series title from filenames if not already set
+    String? searchTitle = seriesTitle;
+    if (searchTitle == null && allEpisodes.isNotEmpty) {
+      searchTitle = allEpisodes.first.seriesInfo.title;
+    }
+
+    // Validate the series title before searching
+    if (!SeriesParser.isValidSeriesTitle(searchTitle)) {
+      debugPrint('TVMaze: Cannot search - invalid title "$searchTitle"');
+      return;
+    }
+
+    final validSearchTitle = searchTitle!;
+    debugPrint('TVMaze: Searching for "$validSearchTitle"');
 
     // First, get the show information to extract genres, language, network, etc.
     Map<String, dynamic>? showInfo;
     try {
-      showInfo = await EpisodeInfoService.getSeriesInfo(seriesTitle!);
+      showInfo = await EpisodeInfoService.getSeriesInfo(validSearchTitle);
+      // Found series info (no log needed, success assumed)
     } catch (e) {
+      debugPrint('TVMaze: Series lookup failed: $e');
     }
 
+    // Get all episodes from TVMaze if available for title-only matching
+    List<Map<String, dynamic>> allTVMazeEpisodes = [];
+    bool hasTitleOnlyEpisodes = allEpisodes.any((ep) =>
+      ep.seriesInfo.season == null || ep.seriesInfo.episode == null
+    );
+
+    if (hasTitleOnlyEpisodes && showInfo != null) {
+      try {
+        allTVMazeEpisodes = await EpisodeInfoService.getAllEpisodes(validSearchTitle);
+        debugPrint('TVMaze: Got ${allTVMazeEpisodes.length} episodes for title matching');
+      } catch (e) {
+        debugPrint('TVMaze: Episode list failed: $e');
+      }
+    }
+
+    // Process each episode
     for (final season in seasons) {
       for (final episode in season.episodes) {
+        // Skip Season 0 (special content)
+        if (episode.seriesInfo.season == 0) {
+          continue;
+        }
+
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+          // Standard episode with S##E## format
           try {
             final episodeData = await EpisodeInfoService.getEpisodeInfo(
-              seriesTitle!,
+              validSearchTitle,
               episode.seriesInfo.season!,
               episode.seriesInfo.episode!,
             );
             if (episodeData != null) {
               episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
+              // Episode matched (no log per episode)
             }
           } catch (e) {
             // Silently fail - episode info is optional
           }
+        } else if (allTVMazeEpisodes.isNotEmpty) {
+          // Title-only episode - try to match by filename
+          final filename = episode.filename.toLowerCase();
+          Map<String, dynamic>? bestMatch;
+          double bestScore = 0.0;
+
+          for (final tvEpisode in allTVMazeEpisodes) {
+            final tvTitle = (tvEpisode['name'] ?? '').toString().toLowerCase();
+            final score = _calculateTitleSimilarity(filename, tvTitle);
+
+            if (score > bestScore && score > 0.6) { // 60% similarity threshold
+              bestScore = score;
+              bestMatch = tvEpisode;
+            }
+          }
+
+          if (bestMatch != null) {
+            episode.episodeInfo = EpisodeInfo.fromTVMaze(bestMatch, showInfo: showInfo);
+            // Update the SeriesInfo with matched S##E##
+            final matchedSeason = bestMatch['season'] as int?;
+            final matchedEpisode = bestMatch['number'] as int?;
+            if (matchedSeason != null && matchedEpisode != null) {
+              episode.seriesInfo = episode.seriesInfo.copyWith(
+                season: matchedSeason,
+                episode: matchedEpisode,
+              );
+              debugPrint('TVMaze: Title match "${episode.filename}" → S${matchedSeason.toString().padLeft(2, '0')}E${matchedEpisode.toString().padLeft(2, '0')} (${(bestScore * 100).toStringAsFixed(0)}%)');
+            }
+          }
+          // No match - skip logging for cleaner output
         }
       }
+    }
+
+    // If TVMaze fetch failed completely, log fallback
+    if (showInfo == null && isSeries) {
+      debugPrint('SeriesPlaylist: TVMaze unavailable, treating as MOVIE_COLLECTION fallback');
     }
    }
 
@@ -369,19 +669,98 @@ class SeriesPlaylist {
     return -1;
   }
 
-  /// Get the original index of the first episode (lowest season, lowest episode)
+  /// Get the original index of the first episode (lowest season > 0, lowest episode)
+  /// Skips Season 0 (extras/alternate versions) unless that's all there is
   /// Returns -1 if no episodes found
   int getFirstEpisodeOriginalIndex() {
     if (allEpisodes.isEmpty) {
       return -1;
     }
-    
-    // The allEpisodes list is already sorted by season and episode
-    // So the first episode is the one with lowest season and episode
+
+    // Find first episode where season > 0 (skip extras/alternate versions)
+    for (final episode in allEpisodes) {
+      if (episode.seriesInfo.season != null &&
+          episode.seriesInfo.season! > 0 &&
+          episode.seriesInfo.episode != null) {
+        return episode.originalIndex;
+      }
+    }
+
+    // Fallback to Season 0 if no regular seasons exist
     final firstEpisode = allEpisodes.first;
     if (firstEpisode.seriesInfo.season != null && firstEpisode.seriesInfo.episode != null) {
       return firstEpisode.originalIndex;
     }
     return -1;
   }
-} 
+
+  /// Detect duplicate episodes based on S##E## numbers
+  static Map<String, DuplicateGroup> _detectDuplicates(
+    List<SeriesInfo> seriesInfos,
+    List<int> fileSizes,
+  ) {
+    final duplicateMap = <String, DuplicateGroup>{};
+
+    for (int i = 0; i < seriesInfos.length; i++) {
+      final info = seriesInfos[i];
+      if (info.isSeries && info.season != null && info.episode != null) {
+        final key = 'S${info.season}E${info.episode}';
+
+        if (!duplicateMap.containsKey(key)) {
+          duplicateMap[key] = DuplicateGroup(
+            season: info.season!,
+            episode: info.episode!,
+            indices: [],
+            fileSizes: [],
+          );
+        }
+
+        duplicateMap[key]!.indices.add(i);
+        if (i < fileSizes.length) {
+          duplicateMap[key]!.fileSizes.add(fileSizes[i]);
+        } else {
+          duplicateMap[key]!.fileSizes.add(0);
+        }
+      }
+    }
+
+    return duplicateMap;
+  }
+
+  /// Calculate similarity between two titles (0.0 to 1.0)
+  static double _calculateTitleSimilarity(String s1, String s2) {
+    // Simple Levenshtein-based similarity
+    if (s1.isEmpty || s2.isEmpty) return 0.0;
+    if (s1 == s2) return 1.0;
+
+    // Normalize strings
+    final str1 = s1.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), ' ').trim();
+    final str2 = s2.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), ' ').trim();
+
+    // Check if one string contains the other
+    if (str1.contains(str2) || str2.contains(str1)) {
+      return 0.8; // High similarity if one contains the other
+    }
+
+    // Simple word-based similarity
+    final words1 = str1.split(RegExp(r'\s+'));
+    final words2 = str2.split(RegExp(r'\s+'));
+
+    int matchingWords = 0;
+    for (final word1 in words1) {
+      if (word1.length < 3) continue; // Skip short words
+      for (final word2 in words2) {
+        if (word2.length < 3) continue;
+        if (word1 == word2) {
+          matchingWords++;
+          break;
+        }
+      }
+    }
+
+    final totalWords = math.max(words1.length, words2.length);
+    if (totalWords == 0) return 0.0;
+
+    return matchingWords / totalWords;
+  }
+}

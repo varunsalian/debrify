@@ -140,6 +140,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       try {
         _cachedSeriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           widget.playlist!,
+          collectionTitle: widget.title, // Pass video title as fallback
         );
       } catch (e) {
         return null;
