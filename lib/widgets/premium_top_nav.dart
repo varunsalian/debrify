@@ -8,6 +8,7 @@ class PremiumTopNav extends StatefulWidget implements PreferredSizeWidget {
   final ValueChanged<int> onTap;
   final List<int>? badges;
   final bool haptics;
+  final bool enableAutofocus;
 
   const PremiumTopNav({
     super.key,
@@ -16,6 +17,7 @@ class PremiumTopNav extends StatefulWidget implements PreferredSizeWidget {
     required this.onTap,
     this.badges,
     this.haptics = true,
+    this.enableAutofocus = true,
   });
 
   @override
@@ -124,7 +126,7 @@ class _PremiumTopNavState extends State<PremiumTopNav> {
                           badge: (badges != null && i < badges.length)
                               ? badges[i]
                               : null,
-                          autofocus: widget.currentIndex == i,
+                          autofocus: widget.enableAutofocus && widget.currentIndex == i,
                           onPressed: () {
                             if (haptics) HapticFeedback.selectionClick();
                             onTap(i);

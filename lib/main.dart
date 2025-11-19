@@ -13,7 +13,7 @@ import 'screens/magic_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
-import 'widgets/initial_setup_flow.dart';
+import 'widgets/app_initializer.dart';
 
 import 'widgets/animated_background.dart';
 import 'widgets/premium_nav_bar.dart';
@@ -275,7 +275,7 @@ class DebrifyApp extends StatelessWidget {
           elevation: 8,
         ),
       ),
-      home: const MainPage(),
+      home: const AppInitializer(),
     );
   }
 }
@@ -293,7 +293,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   late Animation<double> _fadeAnimation;
   bool _hasRealDebridKey = false;
   bool _hasTorboxKey = false;
-  bool _initialSetupHandled = false;
   bool _rdIntegrationEnabled = true;
   bool _tbIntegrationEnabled = true;
   bool _pikpakEnabled = false;
@@ -402,11 +401,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     );
     _animationController.forward();
 
-    // Trigger onboarding experience after the first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _handleInitialExperience();
-    });
-
     AndroidNativeDownloader.isTelevision().then((isTv) {
       if (!mounted) return;
       setState(() {
@@ -481,24 +475,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     _animationController.forward();
   }
 
-  Future<void> _handleInitialExperience() async {
-    if (_initialSetupHandled) return;
-    _initialSetupHandled = true;
-
-    final hasCompleted = await StorageService.isInitialSetupComplete();
-    if (hasCompleted || !mounted) return;
-
-    final configured = await InitialSetupFlow.show(context);
-    if (!mounted) return;
-
-    await StorageService.setInitialSetupComplete(true);
-
-    if (configured) {
-      MainPageBridge.notifyIntegrationChanged();
-    }
-
-    _loadIntegrationState();
-  }
 
   void _handleIntegrationChanged() {
     _loadIntegrationState();
