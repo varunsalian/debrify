@@ -7832,6 +7832,7 @@ class _RandomStartSlider extends StatefulWidget {
 
 class _RandomStartSliderState extends State<_RandomStartSlider> {
   FocusNode? _focusNode;
+  bool _isFocused = false;
 
   @override
   void initState() {
@@ -7841,6 +7842,15 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
         debugLabel: 'RandomStartSlider',
         onKeyEvent: _handleKeyEvent,
       );
+      _focusNode!.addListener(_handleFocusChange);
+    }
+  }
+
+  void _handleFocusChange() {
+    if (mounted) {
+      setState(() {
+        _isFocused = _focusNode?.hasFocus ?? false;
+      });
     }
   }
 
@@ -7852,7 +7862,9 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
         debugLabel: 'RandomStartSlider',
         onKeyEvent: _handleKeyEvent,
       );
+      _focusNode!.addListener(_handleFocusChange);
     } else if (!widget.isAndroidTv && _focusNode != null) {
+      _focusNode!.removeListener(_handleFocusChange);
       _focusNode!.dispose();
       _focusNode = null;
     }
@@ -7860,6 +7872,7 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
 
   @override
   void dispose() {
+    _focusNode?.removeListener(_handleFocusChange);
     _focusNode?.dispose();
     super.dispose();
   }
@@ -7910,6 +7923,34 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
         ),
       ],
     );
+
+    // Wrap in focus indicator container for TV
+    if (widget.isAndroidTv) {
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _isFocused
+              ? const Color(0xFF2A2A2A)
+              : const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _isFocused ? Colors.white : Colors.white12,
+            width: _isFocused ? 2 : 1,
+          ),
+          boxShadow: _isFocused
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: sliderColumn,
+      );
+    }
 
     return sliderColumn;
   }
@@ -7982,7 +8023,7 @@ class _ZipImportFailureDisplay {
   });
 }
 
-class _SwitchRow extends StatelessWidget {
+class _SwitchRow extends StatefulWidget {
   final String title;
   final String subtitle;
   final bool value;
@@ -7993,21 +8034,62 @@ class _SwitchRow extends StatelessWidget {
     required this.value,
     required this.onChanged,
   });
+
+  @override
+  State<_SwitchRow> createState() => _SwitchRowState();
+}
+
+class _SwitchRowState extends State<_SwitchRow> {
+  bool _isFocused = false;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12, width: 1),
-      ),
-      child: SwitchListTile(
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70)),
-        value: value,
-        onChanged: onChanged,
-        activeColor: const Color(0xFFE50914),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+    return Focus(
+      onFocusChange: (focused) {
+        setState(() {
+          _isFocused = focused;
+        });
+      },
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            widget.onChanged(!widget.value);
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: _isFocused
+              ? const Color(0xFF2A2A2A)
+              : const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _isFocused ? Colors.white : Colors.white12,
+            width: _isFocused ? 2 : 1,
+          ),
+          boxShadow: _isFocused
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: SwitchListTile(
+          title: Text(widget.title, style: const TextStyle(color: Colors.white)),
+          subtitle: Text(widget.subtitle, style: const TextStyle(color: Colors.white70)),
+          value: widget.value,
+          onChanged: widget.onChanged,
+          activeColor: const Color(0xFFE50914),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+        ),
       ),
     );
   }
