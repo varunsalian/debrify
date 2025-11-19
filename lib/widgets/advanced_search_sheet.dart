@@ -122,6 +122,15 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
           _selected = null;
         }
       });
+
+      // Auto-focus first result for better TV/DPAD experience
+      if (results.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _resultFocusNodes.isNotEmpty) {
+            _resultFocusNodes.first.requestFocus();
+          }
+        });
+      }
     } catch (e) {
       debugPrint('AdvancedSearchSheet: Lookup error $e');
       setState(() {
@@ -426,32 +435,18 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
                             itemBuilder: (context, index) {
                               final item = _results[index];
                               final focusNode = _resultFocusNodes[index];
-                              return Focus(
+                              return _FocusableImdbResultTile(
+                                item: item,
                                 focusNode: focusNode,
-                                onKeyEvent: (node, event) =>
+                                isSelected: _selected?.imdbId == item.imdbId,
+                                onKeyEvent: (event) =>
                                     _handleResultKey(index, event),
-                                child: ListTile(
-                                  selected: _selected?.imdbId == item.imdbId,
-                                  selectedTileColor:
-                                      Colors.white.withValues(alpha: 0.08),
-                                  title: Text(
-                                    item.title,
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                  subtitle: Text(
-                                    item.year ?? 'Year unknown',
-                                    style: TextStyle(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.7),
-                                    ),
-                                  ),
-                                  onTap: () {
-                                    if (!_validateSeriesFields()) {
-                                      return;
-                                    }
-                                    _completeSelection(item);
-                                  },
-                                ),
+                                onTap: () {
+                                  if (!_validateSeriesFields()) {
+                                    return;
+                                  }
+                                  _completeSelection(item);
+                                },
                               );
                             },
                           ),
@@ -470,6 +465,102 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// TV-optimized IMDB result tile with DPAD focus indicators
+class _FocusableImdbResultTile extends StatefulWidget {
+  final ImdbTitleResult item;
+  final FocusNode focusNode;
+  final bool isSelected;
+  final KeyEventResult Function(KeyEvent) onKeyEvent;
+  final VoidCallback onTap;
+
+  const _FocusableImdbResultTile({
+    required this.item,
+    required this.focusNode,
+    required this.isSelected,
+    required this.onKeyEvent,
+    required this.onTap,
+  });
+
+  @override
+  State<_FocusableImdbResultTile> createState() =>
+      _FocusableImdbResultTileState();
+}
+
+class _FocusableImdbResultTileState extends State<_FocusableImdbResultTile> {
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (focused) {
+        setState(() {
+          _isFocused = focused;
+        });
+        // Auto-scroll to ensure focused item is visible
+        if (focused) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+          );
+        }
+      },
+      onKeyEvent: (node, event) => widget.onKeyEvent(event),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: _isFocused
+              ? Colors.white.withValues(alpha: 0.15)
+              : widget.isSelected
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _isFocused
+                ? Colors.white.withValues(alpha: 0.8)
+                : Colors.transparent,
+            width: 2,
+          ),
+          boxShadow: _isFocused
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: ListTile(
+          title: Text(
+            widget.item.title,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: _isFocused ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+          subtitle: Text(
+            widget.item.year ?? 'Year unknown',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+          trailing: _isFocused
+              ? Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Colors.white.withValues(alpha: 0.6),
+                )
+              : null,
+          onTap: widget.onTap,
         ),
       ),
     );
