@@ -2284,6 +2284,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ? 'Open instantly in the Torbox player experience.'
                         : 'Available for torrents with video files.',
                     enabled: hasVideo,
+                    autofocus: true,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _playTorboxTorrent(torrent);
@@ -3123,6 +3124,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ? 'Unrestrict and open instantly in the built-in player.'
                             : 'Available for video torrents only.',
                         enabled: hasAnyVideo,
+                        autofocus: true,
                         onTap: () async {
                           Navigator.of(ctx).pop();
                           await _playFromResult(
@@ -5767,6 +5769,7 @@ class _DebridActionTile extends StatefulWidget {
   final String subtitle;
   final VoidCallback onTap;
   final bool enabled;
+  final bool autofocus;
 
   const _DebridActionTile({
     required this.icon,
@@ -5775,6 +5778,7 @@ class _DebridActionTile extends StatefulWidget {
     required this.subtitle,
     required this.onTap,
     required this.enabled,
+    this.autofocus = false,
   });
 
   @override
@@ -5788,6 +5792,7 @@ class _DebridActionTileState extends State<_DebridActionTile> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Focus(
+      autofocus: widget.autofocus,
       onFocusChange: (focused) {
         if (mounted) {
           setState(() {
