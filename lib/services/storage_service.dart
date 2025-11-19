@@ -84,7 +84,7 @@ class StorageService {
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
-  static const int _debrifyTvRandomStartPercentDefault = 40;
+  static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
 
@@ -803,7 +803,7 @@ class StorageService {
 
   static Future<bool> getDebrifyTvShowVideoTitle() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvShowVideoTitleKey) ?? false;
+    return prefs.getBool(_debrifyTvShowVideoTitleKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvShowVideoTitle(bool value) async {

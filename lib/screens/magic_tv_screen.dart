@@ -31,7 +31,7 @@ import '../utils/series_parser.dart';
 import '../utils/nsfw_filter.dart';
 import 'video_player_screen.dart';
 
-const int _randomStartPercentDefault = 40;
+const int _randomStartPercentDefault = 20;
 const int _randomStartPercentMin = 10;
 const int _randomStartPercentMax = 90;
 
