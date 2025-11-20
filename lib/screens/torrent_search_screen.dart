@@ -2192,6 +2192,36 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final videoFiles = torrent.files.where(_torboxFileLooksLikeVideo).toList();
     final hasVideo = videoFiles.isNotEmpty;
 
+    // Get the post-torrent action preference
+    final postAction = await StorageService.getTorboxPostTorrentAction();
+
+    // Check if torrent is video-only for auto-download handling
+    final isVideoOnly = torrent.files.isNotEmpty &&
+        torrent.files.every((file) => _torboxFileLooksLikeVideo(file));
+
+    // Handle automatic actions based on preference
+    switch (postAction) {
+      case 'play':
+        if (hasVideo) {
+          _playTorboxTorrent(torrent);
+          return;
+        }
+        // Fall through to 'choose' if no video
+        break;
+      case 'download':
+        if (isVideoOnly) {
+          // Auto-download all videos without dialog
+          _showTorboxDownloadOptions(torrent);
+          return;
+        }
+        // Fall through to 'choose' if not video-only
+        break;
+      case 'choose':
+      default:
+        // Show the dialog
+        break;
+    }
+
     await showDialog(
       context: context,
       builder: (ctx) {

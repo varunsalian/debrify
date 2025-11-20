@@ -28,6 +28,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   bool _saving = false;
   bool _checkCacheBeforeSearch = false;
   bool _integrationEnabled = true;
+  String _postTorrentAction = 'choose';
 
   @override
   void initState() {
@@ -40,11 +41,13 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     final cachePref = await StorageService.getTorboxCacheCheckEnabled();
     final integrationEnabled =
         await StorageService.getTorboxIntegrationEnabled();
+    final postAction = await StorageService.getTorboxPostTorrentAction();
     setState(() {
       _savedApiKey = apiKey;
       _checkCacheBeforeSearch = cachePref;
       _loading = false;
       _integrationEnabled = integrationEnabled;
+      _postTorrentAction = postAction;
     });
 
     if (integrationEnabled && apiKey != null && apiKey.isNotEmpty) {
@@ -121,6 +124,12 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   Future<void> _updateCacheCheck(bool value) async {
     setState(() => _checkCacheBeforeSearch = value);
     await StorageService.setTorboxCacheCheckEnabled(value);
+  }
+
+  Future<void> _savePostAction(String action) async {
+    setState(() => _postTorrentAction = action);
+    await StorageService.saveTorboxPostTorrentAction(action);
+    _snack('Preference saved');
   }
 
   Future<void> _updateIntegrationEnabled(bool value) async {
@@ -448,6 +457,76 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.play_circle_outline,
+                                color: Theme.of(context).colorScheme.primary,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Post-Torrent Action',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Choose what happens after adding a torrent to Torbox',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 12),
+                          RadioListTile<String>(
+                            title: const Text('Let me choose'),
+                            subtitle: const Text(
+                              'Show a quick Play/Download picker after adding a torrent',
+                            ),
+                            value: 'choose',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          RadioListTile<String>(
+                            title: const Text('Play video'),
+                            subtitle: const Text(
+                              'Automatically open video player',
+                            ),
+                            value: 'play',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          RadioListTile<String>(
+                            title: const Text('Download'),
+                            subtitle: const Text(
+                              'If the torrent contains only video files, all videos will download immediately',
+                            ),
+                            value: 'download',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
