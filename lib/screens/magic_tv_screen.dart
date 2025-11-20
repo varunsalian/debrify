@@ -27,6 +27,7 @@ import '../services/torrents_csv_engine.dart';
 import '../services/pirate_bay_engine.dart';
 import '../services/solid_torrents_engine.dart';
 import '../services/debrify_tv_zip_importer.dart';
+import '../services/main_page_bridge.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/nsfw_filter.dart';
@@ -385,14 +386,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// Check if there's a startup channel to auto-launch
   Future<void> _checkStartupAutoLaunch() async {
     try {
-      debugPrint('DebrifyTVScreen: Checking for startup auto-launch...');
+      debugPrint('🚀 [AUTO-LAUNCH] Starting check...');
 
       // Check if there's a startup channel to launch
       final startupChannelId = MainPage.getStartupChannelId();
-      debugPrint('DebrifyTVScreen: Startup channel ID: $startupChannelId');
+      debugPrint('🚀 [AUTO-LAUNCH] Channel ID: $startupChannelId');
 
       if (startupChannelId == null) {
-        debugPrint('DebrifyTVScreen: No startup channel configured');
+        debugPrint('🚀 [AUTO-LAUNCH] No channel configured, skipping');
         return;
       }
 
@@ -412,6 +413,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (_channels.isEmpty) {
         debugPrint('DebrifyTVScreen: Channels list is still empty after waiting');
+        MainPageBridge.notifyAutoLaunchFailed('Channels not loaded');
         return;
       }
 
@@ -423,19 +425,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (channel == null) {
         debugPrint('DebrifyTVScreen: Channel with ID $startupChannelId not found in ${_channels.length} channels');
         debugPrint('DebrifyTVScreen: Available channel IDs: ${_channels.map((c) => c.id).join(", ")}');
+        MainPageBridge.notifyAutoLaunchFailed('Startup channel not found');
         return;
       }
 
-      debugPrint('DebrifyTVScreen: Found channel: ${channel.name} (ID: ${channel.id})');
+      debugPrint('🚀 [AUTO-LAUNCH] Found channel: ${channel.name}');
+      debugPrint('🚀 [AUTO-LAUNCH] Keywords: ${channel.keywords.length}, isAndroidTv: $_isAndroidTv');
 
       // Small delay to ensure UI is ready
       await Future.delayed(const Duration(milliseconds: 500));
       if (!mounted) {
-        debugPrint('DebrifyTVScreen: Widget unmounted before launching channel');
+        debugPrint('🚀 [AUTO-LAUNCH] Widget unmounted, aborting');
         return;
       }
 
-      debugPrint('DebrifyTVScreen: Auto-launching channel: ${channel.name}');
+      debugPrint('🚀 [AUTO-LAUNCH] Calling _watchChannel()...');
 
       // Call the existing watch channel method
       _watchChannel(channel);
@@ -443,6 +447,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } catch (e, stackTrace) {
       debugPrint('DebrifyTVScreen: Failed to auto-play startup channel: $e');
       debugPrint('DebrifyTVScreen: Stack trace: $stackTrace');
+      MainPageBridge.notifyAutoLaunchFailed('Auto-launch exception: $e');
       // Silently fail - user can manually select a channel
     }
   }
@@ -2963,16 +2968,24 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _watchChannel(_DebrifyTvChannel channel) async {
+    debugPrint('🎬 [WATCH] Starting for channel: ${channel.name}');
+
     final keywords = await _getChannelKeywords(channel.id);
     if (keywords.isEmpty) {
+      debugPrint('❌ [WATCH] No keywords');
+      MainPageBridge.notifyAutoLaunchFailed('Channel has no keywords');
       _showSnack('Channel has no keywords yet', color: Colors.orange);
       return;
     }
+    debugPrint('✅ [WATCH] Keywords: ${keywords.length}');
+
     await _syncProviderAvailability();
     final bool providerReady = _provider == _providerTorbox
         ? _torboxAvailable
         : _rdAvailable;
     if (!providerReady) {
+      debugPrint('❌ [WATCH] Provider not ready: $_provider');
+      MainPageBridge.notifyAutoLaunchFailed('Provider not configured');
       final providerName = _providerDisplay(_provider);
       _showSnack(
         'Enable $providerName in Settings to watch this channel',
@@ -2980,29 +2993,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       return;
     }
+    debugPrint('✅ [WATCH] Provider ready: $_provider');
 
     final cacheEntry = await _ensureCacheEntry(channel.id);
     if (cacheEntry == null) {
+      debugPrint('❌ [WATCH] Cache entry is null');
+      MainPageBridge.notifyAutoLaunchFailed('Cache entry not found');
       _showSnack(
         'Channel cache not found. Edit the channel to rebuild it.',
         color: Colors.orange,
       );
       return;
     }
+    debugPrint('✅ [WATCH] Cache entry loaded, status: ${cacheEntry.status}');
+
     if (!cacheEntry.isReady) {
+      debugPrint('❌ [WATCH] Cache not ready, status: ${cacheEntry.status}');
+      MainPageBridge.notifyAutoLaunchFailed('Cache not ready: ${cacheEntry.status}');
       final message =
           cacheEntry.errorMessage ??
           'Channel cache failed to build. Try editing and saving again.';
       _showSnack(message, color: Colors.orange);
       return;
     }
+
     if (cacheEntry.torrents.isEmpty) {
+      debugPrint('❌ [WATCH] Cache has no torrents');
+      MainPageBridge.notifyAutoLaunchFailed('Cache has no torrents');
       _showSnack(
         'No torrents cached yet. Try editing the channel keywords.',
         color: Colors.orange,
       );
       return;
     }
+    debugPrint('✅ [WATCH] Cache has ${cacheEntry.torrents.length} torrents');
 
     final previousKeywords = _keywordsController.text;
 
@@ -3021,7 +3045,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final cachedTorrents = playbackSelection
         .map((cached) => cached.toTorrent())
         .toList();
+    debugPrint('✅ [WATCH] Selected ${cachedTorrents.length} torrents for playback');
+
     if (_provider == _providerTorbox) {
+      debugPrint('🎬 [WATCH] Launching Torbox flow...');
       await _watchTorboxWithCachedTorrents(
         cachedTorrents,
         channelName: channel.name,
@@ -3029,6 +3056,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         channelNumber: resolvedChannelNumber,
       );
     } else {
+      debugPrint('🎬 [WATCH] Launching RealDebrid flow...');
       await _watchWithCachedTorrents(
         cachedTorrents,
         applyNsfwFilter: channel.avoidNsfw,
@@ -3682,6 +3710,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     break; // Exit the search loop
                   }
 
+                  // Hide auto-launch overlay before launching player
+                  MainPageBridge.notifyPlayerLaunching();
+
                   // Fall back to Flutter video player
                   await Navigator.of(context).push(
                     MaterialPageRoute(
@@ -3941,6 +3972,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             _isBusy = false;
             _status = 'No playable torrents found. Try different keywords.';
           });
+          MainPageBridge.notifyAutoLaunchFailed('No playable streams found');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -4004,6 +4036,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         // Prefetch will continue in background while TV player is active
         return;
       }
+
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
 
       // Fall back to Flutter video player
       await Navigator.of(context).push(
@@ -4380,6 +4415,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (!_watchCancelled) {
+        // Hide auto-launch overlay before launching player
+        MainPageBridge.notifyPlayerLaunching();
+
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => VideoPlayerScreen(
@@ -4432,6 +4470,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     int? channelNumber,
   }) async {
     if (cachedTorrents.isEmpty) {
+      MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
       _showSnack(
         'Cached channel has no torrents yet. Please wait a moment.',
         color: Colors.orange,
@@ -4455,6 +4494,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
+      MainPageBridge.notifyAutoLaunchFailed('No Real Debrid API key');
       _showSnack(
         'Please add your Real Debrid API key in Settings first!',
         color: Colors.orange,
@@ -4611,6 +4651,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _status =
               'No cached torrents played successfully. Try refreshing the channel.';
         });
+        MainPageBridge.notifyAutoLaunchFailed('No cached streams available');
         _showSnack(
           'No cached torrents played successfully. Try refreshing the channel.',
           color: Colors.orange,
@@ -4646,6 +4687,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         // Prefetch will continue in background while TV player is active
         return;
       }
+
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
 
       // Fall back to Flutter video player
       await Navigator.of(context).push(
@@ -4706,6 +4750,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final title = (firstStream['title'] ?? '').trim();
 
     try {
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
+
       final launched = await AndroidTvPlayerBridge.launchTorboxPlayback(
         initialUrl: initialUrl,
         title: title.isEmpty ? 'Debrify TV' : title,
@@ -5212,6 +5259,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _channels.length > 1 &&
           _provider == _providerRealDebrid;
 
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
+
       final launched = await AndroidTvPlayerBridge.launchRealDebridPlayback(
         initialUrl: initialUrl,
         title: title.isEmpty ? 'Debrify TV' : title,
@@ -5282,6 +5332,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     int? channelNumber,
   }) async {
     if (cachedTorrents.isEmpty) {
+      MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
       _showSnack(
         'Cached channel has no torrents yet. Please wait a moment.',
         color: Colors.orange,
@@ -5311,6 +5362,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
+      MainPageBridge.notifyAutoLaunchFailed('No Torbox API key');
       _showSnack(
         'Please add your Torbox API key in Settings first!',
         color: Colors.orange,
@@ -5467,6 +5519,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _status = 'No playable Torbox streams found. Try refreshing.';
           _isBusy = false;
         });
+        MainPageBridge.notifyAutoLaunchFailed('No cached Torbox streams available');
         _showSnack(
           'No cached Torbox streams are playable. Try refreshing the channel.',
           color: Colors.orange,
@@ -5488,6 +5541,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (launchedOnTv) {
         return;
       }
+
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
 
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -5570,6 +5626,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (_progressOpen || !mounted) {
       return;
     }
+
+    // Skip showing dialog during auto-launch (overlay handles loading UI)
+    if (MainPage.isAutoLaunchShowingOverlay) {
+      debugPrint('DebrifyTVScreen: Skipping progress dialog during auto-launch');
+      return;
+    }
+
     _progress.value = [];
     _progressOpen = true;
     Future.microtask(() {
@@ -5637,6 +5700,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             setState(() {
               _status = 'Playing: ${next.name}';
             });
+
+            // Hide auto-launch overlay before launching player
+            MainPageBridge.notifyPlayerLaunching();
+
             await Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => VideoPlayerScreen(

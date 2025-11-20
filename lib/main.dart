@@ -29,6 +29,7 @@ import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
 import 'services/magnet_link_handler.dart';
 import 'models/torbox_torrent.dart';
+import 'widgets/auto_launch_overlay.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
 
@@ -292,12 +293,22 @@ class MainPage extends StatefulWidget {
     return _MainPageState._getStartupChannelId();
   }
 
+  /// Check if auto-launch overlay is currently showing
+  static bool get isAutoLaunchShowingOverlay => _MainPageState.isAutoLaunchShowingOverlay;
+
   @override
   State<MainPage> createState() => _MainPageState();
 }
 
 class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   static String? _startupChannelIdToLaunch;
+  static bool _startupChannelIdConsumed = false;
+
+  // Track if auto-launch is currently showing overlay
+  static bool _isAutoLaunchShowingOverlay = false;
+
+  // Public getter for other widgets to check
+  static bool get isAutoLaunchShowingOverlay => _isAutoLaunchShowingOverlay;
 
   int _selectedIndex = 0;
   late AnimationController _animationController;
@@ -308,6 +319,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _tbIntegrationEnabled = true;
   bool _pikpakEnabled = false;
   bool _isAndroidTv = false;
+
+  // Auto-launch overlay state
+  bool _showAutoLaunchOverlay = false;
+  String? _autoLaunchChannelName;
+  int? _autoLaunchChannelNumber;
+  bool _autoLaunchInProgress = false;
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
@@ -401,6 +418,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         }
       });
     };
+    MainPageBridge.hideAutoLaunchOverlay = _hideAutoLaunchOverlay;
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     _loadIntegrationState();
     _animationController = AnimationController(
@@ -412,11 +430,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     );
     _animationController.forward();
 
-    AndroidNativeDownloader.isTelevision().then((isTv) {
+    AndroidNativeDownloader.isTelevision().then((isTv) async {
       if (!mounted) return;
+
+      // Check if auto-launch is enabled to avoid race condition
+      final autoLaunchEnabled = await StorageService.getStartupAutoLaunchEnabled();
+
       setState(() {
         _isAndroidTv = isTv;
-        if (_isAndroidTv) {
+        // Only auto-navigate to Debrify TV if auto-launch is NOT enabled
+        // (auto-launch will handle navigation after setting up channel ID)
+        if (_isAndroidTv && !autoLaunchEnabled) {
           _selectedIndex = 3; // Debrify TV
         }
       });
@@ -435,6 +459,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.switchTab = null;
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxAction = null;
+    MainPageBridge.hideAutoLaunchOverlay = null;
     _animationController.dispose();
     DeepLinkService().dispose();
     super.dispose();
@@ -496,21 +521,38 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   /// Static getter for startup channel ID (used by DebrifyTVScreen)
   static String? _getStartupChannelId() {
-    final id = _startupChannelIdToLaunch;
-    _startupChannelIdToLaunch = null; // Clear after reading
-    return id;
+    // Check if already consumed (prevents double-read by AnimatedSwitcher)
+    if (_startupChannelIdConsumed) {
+      debugPrint('MainPage: Startup channel ID already consumed, returning null');
+      return null;
+    }
+
+    // Mark as consumed and return the value
+    _startupChannelIdConsumed = true;
+    debugPrint('MainPage: Startup channel ID consumed: $_startupChannelIdToLaunch');
+    return _startupChannelIdToLaunch;
   }
 
   /// Check if startup auto-launch is enabled and navigate to Debrify TV
   Future<void> _checkStartupAutoLaunch() async {
+    // Prevent duplicate launches
+    if (_autoLaunchInProgress) return;
+    _autoLaunchInProgress = true;
+
     try {
       // Check if auto-launch is enabled
       final autoLaunchEnabled = await StorageService.getStartupAutoLaunchEnabled();
-      if (!autoLaunchEnabled) return;
+      if (!autoLaunchEnabled) {
+        _autoLaunchInProgress = false;
+        return;
+      }
 
       // Load channels
       final channels = await DebrifyTvRepository.instance.fetchAllChannels();
-      if (channels.isEmpty) return;
+      if (channels.isEmpty) {
+        _autoLaunchInProgress = false;
+        return;
+      }
 
       // Get selected channel ID
       final selectedChannelId = await StorageService.getStartupChannelId() ?? 'random';
@@ -532,22 +574,70 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         }
       }
 
+      // Show overlay IMMEDIATELY (before any navigation)
+      if (!mounted) {
+        _autoLaunchInProgress = false;
+        return;
+      }
+
+      setState(() {
+        _showAutoLaunchOverlay = true;
+        _autoLaunchChannelName = channelToLaunch.name;
+        _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
+          ? channelToLaunch.channelNumber
+          : null;
+      });
+
+      // Set flag to indicate overlay is showing
+      _isAutoLaunchShowingOverlay = true;
+
       // Set the startup channel for DebrifyTVScreen to pick up
       _startupChannelIdToLaunch = channelToLaunch.channelId;
+      _startupChannelIdConsumed = false; // Reset consumption flag
+      debugPrint('MainPage: Set startup channel ID: ${channelToLaunch.channelId}');
 
-      // Navigate to Debrify TV tab (index 3)
-      if (!mounted) return;
-
-      // Use a small delay to ensure UI is ready
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (!mounted) return;
+      // Navigate to Debrify TV tab (index 3) - no delay needed, overlay is showing
+      if (!mounted) {
+        _autoLaunchInProgress = false;
+        return;
+      }
 
       _onItemTapped(3); // Debrify TV tab
 
     } catch (e) {
       debugPrint('MainPage: Failed to auto-launch channel: $e');
-      // Silently fail - just continue with normal startup
+      // Remove overlay on error
+      if (mounted) {
+        setState(() {
+          _showAutoLaunchOverlay = false;
+          _autoLaunchChannelName = null;
+          _autoLaunchChannelNumber = null;
+        });
+      }
+      // Clear flags on error
+      _isAutoLaunchShowingOverlay = false;
+      _startupChannelIdToLaunch = null;
+      _startupChannelIdConsumed = false;
+    } finally {
+      _autoLaunchInProgress = false;
     }
+  }
+
+  void _hideAutoLaunchOverlay() {
+    if (!_showAutoLaunchOverlay) return;
+    if (!mounted) return;
+    setState(() {
+      _showAutoLaunchOverlay = false;
+      _autoLaunchChannelName = null;
+      _autoLaunchChannelNumber = null;
+    });
+
+    // Clear flags when overlay is hidden
+    _isAutoLaunchShowingOverlay = false;
+
+    // Clean up startup channel variables (optional, for memory cleanup)
+    _startupChannelIdToLaunch = null;
+    _startupChannelIdConsumed = false;
   }
 
   Future<void> _loadIntegrationState() async {
@@ -678,49 +768,62 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final selectedNavIndex = visibleIndices.indexOf(_selectedIndex);
     final currentNavIndex = selectedNavIndex == -1 ? 0 : selectedNavIndex;
 
-    return AnimatedPremiumBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: PremiumTopNav(
-            currentIndex: currentNavIndex,
-            items: navItems,
-            onTap: (relativeIndex) {
-              final actualIndex = visibleIndices[relativeIndex];
-              _onItemTapped(actualIndex);
-            },
-            badges: navBadges,
-            haptics: true,
-          ),
-          automaticallyImplyLeading: false,
-        ),
-        body: FadeTransition(
-          opacity: _fadeAnimation,
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 350),
-            transitionBuilder: (child, animation) {
-              final offsetAnimation =
-                  Tween<Offset>(
-                    begin: const Offset(0.02, 0.02),
-                    end: Offset.zero,
-                  ).animate(
-                    CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOutCubic,
-                    ),
+    return Stack(
+      children: [
+        // Main app content
+        AnimatedPremiumBackground(
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              title: PremiumTopNav(
+                currentIndex: currentNavIndex,
+                items: navItems,
+                onTap: (relativeIndex) {
+                  final actualIndex = visibleIndices[relativeIndex];
+                  _onItemTapped(actualIndex);
+                },
+                badges: navBadges,
+                haptics: true,
+              ),
+              automaticallyImplyLeading: false,
+            ),
+            body: FadeTransition(
+              opacity: _fadeAnimation,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 350),
+                transitionBuilder: (child, animation) {
+                  final offsetAnimation =
+                      Tween<Offset>(
+                        begin: const Offset(0.02, 0.02),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                        ),
+                      );
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(position: offsetAnimation, child: child),
                   );
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(position: offsetAnimation, child: child),
-              );
-            },
-            child: KeyedSubtree(
-              key: ValueKey<int>(_selectedIndex),
-              child: _pages[_selectedIndex],
+                },
+                child: KeyedSubtree(
+                  key: ValueKey<int>(_selectedIndex),
+                  child: _pages[_selectedIndex],
+                ),
+              ),
             ),
           ),
         ),
-      ),
+
+        // Auto-launch overlay (covers everything when shown)
+        if (_showAutoLaunchOverlay)
+          AutoLaunchOverlay(
+            channelName: _autoLaunchChannelName ?? 'Loading...',
+            channelNumber: _autoLaunchChannelNumber,
+            onTimeout: _hideAutoLaunchOverlay,
+          ),
+      ],
     );
   }
 }

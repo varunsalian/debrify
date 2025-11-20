@@ -16,6 +16,7 @@ class MainPageBridge {
       openTorboxAction;
   static Future<void> Function(Map<String, dynamic> result, String torrentName, String apiKey)? handleRealDebridResult;
   static Future<void> Function(TorboxTorrent torrent)? handleTorboxResult;
+  static VoidCallback? hideAutoLaunchOverlay;
 
   static final List<VoidCallback> _integrationListeners = [];
 
@@ -32,5 +33,14 @@ class MainPageBridge {
     for (final listener in List<VoidCallback>.from(_integrationListeners)) {
       listener();
     }
+  }
+
+  static void notifyPlayerLaunching() {
+    hideAutoLaunchOverlay?.call();
+  }
+
+  static void notifyAutoLaunchFailed([String? reason]) {
+    debugPrint('MainPageBridge: Auto-launch failed: $reason');
+    hideAutoLaunchOverlay?.call();
   }
 }
