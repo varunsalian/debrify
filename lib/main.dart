@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +14,10 @@ import 'screens/magic_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
+import 'services/debrify_tv_repository.dart';
+import 'models/debrify_tv_channel_record.dart';
 import 'widgets/app_initializer.dart';
+import 'package:collection/collection.dart';
 
 import 'widgets/animated_background.dart';
 import 'widgets/premium_nav_bar.dart';
@@ -283,11 +287,18 @@ class DebrifyApp extends StatelessWidget {
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
+  /// Get the startup channel ID if set (used by DebrifyTVScreen)
+  static String? getStartupChannelId() {
+    return _MainPageState._getStartupChannelId();
+  }
+
   @override
   State<MainPage> createState() => _MainPageState();
 }
 
 class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
+  static String? _startupChannelIdToLaunch;
+
   int _selectedIndex = 0;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -413,6 +424,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     // Initialize deep link service for magnet links
     _initializeDeepLinking();
+
+    // Check if startup auto-launch is enabled
+    _checkStartupAutoLaunch();
   }
 
   @override
@@ -478,6 +492,62 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   void _handleIntegrationChanged() {
     _loadIntegrationState();
+  }
+
+  /// Static getter for startup channel ID (used by DebrifyTVScreen)
+  static String? _getStartupChannelId() {
+    final id = _startupChannelIdToLaunch;
+    _startupChannelIdToLaunch = null; // Clear after reading
+    return id;
+  }
+
+  /// Check if startup auto-launch is enabled and navigate to Debrify TV
+  Future<void> _checkStartupAutoLaunch() async {
+    try {
+      // Check if auto-launch is enabled
+      final autoLaunchEnabled = await StorageService.getStartupAutoLaunchEnabled();
+      if (!autoLaunchEnabled) return;
+
+      // Load channels
+      final channels = await DebrifyTvRepository.instance.fetchAllChannels();
+      if (channels.isEmpty) return;
+
+      // Get selected channel ID
+      final selectedChannelId = await StorageService.getStartupChannelId() ?? 'random';
+
+      // Determine which channel to launch
+      DebrifyTvChannelRecord channelToLaunch;
+
+      if (selectedChannelId == 'random') {
+        final random = Random();
+        channelToLaunch = channels[random.nextInt(channels.length)];
+      } else {
+        final foundChannel = channels.firstWhereOrNull((c) => c.channelId == selectedChannelId);
+        if (foundChannel == null) {
+          // Channel not found, fallback to random
+          final random = Random();
+          channelToLaunch = channels[random.nextInt(channels.length)];
+        } else {
+          channelToLaunch = foundChannel;
+        }
+      }
+
+      // Set the startup channel for DebrifyTVScreen to pick up
+      _startupChannelIdToLaunch = channelToLaunch.channelId;
+
+      // Navigate to Debrify TV tab (index 3)
+      if (!mounted) return;
+
+      // Use a small delay to ensure UI is ready
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+
+      _onItemTapped(3); // Debrify TV tab
+
+    } catch (e) {
+      debugPrint('MainPage: Failed to auto-launch channel: $e');
+      // Silently fail - just continue with normal startup
+    }
   }
 
   Future<void> _loadIntegrationState() async {

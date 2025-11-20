@@ -44,6 +44,10 @@ class StorageService {
       'debrify_tv_random_start_percent';
   static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
 
+  // Startup settings
+  static const String _startupAutoLaunchEnabledKey = 'startup_auto_launch_enabled';
+  static const String _startupChannelIdKey = 'startup_channel_id';
+
   // PikPak API settings
   static const String _pikpakEnabledKey = 'pikpak_enabled';
   static const String _pikpakEmailKey = 'pikpak_email';
@@ -1242,6 +1246,31 @@ class StorageService {
   static Future<void> setDebrifyTvMinTorrentsPerKeyword(int value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_debrifyTvMinTorrentsPerKeywordKey, value.clamp(1, 50));
+  }
+
+  // Startup Settings
+  static Future<bool> getStartupAutoLaunchEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_startupAutoLaunchEnabledKey) ?? false;
+  }
+
+  static Future<void> setStartupAutoLaunchEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_startupAutoLaunchEnabledKey, value);
+  }
+
+  static Future<String?> getStartupChannelId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupChannelIdKey);
+  }
+
+  static Future<void> setStartupChannelId(String? channelId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (channelId == null) {
+      await prefs.remove(_startupChannelIdKey);
+    } else {
+      await prefs.setString(_startupChannelIdKey, channelId);
+    }
   }
 
   // PikPak API Settings

@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:collection/collection.dart';
 
 import '../models/torrent.dart';
 import '../models/debrify_tv_cache.dart';
@@ -30,6 +31,7 @@ import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/nsfw_filter.dart';
 import 'video_player_screen.dart';
+import '../main.dart';
 
 const int _randomStartPercentDefault = 20;
 const int _randomStartPercentMin = 10;
@@ -335,6 +337,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
     _loadSettings();
     _loadChannels();
+
+    // Check if this is a startup auto-launch
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkStartupAutoLaunch();
+    });
   }
 
   @override
@@ -373,6 +380,71 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
     return KeyEventResult.ignored;
+  }
+
+  /// Check if there's a startup channel to auto-launch
+  Future<void> _checkStartupAutoLaunch() async {
+    try {
+      debugPrint('DebrifyTVScreen: Checking for startup auto-launch...');
+
+      // Check if there's a startup channel to launch
+      final startupChannelId = MainPage.getStartupChannelId();
+      debugPrint('DebrifyTVScreen: Startup channel ID: $startupChannelId');
+
+      if (startupChannelId == null) {
+        debugPrint('DebrifyTVScreen: No startup channel configured');
+        return;
+      }
+
+      // Wait for channels to be loaded with a timeout
+      debugPrint('DebrifyTVScreen: Waiting for channels to load...');
+      int attempts = 0;
+      const maxAttempts = 50; // 5 seconds max wait (50 * 100ms)
+
+      while (_channels.isEmpty && attempts < maxAttempts) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        attempts++;
+        if (!mounted) {
+          debugPrint('DebrifyTVScreen: Widget unmounted while waiting for channels');
+          return;
+        }
+      }
+
+      if (_channels.isEmpty) {
+        debugPrint('DebrifyTVScreen: Channels list is still empty after waiting');
+        return;
+      }
+
+      debugPrint('DebrifyTVScreen: Channels loaded (${_channels.length} channels)');
+
+      // Find the channel in the loaded channels list
+      final channel = _channels.firstWhereOrNull((c) => c.id == startupChannelId);
+
+      if (channel == null) {
+        debugPrint('DebrifyTVScreen: Channel with ID $startupChannelId not found in ${_channels.length} channels');
+        debugPrint('DebrifyTVScreen: Available channel IDs: ${_channels.map((c) => c.id).join(", ")}');
+        return;
+      }
+
+      debugPrint('DebrifyTVScreen: Found channel: ${channel.name} (ID: ${channel.id})');
+
+      // Small delay to ensure UI is ready
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) {
+        debugPrint('DebrifyTVScreen: Widget unmounted before launching channel');
+        return;
+      }
+
+      debugPrint('DebrifyTVScreen: Auto-launching channel: ${channel.name}');
+
+      // Call the existing watch channel method
+      _watchChannel(channel);
+
+    } catch (e, stackTrace) {
+      debugPrint('DebrifyTVScreen: Failed to auto-play startup channel: $e');
+      debugPrint('DebrifyTVScreen: Stack trace: $stackTrace');
+      // Silently fail - user can manually select a channel
+    }
   }
 
   void _closeProgressDialog() {

@@ -8,6 +8,7 @@ import '../widgets/shimmer.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
+import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
 
@@ -139,6 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
+      onOpenStartupSettings: _openStartupSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
@@ -165,6 +167,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const PikPakSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openStartupSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const StartupSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -303,6 +313,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
+  final Future<void> Function() onOpenStartupSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
@@ -312,6 +323,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenTorrentSettings,
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
+    required this.onOpenStartupSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
     required this.onDangerAction,
@@ -349,6 +361,12 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'PikPak Settings',
                 subtitle: 'Configure PikPak cloud storage integration',
                 onTap: onOpenPikPakSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.rocket_launch_rounded,
+                title: 'Startup Settings',
+                subtitle: 'Auto-launch Debrify TV on app start',
+                onTap: onOpenStartupSettings,
               ),
             ],
           ),
