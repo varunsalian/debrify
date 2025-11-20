@@ -284,8 +284,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _hideSeekbar = true;
   bool _showChannelName = true;
   bool _showVideoTitle = true;
-  bool _hideOptions = true;
-  bool _hideBackButton = true;
+  bool _hideOptions = false;
+  bool _hideBackButton = false;
   String _provider = _providerRealDebrid;
 
   // Quick play options
@@ -294,8 +294,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _quickHideSeekbar = true;
   bool _quickShowChannelName = true;
   bool _quickShowVideoTitle = true;
-  bool _quickHideOptions = true;
-  bool _quickHideBackButton = true;
+  bool _quickHideOptions = false;
+  bool _quickHideBackButton = false;
   bool _quickAvoidNsfw = true;
   String _quickProvider = _providerRealDebrid;
 
@@ -496,10 +496,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final startRandom = await StorageService.getDebrifyTvStartRandom();
     final randomStartPercent =
         await StorageService.getDebrifyTvRandomStartPercent();
-    final hideOptions = await StorageService.getDebrifyTvHideOptions();
+    // Hardcoded to false - no longer loading from storage
+    const hideOptions = false;
     final showChannelName = await StorageService.getDebrifyTvShowChannelName();
     final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
-    final hideBackButton = await StorageService.getDebrifyTvHideBackButton();
+    // hideBackButton is hardcoded to false - no longer loading from storage
     final avoidNsfw = await StorageService.getDebrifyTvAvoidNsfw();
     final storedProvider = await StorageService.getDebrifyTvProvider();
     final hasStoredProvider = await StorageService.hasDebrifyTvProvider();
@@ -544,8 +545,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _hideSeekbar = hideOptions;
         _showChannelName = showChannelName;
         _showVideoTitle = showVideoTitle;
-        _hideOptions = hideOptions;
-        _hideBackButton = hideBackButton;
+        _hideOptions = false;  // Hardcoded to false
+        _hideBackButton = false;  // Hardcoded to false
         _rdAvailable = rdAvailable;
         _torboxAvailable = torboxAvailable;
         _provider = defaultProvider;
@@ -556,8 +557,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _quickHideSeekbar = hideOptions;
         _quickShowChannelName = showChannelName;
         _quickShowVideoTitle = showVideoTitle;
-        _quickHideOptions = hideOptions;
-        _quickHideBackButton = hideBackButton;
+        _quickHideOptions = false;  // Hardcoded to false
+        _quickHideBackButton = false;  // Hardcoded to false
         _quickAvoidNsfw = avoidNsfw;
         _quickProvider = defaultProvider;
 
@@ -6064,39 +6065,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
 
-    final bool hideOptions = isQuickScope ? _quickHideOptions : _hideOptions;
+    // Hardcoded to false - no longer changeable
+    const bool hideOptions = false;
     void setHideOptions(bool value) {
-      setState(() {
-        if (isQuickScope) {
-          _quickHideOptions = value;
-          _quickHideSeekbar = value;
-        } else {
-          _hideOptions = value;
-          _hideSeekbar = value;
-        }
-      });
-      dialogSetState?.call(() {});
-      if (!isQuickScope) {
-        unawaited(StorageService.saveDebrifyTvHideOptions(value));
-        unawaited(StorageService.saveDebrifyTvHideSeekbar(value));
-      }
+      // No-op: hideOptions is now hardcoded to false
+      // Keep function for compatibility but it doesn't do anything
     }
 
-    final bool hideBackButton = isQuickScope
-        ? _quickHideBackButton
-        : _hideBackButton;
+    // Hardcoded to false - no longer changeable
+    const bool hideBackButton = false;
     void setHideBackButton(bool value) {
-      setState(() {
-        if (isQuickScope) {
-          _quickHideBackButton = value;
-        } else {
-          _hideBackButton = value;
-        }
-      });
-      dialogSetState?.call(() {});
-      if (!isQuickScope) {
-        unawaited(StorageService.saveDebrifyTvHideBackButton(value));
-      }
+      // No-op: hideBackButton is now hardcoded to false
+      // Keep function for compatibility but it doesn't do anything
     }
 
     return ConstrainedBox(
@@ -6156,22 +6136,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           StorageService.saveDebrifyTvRandomStartPercent(next),
               ),
             ],
-            const SizedBox(height: 8),
-            _SwitchRow(
-              title: 'Hide all options',
-              subtitle:
-                  'Hide all bottom controls (next, audio, etc.) - back button stays',
-              value: hideOptions,
-              onChanged: (v) => setHideOptions(v),
-            ),
-            const SizedBox(height: 8),
-            _SwitchRow(
-              title: 'Hide back button',
-              subtitle:
-                  'Hide back button - use device back gesture or escape key',
-              value: hideBackButton,
-              onChanged: (v) => setHideBackButton(v),
-            ),
+            // Removed Hide all options and Hide back button settings
+            // These are now hardcoded to false (visible by default)
             if (includeNsfwToggle && isQuickScope) ...[
               const SizedBox(height: 8),
               _SwitchRow(
@@ -6205,8 +6171,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _quickHideSeekbar = true;
                       _quickShowChannelName = true;
                       _quickShowVideoTitle = true;
-                      _quickHideOptions = true;
-                      _quickHideBackButton = true;
+                      _quickHideOptions = false;  // Hardcoded to false
+                      _quickHideBackButton = false;  // Hardcoded to false
                       _quickAvoidNsfw = true;
                       _quickProvider = defaultProvider;
                     } else {
@@ -6215,8 +6181,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _hideSeekbar = true;
                       _showChannelName = true;
                       _showVideoTitle = true;
-                      _hideOptions = true;
-                      _hideBackButton = true;
+                      _hideOptions = false;  // Hardcoded to false
+                      _hideBackButton = false;  // Hardcoded to false
                       _provider = defaultProvider;
                     }
                   });
@@ -6227,8 +6193,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     await StorageService.saveDebrifyTvHideSeekbar(true);
                     await StorageService.saveDebrifyTvShowChannelName(true);
                     await StorageService.saveDebrifyTvShowVideoTitle(true);
-                    await StorageService.saveDebrifyTvHideOptions(true);
-                    await StorageService.saveDebrifyTvHideBackButton(true);
+                    // No longer saving hideOptions and hideBackButton - they're hardcoded to false
                     await StorageService.saveDebrifyTvProvider(defaultProvider);
                   }
 
@@ -6586,8 +6551,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _quickHideSeekbar = _hideSeekbar;
                         _quickShowChannelName = _showChannelName;
                         _quickShowVideoTitle = _showVideoTitle;
-                        _quickHideOptions = _hideOptions;
-                        _quickHideBackButton = _hideBackButton;
+                        _quickHideOptions = false;  // Always false now
+                        _quickHideBackButton = false;  // Always false now
                         _quickAvoidNsfw = avoidNsfw;
                         _quickProvider = _provider;
                       });
