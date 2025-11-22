@@ -18,6 +18,7 @@ import '../models/debrify_tv_channel_record.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
+import '../services/pikpak_tv_service.dart';
 import '../services/storage_service.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../services/debrify_tv_repository.dart';
@@ -239,6 +240,7 @@ class _DebrifyTvChannel {
 class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const String _providerRealDebrid = 'real_debrid';
   static const String _providerTorbox = 'torbox';
+  static const String _providerPikPak = 'pikpak';
   static const String _torboxFileEntryType = 'torbox_file';
   static const int _torboxMinVideoSizeBytes =
       50 * 1024 * 1024; // 50 MB filter threshold
@@ -311,6 +313,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   bool _rdAvailable = false;
   bool _torboxAvailable = false;
+  bool _pikpakAvailable = false;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -547,31 +550,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     String? preferred,
     bool rdAvailable,
     bool torboxAvailable,
+    bool pikpakAvailable,
   ) {
-    if (torboxAvailable && rdAvailable) {
-      if (preferred == _providerRealDebrid) {
-        return _providerRealDebrid;
-      }
-      if (preferred == _providerTorbox) {
-        return _providerTorbox;
-      }
+    // If user has a preferred provider that's available, use it
+    if (preferred == _providerPikPak && pikpakAvailable) {
+      return _providerPikPak;
+    }
+    if (preferred == _providerTorbox && torboxAvailable) {
+      return _providerTorbox;
+    }
+    if (preferred == _providerRealDebrid && rdAvailable) {
+      return _providerRealDebrid;
+    }
+
+    // Fallback: pick first available provider
+    if (rdAvailable) {
       return _providerRealDebrid;
     }
     if (torboxAvailable) {
       return _providerTorbox;
     }
-    if (rdAvailable) {
-      return _providerRealDebrid;
+    if (pikpakAvailable) {
+      return _providerPikPak;
     }
-    if (preferred == _providerTorbox) {
-      return _providerTorbox;
-    }
+
+    // No provider available, default to RD (will show as unavailable)
     return _providerRealDebrid;
   }
 
   bool _isProviderSelectable(String provider) {
     if (provider == _providerTorbox) {
       return _torboxAvailable;
+    }
+    if (provider == _providerPikPak) {
+      return _pikpakAvailable;
     }
     return _rdAvailable;
   }
@@ -630,10 +642,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
     final torboxAvailable =
         torboxIntegrationEnabled && torboxKey != null && torboxKey.isNotEmpty;
+    final pikpakAvailable = await PikPakTvService.instance.isAvailable();
     final defaultProvider = _determineDefaultProvider(
       hasStoredProvider ? storedProvider : null,
       rdAvailable,
       torboxAvailable,
+      pikpakAvailable,
     );
     final isTv = await AndroidNativeDownloader.isTelevision();
 
@@ -648,6 +662,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _hideBackButton = false;  // Hardcoded to false
         _rdAvailable = rdAvailable;
         _torboxAvailable = torboxAvailable;
+        _pikpakAvailable = pikpakAvailable;
         _provider = defaultProvider;
         _isAndroidTv = isTv;
 
@@ -1097,6 +1112,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final torboxIntegrationEnabled =
         await StorageService.getTorboxIntegrationEnabled();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final pikpakAvailable = await PikPakTvService.instance.isAvailable();
 
     final rdAvailable =
         rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
@@ -1107,11 +1123,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _provider,
       rdAvailable,
       torboxAvailable,
+      pikpakAvailable,
     );
     final nextQuickProvider = _determineDefaultProvider(
       _quickProvider,
       rdAvailable,
       torboxAvailable,
+      pikpakAvailable,
     );
 
     if (!mounted) return;
@@ -1119,6 +1137,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     setState(() {
       _rdAvailable = rdAvailable;
       _torboxAvailable = torboxAvailable;
+      _pikpakAvailable = pikpakAvailable;
       _provider = nextChannelProvider;
       _quickProvider = nextQuickProvider;
     });
@@ -1374,7 +1393,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   String _providerDisplay(String provider) {
-    return provider == _providerTorbox ? 'Torbox' : 'Real Debrid';
+    if (provider == _providerTorbox) return 'Torbox';
+    if (provider == _providerPikPak) return 'PikPak';
+    return 'Real Debrid';
   }
 
   Widget _providerChoiceChips(
@@ -1443,6 +1464,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 : (selected) {
                     if (selected) {
                       handleSelection(_providerTorbox);
+                    }
+                  },
+          ),
+        ),
+        Tooltip(
+          message: _pikpakAvailable
+              ? 'Use PikPak for Debrify TV'
+              : 'Login to PikPak in Settings to use this option.',
+          child: ChoiceChip(
+            label: const Text('PikPak'),
+            selected: currentProvider == _providerPikPak,
+            disabledColor: Colors.white12,
+            onSelected: (!_pikpakAvailable || _isBusy)
+                ? null
+                : (selected) {
+                    if (selected) {
+                      handleSelection(_providerPikPak);
                     }
                   },
           ),
@@ -3083,6 +3121,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
+    } else if (_provider == _providerPikPak) {
+      debugPrint('🎬 [WATCH] Launching PikPak flow...');
+      await _watchPikPakWithCachedTorrents(
+        cachedTorrents,
+        channelName: channel.name,
+        channelId: channel.id,
+        channelNumber: resolvedChannelNumber,
+      );
     } else {
       debugPrint('🎬 [WATCH] Launching RealDebrid flow...');
       await _watchWithCachedTorrents(
@@ -3114,15 +3160,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     await _syncProviderAvailability();
-    if (!_rdAvailable && !_torboxAvailable) {
+    if (!_rdAvailable && !_torboxAvailable && !_pikpakAvailable) {
       if (mounted) {
         setState(() {
           _status =
-              'Connect Real Debrid or Torbox in Settings to use Debrify TV.';
+              'Connect Real Debrid, Torbox, or PikPak in Settings to use Debrify TV.';
         });
       }
       _showSnack(
-        'Connect Real Debrid or Torbox in Settings to use Debrify TV.',
+        'Connect Real Debrid, Torbox, or PikPak in Settings to use Debrify TV.',
         color: Colors.orange,
       );
       return;
@@ -3176,7 +3222,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _progressOpen = true;
     final providerLabel = _quickProvider == _providerTorbox
         ? 'Torbox'
-        : 'Real Debrid';
+        : _quickProvider == _providerPikPak
+            ? 'PikPak'
+            : 'Real Debrid';
     // ignore: unawaited_futures
     showDialog(
       context: context,
@@ -3395,6 +3443,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (_quickProvider == _providerTorbox) {
       await _watchWithTorbox(keywords, _log);
+      return;
+    }
+
+    if (_quickProvider == _providerPikPak) {
+      await _watchWithPikPak(keywords, _log);
       return;
     }
 
@@ -3749,7 +3802,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         requestNextChannel:
                             _channels.length > 1 &&
                                 (_quickProvider == _providerRealDebrid ||
-                                    _quickProvider == _providerTorbox)
+                                    _quickProvider == _providerTorbox ||
+                                    _quickProvider == _providerPikPak)
                             ? _requestNextChannel
                             : null,
                       ),
@@ -4068,7 +4122,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestNextChannel:
                 _channels.length > 1 &&
                     (_quickProvider == _providerRealDebrid ||
-                        _quickProvider == _providerTorbox)
+                        _quickProvider == _providerTorbox ||
+                        _quickProvider == _providerPikPak)
                 ? _requestNextChannel
                 : null,
           ),
@@ -4448,7 +4503,274 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               requestNextChannel:
                   _channels.length > 1 &&
                       (_quickProvider == _providerRealDebrid ||
-                          _quickProvider == _providerTorbox)
+                          _quickProvider == _providerTorbox ||
+                          _quickProvider == _providerPikPak)
+                  ? _requestNextChannel
+                  : null,
+            ),
+          ),
+        );
+      }
+
+      if (mounted && !_watchCancelled) {
+        setState(() {
+          _status = _queue.isEmpty
+              ? ''
+              : 'Queue has ${_queue.length} remaining';
+        });
+      }
+    } finally {
+      _closeProgressDialog();
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _watchWithPikPak(
+    List<String> keywords,
+    void Function(String message) log,
+  ) async {
+    final pikpakAvailable = await PikPakTvService.instance.isAvailable();
+    if (!pikpakAvailable) {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _status = 'Please login to PikPak in Settings first!';
+        _isBusy = false;
+      });
+      _showSnack(
+        'Please login to PikPak in Settings first!',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    log('🌐 PikPak: searching for torrents...');
+    final Map<String, Torrent> dedup = <String, Torrent>{};
+
+    try {
+      final futures = keywords
+          .map(
+            (kw) => TorrentService.searchAllEngines(
+              kw,
+              engineStates: {
+                'torrents_csv': _useTorrentsCsv,
+                'pirate_bay': _usePirateBay,
+                'yts': _useYts,
+                'solid_torrents': _useSolidTorrents,
+              },
+              maxResultsOverrides: {
+                'torrents_csv': _quickPlayTorrentsCsvMax,
+                'pirate_bay': _quickPlayPirateBayMax,
+                'yts': _quickPlayYtsMax,
+                'solid_torrents': _quickPlaySolidTorrentsMax,
+              },
+            ),
+          )
+          .toList();
+
+      await for (final result in Stream.fromFutures(futures)) {
+        final torrents =
+            (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
+        final Map<String, String> engineErrors = {};
+        final rawErrors = result['engineErrors'];
+        if (rawErrors is Map) {
+          rawErrors.forEach((key, value) {
+            engineErrors[key.toString()] = value?.toString() ?? '';
+          });
+        }
+        if (engineErrors.isNotEmpty) {
+          engineErrors.forEach((engine, message) {
+            debugPrint('PikPak: Search engine "$engine" failed: $message');
+          });
+        }
+
+        // Apply NSFW filter if enabled
+        List<Torrent> torrentsToProcess = torrents;
+        if (_quickAvoidNsfw) {
+          final beforeCount = torrents.length;
+          torrentsToProcess = torrents.where((torrent) {
+            if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+              debugPrint('PikPak: Filtered NSFW torrent: ${torrent.name}');
+              return false;
+            }
+            return true;
+          }).toList();
+          if (beforeCount != torrentsToProcess.length) {
+            debugPrint(
+              'PikPak: NSFW filter: $beforeCount → ${torrentsToProcess.length} torrents',
+            );
+          }
+        }
+
+        int added = 0;
+        for (final torrent in torrentsToProcess) {
+          final normalizedHash = _normalizeInfohash(torrent.infohash);
+          if (normalizedHash.isEmpty) continue;
+          if (!dedup.containsKey(normalizedHash)) {
+            dedup[normalizedHash] = torrent;
+            added++;
+          }
+        }
+        if (added > 0) {
+          final combined = dedup.values.toList();
+          combined.shuffle(Random());
+          _queue
+            ..clear()
+            ..addAll(combined);
+          _lastQueueSize = _queue.length;
+          _lastSearchAt = DateTime.now();
+          if (mounted) {
+            setState(() {
+              _status = 'Preparing PikPak stream...';
+            });
+          }
+        }
+      }
+
+      final combinedList = dedup.values.toList();
+      if (combinedList.isEmpty) {
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() {
+            _status = 'No results found. Try different keywords.';
+          });
+          _showSnack(
+            'No results found. Try different keywords.',
+            color: Colors.red,
+          );
+        }
+        return;
+      }
+
+      combinedList.shuffle(Random());
+      _queue
+        ..clear()
+        ..addAll(combinedList);
+      _lastQueueSize = _queue.length;
+      _lastSearchAt = DateTime.now();
+
+      if (mounted) {
+        setState(() {
+          _status = 'Preparing PikPak stream...';
+        });
+      }
+
+      Future<Map<String, String>?> requestPikPakNext() async {
+        if (_watchCancelled) {
+          return null;
+        }
+        while (_queue.isNotEmpty && !_watchCancelled) {
+          final item = _queue.removeAt(0);
+          if (_watchCancelled) {
+            break;
+          }
+          if (item is! Torrent) {
+            continue;
+          }
+
+          log('Trying torrent: ${item.name}');
+          final prepared = await PikPakTvService.instance.prepareTorrent(
+            infohash: item.infohash,
+            torrentName: item.name,
+            onLog: (msg) => debugPrint('DebrifyTV/PikPak: $msg'),
+          );
+
+          if (_watchCancelled) {
+            return null;
+          }
+
+          if (prepared == null) {
+            log('Torrent not ready, trying next...');
+            continue;
+          }
+
+          if (mounted && !_watchCancelled) {
+            setState(() {
+              _status = _queue.isEmpty
+                  ? ''
+                  : 'Queue has ${_queue.length} remaining';
+            });
+          }
+
+          return {
+            'url': prepared['url']!,
+            'title': prepared['title']!,
+          };
+        }
+        if (mounted && !_watchCancelled) {
+          setState(() {
+            _status = 'No more PikPak streams available.';
+          });
+        }
+        return null;
+      }
+
+      final first = await requestPikPakNext();
+      if (_watchCancelled) {
+        return;
+      }
+      if (first == null) {
+        _closeProgressDialog();
+        if (mounted && !_watchCancelled) {
+          setState(() {
+            _status = 'No playable PikPak streams found. Try different keywords.';
+          });
+          MainPageBridge.notifyAutoLaunchFailed('No PikPak streams available');
+          _showSnack(
+            'No playable PikPak streams found. Try different keywords.',
+            color: Colors.red,
+          );
+        }
+        return;
+      }
+
+      _closeProgressDialog();
+      if (!mounted) return;
+
+      // Try Android TV native player first
+      final launchedOnTv = await _launchPikPakOnAndroidTv(
+        firstStream: first,
+        requestNext: requestPikPakNext,
+        showChannelNameOverride: _quickShowChannelName,
+        channelName: null,
+        channelId: null,
+        channelNumber: null,
+        channelDirectory: null,
+      );
+      if (_watchCancelled) {
+        return;
+      }
+      if (launchedOnTv) {
+        return;
+      }
+
+      if (!_watchCancelled) {
+        // Hide auto-launch overlay before launching player
+        MainPageBridge.notifyPlayerLaunching();
+
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => VideoPlayerScreen(
+              videoUrl: first['url'] ?? '',
+              title: first['title'] ?? 'Debrify TV',
+              startFromRandom: _quickStartRandom,
+              randomStartMaxPercent: _quickRandomStartPercent,
+              hideSeekbar: _quickHideSeekbar,
+              showChannelName: _quickShowChannelName,
+              channelName: null,
+              channelNumber: null,
+              showVideoTitle: _quickShowVideoTitle,
+              hideOptions: _quickHideOptions,
+              requestMagicNext: requestPikPakNext,
+              requestNextChannel:
+                  _channels.length > 1 &&
+                      (_quickProvider == _providerRealDebrid ||
+                          _quickProvider == _providerTorbox ||
+                          _quickProvider == _providerPikPak)
                   ? _requestNextChannel
                   : null,
             ),
@@ -4720,7 +5042,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestNextChannel:
                 _channels.length > 1 &&
                     (_provider == _providerRealDebrid ||
-                        _provider == _providerTorbox)
+                        _provider == _providerTorbox ||
+                        _provider == _providerPikPak)
                 ? _requestNextChannel
                 : null,
           ),
@@ -5177,6 +5500,56 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return null;
       }
 
+      if (_provider == _providerPikPak) {
+        final pikpakAvailable = await PikPakTvService.instance.isAvailable();
+        if (!pikpakAvailable) {
+          debugPrint('DebrifyTV: PikPak not authenticated');
+          return null;
+        }
+
+        for (var index = 0; index < filteredTorrents.length; index++) {
+          final candidate = filteredTorrents[index];
+
+          final prepared = await PikPakTvService.instance.prepareTorrent(
+            infohash: candidate.infohash,
+            torrentName: candidate.name,
+            onLog: (message) => debugPrint('DebrifyTV/PikPak: $message'),
+          );
+
+          if (prepared == null) {
+            debugPrint(
+              'DebrifyTV: PikPak preparation failed for candidate ${candidate.infohash}',
+            );
+            continue;
+          }
+
+          if (mounted) {
+            final remaining = filteredTorrents.skip(index + 1).toList();
+            setState(() {
+              _currentWatchingChannelId = targetChannel.id;
+              _queue
+                ..clear()
+                ..addAll(remaining);
+            });
+            _keywordsController.text = keywords.join(', ');
+          }
+
+          debugPrint(
+            'DebrifyTV: PikPak channel switch ready with stream ${prepared['title']}',
+          );
+          return {
+            'channelId': targetChannel.id,
+            'channelName': targetChannel.name,
+            'channelNumber': targetChannelNumber,
+            'firstUrl': prepared['url']!,
+            'firstTitle': prepared['title']!,
+          };
+        }
+
+        debugPrint('DebrifyTV: All PikPak candidates failed for channel');
+        return null;
+      }
+
       debugPrint(
         'DebrifyTV: Unsupported provider for channel switching: $_provider',
       );
@@ -5573,7 +5946,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             requestNextChannel:
                 _channels.length > 1 &&
                     (_provider == _providerRealDebrid ||
-                        _provider == _providerTorbox)
+                        _provider == _providerTorbox ||
+                        _provider == _providerPikPak)
                 ? _requestNextChannel
                 : null,
           ),
@@ -5593,6 +5967,226 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _isBusy = false;
       });
     }
+  }
+
+  Future<void> _watchPikPakWithCachedTorrents(
+    List<Torrent> cachedTorrents, {
+    String? channelName,
+    String? channelId,
+    int? channelNumber,
+  }) async {
+    if (cachedTorrents.isEmpty) {
+      MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
+      _showSnack(
+        'Cached channel has no torrents yet. Please wait a moment.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
+        ? _androidTvChannelMetadata(
+            activeChannelId: channelId ?? _currentWatchingChannelId,
+          )
+        : null;
+
+    void log(String message) {
+      debugPrint('DebrifyTV/PikPak: $message');
+    }
+
+    final pikpakAvailable = await PikPakTvService.instance.isAvailable();
+    if (!pikpakAvailable) {
+      _showSnack(
+        'Please login to PikPak in Settings first!',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    _showCachedPlaybackDialog();
+
+    final List<Torrent> candidatePool = List<Torrent>.from(cachedTorrents);
+    candidatePool.shuffle(Random());
+
+    if (mounted) {
+      setState(() {
+        _status = 'Preparing PikPak stream...';
+        _isBusy = true;
+        _queue
+          ..clear()
+          ..addAll(candidatePool);
+      });
+    }
+
+    Future<Map<String, String>?> requestPikPakNext() async {
+      while (_queue.isNotEmpty) {
+        final next = _queue.removeAt(0);
+        if (next is! Torrent) {
+          continue;
+        }
+
+        log('Trying torrent: ${next.name}');
+        final prepared = await PikPakTvService.instance.prepareTorrent(
+          infohash: next.infohash,
+          torrentName: next.name,
+          onLog: log,
+        );
+
+        if (prepared == null) {
+          log('Torrent not ready, trying next...');
+          continue;
+        }
+
+        return {
+          'url': prepared['url']!,
+          'title': prepared['title']!,
+        };
+      }
+      return null;
+    }
+
+    try {
+      final first = await requestPikPakNext();
+      if (first == null) {
+        _closeProgressDialog();
+        if (!mounted) return;
+        setState(() {
+          _status = 'No playable PikPak streams found. Try refreshing.';
+          _isBusy = false;
+        });
+        MainPageBridge.notifyAutoLaunchFailed('No PikPak streams available');
+        _showSnack(
+          'No PikPak streams are playable. Try refreshing the channel.',
+          color: Colors.orange,
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      _closeProgressDialog();
+
+      // Try Android TV native player first
+      final launchedOnTv = await _launchPikPakOnAndroidTv(
+        firstStream: first,
+        requestNext: requestPikPakNext,
+        channelName: channelName,
+        channelId: channelId,
+        channelNumber: channelNumber,
+        channelDirectory: channelDirectory,
+      );
+      if (launchedOnTv) {
+        return;
+      }
+
+      // Fall back to Flutter video player (MediaKit)
+      MainPageBridge.notifyPlayerLaunching();
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(
+            videoUrl: first['url'] ?? '',
+            title: first['title'] ?? 'Debrify TV',
+            startFromRandom: _startRandom,
+            randomStartMaxPercent: _randomStartPercent,
+            hideSeekbar: _hideSeekbar,
+            showChannelName: _showChannelName,
+            channelName: channelName,
+            channelNumber: channelNumber,
+            showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            requestMagicNext: requestPikPakNext,
+            requestNextChannel:
+                _channels.length > 1 &&
+                    (_provider == _providerRealDebrid ||
+                        _provider == _providerTorbox ||
+                        _provider == _providerPikPak)
+                ? _requestNextChannel
+                : null,
+          ),
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          _status = _queue.isEmpty
+              ? ''
+              : 'Queue has ${_queue.length} remaining';
+        });
+      }
+    } finally {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+      });
+    }
+  }
+
+  Future<bool> _launchPikPakOnAndroidTv({
+    required Map<String, String> firstStream,
+    required Future<Map<String, String>?> Function() requestNext,
+    String? channelName,
+    bool? showChannelNameOverride,
+    String? channelId,
+    int? channelNumber,
+    List<Map<String, dynamic>>? channelDirectory,
+  }) async {
+    if (!_isAndroidTv) {
+      return false;
+    }
+    final initialUrl = firstStream['url'] ?? '';
+    if (initialUrl.isEmpty) {
+      return false;
+    }
+
+    final title = (firstStream['title'] ?? '').trim();
+
+    try {
+      MainPageBridge.notifyPlayerLaunching();
+
+      // Reuse Torbox bridge method - it works for any stream URL
+      final launched = await AndroidTvPlayerBridge.launchTorboxPlayback(
+        initialUrl: initialUrl,
+        title: title.isEmpty ? 'Debrify TV' : title,
+        magnets: const [],
+        requestNext: requestNext,
+        requestChannelSwitch: _channels.length > 1 ? _requestNextChannel : null,
+        requestChannelById: _channels.length > 1 ? _requestChannelById : null,
+        onFinished: () async {
+          AndroidTvPlayerBridge.clearTorboxProvider();
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _status = _queue.isEmpty
+                ? ''
+                : 'Queue has ${_queue.length} remaining';
+          });
+        },
+        startFromRandom: _startRandom,
+        randomStartMaxPercent: _randomStartPercent,
+        hideSeekbar: _hideSeekbar,
+        hideOptions: _hideOptions,
+        showVideoTitle: _showVideoTitle,
+        showChannelName: showChannelNameOverride ?? _showChannelName,
+        channelName: channelName,
+        channels: channelDirectory,
+        currentChannelId: channelId ?? _currentWatchingChannelId,
+        currentChannelNumber: channelNumber,
+      );
+      if (launched) {
+        if (mounted) {
+          setState(() {
+            _status = 'Playing via Android TV';
+          });
+        }
+        return true;
+      }
+    } catch (e) {
+      debugPrint('DebrifyTV: Android TV bridge failed for PikPak: $e');
+    }
+
+    AndroidTvPlayerBridge.clearTorboxProvider();
+    return false;
   }
 
   void _showChannelCreationDialog(String channelName, {int? countdownSeconds}) {
@@ -6312,6 +6906,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     null,
                     _rdAvailable,
                     _torboxAvailable,
+                    _pikpakAvailable,
                   );
 
                   setState(() {
