@@ -11,6 +11,7 @@ import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
+import '../services/pikpak_api_service.dart';
 import '../utils/series_parser.dart';
 
 final Map<String, String> _resolvedStreamCache = <String, String>{};
@@ -294,6 +295,22 @@ class VideoPlayerLauncher {
       );
       if (url.isEmpty) {
         throw Exception('Torbox returned an empty stream URL');
+      }
+      return url;
+    }
+
+    // PikPak lazy resolution
+    final hasPikPakMetadata = entry.pikpakFileId != null;
+    if (provider == 'pikpak' || hasPikPakMetadata) {
+      final fileId = entry.pikpakFileId;
+      if (fileId == null) {
+        throw Exception('PikPak file metadata missing');
+      }
+      final pikpak = PikPakApiService.instance;
+      final fileData = await pikpak.getFileDetails(fileId);
+      final url = pikpak.getStreamingUrl(fileData);
+      if (url == null || url.isEmpty) {
+        throw Exception('PikPak returned an empty stream URL');
       }
       return url;
     }

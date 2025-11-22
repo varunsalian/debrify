@@ -13,6 +13,7 @@ import '../services/debrid_service.dart';
 import '../services/episode_info_service.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
+import '../services/pikpak_api_service.dart';
 
 import '../widgets/series_browser.dart';
 import '../widgets/movie_collection_browser.dart';
@@ -94,9 +95,10 @@ class PlaylistEntry {
   final String? torrentHash; // SHA1 Hash of the torrent
   final int? sizeBytes; // Original file size in bytes, when known
   final String?
-  provider; // Source provider identifier (e.g. realdebrid, torbox)
+  provider; // Source provider identifier (e.g. realdebrid, torbox, pikpak)
   final int? torboxTorrentId; // Torbox torrent identifier for lazy resolution
   final int? torboxFileId; // Torbox file identifier for lazy resolution
+  final String? pikpakFileId; // PikPak file identifier for lazy resolution
   const PlaylistEntry({
     required this.url,
     required this.title,
@@ -106,6 +108,7 @@ class PlaylistEntry {
     this.provider,
     this.torboxTorrentId,
     this.torboxFileId,
+    this.pikpakFileId,
   });
 }
 
@@ -1261,6 +1264,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return url;
       } catch (e) {
         throw Exception('Torbox link failed: $e');
+      }
+    }
+
+    // PikPak lazy resolution
+    final hasPikPakMetadata = entry.pikpakFileId != null;
+    if (provider == 'pikpak' || hasPikPakMetadata) {
+      final fileId = entry.pikpakFileId;
+      if (fileId == null) {
+        throw Exception('PikPak file metadata missing');
+      }
+      try {
+        final pikpak = PikPakApiService.instance;
+        final fileData = await pikpak.getFileDetails(fileId);
+        final url = pikpak.getStreamingUrl(fileData);
+        if (url == null || url.isEmpty) {
+          throw Exception('PikPak returned an empty stream URL');
+        }
+        return url;
+      } catch (e) {
+        throw Exception('PikPak link failed: $e');
       }
     }
 

@@ -1774,88 +1774,166 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (videoFiles.isEmpty) return;
 
     final pikpak = PikPakApiService.instance;
-    // Capture navigator before any async operations
-    final navigator = Navigator.of(context);
 
+    // Single video - play directly
     if (videoFiles.length == 1) {
-      // Single video - play directly
       final file = videoFiles.first;
-      final fullData = await pikpak.getFileDetails(file['id']);
-      final url = pikpak.getStreamingUrl(fullData);
-      if (url != null && mounted) {
-        navigator.push(
-          MaterialPageRoute(
-            builder: (_) => VideoPlayerScreen(
-              videoUrl: url,
-              title: file['name'] ?? torrentName,
-            ),
-          ),
-        );
-      }
-    } else {
-      // Multiple videos - show selection dialog
-      if (!mounted) return;
-      final selectedFile = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (ctx) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF0F172A),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('Select Video to Play'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: videoFiles.length,
-                itemBuilder: (context, index) {
-                  final file = videoFiles[index];
-                  final name = file['name'] ?? 'Video ${index + 1}';
-                  final size = file['size'];
-                  final sizeStr = size != null ? Formatters.formatFileSize(int.tryParse(size.toString()) ?? 0) : '';
-
-                  return ListTile(
-                    autofocus: index == 0,
-                    leading: const Icon(Icons.play_circle_outline, color: Color(0xFF60A5FA)),
-                    title: Text(
-                      name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    subtitle: sizeStr.isNotEmpty ? Text(sizeStr, style: const TextStyle(fontSize: 12)) : null,
-                    onTap: () => Navigator.of(ctx).pop(file),
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(
-                autofocus: videoFiles.isEmpty,
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Cancel'),
-              ),
-            ],
-          );
-        },
-      );
-
-      // Handle selection after dialog closes
-      if (selectedFile != null && mounted) {
-        final name = selectedFile['name'] ?? torrentName;
-        final fullData = await pikpak.getFileDetails(selectedFile['id']);
+      try {
+        final fullData = await pikpak.getFileDetails(file['id']);
         final url = pikpak.getStreamingUrl(fullData);
         if (url != null && mounted) {
-          navigator.push(
-            MaterialPageRoute(
-              builder: (_) => VideoPlayerScreen(
-                videoUrl: url,
-                title: name,
-              ),
+          await VideoPlayerLauncher.push(
+            context,
+            VideoPlayerLaunchArgs(
+              videoUrl: url,
+              title: file['name'] ?? torrentName,
+              subtitle: Formatters.formatFileSize(int.tryParse(file['size']?.toString() ?? '0') ?? 0),
             ),
           );
         }
+      } catch (e) {
+        _showPikPakSnack('Failed to play: ${e.toString()}', isError: true);
       }
+      return;
     }
+
+    // Multiple videos - build playlist like Torbox
+    final entries = <_PikPakPlaylistItem>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final file = videoFiles[i];
+      final displayName = _pikpakDisplayName(file);
+      final info = SeriesParser.parseFilename(displayName);
+      entries.add(_PikPakPlaylistItem(
+        file: file,
+        originalIndex: i,
+        seriesInfo: info,
+        displayName: displayName,
+      ));
+    }
+
+    // Detect if it's a series collection
+    final filenames = entries.map((e) => e.displayName).toList();
+    final bool isSeriesCollection =
+        entries.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+    // Sort entries
+    final sortedEntries = [...entries];
+    if (isSeriesCollection) {
+      sortedEntries.sort((a, b) {
+        final aInfo = a.seriesInfo;
+        final bInfo = b.seriesInfo;
+        final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+        if (seasonCompare != 0) return seasonCompare;
+        final episodeCompare = (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+        if (episodeCompare != 0) return episodeCompare;
+        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+      });
+    } else {
+      sortedEntries.sort(
+        (a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      );
+    }
+
+    // Find first episode to start from
+    final seriesInfos = sortedEntries.map((e) => e.seriesInfo).toList();
+    int startIndex = isSeriesCollection ? _findFirstEpisodeIndex(seriesInfos) : 0;
+    if (startIndex < 0 || startIndex >= sortedEntries.length) {
+      startIndex = 0;
+    }
+
+    // Resolve only the first video URL (lazy loading for rest)
+    String initialUrl = '';
+    try {
+      final firstFile = sortedEntries[startIndex].file;
+      final fullData = await pikpak.getFileDetails(firstFile['id']);
+      initialUrl = pikpak.getStreamingUrl(fullData) ?? '';
+    } catch (e) {
+      _showPikPakSnack('Failed to prepare stream: ${e.toString()}', isError: true);
+      return;
+    }
+
+    if (initialUrl.isEmpty) {
+      _showPikPakSnack('Could not get streaming URL', isError: true);
+      return;
+    }
+
+    // Build playlist entries
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sortedEntries.length; i++) {
+      final entry = sortedEntries[i];
+      final seriesInfo = entry.seriesInfo;
+      final episodeLabel = _formatPikPakPlaylistTitle(
+        info: seriesInfo,
+        fallback: entry.displayName,
+        isSeriesCollection: isSeriesCollection,
+      );
+      final combinedTitle = _combineSeriesAndEpisodeTitle(
+        seriesTitle: seriesInfo.title,
+        episodeLabel: episodeLabel,
+        isSeriesCollection: isSeriesCollection,
+        fallback: entry.displayName,
+      );
+      playlistEntries.add(PlaylistEntry(
+        url: i == startIndex ? initialUrl : '',
+        title: combinedTitle,
+        provider: 'pikpak',
+        pikpakFileId: entry.file['id'],
+        sizeBytes: int.tryParse(entry.file['size']?.toString() ?? '0'),
+      ));
+    }
+
+    // Calculate subtitle
+    final totalBytes = sortedEntries.fold<int>(
+      0,
+      (sum, e) => sum + (int.tryParse(e.file['size']?.toString() ?? '0') ?? 0),
+    );
+    final subtitle =
+        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+    if (!mounted) return;
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialUrl,
+        title: torrentName,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
+      ),
+    );
+  }
+
+  String _pikpakDisplayName(Map<String, dynamic> file) {
+    final name = file['name']?.toString() ?? '';
+    if (name.isNotEmpty) {
+      return FileUtils.getFileName(name);
+    }
+    return 'File ${file['id']}';
+  }
+
+  String _formatPikPakPlaylistTitle({
+    required SeriesInfo info,
+    required String fallback,
+    required bool isSeriesCollection,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final season = info.season;
+    final episode = info.episode;
+    if (info.isSeries && season != null && episode != null) {
+      final seasonLabel = season.toString().padLeft(2, '0');
+      final episodeLabel = episode.toString().padLeft(2, '0');
+      final description = info.episodeTitle?.trim().isNotEmpty == true
+          ? info.episodeTitle!.trim()
+          : info.title?.trim().isNotEmpty == true
+          ? info.title!.trim()
+          : fallback;
+      return 'S${seasonLabel}E$episodeLabel · $description';
+    }
+
+    return fallback;
   }
 
   Future<void> _addPikPakToPlaylist(List<Map<String, dynamic>> videoFiles, String torrentName) async {
@@ -1871,23 +1949,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'title': file['name'] ?? torrentName,
         'kind': 'single',
         'pikpakFileId': file['id'],
-        'sizeBytes': file['size'],
+        'sizeBytes': int.tryParse(file['size']?.toString() ?? '0'),
       });
       _showPikPakSnack(added ? 'Added to playlist' : 'Already in playlist', isError: !added);
     } else {
-      // Add all videos
-      int addedCount = 0;
-      for (final file in videoFiles) {
-        final added = await StorageService.addPlaylistItemRaw({
-          'provider': 'pikpak',
-          'title': file['name'] ?? torrentName,
-          'kind': 'single',
-          'pikpakFileId': file['id'],
-          'sizeBytes': file['size'],
-        });
-        if (added) addedCount++;
-      }
-      _showPikPakSnack('Added $addedCount videos to playlist');
+      // Save as collection (like Torbox)
+      final fileIds = videoFiles.map((f) => f['id'] as String).toList();
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'pikpak',
+        'title': torrentName,
+        'kind': 'collection',
+        'pikpakFileIds': fileIds,
+        'count': videoFiles.length,
+      });
+      _showPikPakSnack(
+        added ? 'Added ${videoFiles.length} videos to playlist' : 'Already in playlist',
+        isError: !added,
+      );
     }
   }
 
@@ -6332,6 +6410,20 @@ class _TorboxPlaylistItem {
   final String displayName;
 
   const _TorboxPlaylistItem({
+    required this.file,
+    required this.originalIndex,
+    required this.seriesInfo,
+    required this.displayName,
+  });
+}
+
+class _PikPakPlaylistItem {
+  final Map<String, dynamic> file;
+  final int originalIndex;
+  final SeriesInfo seriesInfo;
+  final String displayName;
+
+  const _PikPakPlaylistItem({
     required this.file,
     required this.originalIndex,
     required this.seriesInfo,
