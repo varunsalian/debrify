@@ -1272,71 +1272,555 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final magnet = 'magnet:?xt=urn:btih:$infohash&dn=${Uri.encodeComponent(torrentName)}';
 
       final pikpak = PikPakApiService.instance;
-      final result = await pikpak.addOfflineDownload(magnet);
+
+      // Show loading dialog with progress
+      String? fileId;
+      int progress = 0;
+      bool cancelled = false;
+      bool showingTimeoutOptions = false;
+      final startTime = DateTime.now();
+
+      // Add to PikPak first
+      final addResult = await pikpak.addOfflineDownload(magnet);
+
+      // Extract file ID
+      if (addResult['file'] != null) {
+        fileId = addResult['file']['id'];
+      } else if (addResult['task'] != null) {
+        fileId = addResult['task']['file_id'];
+      } else if (addResult['id'] != null) {
+        fileId = addResult['id'];
+      }
+
+      if (fileId == null) {
+        throw Exception('Could not get file ID from PikPak');
+      }
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF22C55E),
-                  borderRadius: BorderRadius.circular(8),
+      // Show loading dialog and start polling
+      bool pollingStarted = false;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              // Start polling only once
+              if (!pollingStarted && !cancelled) {
+                pollingStarted = true;
+                _pollPikPakStatus(
+                  fileId!,
+                  torrentName,
+                  dialogContext,
+                  setDialogState,
+                  startTime,
+                  (p) {
+                    if (mounted) setDialogState(() => progress = p);
+                  },
+                  () => cancelled,
+                  (show) {
+                    if (mounted) setDialogState(() => showingTimeoutOptions = show);
+                  },
+                );
+              }
+
+              final elapsed = DateTime.now().difference(startTime);
+              final showTakingLonger = elapsed.inSeconds > 30 && !showingTimeoutOptions;
+
+              return AlertDialog(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFAA00).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.cloud_sync, color: Color(0xFFFFAA00), size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Processing on PikPak',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Icon(Icons.check_circle, color: Colors.white, size: 16),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Added to PikPak: ${result['file']?['name'] ?? result['name'] ?? torrentName}',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      torrentName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (!showingTimeoutOptions) ...[
+                      LinearProgressIndicator(
+                        value: progress > 0 ? progress / 100 : null,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFAA00)),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        progress > 0 ? 'Downloading: $progress%' : 'Checking status...',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (showTakingLonger) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Taking longer than expected...',
+                          style: TextStyle(
+                            color: Colors.orange.withValues(alpha: 0.8),
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ] else ...[
+                      const Text(
+                        'This torrent is taking a while. What would you like to do?',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFF1E293B),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 3),
-        ),
+                actions: showingTimeoutOptions
+                    ? [
+                        TextButton(
+                          autofocus: true,
+                          onPressed: () {
+                            setDialogState(() {
+                              showingTimeoutOptions = false;
+                            });
+                          },
+                          child: const Text('Keep Waiting'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            cancelled = true;
+                            Navigator.of(dialogContext).pop();
+                            _showPikPakSnack('You can find it in PikPak Files later');
+                          },
+                          child: const Text('View Later'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            cancelled = true;
+                            Navigator.of(dialogContext).pop();
+                          },
+                          style: TextButton.styleFrom(foregroundColor: Colors.red.shade400),
+                          child: const Text('Cancel'),
+                        ),
+                      ]
+                    : [
+                        TextButton(
+                          autofocus: true,
+                          onPressed: () {
+                            cancelled = true;
+                            Navigator.of(dialogContext).pop();
+                            _showPikPakSnack('Added to PikPak. You can find it in PikPak Files.');
+                          },
+                          child: const Text('Run in Background'),
+                        ),
+                      ],
+              );
+            },
+          );
+        },
       );
     } catch (e) {
       print('Error sending to PikPak: $e');
       if (!mounted) return;
+      _showPikPakSnack('Failed: ${e.toString()}', isError: true);
+    }
+  }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.error, color: Colors.white, size: 16),
+  Future<void> _pollPikPakStatus(
+    String fileId,
+    String torrentName,
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+    DateTime startTime,
+    Function(int) onProgress,
+    bool Function() isCancelled,
+    Function(bool) setShowTimeoutOptions,
+  ) async {
+    final pikpak = PikPakApiService.instance;
+    const pollInterval = Duration(seconds: 2);
+    const timeoutShowOptions = Duration(seconds: 60);
+
+    while (!isCancelled()) {
+      await Future.delayed(pollInterval);
+      if (isCancelled() || !mounted) return;
+
+      // Check if we should show timeout options
+      final elapsed = DateTime.now().difference(startTime);
+      if (elapsed > timeoutShowOptions) {
+        setShowTimeoutOptions(true);
+        return;
+      }
+
+      try {
+        final fileData = await pikpak.getFileDetails(fileId);
+        final phase = fileData['phase'];
+        final kind = fileData['kind'];
+
+        // Update progress
+        final progressValue = fileData['progress'];
+        if (progressValue != null) {
+          try {
+            final p = progressValue is int ? progressValue : int.parse(progressValue.toString());
+            onProgress(p);
+          } catch (_) {}
+        }
+
+        // Check if complete
+        if (phase == 'PHASE_TYPE_COMPLETE') {
+          if (!mounted) return;
+          Navigator.of(dialogContext).pop();
+
+          // Get all video files
+          List<Map<String, dynamic>> videoFiles = [];
+
+          if (kind == 'drive#folder') {
+            // It's a folder (torrent pack), list contents
+            final result = await pikpak.listFiles(parentId: fileId);
+            videoFiles = result.files.where((f) {
+              final mimeType = f['mime_type'] ?? '';
+              return mimeType.startsWith('video/');
+            }).toList();
+          } else {
+            // Single file
+            final mimeType = fileData['mime_type'] ?? '';
+            if (mimeType.startsWith('video/')) {
+              videoFiles = [fileData];
+            }
+          }
+
+          if (!mounted) return;
+          await _showPikPakPostAddOptions(torrentName, fileId, videoFiles);
+          return;
+        }
+
+        // Check if failed
+        if (phase == 'PHASE_TYPE_ERROR') {
+          if (!mounted) return;
+          Navigator.of(dialogContext).pop();
+          _showPikPakSnack('Download failed on PikPak', isError: true);
+          return;
+        }
+      } catch (e) {
+        print('PikPak polling error: $e');
+        // Continue polling on error
+      }
+    }
+  }
+
+  Future<void> _showPikPakPostAddOptions(
+    String torrentName,
+    String fileId,
+    List<Map<String, dynamic>> videoFiles,
+  ) async {
+    if (!mounted) return;
+
+    final hasVideo = videoFiles.isNotEmpty;
+    final postAction = await StorageService.getPikPakPostTorrentAction();
+
+    // Handle automatic actions
+    switch (postAction) {
+      case 'play':
+        if (hasVideo) {
+          _playPikPakVideos(videoFiles, torrentName);
+          return;
+        }
+        break;
+      case 'choose':
+      default:
+        break;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              color: const Color(0xFF0F172A),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFFAA00), Color(0xFFFF6600)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(Icons.cloud_done_rounded, color: Colors.white),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                torrentName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                hasVideo
+                                    ? 'Ready on PikPak. ${videoFiles.length} video${videoFiles.length > 1 ? 's' : ''} found.'
+                                    : 'Ready on PikPak. No videos detected.',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(Icons.close_rounded, color: Colors.white54),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFF1E293B)),
+                  _DebridActionTile(
+                    icon: Icons.play_circle_fill_rounded,
+                    color: const Color(0xFF60A5FA),
+                    title: 'Play now',
+                    subtitle: hasVideo
+                        ? 'Stream instantly from PikPak.'
+                        : 'No video files found.',
+                    enabled: hasVideo,
+                    autofocus: true,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _playPikPakVideos(videoFiles, torrentName);
+                    },
+                  ),
+                  _DebridActionTile(
+                    icon: Icons.playlist_add_rounded,
+                    color: const Color(0xFFA855F7),
+                    title: 'Add to playlist',
+                    subtitle: hasVideo
+                        ? 'Save for later viewing.'
+                        : 'Available for video files only.',
+                    enabled: hasVideo,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _addPikPakToPlaylist(videoFiles, torrentName);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Failed to add to PikPak: ${e.toString()}',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _playPikPakVideos(List<Map<String, dynamic>> videoFiles, String torrentName) async {
+    if (videoFiles.isEmpty) return;
+
+    final pikpak = PikPakApiService.instance;
+    // Capture navigator before any async operations
+    final navigator = Navigator.of(context);
+
+    if (videoFiles.length == 1) {
+      // Single video - play directly
+      final file = videoFiles.first;
+      final fullData = await pikpak.getFileDetails(file['id']);
+      final url = pikpak.getStreamingUrl(fullData);
+      if (url != null && mounted) {
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => VideoPlayerScreen(
+              videoUrl: url,
+              title: file['name'] ?? torrentName,
+            ),
+          ),
+        );
+      }
+    } else {
+      // Multiple videos - show selection dialog
+      if (!mounted) return;
+      final selectedFile = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF0F172A),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Select Video to Play'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: videoFiles.length,
+                itemBuilder: (context, index) {
+                  final file = videoFiles[index];
+                  final name = file['name'] ?? 'Video ${index + 1}';
+                  final size = file['size'];
+                  final sizeStr = size != null ? Formatters.formatFileSize(int.tryParse(size.toString()) ?? 0) : '';
+
+                  return ListTile(
+                    autofocus: index == 0,
+                    leading: const Icon(Icons.play_circle_outline, color: Color(0xFF60A5FA)),
+                    title: Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    subtitle: sizeStr.isNotEmpty ? Text(sizeStr, style: const TextStyle(fontSize: 12)) : null,
+                    onTap: () => Navigator.of(ctx).pop(file),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                autofocus: videoFiles.isEmpty,
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
               ),
             ],
-          ),
-          backgroundColor: const Color(0xFF1E293B),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 4),
-        ),
+          );
+        },
       );
+
+      // Handle selection after dialog closes
+      if (selectedFile != null && mounted) {
+        final name = selectedFile['name'] ?? torrentName;
+        final fullData = await pikpak.getFileDetails(selectedFile['id']);
+        final url = pikpak.getStreamingUrl(fullData);
+        if (url != null && mounted) {
+          navigator.push(
+            MaterialPageRoute(
+              builder: (_) => VideoPlayerScreen(
+                videoUrl: url,
+                title: name,
+              ),
+            ),
+          );
+        }
+      }
     }
+  }
+
+  Future<void> _addPikPakToPlaylist(List<Map<String, dynamic>> videoFiles, String torrentName) async {
+    if (videoFiles.isEmpty) {
+      _showPikPakSnack('No video files to add', isError: true);
+      return;
+    }
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'pikpak',
+        'title': file['name'] ?? torrentName,
+        'kind': 'single',
+        'pikpakFileId': file['id'],
+        'sizeBytes': file['size'],
+      });
+      _showPikPakSnack(added ? 'Added to playlist' : 'Already in playlist', isError: !added);
+    } else {
+      // Add all videos
+      int addedCount = 0;
+      for (final file in videoFiles) {
+        final added = await StorageService.addPlaylistItemRaw({
+          'provider': 'pikpak',
+          'title': file['name'] ?? torrentName,
+          'kind': 'single',
+          'pikpakFileId': file['id'],
+          'sizeBytes': file['size'],
+        });
+        if (added) addedCount++;
+      }
+      _showPikPakSnack('Added $addedCount videos to playlist');
+    }
+  }
+
+  void _showPikPakSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isError ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                isError ? Icons.error : Icons.check_circle,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(message, style: const TextStyle(fontWeight: FontWeight.w500)),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: Duration(seconds: isError ? 4 : 3),
+      ),
+    );
   }
 
   Future<void> _addToRealDebrid(

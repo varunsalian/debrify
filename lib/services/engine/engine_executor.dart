@@ -306,10 +306,8 @@ class EngineExecutor {
 
       // Add to query params if we have a value or it's required
       if (value != null && value.isNotEmpty) {
-        // Encode if configured
-        if (config.urlBuilder.encode && param.source == 'query') {
-          value = Uri.encodeComponent(value);
-        }
+        // Don't manually encode - Uri.replace() handles encoding automatically
+        // Manual encoding would cause double-encoding (%20 -> %2520)
         queryParams[param.name] = value;
       } else if (param.required) {
         debugPrint(
@@ -333,9 +331,9 @@ class EngineExecutor {
       }
 
       if (valueToUse != null && valueToUse.isNotEmpty) {
-        final String encodedValue =
-            config.urlBuilder.encode ? Uri.encodeComponent(valueToUse) : valueToUse;
-        queryParams[queryParamName] = encodedValue;
+        // Don't encode here - Uri.replace() will encode automatically
+        // Manual encoding would cause double-encoding (%20 -> %2520)
+        queryParams[queryParamName] = valueToUse;
       }
     }
 

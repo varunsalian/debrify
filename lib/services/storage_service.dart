@@ -16,6 +16,7 @@ class StorageService {
       'torbox_integration_enabled';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey = 'torbox_post_torrent_action';
+  static const String _pikpakPostTorrentActionKey = 'pikpak_post_torrent_action';
   static const String _batteryOptStatusKey =
       'battery_opt_status_v1'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
@@ -198,6 +199,17 @@ class StorageService {
   static Future<void> saveTorboxPostTorrentAction(String action) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_torboxPostTorrentActionKey, action);
+  }
+
+  // PikPak post-torrent action methods
+  static Future<String> getPikPakPostTorrentAction() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakPostTorrentActionKey) ?? 'choose';
+  }
+
+  static Future<void> savePikPakPostTorrentAction(String action) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakPostTorrentActionKey, action);
   }
 
   // Battery optimization status
