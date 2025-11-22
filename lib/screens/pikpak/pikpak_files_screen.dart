@@ -24,6 +24,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   bool _ignoreSmallVideos = true;
   String? _email;
 
+  // Pagination state
+  String? _nextPageToken;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+
   // Folder navigation state
   String? _currentFolderId;
   String _currentFolderName = 'My Files';
@@ -39,7 +44,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadSettings();
+  }
+
+  void _onScroll() {
+    // Load more when user scrolls near the bottom (200px threshold)
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreFiles();
+    }
   }
 
   @override
@@ -81,48 +95,18 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
+      // Reset pagination state for fresh load
+      _nextPageToken = null;
+      _hasMore = true;
     });
 
     try {
-      final files = await PikPakApiService.instance.listFiles(parentId: _currentFolderId);
+      final result = await PikPakApiService.instance.listFiles(parentId: _currentFolderId);
 
       if (!mounted) return;
 
       // Filter files based on settings
-      List<Map<String, dynamic>> filteredFiles = files;
-
-      // Filter by file type (videos only)
-      if (_showVideosOnly) {
-        filteredFiles = filteredFiles.where((file) {
-          final kind = file['kind'] ?? '';
-          final mimeType = file['mime_type'] ?? '';
-          // Always show folders, only filter non-folder items
-          return kind == 'drive#folder' || mimeType.startsWith('video/');
-        }).toList();
-      }
-
-      // Filter by size (ignore videos under 100MB)
-      if (_ignoreSmallVideos) {
-        filteredFiles = filteredFiles.where((file) {
-          final kind = file['kind'] ?? '';
-          final mimeType = file['mime_type'] ?? '';
-          final size = file['size'];
-
-          // Always show folders
-          if (kind == 'drive#folder') return true;
-
-          // For videos, check size
-          if (mimeType.startsWith('video/')) {
-            if (size == null) return true; // Show if size is unknown
-            final sizeBytes = int.tryParse(size.toString()) ?? 0;
-            final sizeMB = sizeBytes / (1024 * 1024);
-            return sizeMB >= 100; // Only show videos 100MB or larger
-          }
-
-          // Show non-video files if videos-only filter is off
-          return true;
-        }).toList();
-      }
+      final filteredFiles = _filterFiles(result.files);
 
       // Dispose old file item focus nodes
       for (final node in _fileItemFocusNodes) {
@@ -138,6 +122,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       setState(() {
         _files.clear();
         _files.addAll(filteredFiles);
+        _nextPageToken = result.nextPageToken;
+        _hasMore = result.nextPageToken != null && result.nextPageToken!.isNotEmpty;
         _isLoading = false;
         _initialLoad = false;
       });
@@ -160,6 +146,89 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _initialLoad = false;
       });
     }
+  }
+
+  Future<void> _loadMoreFiles() async {
+    // Don't load more if already loading, no more pages, or no page token
+    if (_isLoadingMore || !_hasMore || _nextPageToken == null) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final result = await PikPakApiService.instance.listFiles(
+        parentId: _currentFolderId,
+        pageToken: _nextPageToken,
+      );
+
+      if (!mounted) return;
+
+      // Filter files based on settings
+      final filteredFiles = _filterFiles(result.files);
+
+      // Create focus nodes for new files
+      final startIndex = _fileItemFocusNodes.length;
+      for (int i = 0; i < filteredFiles.length; i++) {
+        _fileItemFocusNodes.add(FocusNode(debugLabel: 'pikpak-file-${startIndex + i}'));
+      }
+
+      setState(() {
+        _files.addAll(filteredFiles);
+        _nextPageToken = result.nextPageToken;
+        _hasMore = result.nextPageToken != null && result.nextPageToken!.isNotEmpty;
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      print('Error loading more PikPak files: $e');
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingMore = false;
+      });
+
+      _showSnackBar('Failed to load more files: $e');
+    }
+  }
+
+  /// Filter files based on user settings (videos only, ignore small videos)
+  List<Map<String, dynamic>> _filterFiles(List<Map<String, dynamic>> files) {
+    List<Map<String, dynamic>> filteredFiles = files;
+
+    // Filter by file type (videos only)
+    if (_showVideosOnly) {
+      filteredFiles = filteredFiles.where((file) {
+        final kind = file['kind'] ?? '';
+        final mimeType = file['mime_type'] ?? '';
+        // Always show folders, only filter non-folder items
+        return kind == 'drive#folder' || mimeType.startsWith('video/');
+      }).toList();
+    }
+
+    // Filter by size (ignore videos under 100MB)
+    if (_ignoreSmallVideos) {
+      filteredFiles = filteredFiles.where((file) {
+        final kind = file['kind'] ?? '';
+        final mimeType = file['mime_type'] ?? '';
+        final size = file['size'];
+
+        // Always show folders
+        if (kind == 'drive#folder') return true;
+
+        // For videos, check size
+        if (mimeType.startsWith('video/')) {
+          if (size == null) return true; // Show if size is unknown
+          final sizeBytes = int.tryParse(size.toString()) ?? 0;
+          final sizeMB = sizeBytes / (1024 * 1024);
+          return sizeMB >= 100; // Only show videos 100MB or larger
+        }
+
+        // Show non-video files if videos-only filter is off
+        return true;
+      }).toList();
+    }
+
+    return filteredFiles;
   }
 
   void _navigateIntoFolder(String folderId, String folderName) {
@@ -471,15 +540,53 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Widget _buildFileList() {
+    // Add 1 to item count for loading indicator when loading more
+    final itemCount = _files.length + (_isLoadingMore || _hasMore ? 1 : 0);
+
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.all(16),
-      itemCount: _files.length,
+      itemCount: itemCount,
       itemBuilder: (context, index) {
+        // Show loading indicator at the end
+        if (index >= _files.length) {
+          return _buildLoadingIndicator();
+        }
         final file = _files[index];
         return _buildFileCard(file, index);
       },
     );
+  }
+
+  Widget _buildLoadingIndicator() {
+    if (_isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    // Show a subtle hint that more can be loaded
+    if (_hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            'Scroll for more',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   Widget _buildFileCard(Map<String, dynamic> file, int index) {

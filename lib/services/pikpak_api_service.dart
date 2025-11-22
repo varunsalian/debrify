@@ -634,21 +634,27 @@ class PikPakApiService {
     }
   }
 
-  /// List files in a directory
-  Future<List<Map<String, dynamic>>> listFiles({String? parentId, int limit = 100}) async {
+  /// List files in a directory with pagination support
+  /// Returns a record containing the files list and optional next page token
+  Future<({List<Map<String, dynamic>> files, String? nextPageToken})> listFiles({
+    String? parentId,
+    int limit = 50,
+    String? pageToken,
+  }) async {
     try {
-      print('PikPak: Listing files (parent: ${parentId ?? "root"})');
+      print('PikPak: Listing files (parent: ${parentId ?? "root"}, pageToken: ${pageToken ?? "none"})');
       // IMPORTANT: Adding with_audit=true to get media links populated for each file
       // Adding filters to exclude trashed files (deleted files go to trash first in PikPak)
       final filters = Uri.encodeComponent('{"trashed":{"eq":false}}');
-      final response = await _makeAuthenticatedRequest(
-        'GET',
-        '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$filters',
-        null,
-      );
+      String url = '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$filters';
+      if (pageToken != null && pageToken.isNotEmpty) {
+        url += '&page_token=$pageToken';
+      }
+      final response = await _makeAuthenticatedRequest('GET', url, null);
       final files = List<Map<String, dynamic>>.from(response['files'] ?? []);
-      print('PikPak: Found ${files.length} files');
-      return files;
+      final nextPageToken = response['next_page_token'] as String?;
+      print('PikPak: Found ${files.length} files, nextPageToken: ${nextPageToken ?? "none"}');
+      return (files: files, nextPageToken: nextPageToken);
     } catch (e) {
       // If captcha verification fails, get fresh token and retry
       if (e.toString().contains('Verification code is invalid')) {
@@ -676,15 +682,16 @@ class PikPakApiService {
 
         // Retry the request with same filters
         final retryFilters = Uri.encodeComponent('{"trashed":{"eq":false}}');
-        final response = await _makeAuthenticatedRequest(
-          'GET',
-          '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$retryFilters',
-          null,
-        );
+        String retryUrl = '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$retryFilters';
+        if (pageToken != null && pageToken.isNotEmpty) {
+          retryUrl += '&page_token=$pageToken';
+        }
+        final response = await _makeAuthenticatedRequest('GET', retryUrl, null);
 
         final files = List<Map<String, dynamic>>.from(response['files'] ?? []);
-        print('PikPak: Found ${files.length} files (after retry)');
-        return files;
+        final nextPageToken = response['next_page_token'] as String?;
+        print('PikPak: Found ${files.length} files (after retry), nextPageToken: ${nextPageToken ?? "none"}');
+        return (files: files, nextPageToken: nextPageToken);
       } else {
         print('PikPak: Failed to list files: $e');
         rethrow;
@@ -772,7 +779,8 @@ class PikPakApiService {
           if (kind == 'drive#folder') {
             print('PikPak: Downloaded item is a folder, listing contents...');
             try {
-              final files = await listFiles(parentId: fileId);
+              final result = await listFiles(parentId: fileId);
+              final files = result.files;
               print('PikPak: Found ${files.length} files in folder');
 
               // Find the first video file
