@@ -91,6 +91,9 @@ class DefaultTvModeConfig {
   /// Minimum number of torrents per keyword
   final int minTorrentsPerKeyword;
 
+  /// Maximum keywords for quick play
+  final int maxKeywords;
+
   /// Whether to avoid NSFW content
   final bool avoidNsfw;
 
@@ -101,6 +104,7 @@ class DefaultTvModeConfig {
     required this.keywordThreshold,
     required this.channelBatchSize,
     required this.minTorrentsPerKeyword,
+    required this.maxKeywords,
     required this.avoidNsfw,
     required this.nsfwCategoryPatterns,
   });
@@ -108,9 +112,13 @@ class DefaultTvModeConfig {
   /// Factory constructor to create DefaultTvModeConfig from a YAML map
   factory DefaultTvModeConfig.fromMap(Map<String, dynamic> map) {
     return DefaultTvModeConfig(
-      keywordThreshold: map['keyword_threshold'] as int? ?? 3,
-      channelBatchSize: map['channel_batch_size'] as int? ?? 5,
-      minTorrentsPerKeyword: map['min_torrents_per_keyword'] as int? ?? 1,
+      keywordThreshold: map['keyword_threshold'] as int? ?? 10,
+      // Support both YAML key names
+      channelBatchSize: map['channel_batch_size'] as int? ??
+          map['batch_size'] as int? ?? 4,
+      minTorrentsPerKeyword: map['min_torrents_per_keyword'] as int? ??
+          map['min_torrents'] as int? ?? 5,
+      maxKeywords: map['max_keywords'] as int? ?? 5,
       avoidNsfw: map['avoid_nsfw'] as bool? ?? true,
       nsfwCategoryPatterns: (map['nsfw_category_patterns'] as List<dynamic>?)
               ?.map((e) => e.toString())
@@ -133,6 +141,7 @@ class DefaultTvModeConfig {
       'keyword_threshold': keywordThreshold,
       'channel_batch_size': channelBatchSize,
       'min_torrents_per_keyword': minTorrentsPerKeyword,
+      'max_keywords': maxKeywords,
       'avoid_nsfw': avoidNsfw,
       'nsfw_category_patterns': nsfwCategoryPatterns,
     };

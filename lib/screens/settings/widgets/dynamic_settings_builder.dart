@@ -822,7 +822,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
             // Keyword Threshold
             _buildGlobalSliderSetting(
               label: 'Keyword Threshold',
-              subtitle: 'Minimum keywords before TV mode activates',
+              subtitle: 'Below this: fetch more per keyword. Above: fetch less',
               value: _keywordThreshold,
               min: 1,
               max: 50,
@@ -860,7 +860,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
             // Min Torrents Per Keyword
             _buildGlobalSliderSetting(
               label: 'Min Torrents Per Keyword',
-              subtitle: 'Minimum results per keyword before stopping',
+              subtitle: 'Skip keywords with fewer results than this',
               value: _minTorrentsPerKeyword,
               min: 1,
               max: 50,

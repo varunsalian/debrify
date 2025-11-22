@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'widgets/dynamic_settings_builder.dart';
 import '../../services/engine/settings_manager.dart';
 import '../../services/engine/engine_registry.dart';
+import '../../services/engine/config_loader.dart';
 
 class DebrifyTvSettingsPage extends StatefulWidget {
   const DebrifyTvSettingsPage({super.key});
@@ -178,12 +179,18 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
   Future<void> _resetToDefaults() async {
     final settings = SettingsManager();
     final registry = EngineRegistry.instance;
+    final configLoader = ConfigLoader();
 
-    // Reset global TV settings
-    await settings.setGlobalKeywordThreshold(10);
-    await settings.setGlobalBatchSize(4);
-    await settings.setGlobalMinTorrentsPerKeyword(5);
-    await settings.setGlobalAvoidNsfw(true);
+    // Load defaults from _defaults.yaml
+    final defaults = await configLoader.getDefaults();
+    final tvDefaults = defaults.tvMode;
+
+    // Reset global TV settings from YAML defaults
+    await settings.setGlobalKeywordThreshold(tvDefaults.keywordThreshold);
+    await settings.setGlobalBatchSize(tvDefaults.channelBatchSize);
+    await settings.setGlobalMinTorrentsPerKeyword(tvDefaults.minTorrentsPerKeyword);
+    await settings.setGlobalMaxKeywords(tvDefaults.maxKeywords);
+    await settings.setGlobalAvoidNsfw(tvDefaults.avoidNsfw);
 
     // Reset per-engine TV settings from their configs
     for (final config in registry.getAllConfigs().values) {
