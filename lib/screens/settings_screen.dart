@@ -11,6 +11,7 @@ import 'settings/real_debrid_settings_page.dart';
 import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
+import 'settings/engine_import_page.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -141,6 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenStartupSettings: _openStartupSettings,
+      onOpenEngineImportSettings: _openEngineImportSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
@@ -175,6 +177,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const StartupSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openEngineImportSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const EngineImportPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -314,6 +324,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenStartupSettings;
+  final Future<void> Function() onOpenEngineImportSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
@@ -324,6 +335,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
     required this.onOpenStartupSettings,
+    required this.onOpenEngineImportSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
     required this.onDangerAction,
@@ -339,38 +351,68 @@ class _SettingsLayout extends StatelessWidget {
         children: [
           _SettingsHeader(theme: theme),
           const SizedBox(height: 24),
+          // Connections section with cards + PikPak tile
           connections,
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           _SettingsSection(
-            title: 'Integrations',
+            title: '',
+            children: [
+              _SettingsTile(
+                icon: Icons.cloud_circle_rounded,
+                title: 'PikPak',
+                subtitle: 'Cloud storage integration',
+                onTap: onOpenPikPakSettings,
+                tag: 'Experimental',
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // Search section
+          _SettingsSection(
+            title: 'Search',
             children: [
               _SettingsTile(
                 icon: Icons.search_rounded,
-                title: 'Torrent Settings',
-                subtitle: 'Search engines, filters, and sorting',
+                title: 'Search Settings',
+                subtitle: 'Engines, filters, and sorting',
                 onTap: onOpenTorrentSettings,
               ),
               _SettingsTile(
+                icon: Icons.extension_rounded,
+                title: 'Import Engines',
+                subtitle: 'Import and manage torrent search engines',
+                onTap: onOpenEngineImportSettings,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // TV Mode section
+          _SettingsSection(
+            title: 'TV Mode',
+            children: [
+              _SettingsTile(
                 icon: Icons.live_tv_rounded,
                 title: 'Debrify TV Settings',
-                subtitle: 'Search engines, limits, and channel configuration',
+                subtitle: 'Limits, channels, and playback configuration',
                 onTap: onOpenDebrifyTvSettings,
               ),
-              _SettingsTile(
-                icon: Icons.cloud_circle_rounded,
-                title: 'PikPak Settings',
-                subtitle: 'Configure PikPak cloud storage integration',
-                onTap: onOpenPikPakSettings,
-              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // General section
+          _SettingsSection(
+            title: 'General',
+            children: [
               _SettingsTile(
                 icon: Icons.rocket_launch_rounded,
-                title: 'Startup Settings',
+                title: 'Startup',
                 subtitle: 'Auto-launch Debrify TV on app start',
                 onTap: onOpenStartupSettings,
               ),
             ],
           ),
           const SizedBox(height: 24),
+          // Maintenance section
           _SettingsSection(
             title: 'Maintenance',
             children: [
@@ -389,6 +431,7 @@ class _SettingsLayout extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
+          // Danger Zone section
           _SettingsSection(
             title: 'Danger Zone',
             accentColor: theme.colorScheme.error,
@@ -630,15 +673,17 @@ class _SettingsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.2,
-            color: accentColor ?? theme.colorScheme.onSurface,
+        if (title.isNotEmpty) ...[
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+              color: accentColor ?? theme.colorScheme.onSurface,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
+          const SizedBox(height: 12),
+        ],
         Material(
           color: theme.colorScheme.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(18),
@@ -668,12 +713,14 @@ class _SettingsTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final Future<void> Function() onTap;
+  final String? tag;
 
   const _SettingsTile({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.tag,
   });
 
   @override
@@ -701,11 +748,36 @@ class _SettingsTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (tag != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.tertiary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            tag!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.tertiary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(

@@ -5,6 +5,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/account_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/torbox_account_service.dart';
+import '../services/engine/remote_engine_manager.dart';
+import '../services/engine/local_engine_storage.dart';
+import '../services/engine/config_loader.dart';
+import '../services/engine/engine_registry.dart';
 
 class InitialSetupFlow extends StatefulWidget {
   const InitialSetupFlow({super.key});
@@ -104,11 +108,18 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final Set<_IntegrationType> _selection = <_IntegrationType>{};
   final TextEditingController _realDebridController = TextEditingController();
   final TextEditingController _torboxController = TextEditingController();
-  int _stepIndex = 0; // 0 => welcome, >0 => selected integrations
+  int _stepIndex = 0; // 0 => welcome, >0 => selected integrations, -1 => engine selection
   List<_IntegrationType> _flow = const <_IntegrationType>[];
   bool _isProcessing = false;
   String? _errorMessage;
   bool _hasConfigured = false;
+
+  // Engine selection state
+  final RemoteEngineManager _remoteEngineManager = RemoteEngineManager();
+  List<RemoteEngineInfo> _availableEngines = [];
+  Set<String> _selectedEngineIds = {};
+  bool _isLoadingEngines = false;
+  String? _engineError;
 
   // Focus nodes for TV/DPAD navigation
   final FocusNode _dialogFocusNode = FocusNode(debugLabel: 'initial-setup-dialog');
@@ -169,6 +180,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _textFieldFocusNode.dispose();
     _skipForNowButtonFocusNode.dispose();
     _connectButtonFocusNode.dispose();
+    _remoteEngineManager.dispose();
     super.dispose();
   }
 
@@ -258,11 +270,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                                         switchOutCurve: Curves.easeInCubic,
                                         child: _stepIndex == 0
                                             ? _buildWelcomeStep(theme, innerConstraints.maxWidth)
-                                            : _buildIntegrationStep(
-                                                theme,
-                                                _flow[_stepIndex - 1],
-                                                innerConstraints.maxWidth,
-                                              ),
+                                            : _stepIndex > _flow.length
+                                                ? _buildEngineSelectionStep(theme, innerConstraints.maxWidth)
+                                                : _buildIntegrationStep(
+                                                    theme,
+                                                    _flow[_stepIndex - 1],
+                                                    innerConstraints.maxWidth,
+                                                  ),
                                       );
                                     },
                                   ),
@@ -630,6 +644,211 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     );
   }
 
+  Widget _buildEngineSelectionStep(ThemeData theme, double availableWidth) {
+    return Column(
+      key: const ValueKey<String>('engine-selection'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          'Import Search Engines',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Select the torrent search engines you want to use.',
+          style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+        ),
+        const SizedBox(height: 24),
+        if (_isLoadingEngines)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Column(
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 16),
+                  Text(
+                    'Loading available engines...',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else if (_engineError != null)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Failed to load engines',
+                    style: theme.textTheme.titleMedium?.copyWith(color: Colors.white),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _engineError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _isLoadingEngines = true;
+                        _engineError = null;
+                      });
+                      _loadAvailableEngines();
+                    },
+                    icon: const Icon(Icons.refresh, color: Colors.white),
+                    label: const Text('Retry', style: TextStyle(color: Colors.white)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white30),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Container(
+            constraints: const BoxConstraints(maxHeight: 280),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _availableEngines.length,
+              itemBuilder: (context, index) {
+                final engine = _availableEngines[index];
+                final isSelected = _selectedEngineIds.contains(engine.id);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedEngineIds.remove(engine.id);
+                          } else {
+                            _selectedEngineIds.add(engine.id);
+                          }
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: isSelected
+                              ? Colors.white.withValues(alpha: 0.15)
+                              : Colors.white.withValues(alpha: 0.05),
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.white.withValues(alpha: 0.4)
+                                : Colors.white.withValues(alpha: 0.1),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: isSelected,
+                              onChanged: (value) {
+                                setState(() {
+                                  if (value == true) {
+                                    _selectedEngineIds.add(engine.id);
+                                  } else {
+                                    _selectedEngineIds.remove(engine.id);
+                                  }
+                                });
+                              },
+                              fillColor: WidgetStateProperty.resolveWith((states) {
+                                if (states.contains(WidgetState.selected)) {
+                                  return Colors.white;
+                                }
+                                return Colors.transparent;
+                              }),
+                              checkColor: const Color(0xFF1F2937),
+                              side: const BorderSide(color: Colors.white54),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              _getEngineIcon(engine.icon),
+                              color: Colors.white70,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                engine.displayName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            TextButton(
+              onPressed: _isProcessing
+                  ? null
+                  : () => Navigator.of(context).pop(_hasConfigured),
+              child: const Text('Skip for now'),
+            ),
+            const Spacer(),
+            FilledButton(
+              onPressed: _isProcessing || _isLoadingEngines
+                  ? null
+                  : _importSelectedEngines,
+              child: _isProcessing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      _selectedEngineIds.isEmpty
+                          ? 'Finish'
+                          : 'Import ${_selectedEngineIds.length} Engine${_selectedEngineIds.length == 1 ? '' : 's'}',
+                    ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  IconData _getEngineIcon(String? iconName) {
+    switch (iconName) {
+      case 'sailing':
+        return Icons.sailing;
+      case 'storage':
+        return Icons.storage;
+      case 'movie':
+        return Icons.movie;
+      case 'tv':
+        return Icons.tv;
+      case 'cloud':
+        return Icons.cloud;
+      default:
+        return Icons.extension;
+    }
+  }
+
   void _toggleSelection(_IntegrationType type) {
     setState(() {
       if (_selection.contains(type)) {
@@ -726,7 +945,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
   void _advanceOrFinish() {
     if (_stepIndex >= _flow.length) {
-      Navigator.of(context).pop(_hasConfigured);
+      // Go to engine selection step
+      _goToEngineSelection();
       return;
     }
 
@@ -734,6 +954,82 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _stepIndex += 1;
       _errorMessage = null;
     });
+  }
+
+  void _goToEngineSelection() {
+    setState(() {
+      _stepIndex = _flow.length + 1;
+      _isLoadingEngines = true;
+      _engineError = null;
+    });
+    _loadAvailableEngines();
+  }
+
+  Future<void> _loadAvailableEngines() async {
+    try {
+      final engines = await _remoteEngineManager.fetchAvailableEngines();
+      if (mounted) {
+        setState(() {
+          _availableEngines = engines;
+          // Auto-select all engines by default
+          _selectedEngineIds = engines.map((e) => e.id).toSet();
+          _isLoadingEngines = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingEngines = false;
+          _engineError = e.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _importSelectedEngines() async {
+    if (_selectedEngineIds.isEmpty) {
+      // Skip if no engines selected
+      Navigator.of(context).pop(_hasConfigured);
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    final localStorage = LocalEngineStorage.instance;
+    int successCount = 0;
+
+    for (final engine in _availableEngines) {
+      if (!_selectedEngineIds.contains(engine.id)) continue;
+
+      try {
+        final yamlContent = await _remoteEngineManager.downloadEngineYaml(engine.fileName);
+        if (yamlContent != null) {
+          await localStorage.saveEngine(
+            engineId: engine.id,
+            fileName: engine.fileName,
+            yamlContent: yamlContent,
+            displayName: engine.displayName,
+            icon: engine.icon,
+          );
+          successCount++;
+        }
+      } catch (e) {
+        debugPrint('Failed to import ${engine.id}: $e');
+      }
+    }
+
+    // Reload engine registry
+    ConfigLoader().clearCache();
+    await EngineRegistry.instance.reload();
+
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+      });
+      Navigator.of(context).pop(_hasConfigured || successCount > 0);
+    }
   }
 
   Future<void> _launch(String url) async {

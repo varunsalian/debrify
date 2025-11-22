@@ -1,15 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:yaml/yaml.dart';
 
 import '../../models/engine_config/engine_config.dart';
 import '../../models/engine_config/default_config.dart';
+import 'local_engine_storage.dart';
 
 /// Service for loading and managing YAML engine configuration files.
 ///
 /// This service handles:
 /// - Loading _defaults.yaml with fallback to hardcoded defaults
-/// - Loading all engine YAML files from assets/config/engines/
+/// - Loading all engine YAML files from local storage (imported from GitLab)
 /// - Merging engine configs with defaults
 /// - Caching loaded configurations
 /// - Graceful error handling for invalid/missing files
@@ -19,18 +22,8 @@ class ConfigLoader {
   factory ConfigLoader() => _instance;
   ConfigLoader._internal();
 
-  /// Asset path for engine configuration files
+  /// Asset path for default configuration file
   static const String _configBasePath = 'assets/config/engines';
-
-  /// List of known engine config files (excluding _defaults.yaml)
-  /// These are discovered at build time and listed here
-  static const List<String> _knownEngineFiles = [
-    'pirate_bay.yaml',
-    'solid_torrents.yaml',
-    'torrents_csv.yaml',
-    'yts.yaml',
-    'torrentio.yaml',
-  ];
 
   // Cached configs
   DefaultConfig? _defaultConfig;
@@ -89,7 +82,7 @@ class ConfigLoader {
     }
   }
 
-  /// Load all engine configs from assets/config/engines/
+  /// Load all engine configs from local storage (imported engines)
   ///
   /// Returns a list of [EngineConfig] objects for all valid engine YAML files.
   /// Invalid or missing files are skipped with a warning logged.
@@ -97,10 +90,18 @@ class ConfigLoader {
   Future<List<EngineConfig>> loadEngineConfigs() async {
     final configs = <EngineConfig>[];
     final defaults = await getDefaults();
+    final localStorage = LocalEngineStorage.instance;
 
-    for (final fileName in _knownEngineFiles) {
-      final assetPath = '$_configBasePath/$fileName';
-      final config = await loadEngineConfig(assetPath);
+    // Get all imported engine file paths from local storage
+    final filePaths = await localStorage.getAllEngineFilePaths();
+
+    if (filePaths.isEmpty) {
+      debugPrint('ConfigLoader: No imported engines found in local storage');
+      return configs;
+    }
+
+    for (final filePath in filePaths) {
+      final config = await loadEngineConfigFromFile(filePath);
 
       if (config != null) {
         // Merge with defaults
@@ -113,10 +114,56 @@ class ConfigLoader {
     if (configs.isEmpty) {
       debugPrint('ConfigLoader: No valid engine configs found');
     } else {
-      debugPrint('ConfigLoader: Loaded ${configs.length} engine configs');
+      debugPrint('ConfigLoader: Loaded ${configs.length} engine configs from local storage');
     }
 
     return configs;
+  }
+
+  /// Load a single engine config from a file path (local storage)
+  ///
+  /// Returns [EngineConfig] if the file is valid, null otherwise.
+  Future<EngineConfig?> loadEngineConfigFromFile(String filePath) async {
+    try {
+      debugPrint('ConfigLoader: Loading from file: $filePath');
+      final file = File(filePath);
+
+      if (!await file.exists()) {
+        debugPrint('ConfigLoader: File not found: $filePath');
+        return null;
+      }
+
+      final yamlString = await file.readAsString();
+      debugPrint('ConfigLoader: YAML string length: ${yamlString.length}');
+
+      final yamlMap = loadYaml(yamlString);
+      if (yamlMap == null) {
+        debugPrint('ConfigLoader: $filePath is empty, skipping');
+        return null;
+      }
+
+      final map = _convertYamlToMap(yamlMap);
+      debugPrint('ConfigLoader: Converted YAML to map with ${map.length} keys');
+
+      // Transform the flat YAML structure to the expected nested structure
+      final transformedMap = _transformYamlToEngineConfig(map);
+      debugPrint('ConfigLoader: Transformed map has ${transformedMap.length} sections');
+
+      final config = EngineConfig.fromMap(transformedMap);
+      debugPrint('ConfigLoader: Successfully created EngineConfig for ${config.metadata.id}');
+      return config;
+    } on YamlException catch (e) {
+      debugPrint('ConfigLoader: Invalid YAML in $filePath - $e');
+      return null;
+    } on TypeError catch (e, stackTrace) {
+      debugPrint('ConfigLoader: Type error loading $filePath - $e');
+      debugPrint('ConfigLoader: Stack trace: $stackTrace');
+      return null;
+    } catch (e, stackTrace) {
+      debugPrint('ConfigLoader: Error loading $filePath - $e');
+      debugPrint('ConfigLoader: Stack trace: $stackTrace');
+      return null;
+    }
   }
 
   /// Load a single engine config file
