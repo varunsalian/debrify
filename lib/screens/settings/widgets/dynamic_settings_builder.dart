@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../models/engine_config/engine_config.dart';
 import '../../../services/engine/settings_manager.dart';
@@ -529,26 +530,20 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
             ],
           ),
           const SizedBox(height: 12),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-            ),
-            child: Slider(
-              value: currentValue.clamp(min, max),
-              min: min,
-              max: max,
-              divisions: (max - min).toInt(),
-              onChanged: (value) async {
-                final intValue = value.toInt();
-                await _settings.setValue<int>(engineId, settingId, intValue);
-                setState(() {
-                  _settingValues[engineId] ??= {};
-                  _settingValues[engineId]![settingId] = intValue;
-                });
-                widget.onSettingsChanged?.call();
-              },
-            ),
+          _TvFriendlySlider(
+            value: currentValue.clamp(min, max),
+            min: min,
+            max: max,
+            divisions: (max - min).toInt(),
+            onChanged: (value) async {
+              final intValue = value.toInt();
+              await _settings.setValue<int>(engineId, settingId, intValue);
+              setState(() {
+                _settingValues[engineId] ??= {};
+                _settingValues[engineId]![settingId] = intValue;
+              });
+              widget.onSettingsChanged?.call();
+            },
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -996,20 +991,14 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
             ],
           ),
           const SizedBox(height: 12),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-            ),
-            child: Slider(
-              value: value.toDouble().clamp(min.toDouble(), max.toDouble()),
-              min: min.toDouble(),
-              max: max.toDouble(),
-              divisions: max - min,
-              onChanged: (newValue) {
-                onChanged(newValue.toInt());
-              },
-            ),
+          _TvFriendlySlider(
+            value: value.toDouble().clamp(min.toDouble(), max.toDouble()),
+            min: min.toDouble(),
+            max: max.toDouble(),
+            divisions: max - min,
+            onChanged: (newValue) {
+              onChanged(newValue.toInt());
+            },
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1439,5 +1428,149 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
       default:
         return Icons.search_rounded;
     }
+  }
+}
+
+/// A TV-friendly slider that allows escaping with arrow keys
+/// When at min value, up/left arrows navigate to previous focusable
+/// When at max value, down/right arrows navigate to next focusable
+class _TvFriendlySlider extends StatefulWidget {
+  const _TvFriendlySlider({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+  });
+
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final ValueChanged<double> onChanged;
+
+  @override
+  State<_TvFriendlySlider> createState() => _TvFriendlySliderState();
+}
+
+class _TvFriendlySliderState extends State<_TvFriendlySlider> {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChange);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (mounted) {
+      setState(() {
+        _isFocused = _focusNode.hasFocus;
+      });
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final step = (widget.max - widget.min) / widget.divisions;
+    final isAtMin = widget.value <= widget.min;
+    final isAtMax = widget.value >= widget.max;
+
+    // Navigate up: allow if at min value
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (isAtMin) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
+          return KeyEventResult.handled;
+        }
+      }
+    }
+
+    // Navigate down: allow if at max value
+    if (key == LogicalKeyboardKey.arrowDown) {
+      if (isAtMax) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
+          return KeyEventResult.handled;
+        }
+      }
+    }
+
+    // Left arrow: decrease value or navigate if at min
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (isAtMin) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
+          return KeyEventResult.handled;
+        }
+      } else {
+        widget.onChanged((widget.value - step).clamp(widget.min, widget.max));
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Right arrow: increase value or navigate if at max
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (isAtMax) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
+          return KeyEventResult.handled;
+        }
+      } else {
+        widget.onChanged((widget.value + step).clamp(widget.min, widget.max));
+        return KeyEventResult.handled;
+      }
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Focus(
+      focusNode: _focusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: _isFocused
+              ? Border.all(color: theme.colorScheme.primary, width: 2)
+              : null,
+          color: _isFocused
+              ? theme.colorScheme.primary.withValues(alpha: 0.1)
+              : null,
+        ),
+        child: SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 4,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+          ),
+          child: Slider(
+            value: widget.value,
+            min: widget.min,
+            max: widget.max,
+            divisions: widget.divisions,
+            onChanged: widget.onChanged,
+          ),
+        ),
+      ),
+    );
   }
 }

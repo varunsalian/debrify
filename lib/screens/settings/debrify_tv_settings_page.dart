@@ -20,34 +20,37 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
       appBar: AppBar(
         title: const Text('Debrify TV Settings'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Header
-          _buildHeader(context),
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Header
+            _buildHeader(context),
 
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          // Use DynamicTvSettingsBuilder
-          DynamicTvSettingsBuilder(
-            key: _settingsKey,
-            onSettingsChanged: () {
-              setState(() {}); // Refresh if needed
-            },
-          ),
+            // Use DynamicTvSettingsBuilder
+            DynamicTvSettingsBuilder(
+              key: _settingsKey,
+              onSettingsChanged: () {
+                setState(() {}); // Refresh if needed
+              },
+            ),
 
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // Info section
-          _buildInfoSection(context),
+            // Info section
+            _buildInfoSection(context),
 
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // Reset button
-          _buildResetButton(context),
+            // Reset button
+            _buildResetButton(context),
 
-          const SizedBox(height: 16),
-        ],
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }

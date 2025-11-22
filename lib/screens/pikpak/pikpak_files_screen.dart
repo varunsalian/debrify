@@ -29,6 +29,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   String _currentFolderName = 'My Files';
   final List<({String? id, String name})> _navigationStack = [];
 
+  // Focus nodes for TV/DPAD navigation
+  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'pikpak-refresh');
+  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'pikpak-back');
+  final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'pikpak-retry');
+  final FocusNode _settingsButtonFocusNode = FocusNode(debugLabel: 'pikpak-settings');
+  final List<FocusNode> _fileItemFocusNodes = [];
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +45,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _refreshButtonFocusNode.dispose();
+    _backButtonFocusNode.dispose();
+    _retryButtonFocusNode.dispose();
+    _settingsButtonFocusNode.dispose();
+    for (final node in _fileItemFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -110,12 +124,32 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         }).toList();
       }
 
+      // Dispose old file item focus nodes
+      for (final node in _fileItemFocusNodes) {
+        node.dispose();
+      }
+      _fileItemFocusNodes.clear();
+
+      // Create new focus nodes for each file
+      for (int i = 0; i < filteredFiles.length; i++) {
+        _fileItemFocusNodes.add(FocusNode(debugLabel: 'pikpak-file-$i'));
+      }
+
       setState(() {
         _files.clear();
         _files.addAll(filteredFiles);
         _isLoading = false;
         _initialLoad = false;
       });
+
+      // Auto-focus first file after load
+      if (filteredFiles.isNotEmpty && mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_fileItemFocusNodes.isNotEmpty && mounted) {
+            _fileItemFocusNodes[0].requestFocus();
+          }
+        });
+      }
     } catch (e) {
       print('Error loading PikPak files: $e');
       if (!mounted) return;
@@ -222,35 +256,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
   }
 
-  Future<void> _deleteFile(Map<String, dynamic> fileData) async {
-    final fileName = fileData['name'] ?? 'this file';
-
-    // Confirm deletion
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete File'),
-        content: Text('Are you sure you want to delete "$fileName"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    _showSnackBar('Delete functionality coming soon...', isError: false);
-    // TODO: Implement delete via PikPak API
-  }
-
   Future<void> _refreshFiles() async {
     await _loadFiles();
     _showSnackBar('Files refreshed', isError: false);
@@ -313,6 +318,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       appBar: AppBar(
         leading: _currentFolderId != null
             ? IconButton(
+                focusNode: _backButtonFocusNode,
                 icon: const Icon(Icons.arrow_back),
                 onPressed: _navigateUp,
                 tooltip: 'Back',
@@ -321,15 +327,19 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         title: Text(_currentFolderName),
         actions: [
           IconButton(
+            focusNode: _refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
             onPressed: _isLoading ? null : _refreshFiles,
             tooltip: 'Refresh',
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshFiles,
-        child: _files.isEmpty ? _buildEmpty() : _buildFileList(),
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: RefreshIndicator(
+          onRefresh: _refreshFiles,
+          child: _files.isEmpty ? _buildEmpty() : _buildFileList(),
+        ),
       ),
     );
   }
@@ -339,38 +349,43 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       appBar: AppBar(
         title: const Text('PikPak Files'),
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.cloud_off,
-                size: 64,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'PikPak Not Configured',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Configure your PikPak account in Settings to view and manage files.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 32),
-              FilledButton.icon(
-                onPressed: () {
-                  // TODO: Navigate to settings
-                  _showSnackBar('Open Settings > PikPak to configure', isError: false);
-                },
-                icon: const Icon(Icons.settings),
-                label: const Text('Go to Settings'),
-              ),
-            ],
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.cloud_off,
+                  size: 64,
+                  color: Colors.grey.shade400,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'PikPak Not Configured',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Configure your PikPak account in Settings to view and manage files.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 32),
+                FilledButton.icon(
+                  focusNode: _settingsButtonFocusNode,
+                  autofocus: true,
+                  onPressed: () {
+                    // TODO: Navigate to settings
+                    _showSnackBar('Open Settings > PikPak to configure', isError: false);
+                  },
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Go to Settings'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -382,35 +397,40 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       appBar: AppBar(
         title: const Text('PikPak Files'),
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: Colors.red.shade400,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Failed to Load Files',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                _errorMessage,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 32),
-              FilledButton.icon(
-                onPressed: _refreshFiles,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ],
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.red.shade400,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Failed to Load Files',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _errorMessage,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 32),
+                FilledButton.icon(
+                  focusNode: _retryButtonFocusNode,
+                  autofocus: true,
+                  onPressed: _refreshFiles,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -457,12 +477,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       itemCount: _files.length,
       itemBuilder: (context, index) {
         final file = _files[index];
-        return _buildFileCard(file);
+        return _buildFileCard(file, index);
       },
     );
   }
 
-  Widget _buildFileCard(Map<String, dynamic> file) {
+  Widget _buildFileCard(Map<String, dynamic> file, int index) {
     final name = file['name'] ?? 'Unknown';
     final size = file['size'];
     final mimeType = file['mime_type'] ?? '';
@@ -478,137 +498,125 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // We'll check for actual streaming links when playing
     final hasStreamingLink = isVideo && isComplete;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: isFolder
-            ? () => _navigateIntoFolder(file['id'], name)
-            : isVideo
-                ? () => _playFile(file)
-                : null,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    isFolder
-                        ? Icons.folder
-                        : isVideo
-                            ? Icons.play_circle_outline
-                            : Icons.insert_drive_file,
-                    color: isFolder
-                        ? Colors.amber
-                        : isVideo
-                            ? Colors.blue
-                            : Colors.grey,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+    // Get focus node for this item (if available)
+    final focusNode = index < _fileItemFocusNodes.length ? _fileItemFocusNodes[index] : null;
+
+    return _TvFocusableFileCard(
+      focusNode: focusNode,
+      onTap: isFolder
+          ? () => _navigateIntoFolder(file['id'], name)
+          : isVideo
+              ? () => _playFile(file)
+              : null,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isFolder
+                      ? Icons.folder
+                      : isVideo
+                          ? Icons.play_circle_outline
+                          : Icons.insert_drive_file,
+                  color: isFolder
+                      ? Colors.amber
+                      : isVideo
+                          ? Colors.blue
+                          : Colors.grey,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
                         ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            if (size != null) ...[
-                              Text(
-                                Formatters.formatFileSize(int.tryParse(size.toString()) ?? 0),
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '•',
-                                style: TextStyle(color: Colors.grey.shade600),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (size != null) ...[
                             Text(
-                              _formatDate(createdTime),
+                              Formatters.formatFileSize(int.tryParse(size.toString()) ?? 0),
                               style: TextStyle(
                                 color: Colors.grey.shade600,
                                 fontSize: 13,
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '•',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(width: 8),
                           ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (!isComplete) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const SizedBox(width: 12),
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Downloading...',
-                      style: TextStyle(
-                        color: Colors.orange.shade700,
-                        fontSize: 13,
+                          Text(
+                            _formatDate(createdTime),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
+            ),
+            if (!isComplete) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
-                  if (isFolder) ...[
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _navigateIntoFolder(file['id'], name),
-                        icon: const Icon(Icons.folder_open, size: 18),
-                        label: const Text('Open'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ] else if (isVideo && isComplete) ...[
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _playFile(file),
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Play'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _deleteFile(file),
-                      icon: const Icon(Icons.delete_outline, size: 18),
-                      label: const Text('Delete'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                      ),
+                  const SizedBox(width: 12),
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Downloading...',
+                    style: TextStyle(
+                      color: Colors.orange.shade700,
+                      fontSize: 13,
                     ),
                   ),
                 ],
               ),
             ],
-          ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (isFolder) ...[
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _navigateIntoFolder(file['id'], name),
+                      icon: const Icon(Icons.folder_open, size: 18),
+                      label: const Text('Open'),
+                    ),
+                  ),
+                ] else if (isVideo && isComplete) ...[
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _playFile(file),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -633,5 +641,134 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     } catch (e) {
       return '';
     }
+  }
+}
+
+/// A TV/DPAD-focusable file card with visual focus indication
+class _TvFocusableFileCard extends StatefulWidget {
+  const _TvFocusableFileCard({
+    required this.child,
+    this.focusNode,
+    this.onTap,
+  });
+
+  final Widget child;
+  final FocusNode? focusNode;
+  final VoidCallback? onTap;
+
+  @override
+  State<_TvFocusableFileCard> createState() => _TvFocusableFileCardState();
+}
+
+class _TvFocusableFileCardState extends State<_TvFocusableFileCard> {
+  bool _isFocused = false;
+  late FocusNode _effectiveFocusNode;
+  bool _ownsNode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focusNode != null) {
+      _effectiveFocusNode = widget.focusNode!;
+    } else {
+      _effectiveFocusNode = FocusNode();
+      _ownsNode = true;
+    }
+    _effectiveFocusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(_TvFocusableFileCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusNode != oldWidget.focusNode) {
+      _effectiveFocusNode.removeListener(_handleFocusChange);
+      if (_ownsNode) {
+        _effectiveFocusNode.dispose();
+      }
+      if (widget.focusNode != null) {
+        _effectiveFocusNode = widget.focusNode!;
+        _ownsNode = false;
+      } else {
+        _effectiveFocusNode = FocusNode();
+        _ownsNode = true;
+      }
+      _effectiveFocusNode.addListener(_handleFocusChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    _effectiveFocusNode.removeListener(_handleFocusChange);
+    if (_ownsNode) {
+      _effectiveFocusNode.dispose();
+    }
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (mounted) {
+      setState(() {
+        _isFocused = _effectiveFocusNode.hasFocus;
+      });
+    }
+  }
+
+  void _handleTap() {
+    if (widget.onTap != null) {
+      HapticFeedback.selectionClick();
+      widget.onTap!();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Shortcuts(
+      shortcuts: {
+        const SingleActivator(LogicalKeyboardKey.enter): const ActivateIntent(),
+        const SingleActivator(LogicalKeyboardKey.select): const ActivateIntent(),
+        const SingleActivator(LogicalKeyboardKey.gameButtonA): const ActivateIntent(),
+      },
+      child: Actions(
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              _handleTap();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          focusNode: _effectiveFocusNode,
+          child: GestureDetector(
+            onTap: _handleTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: _isFocused
+                    ? Border.all(color: theme.colorScheme.primary, width: 2)
+                    : null,
+                boxShadow: _isFocused
+                    ? [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

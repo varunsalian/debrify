@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/main_page_bridge.dart';
@@ -14,6 +15,13 @@ class PikPakSettingsPage extends StatefulWidget {
 class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  // Focus nodes for TV/DPAD navigation
+  final FocusNode _emailFocusNode = FocusNode(debugLabel: 'pikpak-email');
+  final FocusNode _passwordFocusNode = FocusNode(debugLabel: 'pikpak-password');
+  final FocusNode _loginButtonFocusNode = FocusNode(debugLabel: 'pikpak-login');
+  final FocusNode _testButtonFocusNode = FocusNode(debugLabel: 'pikpak-test');
+  final FocusNode _logoutButtonFocusNode = FocusNode(debugLabel: 'pikpak-logout');
 
   bool _pikpakEnabled = false;
   bool _showVideosOnly = true;
@@ -32,6 +40,11 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _loginButtonFocusNode.dispose();
+    _testButtonFocusNode.dispose();
+    _logoutButtonFocusNode.dispose();
     super.dispose();
   }
 
@@ -75,8 +88,13 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       if (success) {
         setState(() {
           _isConnected = true;
+          _pikpakEnabled = true;
         });
         await StorageService.setPikPakEnabled(true);
+
+        // Notify main page to update navigation immediately
+        MainPageBridge.notifyIntegrationChanged();
+
         _showSnackBar('Connected successfully!', isError: false);
 
         // Clear password field for security
@@ -159,9 +177,11 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       appBar: AppBar(
         title: const Text('PikPak Settings'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           const Text(
             'PikPak Integration',
             style: TextStyle(
@@ -278,16 +298,29 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
           // Connection status
           Card(
-            color: _isConnected ? Colors.green.shade50 : Colors.grey.shade50,
+            color: _isConnected
+                ? Colors.green.withValues(alpha: 0.15)
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
             child: ListTile(
               leading: Icon(
                 _isConnected ? Icons.check_circle : Icons.circle_outlined,
-                color: _isConnected ? Colors.green : Colors.grey,
+                color: _isConnected ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              title: Text(_isConnected ? 'Connected' : 'Not Connected'),
-              subtitle: Text(_isConnected
-                  ? 'Connected as: ${_emailController.text}'
-                  : 'Login with your PikPak account below'),
+              title: Text(
+                _isConnected ? 'Connected' : 'Not Connected',
+                style: TextStyle(
+                  color: _isConnected ? Colors.green.shade700 : Theme.of(context).colorScheme.onSurface,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              subtitle: Text(
+                _isConnected
+                    ? 'Connected as: ${_emailController.text}'
+                    : 'Login with your PikPak account below',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
           ),
 
@@ -302,32 +335,29 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
               ),
             ),
             const SizedBox(height: 16),
-            TextField(
+            _TvFriendlyTextField(
               controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                hintText: 'your@email.com',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.email),
-              ),
+              focusNode: _emailFocusNode,
+              labelText: 'Email',
+              hintText: 'your@email.com',
+              prefixIcon: const Icon(Icons.email),
               keyboardType: TextInputType.emailAddress,
               enabled: !_isConnecting,
             ),
             const SizedBox(height: 16),
-            TextField(
+            _TvFriendlyTextField(
               controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                hintText: 'Your PikPak password',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock),
-              ),
+              focusNode: _passwordFocusNode,
+              labelText: 'Password',
+              hintText: 'Your PikPak password',
+              prefixIcon: const Icon(Icons.lock),
               obscureText: true,
               enabled: !_isConnecting,
               onSubmitted: (_) => _login(),
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
+              focusNode: _loginButtonFocusNode,
               onPressed: _isConnecting ? null : _login,
               icon: _isConnecting
                   ? const SizedBox(
@@ -341,12 +371,14 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
           ] else ...[
             const SizedBox(height: 16),
             FilledButton.icon(
+              focusNode: _testButtonFocusNode,
               onPressed: _testConnection,
               icon: const Icon(Icons.cloud_done),
               label: const Text('Test Connection'),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
+              focusNode: _logoutButtonFocusNode,
               onPressed: _logout,
               icon: const Icon(Icons.logout),
               label: const Text('Logout'),
@@ -391,7 +423,151 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
             'PikPak is a cloud storage service that supports offline downloads from magnet links and torrents. Files are stored in your PikPak cloud and can be streamed or downloaded.',
             style: TextStyle(fontSize: 14),
           ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A TV-friendly TextField that allows escaping with DPAD
+class _TvFriendlyTextField extends StatefulWidget {
+  const _TvFriendlyTextField({
+    required this.controller,
+    required this.focusNode,
+    required this.labelText,
+    required this.hintText,
+    required this.prefixIcon,
+    this.keyboardType,
+    this.obscureText = false,
+    this.enabled = true,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final String labelText;
+  final String hintText;
+  final Widget prefixIcon;
+  final TextInputType? keyboardType;
+  final bool obscureText;
+  final bool enabled;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
+}
+
+class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_handleFocusChange);
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (mounted) {
+      setState(() {
+        _isFocused = widget.focusNode.hasFocus;
+      });
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final text = widget.controller.text;
+    final selection = widget.controller.selection;
+    final textLength = text.length;
+    final isTextEmpty = textLength == 0;
+
+    // Check if selection is valid
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final isAtStart = !isSelectionValid || (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd = !isSelectionValid || (selection.baseOffset == textLength && selection.extentOffset == textLength);
+
+    // Allow escape from TextField with back button (escape key)
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.browserBack) {
+      final ctx = node.context;
+      if (ctx != null) {
+        FocusScope.of(ctx).previousFocus();
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Navigate up: always allow if text is empty or cursor at start
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (isTextEmpty || isAtStart) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
+          return KeyEventResult.handled;
+        }
+      }
+    }
+
+    // Navigate down: always allow if text is empty or cursor at end
+    if (key == LogicalKeyboardKey.arrowDown) {
+      if (isTextEmpty || isAtEnd) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
+          return KeyEventResult.handled;
+        }
+      }
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Focus(
+      onKeyEvent: _handleKeyEvent,
+      skipTraversal: true,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: _isFocused
+              ? Border.all(color: theme.colorScheme.primary, width: 2)
+              : null,
+          boxShadow: _isFocused
+              ? [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: TextField(
+          controller: widget.controller,
+          focusNode: widget.focusNode,
+          enabled: widget.enabled,
+          obscureText: widget.obscureText,
+          keyboardType: widget.keyboardType,
+          decoration: InputDecoration(
+            labelText: widget.labelText,
+            hintText: widget.hintText,
+            prefixIcon: widget.prefixIcon,
+            border: const OutlineInputBorder(),
+          ),
+          onSubmitted: widget.onSubmitted,
+        ),
       ),
     );
   }
