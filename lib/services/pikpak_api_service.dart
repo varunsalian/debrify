@@ -284,10 +284,22 @@ class PikPakApiService {
       } else {
         print('PikPak: Token refresh failed: ${response.statusCode} - ${response.body}');
 
-        // Check for captcha error (error code 4002)
         try {
           final errorData = jsonDecode(response.body);
           final errorCode = errorData['error_code'];
+          final errorType = errorData['error'] ?? '';
+          final errorDesc = errorData['error_description'] ?? '';
+
+          // Check for refresh token expired (invalid_grant) - requires full re-login
+          if (errorType == 'invalid_grant' ||
+              errorDesc.toString().toLowerCase().contains('refresh token') ||
+              errorDesc.toString().toLowerCase().contains('expired')) {
+            print('PikPak: Refresh token expired, clearing all auth data');
+            await logout();
+            return false;
+          }
+
+          // Check for captcha error (error code 4002)
           if (errorCode == 4002 || errorCode == '4002') {
             print('PikPak: Captcha token invalid, will need to re-login');
             await StorageService.clearPikPakCaptchaToken();
@@ -305,18 +317,26 @@ class PikPakApiService {
   }
 
   /// Ensure we have valid authentication tokens
+  /// Always syncs from storage to ensure we have the latest tokens
   Future<void> _ensureAuthenticated() async {
-    if (_accessToken != null) return;
+    // Always load from storage to ensure we have the latest tokens
+    // This handles cases where tokens were refreshed in a different session
+    // or the in-memory token became stale
+    final storedAccessToken = await StorageService.getPikPakAccessToken();
+    final storedRefreshToken = await StorageService.getPikPakRefreshToken();
 
-    // Try to load from storage
-    _accessToken = await StorageService.getPikPakAccessToken();
-    _refreshToken = await StorageService.getPikPakRefreshToken();
-    _email = await StorageService.getPikPakEmail();
-    _userId = await StorageService.getPikPakUserId();
-
-    if (_accessToken == null || _refreshToken == null) {
+    if (storedAccessToken == null || storedRefreshToken == null) {
+      // Clear in-memory tokens if storage is empty
+      _accessToken = null;
+      _refreshToken = null;
       throw Exception('Not authenticated. Please login first.');
     }
+
+    // Update in-memory tokens from storage
+    _accessToken = storedAccessToken;
+    _refreshToken = storedRefreshToken;
+    _email = await StorageService.getPikPakEmail();
+    _userId = await StorageService.getPikPakUserId();
   }
 
   /// Make an authenticated API request with automatic token refresh
@@ -394,15 +414,57 @@ class PikPakApiService {
       return jsonDecode(response.body);
     } else {
       final errorData = jsonDecode(response.body);
+      final errorCode = errorData['error_code'];
+      final errorMessage = errorData['error_description'] ?? errorData['error'] ?? '';
+
+      // Check for access token expired (error_code 16 or "unauthenticated")
+      // PikPak returns this with non-401 status codes
+      if (errorCode == 16 || errorCode == '16' ||
+          errorMessage.toString().toLowerCase().contains('access token') ||
+          errorData['error'] == 'unauthenticated') {
+        print('PikPak: Access token expired (error_code: $errorCode), attempting refresh...');
+
+        if (await refreshAccessToken()) {
+          print('PikPak: Token refreshed, retrying request...');
+          // Retry the request with new token
+          headers['Authorization'] = 'Bearer $_accessToken';
+
+          if (method == 'POST') {
+            response = await http.post(
+              Uri.parse(url),
+              headers: headers,
+              body: body != null ? jsonEncode(body) : null,
+            );
+          } else if (method == 'GET') {
+            response = await http.get(
+              Uri.parse(url),
+              headers: headers,
+            );
+          }
+
+          // Check if retry succeeded
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            return jsonDecode(response.body);
+          } else {
+            // If retry also failed, throw the new error
+            final retryErrorData = jsonDecode(response.body);
+            throw Exception(retryErrorData['error_description'] ?? retryErrorData['error'] ?? 'API request failed after token refresh');
+          }
+        } else {
+          // Refresh failed - clear tokens and require re-login
+          print('PikPak: Token refresh failed, clearing auth and requiring re-login');
+          await logout();
+          throw Exception('Session expired. Please login again.');
+        }
+      }
 
       // Check for captcha error (error code 4002)
-      final errorCode = errorData['error_code'];
       if (errorCode == 4002 || errorCode == '4002') {
         print('PikPak: Captcha token invalid (error 4002), clearing token');
         await StorageService.clearPikPakCaptchaToken();
       }
 
-      throw Exception(errorData['error_description'] ?? errorData['error'] ?? 'API request failed');
+      throw Exception(errorMessage.isNotEmpty ? errorMessage : 'API request failed');
     }
   }
 
