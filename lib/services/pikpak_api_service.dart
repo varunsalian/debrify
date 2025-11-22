@@ -639,9 +639,11 @@ class PikPakApiService {
     try {
       print('PikPak: Listing files (parent: ${parentId ?? "root"})');
       // IMPORTANT: Adding with_audit=true to get media links populated for each file
+      // Adding filters to exclude trashed files (deleted files go to trash first in PikPak)
+      final filters = Uri.encodeComponent('{"trashed":{"eq":false}}');
       final response = await _makeAuthenticatedRequest(
         'GET',
-        '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true',
+        '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$filters',
         null,
       );
       final files = List<Map<String, dynamic>>.from(response['files'] ?? []);
@@ -672,10 +674,11 @@ class PikPakApiService {
         await StorageService.setPikPakCaptchaToken(captchaToken);
         print('PikPak: Retrying with fresh captcha token');
 
-        // Retry the request
+        // Retry the request with same filters
+        final retryFilters = Uri.encodeComponent('{"trashed":{"eq":false}}');
         final response = await _makeAuthenticatedRequest(
           'GET',
-          '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true',
+          '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$retryFilters',
           null,
         );
 
