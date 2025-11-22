@@ -1275,6 +1275,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Show loading dialog with progress
       String? fileId;
+      String? taskId;
       int progress = 0;
       bool cancelled = false;
       bool showingTimeoutOptions = false;
@@ -1282,8 +1283,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Add to PikPak first
       final addResult = await pikpak.addOfflineDownload(magnet);
+      print('PikPak: addOfflineDownload response: $addResult');
 
-      // Extract file ID
+      // Extract file ID and task ID
       if (addResult['file'] != null) {
         fileId = addResult['file']['id'];
       } else if (addResult['task'] != null) {
@@ -1292,9 +1294,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         fileId = addResult['id'];
       }
 
+      // Extract task ID for tracking download progress
+      if (addResult['task'] != null) {
+        taskId = addResult['task']['id'];
+        print('PikPak: Extracted task_id: $taskId');
+      }
+
       if (fileId == null) {
         throw Exception('Could not get file ID from PikPak');
       }
+
+      print('PikPak: Extracted file_id: $fileId, task_id: $taskId');
 
       if (!mounted) return;
 
@@ -1312,6 +1322,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 pollingStarted = true;
                 _pollPikPakStatus(
                   fileId!,
+                  taskId,
                   torrentName,
                   dialogContext,
                   setDialogState,
@@ -1451,6 +1462,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Future<void> _pollPikPakStatus(
     String fileId,
+    String? taskId,
     String torrentName,
     BuildContext dialogContext,
     StateSetter setDialogState,
@@ -1462,6 +1474,84 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final pikpak = PikPakApiService.instance;
     const pollInterval = Duration(seconds: 2);
     const timeoutShowOptions = Duration(seconds: 60);
+    const extraTimeFor100Percent = Duration(seconds: 10);
+
+    // Phase 1: Poll TASK status until progress >= 90% (if taskId available)
+    if (taskId != null) {
+      print('PikPak: Starting task-based polling for taskId: $taskId');
+      DateTime? reached90PercentTime;
+
+      while (!isCancelled()) {
+        await Future.delayed(pollInterval);
+        if (isCancelled() || !mounted) return;
+
+        // Check if we should show timeout options
+        final elapsed = DateTime.now().difference(startTime);
+        if (elapsed > timeoutShowOptions) {
+          setShowTimeoutOptions(true);
+          return;
+        }
+
+        try {
+          final taskData = await pikpak.getTaskStatus(taskId);
+          final taskPhase = taskData['phase'];
+          final taskProgress = taskData['progress'];
+
+          // Update progress from task
+          if (taskProgress != null) {
+            try {
+              final p = taskProgress is int ? taskProgress : int.parse(taskProgress.toString());
+              print('PikPak: Task progress: $p%, phase: $taskPhase');
+              onProgress(p);
+
+              // Check if task is complete
+              if (taskPhase == 'PHASE_TYPE_COMPLETE') {
+                print('PikPak: Task completed (100%), proceeding to file scanning');
+                break;
+              }
+
+              // Check if task failed
+              if (taskPhase == 'PHASE_TYPE_ERROR') {
+                if (!mounted) return;
+                Navigator.of(dialogContext).pop();
+                _showPikPakSnack('Download failed on PikPak', isError: true);
+                return;
+              }
+
+              // Track when we first reach 90%
+              if (p >= 90 && reached90PercentTime == null) {
+                print('PikPak: Reached 90%, giving ${extraTimeFor100Percent.inSeconds} extra seconds for completion');
+                reached90PercentTime = DateTime.now();
+              }
+
+              // If at 90%+, check if extra time has elapsed
+              if (reached90PercentTime != null) {
+                final timeSince90 = DateTime.now().difference(reached90PercentTime);
+                if (timeSince90 >= extraTimeFor100Percent) {
+                  print('PikPak: Extra time for 100% elapsed ($p%), proceeding with file scanning anyway');
+                  break;
+                }
+              }
+            } catch (_) {
+              print('PikPak: Could not parse task progress: $taskProgress');
+            }
+          }
+        } catch (e) {
+          print('PikPak: Task polling error: $e');
+          // If task API fails, fall back to file-based polling
+          print('PikPak: Falling back to file-based polling');
+          break;
+        }
+      }
+
+      if (isCancelled() || !mounted) return;
+    } else {
+      print('PikPak: No taskId available, using file-based polling');
+    }
+
+    // Phase 2: Now check file status and extract videos
+    // (Either task reached 90%+ or we fell back to file-based polling)
+    print('PikPak: Starting file status check for fileId: $fileId');
 
     while (!isCancelled()) {
       await Future.delayed(pollInterval);
@@ -1479,7 +1569,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final phase = fileData['phase'];
         final kind = fileData['kind'];
 
-        // Update progress
+        // Update progress from file (fallback if task polling didn't work)
         final progressValue = fileData['progress'];
         if (progressValue != null) {
           try {
@@ -1493,25 +1583,36 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           if (!mounted) return;
           Navigator.of(dialogContext).pop();
 
-          // Get all video files
+          // Get all video files (recursively from all folders)
           List<Map<String, dynamic>> videoFiles = [];
 
+          print('PikPak: Download complete. kind=$kind, fileId=$fileId');
+
           if (kind == 'drive#folder') {
-            // It's a folder (torrent pack), list contents
-            final result = await pikpak.listFiles(parentId: fileId);
-            videoFiles = result.files.where((f) {
-              final mimeType = f['mime_type'] ?? '';
-              return mimeType.startsWith('video/');
-            }).toList();
+            // It's a folder (torrent pack), recursively extract all videos
+            print('PikPak: It is a folder, starting recursive extraction...');
+            videoFiles = await _extractAllPikPakVideos(pikpak, fileId);
+            print('PikPak: Recursive extraction found ${videoFiles.length} videos');
           } else {
             // Single file
             final mimeType = fileData['mime_type'] ?? '';
+            print('PikPak: It is a single file. mimeType=$mimeType');
             if (mimeType.startsWith('video/')) {
               videoFiles = [fileData];
             }
           }
 
+          print('PikPak: Final video count: ${videoFiles.length}');
           if (!mounted) return;
+
+          // If no videos found, PikPak might still be processing the torrent files
+          if (videoFiles.isEmpty && kind == 'drive#folder') {
+            _showPikPakSnack(
+              'Files still processing on PikPak. Check PikPak Files later.',
+            );
+            return;
+          }
+
           await _showPikPakPostAddOptions(torrentName, fileId, videoFiles);
           return;
         }
@@ -1821,6 +1922,65 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         duration: Duration(seconds: isError ? 4 : 3),
       ),
     );
+  }
+
+  /// Recursively extract all video files from a PikPak folder and its subfolders
+  Future<List<Map<String, dynamic>>> _extractAllPikPakVideos(
+    PikPakApiService pikpak,
+    String folderId, {
+    int maxDepth = 5,
+    int currentDepth = 0,
+  }) async {
+    if (currentDepth >= maxDepth) {
+      print('PikPak: Max depth reached at $currentDepth');
+      return [];
+    }
+
+    final List<Map<String, dynamic>> videos = [];
+
+    try {
+      print('PikPak: Scanning folder $folderId (depth: $currentDepth)');
+      final result = await pikpak.listFiles(parentId: folderId);
+      final files = result.files;
+      print('PikPak: Found ${files.length} items in folder');
+
+      for (final file in files) {
+        final kind = file['kind'] ?? '';
+        final mimeType = file['mime_type'] ?? '';
+        final name = file['name'] ?? 'unknown';
+
+        print('PikPak: Item: $name, kind: $kind, mime: $mimeType');
+
+        if (kind == 'drive#folder') {
+          // Recursively scan subfolder
+          print('PikPak: Entering subfolder: $name');
+          final subVideos = await _extractAllPikPakVideos(
+            pikpak,
+            file['id'],
+            maxDepth: maxDepth,
+            currentDepth: currentDepth + 1,
+          );
+          print('PikPak: Found ${subVideos.length} videos in subfolder: $name');
+          videos.addAll(subVideos);
+        } else if (mimeType.startsWith('video/')) {
+          // It's a video file
+          print('PikPak: Found video: $name');
+          videos.add(file);
+        }
+      }
+    } catch (e) {
+      print('Error extracting PikPak videos from folder $folderId: $e');
+    }
+
+    // Sort videos by name for consistent ordering
+    videos.sort((a, b) {
+      final nameA = (a['name'] ?? '').toString().toLowerCase();
+      final nameB = (b['name'] ?? '').toString().toLowerCase();
+      return nameA.compareTo(nameB);
+    });
+
+    print('PikPak: Total videos found at depth $currentDepth: ${videos.length}');
+    return videos;
   }
 
   Future<void> _addToRealDebrid(

@@ -540,6 +540,53 @@ class PikPakApiService {
     }
   }
 
+  /// Get task status by task ID
+  /// Returns task details including progress (0-100) and phase
+  Future<Map<String, dynamic>> getTaskStatus(String taskId) async {
+    try {
+      print('PikPak: Getting task status for $taskId');
+      final response = await _makeAuthenticatedRequest(
+        'GET',
+        '$_driveBaseUrl/drive/v1/tasks/$taskId',
+        null,
+      );
+      print('PikPak: Task status retrieved - progress: ${response['progress']}, phase: ${response['phase']}');
+      return response;
+    } catch (e) {
+      // If captcha verification fails, get fresh token and retry
+      if (e.toString().contains('Verification code is invalid')) {
+        print('PikPak: Captcha token invalid for task status, requesting fresh token...');
+
+        final deviceId = await StorageService.getPikPakDeviceId();
+        if (deviceId == null) {
+          throw Exception('No device ID found. Please login first.');
+        }
+
+        final userId = await StorageService.getPikPakUserId();
+        final action = 'GET:/drive/v1/tasks';
+        final captchaToken = await _getCaptchaToken(
+          action: action,
+          deviceId: deviceId,
+          userId: userId,
+        );
+
+        await StorageService.setPikPakCaptchaToken(captchaToken);
+        print('PikPak: Retrying task status with fresh captcha token');
+
+        final response = await _makeAuthenticatedRequest(
+          'GET',
+          '$_driveBaseUrl/drive/v1/tasks/$taskId',
+          null,
+        );
+        print('PikPak: Task status retrieved (after retry) - progress: ${response['progress']}, phase: ${response['phase']}');
+        return response;
+      } else {
+        print('PikPak: Failed to get task status: $e');
+        rethrow;
+      }
+    }
+  }
+
   /// Move files to trash (recoverable)
   /// Returns true if successful
   Future<bool> batchTrashFiles(List<String> fileIds) async {
