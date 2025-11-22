@@ -937,6 +937,16 @@ class StorageService {
       }
       return '$provider|torbox:${torboxId.toLowerCase()}';
     }
+    // PikPak file ID based key
+    final dynamic pikpakFileId = item['pikpakFileId'];
+    if (pikpakFileId != null) {
+      return '$provider|pikpak:file:${pikpakFileId.toString().toLowerCase()}';
+    }
+    final dynamic pikpakFileIds = item['pikpakFileIds'];
+    if (pikpakFileIds is List && pikpakFileIds.isNotEmpty) {
+      final joined = pikpakFileIds.map((e) => e.toString()).join(',');
+      return '$provider|pikpak:files:${joined.toLowerCase()}';
+    }
     final String? rdId = (item['rdTorrentId'] as String?);
     if (rdId != null && rdId.isNotEmpty) {
       return '$provider|rd:${rdId.toLowerCase()}';

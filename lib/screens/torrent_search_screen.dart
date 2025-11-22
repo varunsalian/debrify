@@ -1775,19 +1775,31 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final pikpak = PikPakApiService.instance;
 
-    // Single video - play directly
+    // Single video - play with playlist entry for consistent resume key
     if (videoFiles.length == 1) {
       final file = videoFiles.first;
       try {
         final fullData = await pikpak.getFileDetails(file['id']);
         final url = pikpak.getStreamingUrl(fullData);
         if (url != null && mounted) {
+          final sizeBytes = int.tryParse(file['size']?.toString() ?? '0') ?? 0;
+          final title = file['name'] ?? torrentName;
           await VideoPlayerLauncher.push(
             context,
             VideoPlayerLaunchArgs(
               videoUrl: url,
-              title: file['name'] ?? torrentName,
-              subtitle: Formatters.formatFileSize(int.tryParse(file['size']?.toString() ?? '0') ?? 0),
+              title: title,
+              subtitle: Formatters.formatFileSize(sizeBytes),
+              playlist: [
+                PlaylistEntry(
+                  url: url,
+                  title: title,
+                  provider: 'pikpak',
+                  pikpakFileId: file['id'],
+                  sizeBytes: sizeBytes,
+                ),
+              ],
+              startIndex: 0,
             ),
           );
         }

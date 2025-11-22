@@ -13,6 +13,7 @@ import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
+import '../services/pikpak_api_service.dart';
 import 'video_player_screen.dart';
 
 class PlaylistScreen extends StatefulWidget {
@@ -87,6 +88,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ((item['provider'] as String?) ?? 'realdebrid').toLowerCase();
     if (provider == 'torbox') {
       await _playTorboxItem(item, fallbackTitle: title);
+      return;
+    }
+    if (provider == 'pikpak') {
+      await _playPikPakItem(item, fallbackTitle: title);
       return;
     }
     final String? rdTorrentId = item['rdTorrentId'] as String?;
@@ -525,6 +530,340 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
+  Future<void> _playPikPakItem(
+    Map<String, dynamic> item, {
+    required String fallbackTitle,
+  }) async {
+    final pikpak = PikPakApiService.instance;
+
+    // Check if PikPak is authenticated
+    if (!await pikpak.isAuthenticated()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to PikPak in Settings to play playlist items.')),
+      );
+      return;
+    }
+
+    final String kind = (item['kind'] as String?) ?? 'single';
+
+    // Handle SINGLE items
+    if (kind == 'single') {
+      final String? pikpakFileId = item['pikpakFileId'] as String?;
+      if (pikpakFileId == null || pikpakFileId.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Missing PikPak file information.')),
+        );
+        return;
+      }
+
+      try {
+        debugPrint('PlaylistScreen: Playing PikPak single file, fileId=$pikpakFileId');
+        final fileData = await pikpak.getFileDetails(pikpakFileId);
+        final url = pikpak.getStreamingUrl(fileData);
+
+        if (url == null || url.isEmpty) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to get PikPak streaming URL.')),
+          );
+          return;
+        }
+
+        final String resolvedTitle = (fileData['name'] as String?)?.isNotEmpty == true
+            ? fileData['name'] as String
+            : fallbackTitle;
+        final int? sizeBytes = _asInt(fileData['size']);
+        final String? subtitle =
+            sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
+
+        if (!mounted) return;
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: url,
+            title: resolvedTitle,
+            subtitle: subtitle,
+            playlist: [
+              PlaylistEntry(
+                url: url,
+                title: resolvedTitle,
+                provider: 'pikpak',
+                pikpakFileId: pikpakFileId,
+                sizeBytes: sizeBytes,
+              ),
+            ],
+            startIndex: 0,
+          ),
+        );
+      } catch (e) {
+        debugPrint('PlaylistScreen: PikPak single file playback error: $e');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to play PikPak file: ${_formatPikPakError(e)}')),
+        );
+      }
+      return;
+    }
+
+    // Handle COLLECTION items
+    final List<dynamic>? pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
+    if (pikpakFileIds == null || pikpakFileIds.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Missing PikPak files information.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    bool dialogOpen = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        dialogOpen = true;
+        return const AlertDialog(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Preparing playlist...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      debugPrint('PlaylistScreen: Playing PikPak collection with ${pikpakFileIds.length} files');
+
+      // Fetch file details for all files
+      final List<Map<String, dynamic>> videoFiles = [];
+      for (final fileId in pikpakFileIds) {
+        try {
+          final fileData = await pikpak.getFileDetails(fileId.toString());
+          final mimeType = (fileData['mime_type'] as String?) ?? '';
+          final fileName = (fileData['name'] as String?) ?? '';
+
+          // Filter to video files only
+          if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
+            videoFiles.add(fileData);
+          }
+        } catch (e) {
+          debugPrint('PlaylistScreen: Failed to get PikPak file details for $fileId: $e');
+          // Continue with other files
+        }
+      }
+
+      if (videoFiles.isEmpty) {
+        if (dialogOpen && mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+          dialogOpen = false;
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No playable PikPak video files found.')),
+        );
+        return;
+      }
+
+      // Build playlist entries with series parsing
+      final List<_PikPakPlaylistCandidate> candidates = [];
+      for (final file in videoFiles) {
+        final displayName = (file['name'] as String?) ?? 'Unknown';
+        final info = SeriesParser.parseFilename(displayName);
+        candidates.add(_PikPakPlaylistCandidate(
+          file: file,
+          info: info,
+          displayName: displayName,
+        ));
+      }
+
+      // Detect if it's a series collection
+      final filenames = candidates.map((c) => c.displayName).toList();
+      final bool isSeriesCollection =
+          candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+      // Sort entries
+      if (isSeriesCollection) {
+        candidates.sort((a, b) {
+          final aInfo = a.info;
+          final bInfo = b.info;
+
+          final aIsSeries =
+              aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
+          final bIsSeries =
+              bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
+
+          if (aIsSeries && bIsSeries) {
+            final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+            if (seasonCompare != 0) return seasonCompare;
+
+            final episodeCompare =
+                (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+            if (episodeCompare != 0) return episodeCompare;
+          } else if (aIsSeries != bIsSeries) {
+            return aIsSeries ? -1 : 1;
+          }
+
+          return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+        });
+      } else {
+        candidates.sort(
+          (a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+        );
+      }
+
+      // Find first episode to start from
+      int startIndex = 0;
+      if (isSeriesCollection) {
+        final seriesInfos = candidates.map((c) => c.info).toList();
+        startIndex = _findFirstEpisodeIndex(seriesInfos);
+      }
+      if (startIndex < 0 || startIndex >= candidates.length) {
+        startIndex = 0;
+      }
+
+      // Resolve URL for the first video only (lazy loading for rest)
+      String initialUrl = '';
+      try {
+        final firstFile = candidates[startIndex].file;
+        initialUrl = pikpak.getStreamingUrl(firstFile) ?? '';
+      } catch (e) {
+        debugPrint('PlaylistScreen: PikPak initial URL resolution failed: $e');
+      }
+
+      if (initialUrl.isEmpty) {
+        if (dialogOpen && mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+          dialogOpen = false;
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not get PikPak streaming URL.')),
+        );
+        return;
+      }
+
+      // Build PlaylistEntry list
+      final List<PlaylistEntry> playlistEntries = [];
+      for (int i = 0; i < candidates.length; i++) {
+        final candidate = candidates[i];
+        final seriesInfo = candidate.info;
+        final episodeLabel = _formatPikPakPlaylistTitle(
+          info: seriesInfo,
+          fallback: candidate.displayName,
+          isSeriesCollection: isSeriesCollection,
+        );
+        final combinedTitle = _composePikPakEntryTitle(
+          seriesTitle: seriesInfo.title,
+          episodeLabel: episodeLabel,
+          isSeriesCollection: isSeriesCollection,
+          fallback: candidate.displayName,
+        );
+
+        final fileId = candidate.file['id'] as String?;
+        final sizeBytes = _asInt(candidate.file['size']);
+
+        playlistEntries.add(PlaylistEntry(
+          url: i == startIndex ? initialUrl : '',
+          title: combinedTitle,
+          provider: 'pikpak',
+          pikpakFileId: fileId,
+          sizeBytes: sizeBytes,
+        ));
+      }
+
+      // Calculate subtitle
+      final totalBytes = candidates.fold<int>(
+        0,
+        (sum, c) => sum + (_asInt(c.file['size']) ?? 0),
+      );
+      final subtitle =
+          '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+      if (dialogOpen && mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        dialogOpen = false;
+      }
+
+      if (!mounted) return;
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: initialUrl,
+          title: fallbackTitle,
+          subtitle: subtitle,
+          playlist: playlistEntries,
+          startIndex: startIndex,
+        ),
+      );
+    } catch (e) {
+      debugPrint('PlaylistScreen: PikPak collection playback error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to prepare PikPak playlist: ${_formatPikPakError(e)}')),
+      );
+    } finally {
+      if (dialogOpen && mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  String _formatPikPakError(Object error) {
+    final raw = error.toString();
+    return raw.replaceFirst('Exception: ', '').trim();
+  }
+
+  String _formatPikPakPlaylistTitle({
+    required SeriesInfo info,
+    required String fallback,
+    required bool isSeriesCollection,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final season = info.season;
+    final episode = info.episode;
+    if (info.isSeries && season != null && episode != null) {
+      final seasonLabel = season.toString().padLeft(2, '0');
+      final episodeLabel = episode.toString().padLeft(2, '0');
+      final description = info.episodeTitle?.trim().isNotEmpty == true
+          ? info.episodeTitle!.trim()
+          : info.title?.trim().isNotEmpty == true
+              ? info.title!.trim()
+              : fallback;
+      return 'S${seasonLabel}E$episodeLabel · $description';
+    }
+
+    return fallback;
+  }
+
+  String _composePikPakEntryTitle({
+    required String? seriesTitle,
+    required String episodeLabel,
+    required bool isSeriesCollection,
+    required String fallback,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final cleanSeries = seriesTitle
+        ?.replaceAll(RegExp(r'[._\-]+$'), '')
+        .trim();
+    if (cleanSeries != null && cleanSeries.isNotEmpty) {
+      return '$cleanSeries $episodeLabel';
+    }
+
+    return fallback;
+  }
+
   int? _asInt(dynamic value) {
     if (value is int) return value;
     if (value is num) return value.toInt();
@@ -554,6 +893,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         return 'Real-Debrid';
       case 'torbox':
         return 'TorBox';
+      case 'pikpak':
+      case 'pik-pak':
+      case 'pik_pak':
+        return 'PikPak';
       case 'alldebrid':
       case 'all-debrid':
       case 'all_debrid':
@@ -1631,6 +1974,18 @@ class _TorboxPlaylistCandidate {
   final String displayName;
 
   _TorboxPlaylistCandidate({
+    required this.file,
+    required this.info,
+    required this.displayName,
+  });
+}
+
+class _PikPakPlaylistCandidate {
+  final Map<String, dynamic> file;
+  final SeriesInfo info;
+  final String displayName;
+
+  _PikPakPlaylistCandidate({
     required this.file,
     required this.info,
     required this.displayName,

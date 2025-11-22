@@ -1405,14 +1405,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 			_currentIndex >= 0 &&
 			_currentIndex < widget.playlist!.length) {
 			final entry = widget.playlist![_currentIndex];
+
+			// Check for Torbox-specific key
 			final torboxKey = _torboxResumeKeyForEntry(entry);
 			if (torboxKey != null) {
 				debugPrint('ResumeKey: using torbox key $torboxKey for index $_currentIndex');
 				return torboxKey;
 			}
+
+			// Check for PikPak-specific key
+			final pikpakKey = _pikpakResumeKeyForEntry(entry);
+			if (pikpakKey != null) {
+				debugPrint('ResumeKey: using pikpak key $pikpakKey for index $_currentIndex');
+				return pikpakKey;
+			}
 		}
 
-		// Use playlist-specific resume ID for non-Torbox items
+		// Use playlist-specific resume ID for other items
 		if (widget.playlist != null &&
 			widget.playlist!.isNotEmpty &&
 			_currentIndex >= 0 &&
@@ -1441,11 +1450,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 		return null;
 	}
 
+	String? _pikpakResumeKeyForEntry(PlaylistEntry entry) {
+		final provider = entry.provider?.toLowerCase();
+		if (provider == 'pikpak') {
+			final fileId = entry.pikpakFileId;
+			if (fileId != null && fileId.isNotEmpty) {
+				debugPrint('ResumeKey: pikpak entry detected fileId=$fileId');
+				return 'pikpak_$fileId';
+			}
+			debugPrint('ResumeKey: pikpak entry missing fileId');
+		}
+		return null;
+	}
+
 	String _resumeIdForEntry(PlaylistEntry entry) {
+		// Check for Torbox-specific key
 		final torboxKey = _torboxResumeKeyForEntry(entry);
 		if (torboxKey != null) {
 			return torboxKey;
 		}
+		// Check for PikPak-specific key
+		final pikpakKey = _pikpakResumeKeyForEntry(entry);
+		if (pikpakKey != null) {
+			return pikpakKey;
+		}
+		// Fallback to filename hash
 		final name = entry.title.isNotEmpty ? entry.title : widget.title;
 		return _generateFilenameHash(name);
 	}
