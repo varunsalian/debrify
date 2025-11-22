@@ -1,0 +1,18 @@
+# Global defaults for all torrent search engines
+# These values are applied to all engines unless overridden
+
+version: "1.0"
+
+# Default request configuration
+request:
+  timeout_seconds: 10
+  max_retries: 2
+  retry_delay_ms: 1000
+
+# Default TV mode configuration
+tv_mode:
+  keyword_threshold: 10
+  batch_size: 4
+  min_torrents: 5
+  max_keywords: 5
+  avoid_nsfw: true

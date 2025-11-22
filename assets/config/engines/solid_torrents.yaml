@@ -1,0 +1,90 @@
+# SolidTorrents Search Engine Configuration
+# Comprehensive torrent search via SolidTorrents API
+
+id: solid_torrents
+display_name: "SolidTorrents"
+icon: storage
+
+# Engine capabilities
+capabilities:
+  keyword_search: true
+  imdb_search: true
+  series_support: false
+
+# API endpoint (includes limit and sort params directly in URL)
+# Note: IMDB search uses keyword URL - searches for IMDB ID in torrent names
+api:
+  urls:
+    keyword: "https://r.jina.ai/https://solidtorrents.to/api/v1/search?limit=100&sort=seeders"
+    imdb: "https://r.jina.ai/https://solidtorrents.to/api/v1/search?limit=100&sort=seeders"
+
+# Query parameters
+query_params:
+  type: query_params
+  param_name: "q"
+
+# Pagination configuration - Page-based
+pagination:
+  type: page
+  page_size: 100  # API returns up to 100 per page with limit=100
+  max_pages: 5    # 5 pages × 100 = 500 max results
+  start_page: 1
+  page_param: "page"
+  has_more_field: "pagination.hasNext"
+
+# Response format - jina wrapped
+response_format:
+  type: jina_wrapped
+  extract_json: true
+  results_path: "results"
+
+# Pre-checks for valid response
+pre_checks:
+  - field: "success"
+    equals: true
+
+# Field mappings with transformations
+field_mappings:
+  infohash:
+    source: "infohash"
+    type: direct
+    conversion: uppercase
+  name:
+    source: "title"
+    type: direct
+  size_bytes:
+    source: "size"
+    type: direct
+  seeders:
+    source: "seeders"
+    type: direct
+  leechers:
+    source: "leechers"
+    type: direct
+  category:
+    type: template
+    template: "{category} > {subCategory}"
+
+# User-configurable settings
+settings:
+  - id: enabled
+    type: toggle
+    label: "Enable SolidTorrents"
+    default: true
+  - id: max_results
+    type: dropdown
+    label: "Maximum Results"
+    default: 100
+    options: [100, 200, 300, 400, 500]
+
+# TV mode specific configuration
+tv_mode:
+  enabled_default: false
+  limits:
+    small: 100
+    large: 100
+    quick_play: 200
+
+# Request override - longer timeout needed
+request:
+  timeout_seconds: 15

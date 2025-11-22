@@ -7,9 +7,10 @@ import '../models/torrent_filter_state.dart';
 import '../services/torrent_service.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
+import '../services/engine/settings_manager.dart';
+import '../services/engine/dynamic_engine.dart';
 import '../services/download_service.dart';
 import '../services/pikpak_api_service.dart';
-import '../services/torrentio_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/android_native_downloader.dart';
 import '../utils/formatters.dart';
@@ -38,24 +39,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  final FocusNode _csvTileFocusNode = FocusNode();
-  final FocusNode _pbTileFocusNode = FocusNode();
-  final FocusNode _ytsTileFocusNode = FocusNode();
-  final FocusNode _solidTorrentsTileFocusNode = FocusNode();
-  final FocusNode _csvSwitchFocusNode = FocusNode(skipTraversal: true);
-  final FocusNode _pbSwitchFocusNode = FocusNode(skipTraversal: true);
-  final FocusNode _ytsSwitchFocusNode = FocusNode(skipTraversal: true);
-  final FocusNode _solidTorrentsSwitchFocusNode = FocusNode(skipTraversal: true);
   final FocusNode _providerAccordionFocusNode = FocusNode();
   final FocusNode _advancedButtonFocusNode = FocusNode();
   final FocusNode _sortDirectionFocusNode = FocusNode();
   final FocusNode _filterButtonFocusNode = FocusNode();
   final FocusNode _clearFiltersButtonFocusNode = FocusNode();
   bool _searchFocused = false;
-  bool _csvTileFocused = false;
-  bool _pbTileFocused = false;
-  bool _ytsTileFocused = false;
-  bool _solidTorrentsTileFocused = false;
   bool _providerAccordionFocused = false;
   bool _advancedButtonFocused = false;
   bool _sortDirectionFocused = false;
@@ -83,11 +72,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final List<FocusNode> _cardFocusNodes = [];
   final List<bool> _cardFocusStates = [];
 
-  // Search engine toggles
-  bool _useTorrentsCsv = true;
-  bool _usePirateBay = true;
-  bool _useYts = true;
-  bool _useSolidTorrents = true;
+  // Search engine toggles - dynamic engine states
+  Map<String, bool> _engineStates = {};
+  List<DynamicEngine> _availableEngines = [];
+  final SettingsManager _settingsManager = SettingsManager();
+  // Dynamic focus nodes for engine toggles
+  final Map<String, FocusNode> _engineTileFocusNodes = {};
+  final Map<String, bool> _engineTileFocusStates = {};
   bool _showProvidersPanel = false;
   AdvancedSearchSelection? _activeAdvancedSelection;
 
@@ -296,18 +287,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Future<void> _loadDefaultSettings() async {
-    final defaultTorrentsCsv =
-        await StorageService.getDefaultTorrentsCsvEnabled();
-    final defaultPirateBay = await StorageService.getDefaultPirateBayEnabled();
-    final defaultYts = await StorageService.getDefaultYtsEnabled();
-    final defaultSolidTorrents = await StorageService.getDefaultSolidTorrentsEnabled();
+    // Load available engines dynamically from TorrentService
+    final engines = await TorrentService.getKeywordSearchEngines();
+    final Map<String, bool> states = {};
 
+    // Load enabled state for each engine from SettingsManager
+    for (final engine in engines) {
+      final engineId = engine.name;
+      final defaultEnabled = engine.settingsConfig.enabled?.defaultBool ?? true;
+      final isEnabled = await _settingsManager.getEnabled(engineId, defaultEnabled);
+      states[engineId] = isEnabled;
+    }
+
+    if (!mounted) return;
     setState(() {
-      _useTorrentsCsv = defaultTorrentsCsv;
-      _usePirateBay = defaultPirateBay;
-      _useYts = defaultYts;
-      _useSolidTorrents = defaultSolidTorrents;
+      _availableEngines = engines;
+      _engineStates = states;
     });
+
+    // Ensure focus nodes exist for all engines
+    _ensureEngineFocusNodes();
 
     // Focus the search field after a short delay to ensure UI is ready
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -315,6 +314,35 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _searchFocusNode.requestFocus();
       }
     });
+  }
+
+  void _ensureEngineFocusNodes() {
+    // Remove focus nodes for engines that no longer exist
+    final engineIds = _availableEngines.map((e) => e.name).toSet();
+    final keysToRemove = _engineTileFocusNodes.keys
+        .where((key) => !engineIds.contains(key))
+        .toList();
+    for (final key in keysToRemove) {
+      _engineTileFocusNodes[key]?.dispose();
+      _engineTileFocusNodes.remove(key);
+      _engineTileFocusStates.remove(key);
+    }
+
+    // Add focus nodes for new engines
+    for (final engine in _availableEngines) {
+      final engineId = engine.name;
+      if (!_engineTileFocusNodes.containsKey(engineId)) {
+        final node = FocusNode(debugLabel: 'engine-tile-$engineId');
+        node.addListener(() {
+          if (!mounted) return;
+          setState(() {
+            _engineTileFocusStates[engineId] = node.hasFocus;
+          });
+        });
+        _engineTileFocusNodes[engineId] = node;
+        _engineTileFocusStates[engineId] = false;
+      }
+    }
   }
 
   void _handleIntegrationChanged() {
@@ -341,12 +369,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
-    _csvTileFocusNode.dispose();
-    _pbTileFocusNode.dispose();
-    _ytsTileFocusNode.dispose();
-    _csvSwitchFocusNode.dispose();
-    _pbSwitchFocusNode.dispose();
-    _ytsSwitchFocusNode.dispose();
     _providerAccordionFocusNode.dispose();
     _advancedButtonFocusNode.dispose();
     _sortDirectionFocusNode.dispose();
@@ -355,6 +377,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
+    // Dispose dynamic engine focus nodes
+    for (final node in _engineTileFocusNodes.values) {
+      node.dispose();
+    }
+    _engineTileFocusNodes.clear();
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.handleRealDebridResult = null;
     MainPageBridge.handleTorboxResult = null;
@@ -404,51 +431,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     try {
-      final imdbOverride = _activeAdvancedSelection?.imdbId;
-      final result = await TorrentService.searchAllEngines(
-        query,
-        useTorrentsCsv: _useTorrentsCsv,
-        usePirateBay: _usePirateBay,
-        useYts: _useYts,
-        useSolidTorrents: _useSolidTorrents,
-        imdbIdOverride: (imdbOverride != null && imdbOverride.trim().isNotEmpty)
-            ? imdbOverride
-            : null,
-      );
-      final fetchedTorrents = (result['torrents'] as List<Torrent>).toList(
-        growable: false,
-      );
-      List<Torrent> torrentioResults = const [];
-      if (_activeAdvancedSelection != null) {
-        try {
-          torrentioResults = await TorrentioService.fetchStreams(
-            _activeAdvancedSelection!,
-          );
-        } catch (e) {
-          debugPrint('TorrentSearchScreen: Torrentio search failed: $e');
-          if (mounted) {
-            String errorMsg = e.toString().replaceAll('Exception: ', '');
-            if (errorMsg.contains('SocketException') || errorMsg.contains('Failed host lookup')) {
-              errorMsg = 'Network error. Please check your connection.';
-            } else if (errorMsg.contains('TimeoutException')) {
-              errorMsg = 'Torrentio search timed out. Please try again.';
-            } else if (errorMsg.length > 80) {
-              errorMsg = 'Torrentio search failed. Please try again.';
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Torrentio: $errorMsg'),
-                backgroundColor: const Color(0xFF1E293B),
-                behavior: SnackBarBehavior.floating,
-                margin: const EdgeInsets.all(16),
-              ),
-            );
-          }
-        }
+      final Map<String, dynamic> result;
+      final selection = _activeAdvancedSelection;
+
+      // Use IMDB search when we have an advanced selection, otherwise keyword search
+      if (selection != null && selection.imdbId.trim().isNotEmpty) {
+        debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}');
+        result = await TorrentService.searchByImdb(
+          selection.imdbId,
+          engineStates: _engineStates,
+          isMovie: !selection.isSeries,
+          season: selection.season,
+          episode: selection.episode,
+        );
+      } else {
+        result = await TorrentService.searchAllEngines(
+          query,
+          engineStates: _engineStates,
+        );
       }
-      final combinedTorrents = _mergeTorrentLists(
-        torrentioResults,
-        fetchedTorrents,
+
+      final combinedTorrents = (result['torrents'] as List<Torrent>).toList(
+        growable: false,
       );
       final Map<String, String> engineErrors = {};
       final rawErrors = result['engineErrors'];
@@ -528,11 +532,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final metadata = _buildTorrentMetadataMap(filteredTorrents);
 
       setState(() {
-        final counts = Map<String, int>.from(result['engineCounts'] as Map);
-        if (torrentioResults.isNotEmpty) {
-          counts['torrentio'] = torrentioResults.length;
-        }
-        _engineCounts = counts;
+        _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
         _engineErrors = engineErrors;
         _torboxCacheStatus = torboxCacheMap;
         _isLoading = false;
@@ -645,45 +645,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  void _setUseTorrentsCsv(bool value) {
-    if (_useTorrentsCsv == value) return;
+  void _setEngineEnabled(String engineId, bool value) {
+    if (_engineStates[engineId] == value) return;
     setState(() {
-      _useTorrentsCsv = value;
+      _engineStates[engineId] = value;
     });
-    StorageService.setDefaultTorrentsCsvEnabled(value);
-    if (_hasSearched && _searchController.text.trim().isNotEmpty) {
-      _searchTorrents(_searchController.text);
-    }
-  }
-
-  void _setUsePirateBay(bool value) {
-    if (_usePirateBay == value) return;
-    setState(() {
-      _usePirateBay = value;
-    });
-    StorageService.setDefaultPirateBayEnabled(value);
-    if (_hasSearched && _searchController.text.trim().isNotEmpty) {
-      _searchTorrents(_searchController.text);
-    }
-  }
-
-  void _setUseYts(bool value) {
-    if (_useYts == value) return;
-    setState(() {
-      _useYts = value;
-    });
-    StorageService.setDefaultYtsEnabled(value);
-    if (_hasSearched && _searchController.text.trim().isNotEmpty) {
-      _searchTorrents(_searchController.text);
-    }
-  }
-
-  void _setUseSolidTorrents(bool value) {
-    if (_useSolidTorrents == value) return;
-    setState(() {
-      _useSolidTorrents = value;
-    });
-    StorageService.setDefaultSolidTorrentsEnabled(value);
+    // Persist to SettingsManager
+    _settingsManager.setEnabled(engineId, value);
     if (_hasSearched && _searchController.text.trim().isNotEmpty) {
       _searchTorrents(_searchController.text);
     }
@@ -769,34 +737,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  List<Torrent> _mergeTorrentLists(
-    List<Torrent> preferred,
-    List<Torrent> secondary,
-  ) {
-    final Map<String, Torrent> deduped = {};
-    void add(List<Torrent> list) {
-      for (final torrent in list) {
-        final key = torrent.infohash.trim().toLowerCase();
-        if (key.isEmpty) continue;
-        deduped.putIfAbsent(key, () => torrent);
-      }
-    }
-
-    add(preferred);
-    add(secondary);
-    return deduped.values.toList(growable: false);
-  }
-
-  void _clearAdvancedSelection() {
-    if (_activeAdvancedSelection == null) return;
-    setState(() {
-      _activeAdvancedSelection = null;
-    });
-  }
 
   Widget _buildProviderSummaryText(BuildContext context) {
-    final enabledCount =
-        (_useTorrentsCsv ? 1 : 0) + (_usePirateBay ? 1 : 0) + (_useYts ? 1 : 0) + (_useSolidTorrents ? 1 : 0);
+    final enabledCount = _engineStates.values.where((enabled) => enabled).length;
     if (enabledCount == 0) {
       return Text(
         'No providers selected',
@@ -883,64 +826,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: [
-                      _buildProviderSwitch(
+                    children: _availableEngines.map((engine) {
+                      final engineId = engine.name;
+                      final focusNode = _engineTileFocusNodes[engineId];
+                      final isFocused = _engineTileFocusStates[engineId] ?? false;
+                      final isEnabled = _engineStates[engineId] ?? false;
+                      return _buildProviderSwitch(
                         context,
-                        label: 'Torrents CSV',
-                        value: _useTorrentsCsv,
-                        onToggle: _setUseTorrentsCsv,
-                        tileFocusNode: _csvTileFocusNode,
-                        switchFocusNode: _csvSwitchFocusNode,
-                        tileFocused: _csvTileFocused,
+                        label: engine.displayName,
+                        value: isEnabled,
+                        onToggle: (value) => _setEngineEnabled(engineId, value),
+                        tileFocusNode: focusNode ?? FocusNode(),
+                        tileFocused: isFocused,
                         onFocusChange: (visible) {
-                          if (_csvTileFocused != visible) {
-                            setState(() => _csvTileFocused = visible);
+                          if (_engineTileFocusStates[engineId] != visible) {
+                            setState(() => _engineTileFocusStates[engineId] = visible);
                           }
                         },
-                      ),
-                      _buildProviderSwitch(
-                        context,
-                        label: 'Pirate Bay',
-                        value: _usePirateBay,
-                        onToggle: _setUsePirateBay,
-                        tileFocusNode: _pbTileFocusNode,
-                        switchFocusNode: _pbSwitchFocusNode,
-                        tileFocused: _pbTileFocused,
-                        onFocusChange: (visible) {
-                          if (_pbTileFocused != visible) {
-                            setState(() => _pbTileFocused = visible);
-                          }
-                        },
-                      ),
-                      _buildProviderSwitch(
-                        context,
-                        label: 'YTS',
-                        value: _useYts,
-                        onToggle: _setUseYts,
-                        tileFocusNode: _ytsTileFocusNode,
-                        switchFocusNode: _ytsSwitchFocusNode,
-                        tileFocused: _ytsTileFocused,
-                        onFocusChange: (visible) {
-                          if (_ytsTileFocused != visible) {
-                            setState(() => _ytsTileFocused = visible);
-                          }
-                        },
-                      ),
-                      _buildProviderSwitch(
-                        context,
-                        label: 'SolidTorrents',
-                        value: _useSolidTorrents,
-                        onToggle: _setUseSolidTorrents,
-                        tileFocusNode: _solidTorrentsTileFocusNode,
-                        switchFocusNode: _solidTorrentsSwitchFocusNode,
-                        tileFocused: _solidTorrentsTileFocused,
-                        onFocusChange: (visible) {
-                          if (_solidTorrentsTileFocused != visible) {
-                            setState(() => _solidTorrentsTileFocused = visible);
-                          }
-                        },
-                      ),
-                    ],
+                      );
+                    }).toList(),
                   ),
                   const SizedBox(height: 12),
                   _buildAdvancedProviderHint(context),
@@ -995,7 +899,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     required bool value,
     required ValueChanged<bool> onToggle,
     required FocusNode tileFocusNode,
-    required FocusNode switchFocusNode,
     required bool tileFocused,
     required ValueChanged<bool> onFocusChange,
   }) {
