@@ -14,7 +14,8 @@ class PikPakApiService {
   static const String _webClientSecret = 'dbw2OtmVEeuUvIptb1Coygx';
   static const String _webClientVersion = '2.0.0';
   static const String _webPackageName = 'mypikpak.com';
-  static const String _webUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36';
+  // User-Agent should match Firefox (as used by rclone) for best compatibility
+  static const String _webUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0';
 
   // Web Platform Algorithms for Captcha Sign (from rclone)
   static const List<String> _webAlgorithms = [
@@ -227,6 +228,13 @@ class PikPakApiService {
   }
 
   /// Refresh access token using refresh token
+  ///
+  /// PikPak has deprecated client_secret for token refresh operations.
+  /// Sending client_secret triggers error_code 7: "permission_denied" with
+  /// message "[Danger], Please Do Not Save Your client_secret in browser".
+  ///
+  /// The fix follows rclone's approach: use standard OAuth2 token refresh
+  /// without client_secret, relying on device_id and captcha_token for auth.
   Future<bool> refreshAccessToken() async {
     try {
       if (_refreshToken == null) {
@@ -243,9 +251,47 @@ class PikPakApiService {
       final deviceId = await StorageService.getPikPakDeviceId();
       final captchaToken = await StorageService.getPikPakCaptchaToken();
 
-      final headers = {
+      // Try multiple refresh methods in order of preference
+      // Method 1: Standard OAuth2 refresh without client_secret (rclone approach)
+      // Method 2: Fallback with re-authentication using stored credentials
+
+      final success = await _tryRefreshWithoutClientSecret(deviceId, captchaToken);
+      if (success) {
+        return true;
+      }
+
+      // Method 2: Try re-authentication with stored credentials
+      print('PikPak: Standard refresh failed, attempting re-authentication...');
+      return await _tryReAuthenticate();
+    } catch (e) {
+      print('PikPak: Token refresh error: $e');
+      return false;
+    }
+  }
+
+  /// Attempt token refresh without client_secret (standard OAuth2 flow)
+  /// This is the primary method following rclone's implementation
+  Future<bool> _tryRefreshWithoutClientSecret(String? deviceId, String? captchaToken) async {
+    // Try JSON format first (rclone approach), then form-urlencoded (standard OAuth2)
+    if (await _tryRefreshJson(deviceId, captchaToken)) {
+      return true;
+    }
+
+    print('PikPak: JSON refresh failed, trying form-urlencoded format...');
+    return await _tryRefreshFormUrlEncoded(deviceId, captchaToken);
+  }
+
+  /// Try refresh with JSON body (rclone's approach)
+  Future<bool> _tryRefreshJson(String? deviceId, String? captchaToken) async {
+    try {
+      // Use the rclone endpoint (user.mypikpak.com) which doesn't require client_secret
+      const refreshUrl = 'https://user.mypikpak.com/v1/auth/token';
+
+      final headers = <String, String>{
         'Content-Type': 'application/json',
         'User-Agent': _webUserAgent,
+        'X-Client-ID': _webClientId,
+        'X-Client-Version': _webClientVersion,
       };
 
       if (deviceId != null && deviceId.isNotEmpty) {
@@ -256,62 +302,169 @@ class PikPakApiService {
         headers['X-Captcha-Token'] = captchaToken;
       }
 
-      headers['X-Client-ID'] = _webClientId;
-
+      // OAuth2 refresh WITHOUT client_secret - key fix for the permission_denied error
       final response = await http.post(
-        Uri.parse('$_authBaseUrl/v1/auth/token')
-            .replace(queryParameters: {'client_id': _webClientId}),
+        Uri.parse(refreshUrl).replace(queryParameters: {'client_id': _webClientId}),
         headers: headers,
         body: jsonEncode({
           'client_id': _webClientId,
-          'client_secret': _webClientSecret,
+          // NOTE: client_secret is intentionally NOT included
+          // PikPak rejects requests with client_secret with error_code 7
           'grant_type': 'refresh_token',
           'refresh_token': _refreshToken,
         }),
       );
 
+      print('PikPak: JSON refresh response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _accessToken = data['access_token'];
-        _refreshToken = data['refresh_token'];
-
-        // Save new tokens
-        await StorageService.setPikPakAccessToken(_accessToken!);
-        await StorageService.setPikPakRefreshToken(_refreshToken!);
-
-        print('PikPak: Token refreshed successfully');
-        return true;
+        return await _handleSuccessfulRefresh(response.body);
       } else {
-        print('PikPak: Token refresh failed: ${response.statusCode} - ${response.body}');
-
-        try {
-          final errorData = jsonDecode(response.body);
-          final errorCode = errorData['error_code'];
-          final errorType = errorData['error'] ?? '';
-          final errorDesc = errorData['error_description'] ?? '';
-
-          // Check for refresh token expired (invalid_grant) - requires full re-login
-          if (errorType == 'invalid_grant' ||
-              errorDesc.toString().toLowerCase().contains('refresh token') ||
-              errorDesc.toString().toLowerCase().contains('expired')) {
-            print('PikPak: Refresh token expired, clearing all auth data');
-            await logout();
-            return false;
-          }
-
-          // Check for captcha error (error code 4002)
-          if (errorCode == 4002 || errorCode == '4002') {
-            print('PikPak: Captcha token invalid, will need to re-login');
-            await StorageService.clearPikPakCaptchaToken();
-          }
-        } catch (e) {
-          // Ignore JSON parsing errors
-        }
-
+        _logRefreshError(response.body);
         return false;
       }
     } catch (e) {
-      print('PikPak: Token refresh error: $e');
+      print('PikPak: Error during JSON refresh: $e');
+      return false;
+    }
+  }
+
+  /// Try refresh with form-urlencoded body (standard OAuth2 format)
+  Future<bool> _tryRefreshFormUrlEncoded(String? deviceId, String? captchaToken) async {
+    try {
+      // Standard OAuth2 token endpoint
+      const refreshUrl = 'https://user.mypikpak.com/v1/auth/token';
+
+      final headers = <String, String>{
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': _webUserAgent,
+        'X-Client-ID': _webClientId,
+        'X-Client-Version': _webClientVersion,
+      };
+
+      if (deviceId != null && deviceId.isNotEmpty) {
+        headers['X-Device-ID'] = deviceId;
+      }
+
+      if (captchaToken != null && captchaToken.isNotEmpty) {
+        headers['X-Captcha-Token'] = captchaToken;
+      }
+
+      // Standard OAuth2 form-urlencoded body (without client_secret)
+      final body = {
+        'client_id': _webClientId,
+        'grant_type': 'refresh_token',
+        'refresh_token': _refreshToken!,
+      };
+
+      final response = await http.post(
+        Uri.parse(refreshUrl).replace(queryParameters: {'client_id': _webClientId}),
+        headers: headers,
+        body: body,
+      );
+
+      print('PikPak: Form-urlencoded refresh response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        return await _handleSuccessfulRefresh(response.body);
+      } else {
+        _logRefreshError(response.body);
+        return false;
+      }
+    } catch (e) {
+      print('PikPak: Error during form-urlencoded refresh: $e');
+      return false;
+    }
+  }
+
+  /// Handle successful token refresh response
+  Future<bool> _handleSuccessfulRefresh(String responseBody) async {
+    try {
+      final data = jsonDecode(responseBody);
+      _accessToken = data['access_token'];
+
+      // Update refresh token if a new one is provided
+      if (data['refresh_token'] != null) {
+        _refreshToken = data['refresh_token'];
+        await StorageService.setPikPakRefreshToken(_refreshToken!);
+      }
+
+      // Save new access token
+      await StorageService.setPikPakAccessToken(_accessToken!);
+
+      // Also update user ID if provided
+      if (data['sub'] != null) {
+        _userId = data['sub'];
+        await StorageService.setPikPakUserId(_userId!);
+      }
+
+      print('PikPak: Token refreshed successfully');
+      return true;
+    } catch (e) {
+      print('PikPak: Error parsing refresh response: $e');
+      return false;
+    }
+  }
+
+  /// Log refresh error details
+  void _logRefreshError(String responseBody) {
+    print('PikPak: Refresh failed: $responseBody');
+    try {
+      final errorData = jsonDecode(responseBody);
+      final errorCode = errorData['error_code'];
+      final errorType = errorData['error'] ?? '';
+      final errorDesc = errorData['error_description'] ?? '';
+      print('PikPak: Error code: $errorCode, type: $errorType, desc: $errorDesc');
+
+      // If invalid_grant, the refresh token itself is expired
+      if (errorType == 'invalid_grant' ||
+          errorDesc.toString().toLowerCase().contains('refresh token') ||
+          errorDesc.toString().toLowerCase().contains('invalid refresh')) {
+        print('PikPak: Refresh token is invalid/expired');
+      }
+
+      // If permission_denied (error code 7), this indicates client_secret issue
+      if (errorCode == 7 || errorCode == '7') {
+        print('PikPak: Permission denied - this should not happen without client_secret');
+      }
+
+      // If captcha error, clear it
+      if (errorCode == 4002 || errorCode == '4002') {
+        print('PikPak: Captcha token invalid during refresh');
+        StorageService.clearPikPakCaptchaToken();
+      }
+    } catch (e) {
+      // Ignore JSON parsing errors
+    }
+  }
+
+  /// Attempt to re-authenticate using stored credentials
+  /// This is a fallback when token refresh fails
+  Future<bool> _tryReAuthenticate() async {
+    try {
+      final email = await StorageService.getPikPakEmail();
+      final password = await StorageService.getPikPakPassword();
+
+      if (email == null || password == null) {
+        print('PikPak: No stored credentials for re-authentication');
+        // Clear all auth data since we can't recover
+        await logout();
+        return false;
+      }
+
+      print('PikPak: Re-authenticating with stored credentials...');
+      final success = await login(email, password);
+
+      if (success) {
+        print('PikPak: Re-authentication successful');
+        return true;
+      } else {
+        print('PikPak: Re-authentication failed');
+        // Don't clear credentials yet - user might need to re-login manually
+        return false;
+      }
+    } catch (e) {
+      print('PikPak: Re-authentication error: $e');
       return false;
     }
   }
