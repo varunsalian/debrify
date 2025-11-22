@@ -228,8 +228,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _torboxApiKey!.isNotEmpty;
   }
 
+  int get _enabledServicesCount {
+    int count = 0;
+    if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+      count++;
+    }
+    if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+      count++;
+    }
+    if (_pikpakEnabled) {
+      count++;
+    }
+    return count;
+  }
+
+  bool get _multipleServicesEnabled {
+    return _enabledServicesCount > 1;
+  }
+
   void _handleTorrentCardActivated(Torrent torrent, int index) {
-    if (_bothServicesEnabled) {
+    if (_multipleServicesEnabled) {
       // Show dialog to choose service
       _showServiceSelectionDialog(torrent, index);
     } else if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
@@ -238,17 +256,55 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     } else if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
       // Direct to Torbox
       _addToTorbox(torrent.infohash, torrent.name);
+    } else if (_pikpakEnabled) {
+      // Direct to PikPak
+      _sendToPikPak(torrent.infohash, torrent.name);
     } else {
       // No service configured
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please configure Real-Debrid or Torbox in Settings'),
+          content: Text('Please configure Real-Debrid, Torbox, or PikPak in Settings'),
         ),
       );
     }
   }
 
   Future<void> _showServiceSelectionDialog(Torrent torrent, int index) async {
+    final List<Widget> options = [];
+
+    // Add Torbox option if enabled
+    if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
+          title: const Text('Torbox', style: TextStyle(color: Colors.white)),
+          onTap: () => Navigator.of(context).pop('torbox'),
+        ),
+      );
+    }
+
+    // Add Real-Debrid option if enabled
+    if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
+          title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+          onTap: () => Navigator.of(context).pop('debrid'),
+        ),
+      );
+    }
+
+    // Add PikPak option if enabled
+    if (_pikpakEnabled) {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.folder_rounded, color: Color(0xFF0088CC)),
+          title: const Text('PikPak', style: TextStyle(color: Colors.white)),
+          onTap: () => Navigator.of(context).pop('pikpak'),
+        ),
+      );
+    }
+
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -263,18 +319,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
-              title: const Text('Torbox', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.of(context).pop('torbox'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
-              title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.of(context).pop('debrid'),
-            ),
-          ],
+          children: options,
         ),
       ),
     );
@@ -283,6 +328,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _addToTorbox(torrent.infohash, torrent.name);
     } else if (result == 'debrid') {
       _addToRealDebrid(torrent.infohash, torrent.name, index);
+    } else if (result == 'pikpak') {
+      _sendToPikPak(torrent.infohash, torrent.name);
     }
   }
 
