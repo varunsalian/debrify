@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/engine/remote_engine_manager.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/engine/config_loader.dart';
@@ -22,6 +23,12 @@ class _EngineImportPageState extends State<EngineImportPage> {
   List<ImportedEngineMetadata> _importedEngines = [];
   List<RemoteEngineInfo> _availableEngines = [];
 
+  // Focus nodes for TV/DPAD navigation
+  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'refresh-button');
+  final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'retry-button');
+  final Map<String, FocusNode> _importedEngineFocusNodes = {};
+  final Map<String, FocusNode> _availableEngineFocusNodes = {};
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +38,14 @@ class _EngineImportPageState extends State<EngineImportPage> {
   @override
   void dispose() {
     _remoteManager.dispose();
+    _refreshButtonFocusNode.dispose();
+    _retryButtonFocusNode.dispose();
+    for (final node in _importedEngineFocusNodes.values) {
+      node.dispose();
+    }
+    for (final node in _availableEngineFocusNodes.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -53,13 +68,48 @@ class _EngineImportPageState extends State<EngineImportPage> {
           .where((e) => !importedIds.contains(e.id))
           .toList();
 
+      // Clean up old focus nodes
+      for (final node in _importedEngineFocusNodes.values) {
+        node.dispose();
+      }
+      for (final node in _availableEngineFocusNodes.values) {
+        node.dispose();
+      }
+      _importedEngineFocusNodes.clear();
+      _availableEngineFocusNodes.clear();
+
+      // Create focus nodes for each engine
+      for (final engine in _importedEngines) {
+        _importedEngineFocusNodes[engine.id] = FocusNode(debugLabel: 'imported-${engine.id}');
+      }
+      for (final engine in _availableEngines) {
+        _availableEngineFocusNodes[engine.id] = FocusNode(debugLabel: 'available-${engine.id}');
+      }
+
       setState(() {
         _isLoading = false;
+      });
+
+      // Auto-focus first item after load
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          if (_importedEngines.isNotEmpty) {
+            _importedEngineFocusNodes[_importedEngines.first.id]?.requestFocus();
+          } else if (_availableEngines.isNotEmpty) {
+            _availableEngineFocusNodes[_availableEngines.first.id]?.requestFocus();
+          }
+        }
       });
     } catch (e) {
       setState(() {
         _isLoading = false;
         _error = e.toString();
+      });
+      // Auto-focus retry button on error
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _retryButtonFocusNode.requestFocus();
+        }
       });
     }
   }
@@ -209,13 +259,17 @@ class _EngineImportPageState extends State<EngineImportPage> {
         title: const Text('Import Engines'),
         actions: [
           IconButton(
+            focusNode: _refreshButtonFocusNode,
             onPressed: _isLoading ? null : _loadEngines,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
         ],
       ),
-      body: _buildBody(),
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: _buildBody(),
+      ),
     );
   }
 
@@ -259,10 +313,14 @@ class _EngineImportPageState extends State<EngineImportPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _loadEngines,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(0),
+                child: FilledButton.icon(
+                  focusNode: _retryButtonFocusNode,
+                  onPressed: _loadEngines,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
               ),
             ],
           ),
@@ -281,7 +339,8 @@ class _EngineImportPageState extends State<EngineImportPage> {
             Colors.green,
           ),
           const SizedBox(height: 8),
-          ..._importedEngines.map((engine) => _buildImportedEngineTile(engine)),
+          for (int i = 0; i < _importedEngines.length; i++)
+            _buildImportedEngineTile(_importedEngines[i], i),
           const SizedBox(height: 24),
         ],
 
@@ -293,7 +352,8 @@ class _EngineImportPageState extends State<EngineImportPage> {
             Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(height: 8),
-          ..._availableEngines.map((engine) => _buildAvailableEngineTile(engine)),
+          for (int i = 0; i < _availableEngines.length; i++)
+            _buildAvailableEngineTile(_availableEngines[i], i),
         ],
 
         // Empty state
@@ -361,59 +421,114 @@ class _EngineImportPageState extends State<EngineImportPage> {
     );
   }
 
-  Widget _buildImportedEngineTile(ImportedEngineMetadata engine) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.green.withValues(alpha: 0.1),
-          child: Icon(
-            _getIconForEngine(engine.icon),
-            color: Colors.green,
+  Widget _buildImportedEngineTile(ImportedEngineMetadata engine, int index) {
+    final focusNode = _importedEngineFocusNodes[engine.id];
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(index.toDouble()),
+      child: _TvFocusableCard(
+        focusNode: focusNode,
+        onPressed: () => _deleteEngine(engine),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.green.withValues(alpha: 0.1),
+                child: Icon(
+                  _getIconForEngine(engine.icon),
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      engine.displayName,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Imported ${_formatDate(engine.importedAt)}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.delete_outline,
+                color: Colors.red.withValues(alpha: 0.7),
+              ),
+            ],
           ),
-        ),
-        title: Text(engine.displayName),
-        subtitle: Text(
-          'Imported ${_formatDate(engine.importedAt)}',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 12,
-          ),
-        ),
-        trailing: IconButton(
-          onPressed: () => _deleteEngine(engine),
-          icon: const Icon(Icons.delete_outline),
-          color: Colors.red,
-          tooltip: 'Delete',
         ),
       ),
     );
   }
 
-  Widget _buildAvailableEngineTile(RemoteEngineInfo engine) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          child: Icon(
-            _getIconForEngine(engine.icon),
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
-          ),
-        ),
-        title: Text(engine.displayName),
-        subtitle: engine.description != null
-            ? Text(
-                engine.description!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 12,
+  Widget _buildAvailableEngineTile(RemoteEngineInfo engine, int index) {
+    final focusNode = _availableEngineFocusNodes[engine.id];
+    // Offset by imported engines count for proper traversal order
+    final orderIndex = _importedEngines.length + index;
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(orderIndex.toDouble()),
+      child: _TvFocusableCard(
+        focusNode: focusNode,
+        onPressed: () => _importEngine(engine),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                child: Icon(
+                  _getIconForEngine(engine.icon),
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
                 ),
-              )
-            : null,
-        trailing: FilledButton.tonal(
-          onPressed: () => _importEngine(engine),
-          child: const Text('Import'),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      engine.displayName,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    if (engine.description != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        engine.description!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Import',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -432,5 +547,107 @@ class _EngineImportPageState extends State<EngineImportPage> {
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }
+  }
+}
+
+/// A TV-friendly focusable card widget with visual focus indication
+class _TvFocusableCard extends StatefulWidget {
+  const _TvFocusableCard({
+    required this.focusNode,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final FocusNode? focusNode;
+  final VoidCallback onPressed;
+  final Widget child;
+
+  @override
+  State<_TvFocusableCard> createState() => _TvFocusableCardState();
+}
+
+class _TvFocusableCardState extends State<_TvFocusableCard> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_handleFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_handleFocusChange);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_TvFocusableCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_handleFocusChange);
+      widget.focusNode?.addListener(_handleFocusChange);
+    }
+  }
+
+  void _handleFocusChange() {
+    if (mounted) {
+      setState(() {
+        _isFocused = widget.focusNode?.hasFocus ?? false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              HapticFeedback.lightImpact();
+              widget.onPressed();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          focusNode: widget.focusNode,
+          child: GestureDetector(
+            onTap: widget.onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _isFocused
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
+                  width: 2,
+                ),
+                boxShadow: _isFocused
+                    ? [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: widget.child,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

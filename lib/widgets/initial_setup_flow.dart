@@ -133,6 +133,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final FocusNode _skipForNowButtonFocusNode = FocusNode(debugLabel: 'skip-for-now');
   final FocusNode _connectButtonFocusNode = FocusNode(debugLabel: 'connect-button');
 
+  // Engine selection focus nodes
+  final FocusNode _engineSkipButtonFocusNode = FocusNode(debugLabel: 'engine-skip-button');
+  final FocusNode _engineImportButtonFocusNode = FocusNode(debugLabel: 'engine-import-button');
+  final FocusNode _engineRetryButtonFocusNode = FocusNode(debugLabel: 'engine-retry-button');
+  final Map<String, FocusNode> _engineItemFocusNodes = {};
+
   // DPAD shortcuts for arrow key navigation
   static const Map<ShortcutActivator, Intent> _dpadShortcuts = {
     SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(TraversalDirection.down),
@@ -180,6 +186,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _textFieldFocusNode.dispose();
     _skipForNowButtonFocusNode.dispose();
     _connectButtonFocusNode.dispose();
+    _engineSkipButtonFocusNode.dispose();
+    _engineImportButtonFocusNode.dispose();
+    _engineRetryButtonFocusNode.dispose();
+    for (final node in _engineItemFocusNodes.values) {
+      node.dispose();
+    }
+    _engineItemFocusNodes.clear();
     _remoteEngineManager.dispose();
     super.dispose();
   }
@@ -698,18 +711,22 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     style: const TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                   const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _isLoadingEngines = true;
-                        _engineError = null;
-                      });
-                      _loadAvailableEngines();
-                    },
-                    icon: const Icon(Icons.refresh, color: Colors.white),
-                    label: const Text('Retry', style: TextStyle(color: Colors.white)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white30),
+                  FocusTraversalOrder(
+                    order: const NumericFocusOrder(1),
+                    child: OutlinedButton.icon(
+                      focusNode: _engineRetryButtonFocusNode,
+                      onPressed: () {
+                        setState(() {
+                          _isLoadingEngines = true;
+                          _engineError = null;
+                        });
+                        _loadAvailableEngines();
+                      },
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      label: const Text('Retry', style: TextStyle(color: Colors.white)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.white30),
+                      ),
                     ),
                   ),
                 ],
@@ -725,12 +742,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               itemBuilder: (context, index) {
                 final engine = _availableEngines[index];
                 final isSelected = _selectedEngineIds.contains(engine.id);
+                final focusNode = _engineItemFocusNodes[engine.id];
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () {
+                  child: FocusTraversalOrder(
+                    order: NumericFocusOrder(index.toDouble()),
+                    child: _FocusableEngineItem(
+                      focusNode: focusNode,
+                      isSelected: isSelected,
+                      onToggle: () {
                         setState(() {
                           if (isSelected) {
                             _selectedEngineIds.remove(engine.id);
@@ -739,33 +759,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                           }
                         });
                       },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: isSelected
-                              ? Colors.white.withValues(alpha: 0.15)
-                              : Colors.white.withValues(alpha: 0.05),
-                          border: Border.all(
-                            color: isSelected
-                                ? Colors.white.withValues(alpha: 0.4)
-                                : Colors.white.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Checkbox(
+                      child: Row(
+                        children: [
+                          IgnorePointer(
+                            child: Checkbox(
                               value: isSelected,
-                              onChanged: (value) {
-                                setState(() {
-                                  if (value == true) {
-                                    _selectedEngineIds.add(engine.id);
-                                  } else {
-                                    _selectedEngineIds.remove(engine.id);
-                                  }
-                                });
-                              },
+                              onChanged: null,
                               fillColor: WidgetStateProperty.resolveWith((states) {
                                 if (states.contains(WidgetState.selected)) {
                                   return Colors.white;
@@ -775,24 +774,24 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                               checkColor: const Color(0xFF1F2937),
                               side: const BorderSide(color: Colors.white54),
                             ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              _getEngineIcon(engine.icon),
-                              color: Colors.white70,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                engine.displayName,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            _getEngineIcon(engine.icon),
+                            color: Colors.white70,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              engine.displayName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -803,28 +802,36 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         const SizedBox(height: 24),
         Row(
           children: [
-            TextButton(
-              onPressed: _isProcessing
-                  ? null
-                  : () => Navigator.of(context).pop(_hasConfigured),
-              child: const Text('Skip for now'),
+            FocusTraversalOrder(
+              order: NumericFocusOrder(_availableEngines.length.toDouble() + 1),
+              child: TextButton(
+                focusNode: _engineSkipButtonFocusNode,
+                onPressed: _isProcessing
+                    ? null
+                    : () => Navigator.of(context).pop(_hasConfigured),
+                child: const Text('Skip for now'),
+              ),
             ),
             const Spacer(),
-            FilledButton(
-              onPressed: _isProcessing || _isLoadingEngines
-                  ? null
-                  : _importSelectedEngines,
-              child: _isProcessing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      _selectedEngineIds.isEmpty
-                          ? 'Finish'
-                          : 'Import ${_selectedEngineIds.length} Engine${_selectedEngineIds.length == 1 ? '' : 's'}',
-                    ),
+            FocusTraversalOrder(
+              order: NumericFocusOrder(_availableEngines.length.toDouble() + 2),
+              child: FilledButton(
+                focusNode: _engineImportButtonFocusNode,
+                onPressed: _isProcessing || _isLoadingEngines
+                    ? null
+                    : _importSelectedEngines,
+                child: _isProcessing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        _selectedEngineIds.isEmpty
+                            ? 'Finish'
+                            : 'Import ${_selectedEngineIds.length} Engine${_selectedEngineIds.length == 1 ? '' : 's'}',
+                      ),
+              ),
             ),
           ],
         ),
@@ -969,11 +976,29 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     try {
       final engines = await _remoteEngineManager.fetchAvailableEngines();
       if (mounted) {
+        // Clean up old focus nodes
+        for (final node in _engineItemFocusNodes.values) {
+          node.dispose();
+        }
+        _engineItemFocusNodes.clear();
+
+        // Create focus nodes for each engine
+        for (final engine in engines) {
+          _engineItemFocusNodes[engine.id] = FocusNode(debugLabel: 'engine-${engine.id}');
+        }
+
         setState(() {
           _availableEngines = engines;
           // Auto-select all engines by default
           _selectedEngineIds = engines.map((e) => e.id).toSet();
           _isLoadingEngines = false;
+        });
+
+        // Auto-focus the import button after a short delay
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _engineImportButtonFocusNode.requestFocus();
+          }
         });
       }
     } catch (e) {
@@ -981,6 +1006,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         setState(() {
           _isLoadingEngines = false;
           _engineError = e.toString();
+        });
+        // Focus retry button on error
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _engineRetryButtonFocusNode.requestFocus();
+          }
         });
       }
     }
@@ -1118,6 +1149,114 @@ class _FocusableChipState extends State<_FocusableChip> {
                       : widget.selected
                           ? Colors.white.withValues(alpha: 0.45)
                           : Colors.white.withValues(alpha: 0.15),
+                  width: _isFocused ? 2 : 1,
+                ),
+                boxShadow: _isFocused
+                    ? <BoxShadow>[
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: widget.child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A TV-friendly engine item widget that shows clear focus indication
+class _FocusableEngineItem extends StatefulWidget {
+  const _FocusableEngineItem({
+    required this.focusNode,
+    required this.isSelected,
+    required this.onToggle,
+    required this.child,
+  });
+
+  final FocusNode? focusNode;
+  final bool isSelected;
+  final VoidCallback onToggle;
+  final Widget child;
+
+  @override
+  State<_FocusableEngineItem> createState() => _FocusableEngineItemState();
+}
+
+class _FocusableEngineItemState extends State<_FocusableEngineItem> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_handleFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_handleFocusChange);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_FocusableEngineItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_handleFocusChange);
+      widget.focusNode?.addListener(_handleFocusChange);
+    }
+  }
+
+  void _handleFocusChange() {
+    if (mounted) {
+      setState(() {
+        _isFocused = widget.focusNode?.hasFocus ?? false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              HapticFeedback.lightImpact();
+              widget.onToggle();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          focusNode: widget.focusNode,
+          child: GestureDetector(
+            onTap: widget.onToggle,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: widget.isSelected
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.white.withValues(alpha: 0.05),
+                border: Border.all(
+                  color: _isFocused
+                      ? Colors.white
+                      : widget.isSelected
+                          ? Colors.white.withValues(alpha: 0.4)
+                          : Colors.white.withValues(alpha: 0.1),
                   width: _isFocused ? 2 : 1,
                 ),
                 boxShadow: _isFocused

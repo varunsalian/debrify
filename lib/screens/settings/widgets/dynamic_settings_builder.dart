@@ -115,11 +115,14 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
       return _buildNoEnginesMessage();
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: enginesWithSettings
-          .map((config) => _buildEngineCard(config))
-          .toList(),
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: enginesWithSettings
+            .map((config) => _buildEngineCard(config))
+            .toList(),
+      ),
     );
   }
 
@@ -738,35 +741,38 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Global TV Settings Card
-        _buildGlobalTvSettings(),
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Global TV Settings Card
+          _buildGlobalTvSettings(),
 
-        const SizedBox(height: 24),
+          const SizedBox(height: 24),
 
-        // Per-engine TV settings
-        if (_tvEnabledEngines.isNotEmpty) ...[
-          Text(
-            'Engine TV Mode Settings',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Configure TV mode limits for each search engine',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
-          const SizedBox(height: 16),
-          ..._tvEnabledEngines
-              .map((config) => _buildEngineTvCard(config)),
-        ] else
-          _buildNoTvEnginesMessage(),
-      ],
+          // Per-engine TV settings
+          if (_tvEnabledEngines.isNotEmpty) ...[
+            Text(
+              'Engine TV Mode Settings',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Configure TV mode limits for each search engine',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            ..._tvEnabledEngines
+                .map((config) => _buildEngineTvCard(config)),
+          ] else
+            _buildNoTvEnginesMessage(),
+        ],
+      ),
     );
   }
 
