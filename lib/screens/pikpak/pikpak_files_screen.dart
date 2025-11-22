@@ -330,6 +330,89 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _showSnackBar('Files refreshed', isError: false);
   }
 
+  void _showDeleteDialog(Map<String, dynamic> file) {
+    final fileName = file['name'] ?? 'this item';
+    final fileId = file['id'] as String?;
+
+    if (fileId == null) {
+      _showSnackBar('Cannot delete: Invalid file ID');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete File'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('What would you like to do with "$fileName"?'),
+            const SizedBox(height: 16),
+            const Text(
+              'Move to Trash: File can be recovered later\nDelete Permanently: Cannot be undone',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            autofocus: true, // Safe default for TV/DPAD
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteFile(fileId, fileName, permanent: false);
+            },
+            child: const Text('Move to Trash'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteFile(fileId, fileName, permanent: true);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteFile(String fileId, String fileName, {required bool permanent}) async {
+    try {
+      _showSnackBar(
+        permanent ? 'Deleting permanently...' : 'Moving to trash...',
+        isError: false,
+      );
+
+      if (permanent) {
+        await PikPakApiService.instance.batchDeleteFiles([fileId]);
+      } else {
+        await PikPakApiService.instance.batchTrashFiles([fileId]);
+      }
+
+      if (!mounted) return;
+
+      // Remove the file from the local list
+      setState(() {
+        _files.removeWhere((f) => f['id'] == fileId);
+      });
+
+      _showSnackBar(
+        permanent
+            ? '"$fileName" deleted permanently'
+            : '"$fileName" moved to trash',
+        isError: false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed to delete: $e');
+    }
+  }
+
   void _showSnackBar(String message, {bool isError = true, Duration? duration}) {
     if (!mounted) return;
 
@@ -712,6 +795,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                       label: const Text('Open'),
                     ),
                   ),
+                  const SizedBox(width: 8),
                 ] else if (isVideo && isComplete) ...[
                   Expanded(
                     child: FilledButton.icon(
@@ -720,7 +804,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                       label: const Text('Play'),
                     ),
                   ),
+                  const SizedBox(width: 8),
                 ],
+                // Delete button for all files/folders
+                OutlinedButton.icon(
+                  onPressed: () => _showDeleteDialog(file),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Delete'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade400,
+                  ),
+                ),
               ],
             ),
           ],

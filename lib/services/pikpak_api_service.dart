@@ -540,6 +540,110 @@ class PikPakApiService {
     }
   }
 
+  /// Move files to trash (recoverable)
+  /// Returns true if successful
+  Future<bool> batchTrashFiles(List<String> fileIds) async {
+    if (fileIds.isEmpty) return true;
+
+    try {
+      print('PikPak: Moving ${fileIds.length} file(s) to trash...');
+
+      await _makeAuthenticatedRequest(
+        'POST',
+        '$_driveBaseUrl/drive/v1/files:batchTrash',
+        {'ids': fileIds},
+      );
+
+      print('PikPak: Files moved to trash successfully');
+      return true;
+    } catch (e) {
+      // If captcha verification fails, get fresh token and retry
+      if (e.toString().contains('Verification code is invalid')) {
+        print('PikPak: Captcha token invalid, requesting fresh token...');
+
+        final deviceId = await StorageService.getPikPakDeviceId();
+        if (deviceId == null) {
+          throw Exception('No device ID found. Please login first.');
+        }
+
+        final userId = await StorageService.getPikPakUserId();
+        final action = 'POST:/drive/v1/files:batchTrash';
+        final captchaToken = await _getCaptchaToken(
+          action: action,
+          deviceId: deviceId,
+          userId: userId,
+        );
+
+        await StorageService.setPikPakCaptchaToken(captchaToken);
+        print('PikPak: Retrying with fresh captcha token');
+
+        await _makeAuthenticatedRequest(
+          'POST',
+          '$_driveBaseUrl/drive/v1/files:batchTrash',
+          {'ids': fileIds},
+        );
+
+        print('PikPak: Files moved to trash successfully (after retry)');
+        return true;
+      } else {
+        print('PikPak: Failed to move files to trash: $e');
+        rethrow;
+      }
+    }
+  }
+
+  /// Permanently delete files (not recoverable)
+  /// Returns true if successful
+  Future<bool> batchDeleteFiles(List<String> fileIds) async {
+    if (fileIds.isEmpty) return true;
+
+    try {
+      print('PikPak: Permanently deleting ${fileIds.length} file(s)...');
+
+      await _makeAuthenticatedRequest(
+        'POST',
+        '$_driveBaseUrl/drive/v1/files:batchDelete',
+        {'ids': fileIds},
+      );
+
+      print('PikPak: Files deleted permanently');
+      return true;
+    } catch (e) {
+      // If captcha verification fails, get fresh token and retry
+      if (e.toString().contains('Verification code is invalid')) {
+        print('PikPak: Captcha token invalid, requesting fresh token...');
+
+        final deviceId = await StorageService.getPikPakDeviceId();
+        if (deviceId == null) {
+          throw Exception('No device ID found. Please login first.');
+        }
+
+        final userId = await StorageService.getPikPakUserId();
+        final action = 'POST:/drive/v1/files:batchDelete';
+        final captchaToken = await _getCaptchaToken(
+          action: action,
+          deviceId: deviceId,
+          userId: userId,
+        );
+
+        await StorageService.setPikPakCaptchaToken(captchaToken);
+        print('PikPak: Retrying with fresh captcha token');
+
+        await _makeAuthenticatedRequest(
+          'POST',
+          '$_driveBaseUrl/drive/v1/files:batchDelete',
+          {'ids': fileIds},
+        );
+
+        print('PikPak: Files deleted permanently (after retry)');
+        return true;
+      } else {
+        print('PikPak: Failed to delete files: $e');
+        rethrow;
+      }
+    }
+  }
+
   /// Check if user is authenticated
   Future<bool> isAuthenticated() async {
     final accessToken = await StorageService.getPikPakAccessToken();
