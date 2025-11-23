@@ -134,6 +134,12 @@ class VideoPlayerLauncher {
         resolveEntry: (entry) => _resolveEntryUrl(entry, args),
       );
 
+      // Generate a unique session ID for this playback launch
+      // This prevents stale metadata from previous sessions being sent to new sessions
+      final sessionId = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
+      AndroidTvPlayerBridge.setCurrentSessionId(sessionId);
+      debugPrint('VideoPlayerLauncher: Generated session ID: $sessionId');
+
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: result.payload.toMap(),
         onProgress: (progress) => _handleProgressUpdate(result.payload, progress),
@@ -146,13 +152,117 @@ class VideoPlayerLauncher {
 
       if (!launched) {
         resolver.dispose();
+        return false;
       }
 
-      return launched;
+      // Async TVMaze metadata fetch - don't block initial playback
+      // This mirrors mobile video_player_screen.dart behavior
+      // Pass sessionId to ensure stale metadata from previous sessions is discarded
+      _fetchAndPushMetadataAsync(result.payload, result.entries, sessionId);
+
+      return true;
     } catch (e) {
       debugPrint('VideoPlayerLauncher: Android TV launch failed: $e');
       return false;
     }
+  }
+
+  /// Fetch TVMaze metadata asynchronously and push updates to native player
+  /// This doesn't block initial playback - updates are pushed when available
+  /// The sessionId parameter ensures stale metadata from previous sessions is discarded
+  static void _fetchAndPushMetadataAsync(
+    _AndroidTvPlaybackPayload payload,
+    List<_LauncherEntry> entries,
+    String sessionId,
+  ) {
+    debugPrint('TVMazeAsync: _fetchAndPushMetadataAsync CALLED');
+    debugPrint('TVMazeAsync: contentType=${payload.contentType}, title=${payload.title}');
+    debugPrint('TVMazeAsync: entries.length=${entries.length}');
+
+    if (payload.contentType != _PlaybackContentType.series) {
+      debugPrint('TVMazeAsync: SKIPPED - not series content (contentType=${payload.contentType})');
+      return;
+    }
+
+    // Create SeriesPlaylist for TVMaze lookup
+    final playlistEntries = entries.map((e) => e.entry).toList();
+    if (playlistEntries.length < 2) {
+      debugPrint('TVMazeAsync: SKIPPED - less than 2 entries (${playlistEntries.length})');
+      return;
+    }
+
+    debugPrint('TVMazeAsync: Starting background fetch...');
+
+    // Run in background - don't await
+    () async {
+      try {
+        debugPrint('TVMazeAsync: Creating SeriesPlaylist from ${playlistEntries.length} entries');
+        final seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
+          playlistEntries,
+          collectionTitle: payload.title,
+        );
+
+        debugPrint('TVMazeAsync: SeriesPlaylist created - isSeries=${seriesPlaylist.isSeries}, seriesTitle=${seriesPlaylist.seriesTitle}');
+        debugPrint('TVMazeAsync: allEpisodes.length=${seriesPlaylist.allEpisodes.length}');
+
+        if (!seriesPlaylist.isSeries) {
+          debugPrint('TVMazeAsync: SKIPPED - SeriesPlaylist says not a series');
+          return;
+        }
+
+        debugPrint('TVMazeAsync: Calling fetchEpisodeInfo()...');
+        await seriesPlaylist.fetchEpisodeInfo();
+        debugPrint('TVMazeAsync: fetchEpisodeInfo() completed');
+
+        // Build metadata updates for each item
+        final metadataUpdates = <Map<String, dynamic>>[];
+        int episodesWithInfo = 0;
+        int episodesWithoutInfo = 0;
+        for (final episode in seriesPlaylist.allEpisodes) {
+          if (episode.episodeInfo == null) {
+            episodesWithoutInfo++;
+            continue;
+          }
+          episodesWithInfo++;
+
+          final info = episode.episodeInfo!;
+          metadataUpdates.add({
+            'originalIndex': episode.originalIndex,
+            'title': info.title,
+            'description': info.plot,
+            'artwork': info.poster,
+            'rating': info.rating,
+          });
+        }
+
+        debugPrint('TVMazeAsync: Episodes with info=$episodesWithInfo, without info=$episodesWithoutInfo');
+
+        if (metadataUpdates.isEmpty) {
+          debugPrint('TVMazeAsync: SKIPPED push - metadataUpdates is empty');
+          return;
+        }
+
+        // Check if this session is still current before sending metadata
+        // This prevents stale metadata from Series A being sent to Series B
+        if (!AndroidTvPlayerBridge.isCurrentSession(sessionId)) {
+          debugPrint('TVMazeAsync: DISCARDED - session $sessionId is no longer current (current: ${AndroidTvPlayerBridge.currentSessionId})');
+          return;
+        }
+
+        // Store pending updates for fallback (in case broadcast arrives before receiver is registered)
+        // AND push directly to native player
+        debugPrint('TVMazeAsync: Storing ${metadataUpdates.length} pending metadata updates for fallback');
+        AndroidTvPlayerBridge.storePendingMetadataUpdates(metadataUpdates, sessionId: sessionId);
+
+        // Push metadata updates directly to native player (don't wait for request)
+        debugPrint('TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates to native player');
+        await AndroidTvPlayerBridge.updateEpisodeMetadata(metadataUpdates, sessionId: sessionId);
+        debugPrint('TVMazeAsync: Metadata push complete');
+      } catch (e, stack) {
+        debugPrint('TVMazeAsync: ERROR - $e');
+        debugPrint('TVMazeAsync: Stack - $stack');
+      }
+    }();
   }
 
   static Future<void> _handleProgressUpdate(
@@ -349,6 +459,8 @@ class _AndroidTvPlaybackPayload {
   final int startIndex;
   final String? seriesTitle;
   final List<_AndroidTvSeriesSeason> seasons;
+  final Map<int, int> nextEpisodeMap;
+  final Map<int, int> prevEpisodeMap;
 
   const _AndroidTvPlaybackPayload({
     required this.contentType,
@@ -358,6 +470,8 @@ class _AndroidTvPlaybackPayload {
     required this.startIndex,
     required this.seriesTitle,
     required this.seasons,
+    this.nextEpisodeMap = const {},
+    this.prevEpisodeMap = const {},
   });
 
   Map<String, dynamic> toMap() {
@@ -370,6 +484,9 @@ class _AndroidTvPlaybackPayload {
       'seriesTitle': seriesTitle,
       'items': items.map((e) => e.toMap()).toList(),
       'seasons': seasons.map((e) => e.toMap()).toList(),
+      // Navigation maps for series playback (mirrors mobile video_player_screen.dart)
+      'nextEpisodeMap': nextEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
+      'prevEpisodeMap': prevEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
     };
   }
 }
@@ -625,6 +742,10 @@ class _AndroidTvPlaybackPayloadBuilder {
       );
     }
 
+    // Build navigation maps based on SeriesPlaylist.allEpisodes ordering
+    // This mirrors mobile video_player_screen.dart's navigation exactly
+    final navigationMaps = _buildNavigationMaps(seriesPlaylist, items);
+
     final payload = _AndroidTvPlaybackPayload(
       contentType: contentType,
       title: args.title,
@@ -633,12 +754,59 @@ class _AndroidTvPlaybackPayloadBuilder {
       startIndex: startIndex,
       seriesTitle: seriesPlaylist?.seriesTitle,
       seasons: seasons,
+      nextEpisodeMap: navigationMaps.nextMap,
+      prevEpisodeMap: navigationMaps.prevMap,
     );
 
     return _AndroidTvPlaybackPayloadResult(
       payload: payload,
       entries: launcherEntries,
     );
+  }
+
+  /// Build navigation maps based on SeriesPlaylist.allEpisodes ordering
+  /// Maps originalIndex -> nextOriginalIndex and originalIndex -> prevOriginalIndex
+  /// This mirrors exactly how mobile video_player_screen.dart navigates episodes
+  _NavigationMaps _buildNavigationMaps(
+    SeriesPlaylist? seriesPlaylist,
+    List<_AndroidTvPlaybackItem> items,
+  ) {
+    final nextMap = <int, int>{};
+    final prevMap = <int, int>{};
+
+    if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
+      // For non-series content, use simple sequential navigation
+      for (int i = 0; i < items.length; i++) {
+        if (i + 1 < items.length) {
+          nextMap[i] = i + 1;
+        }
+        if (i > 0) {
+          prevMap[i] = i - 1;
+        }
+      }
+      return _NavigationMaps(nextMap: nextMap, prevMap: prevMap);
+    }
+
+    // For series content, use SeriesPlaylist.allEpisodes ordering
+    // allEpisodes is already sorted by season/episode in SeriesPlaylist.fromPlaylistEntries
+    final allEpisodes = seriesPlaylist.allEpisodes;
+
+    for (int i = 0; i < allEpisodes.length; i++) {
+      final currentOriginalIndex = allEpisodes[i].originalIndex;
+
+      if (i + 1 < allEpisodes.length) {
+        final nextOriginalIndex = allEpisodes[i + 1].originalIndex;
+        nextMap[currentOriginalIndex] = nextOriginalIndex;
+      }
+
+      if (i > 0) {
+        final prevOriginalIndex = allEpisodes[i - 1].originalIndex;
+        prevMap[currentOriginalIndex] = prevOriginalIndex;
+      }
+    }
+
+    debugPrint('VideoPlayerLauncher: Built navigation maps - next: ${nextMap.length}, prev: ${prevMap.length}');
+    return _NavigationMaps(nextMap: nextMap, prevMap: prevMap);
   }
 
   List<PlaylistEntry> _normalizePlaylist() {
@@ -719,9 +887,9 @@ class _AndroidTvPlaybackPayloadBuilder {
         entries,
         collectionTitle: args.title, // Pass collection/torrent title as fallback
       );
-      try {
-        await playlist.fetchEpisodeInfo();
-      } catch (_) {}
+      // DO NOT await fetchEpisodeInfo() here - TVMaze loading is now async
+      // Metadata will be fetched and pushed separately after playback launches
+      // This mirrors mobile behavior where TVMaze doesn't block initial playback
       return playlist;
     } catch (_) {
       return null;
@@ -871,9 +1039,45 @@ class _AndroidTvPlaybackPayloadBuilder {
     return main;
   }
 
+  /// Generate resume ID for a playlist entry - MUST match mobile video_player_screen.dart
+  /// This ensures Android TV and mobile share the same resume state
   String _resumeIdForEntry(PlaylistEntry entry) {
+    // Check for Torbox-specific key
+    final torboxKey = _torboxResumeKeyForEntry(entry);
+    if (torboxKey != null) {
+      return torboxKey;
+    }
+    // Check for PikPak-specific key
+    final pikpakKey = _pikpakResumeKeyForEntry(entry);
+    if (pikpakKey != null) {
+      return pikpakKey;
+    }
+    // Fallback to filename hash
     final name = entry.title.isNotEmpty ? entry.title : args.title;
     return _generateFilenameHash(name);
+  }
+
+  String? _torboxResumeKeyForEntry(PlaylistEntry entry) {
+    final provider = entry.provider?.toLowerCase();
+    if (provider == 'torbox') {
+      final torrentId = entry.torboxTorrentId;
+      final fileId = entry.torboxFileId;
+      if (torrentId != null && fileId != null) {
+        return 'torbox_${torrentId}_$fileId';
+      }
+    }
+    return null;
+  }
+
+  String? _pikpakResumeKeyForEntry(PlaylistEntry entry) {
+    final provider = entry.provider?.toLowerCase();
+    if (provider == 'pikpak') {
+      final fileId = entry.pikpakFileId;
+      if (fileId != null && fileId.isNotEmpty) {
+        return 'pikpak_$fileId';
+      }
+    }
+    return null;
   }
 
   String _generateFilenameHash(String filename) {
@@ -892,5 +1096,17 @@ class _PerItemState {
     this.positionMs = 0,
     this.durationMs = 0,
     this.updatedAt = 0,
+  });
+}
+
+/// Navigation maps for series playback
+/// Maps originalIndex -> next/prev originalIndex based on SeriesPlaylist.allEpisodes order
+class _NavigationMaps {
+  final Map<int, int> nextMap;
+  final Map<int, int> prevMap;
+
+  const _NavigationMaps({
+    required this.nextMap,
+    required this.prevMap,
   });
 }

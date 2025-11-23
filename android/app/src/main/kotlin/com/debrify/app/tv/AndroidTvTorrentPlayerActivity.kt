@@ -173,6 +173,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    // Broadcast receiver for async metadata updates from Flutter
+    private var metadataUpdateReceiver: android.content.BroadcastReceiver? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_android_tv_torrent_player)
@@ -197,9 +200,128 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setupPlaylist()
         setupControls()
         setupBackPressHandler()
+        setupMetadataReceiver()
 
         // Start playback
         playItem(currentIndex)
+    }
+
+    private fun setupMetadataReceiver() {
+        metadataUpdateReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                val updatesJson = intent?.getStringExtra("metadataUpdates") ?: return
+                handleMetadataUpdate(updatesJson)
+            }
+        }
+
+        val filter = android.content.IntentFilter("com.debrify.app.tv.UPDATE_EPISODE_METADATA")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(metadataUpdateReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(metadataUpdateReceiver, filter)
+        }
+        android.util.Log.d("AndroidTvPlayer", "Metadata update receiver registered")
+
+        // Request metadata from Flutter now that receiver is ready
+        requestMetadataFromFlutter()
+    }
+
+    private fun handleMetadataUpdate(updatesJson: String) {
+        android.util.Log.d("TVMazeUpdate", "handleMetadataUpdate CALLED")
+        android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson.length}")
+        try {
+            val updatesArray = JSONArray(updatesJson)
+            android.util.Log.d("TVMazeUpdate", "Parsed ${updatesArray.length()} updates")
+
+            val model = payload
+            if (model == null) {
+                android.util.Log.e("TVMazeUpdate", "payload is NULL - cannot update")
+                return
+            }
+            android.util.Log.d("TVMazeUpdate", "model.items.size=${model.items.size}")
+
+            var anyUpdated = false
+            var updatedCount = 0
+            var skippedCount = 0
+            for (i in 0 until updatesArray.length()) {
+                val update = updatesArray.getJSONObject(i)
+                val originalIndex = update.optInt("originalIndex", -1)
+                if (originalIndex < 0 || originalIndex >= model.items.size) {
+                    android.util.Log.w("TVMazeUpdate", "Skipping invalid originalIndex=$originalIndex (items.size=${model.items.size})")
+                    skippedCount++
+                    continue
+                }
+
+                val item = model.items[originalIndex]
+                val newTitle = update.optString("title", null)
+                val newDescription = update.optString("description", null)
+                val newArtwork = update.optString("artwork", null)
+                val newRating = if (update.has("rating")) update.optDouble("rating") else null
+
+                // Create updated item with new metadata
+                val updatedItem = item.copy(
+                    title = if (!newTitle.isNullOrEmpty()) newTitle else item.title,
+                    description = if (!newDescription.isNullOrEmpty()) newDescription else item.description,
+                    artwork = if (!newArtwork.isNullOrEmpty()) newArtwork else item.artwork,
+                    rating = newRating ?: item.rating
+                )
+                model.items[originalIndex] = updatedItem
+                anyUpdated = true
+                updatedCount++
+            }
+
+            android.util.Log.d("TVMazeUpdate", "Updated $updatedCount items, skipped $skippedCount")
+
+            if (anyUpdated) {
+                android.util.Log.d("TVMazeUpdate", "Refreshing UI adapters...")
+                // Refresh playlist adapter if visible
+                runOnUiThread {
+                    // seriesPlaylistAdapter and moviePlaylistAdapter extend RecyclerView.Adapter
+                    val seriesAdapter = seriesPlaylistAdapter
+                    val movieAdapter = moviePlaylistAdapter
+                    android.util.Log.d("TVMazeUpdate", "seriesAdapter=${seriesAdapter != null}, movieAdapter=${movieAdapter != null}")
+                    seriesAdapter?.notifyDataSetChanged()
+                    movieAdapter?.notifyDataSetChanged()
+                    android.util.Log.d("TVMazeUpdate", "UI refresh done")
+                }
+            } else {
+                android.util.Log.w("TVMazeUpdate", "No items updated - anyUpdated=false")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("TVMazeUpdate", "Failed to parse metadata updates: ${e.message}", e)
+        }
+    }
+
+    private fun requestMetadataFromFlutter() {
+        android.util.Log.d("TVMazeUpdate", "requestMetadataFromFlutter CALLED")
+        val model = payload ?: return
+
+        // Only request metadata for series content
+        if (model.contentType != "series") {
+            android.util.Log.d("TVMazeUpdate", "Not requesting metadata - contentType=${model.contentType}")
+            return
+        }
+
+        try {
+            val channel = MainActivity.getAndroidTvPlayerChannel()
+            if (channel == null) {
+                android.util.Log.e("TVMazeUpdate", "Method channel is null, cannot request metadata")
+                return
+            }
+
+            android.util.Log.d("TVMazeUpdate", "Invoking requestEpisodeMetadata on method channel")
+            // Method channel calls MUST be on the main/UI thread
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                try {
+                    channel.invokeMethod("requestEpisodeMetadata", null)
+                    android.util.Log.d("TVMazeUpdate", "requestEpisodeMetadata invoked successfully")
+                } catch (e: Exception) {
+                    android.util.Log.e("TVMazeUpdate", "Failed to invoke requestEpisodeMetadata", e)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("TVMazeUpdate", "Error requesting metadata from Flutter", e)
+        }
     }
 
     private fun bindViews() {
@@ -1296,38 +1418,91 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun getNextPlayableIndex(fromIndex: Int): Int? {
         val model = payload ?: return null
-        if (playlistMode != PlaylistMode.COLLECTION) {
-            val next = fromIndex + 1
-            return if (next < model.items.size) next else null
+
+        // For series content, use pre-computed navigation map from Flutter
+        // This mirrors mobile video_player_screen.dart's navigation exactly
+        if (playlistMode == PlaylistMode.SERIES && model.nextEpisodeMap.isNotEmpty()) {
+            val nextIndex = model.nextEpisodeMap[fromIndex]
+            android.util.Log.d("AndroidTvPlayer", "getNextPlayableIndex - series mode, fromIndex: $fromIndex, nextIndex: $nextIndex")
+            return nextIndex
         }
 
-        val groups = movieGroups ?: return null
-        val currentGroup = when {
-            groups.main.contains(fromIndex) -> MovieGroup.MAIN
-            groups.extras.contains(fromIndex) -> MovieGroup.EXTRAS
-            else -> null
+        // For collections, continue using movie group logic
+        if (playlistMode == PlaylistMode.COLLECTION) {
+            val groups = movieGroups ?: return null
+            val currentGroup = when {
+                groups.main.contains(fromIndex) -> MovieGroup.MAIN
+                groups.extras.contains(fromIndex) -> MovieGroup.EXTRAS
+                else -> null
+            }
+
+            val source = when (currentGroup) {
+                MovieGroup.MAIN -> groups.main
+                MovieGroup.EXTRAS -> groups.extras
+                else -> null
+            }
+
+            if (source.isNullOrEmpty()) {
+                return null
+            }
+
+            val positionInGroup = source.indexOf(fromIndex)
+            if (positionInGroup == -1) {
+                return null
+            }
+
+            return if (positionInGroup + 1 < source.size) {
+                source[positionInGroup + 1]
+            } else {
+                null
+            }
         }
 
-        val source = when (currentGroup) {
-            MovieGroup.MAIN -> groups.main
-            MovieGroup.EXTRAS -> groups.extras
-            else -> null
+        // Fallback for single/unknown modes: simple sequential navigation
+        val next = fromIndex + 1
+        return if (next < model.items.size) next else null
+    }
+
+    private fun getPrevPlayableIndex(fromIndex: Int): Int? {
+        val model = payload ?: return null
+
+        // For series content, use pre-computed navigation map from Flutter
+        if (playlistMode == PlaylistMode.SERIES && model.prevEpisodeMap.isNotEmpty()) {
+            val prevIndex = model.prevEpisodeMap[fromIndex]
+            android.util.Log.d("AndroidTvPlayer", "getPrevPlayableIndex - series mode, fromIndex: $fromIndex, prevIndex: $prevIndex")
+            return prevIndex
         }
 
-        if (source.isNullOrEmpty()) {
-            return null
+        // For collections, use movie group logic
+        if (playlistMode == PlaylistMode.COLLECTION) {
+            val groups = movieGroups ?: return null
+            val currentGroup = when {
+                groups.main.contains(fromIndex) -> MovieGroup.MAIN
+                groups.extras.contains(fromIndex) -> MovieGroup.EXTRAS
+                else -> null
+            }
+
+            val source = when (currentGroup) {
+                MovieGroup.MAIN -> groups.main
+                MovieGroup.EXTRAS -> groups.extras
+                else -> null
+            }
+
+            if (source.isNullOrEmpty()) {
+                return null
+            }
+
+            val positionInGroup = source.indexOf(fromIndex)
+            if (positionInGroup <= 0) {
+                return null
+            }
+
+            return source[positionInGroup - 1]
         }
 
-        val positionInGroup = source.indexOf(fromIndex)
-        if (positionInGroup == -1) {
-            return null
-        }
-
-        return if (positionInGroup + 1 < source.size) {
-            source[positionInGroup + 1]
-        } else {
-            null
-        }
+        // Fallback for single/unknown modes: simple sequential navigation
+        val prev = fromIndex - 1
+        return if (prev >= 0) prev else null
     }
 
     private fun computeMovieGroups(items: List<PlaybackItem>): MovieGroups {
@@ -1594,33 +1769,40 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 items.add(PlaybackItem.fromJson(itemObj))
             }
 
-            val requestedStartIndex = obj.optInt("startIndex", 0)
-            val startItem = items.getOrNull(requestedStartIndex)
+            // Use startIndex directly from Flutter - items are already in correct order
+            // DO NOT re-sort items here - Flutter's SeriesPlaylist.allEpisodes order is authoritative
+            val startIndex = obj.optInt("startIndex", 0).coerceIn(0, items.lastIndex.coerceAtLeast(0))
 
-            // Sort items by season and episode for proper playback order
-            items.sortWith(compareBy(
-                { it.season ?: 0 },
-                { it.episode ?: 0 }
-            ))
+            // Parse navigation maps from Flutter (pre-computed based on SeriesPlaylist order)
+            val nextEpisodeMap = mutableMapOf<Int, Int>()
+            val prevEpisodeMap = mutableMapOf<Int, Int>()
 
-            // Find the new position of the start item after sorting
-            val actualStartIndex = if (startItem != null) {
-                items.indexOf(startItem).coerceAtLeast(0)
-            } else {
-                0
+            obj.optJSONObject("nextEpisodeMap")?.let { mapObj ->
+                mapObj.keys().forEach { key ->
+                    nextEpisodeMap[key.toInt()] = mapObj.getInt(key)
+                }
             }
 
-            android.util.Log.d("AndroidTvPlayer", "parsePayload - requested start: $requestedStartIndex, actual after sort: $actualStartIndex, startItem: ${startItem?.title}")
+            obj.optJSONObject("prevEpisodeMap")?.let { mapObj ->
+                mapObj.keys().forEach { key ->
+                    prevEpisodeMap[key.toInt()] = mapObj.getInt(key)
+                }
+            }
+
+            android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}")
 
             PlaybackPayload(
                 title = obj.optString("title"),
                 subtitle = obj.optString("subtitle"),
                 contentType = obj.optString("contentType", "single"),
                 items = items,
-                startIndex = actualStartIndex,
-                seriesTitle = obj.optString("seriesTitle")
+                startIndex = startIndex,
+                seriesTitle = obj.optString("seriesTitle"),
+                nextEpisodeMap = nextEpisodeMap,
+                prevEpisodeMap = prevEpisodeMap
             )
         } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "parsePayload failed", e)
             null
         }
     }
@@ -1664,6 +1846,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Unregister broadcast receiver
+        metadataUpdateReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (e: Exception) {
+                android.util.Log.w("AndroidTvPlayer", "Failed to unregister metadata receiver", e)
+            }
+        }
+        metadataUpdateReceiver = null
+
         // Clear all handlers
         progressHandler.removeCallbacksAndMessages(null)
         titleHandler.removeCallbacksAndMessages(null)
@@ -1734,7 +1926,9 @@ private data class PlaybackPayload(
     val contentType: String,
     val items: MutableList<PlaybackItem>,
     val startIndex: Int,
-    val seriesTitle: String?
+    val seriesTitle: String?,
+    val nextEpisodeMap: Map<Int, Int> = emptyMap(),
+    val prevEpisodeMap: Map<Int, Int> = emptyMap()
 )
 
 private data class PlaybackItem(
@@ -1835,8 +2029,9 @@ private class PlaylistAdapter(
                 listItems.add(PlaylistListItem.SeasonHeader(season, episodesInSeason.size))
             }
 
-            // Add episodes (already sorted at payload level)
-            for (episode in episodesInSeason) {
+            // Sort episodes by episode number (integer comparison to avoid "1", "10", "11", "2" string sorting)
+            val sortedEpisodes = episodesInSeason.sortedBy { it.episode ?: 0 }
+            for (episode in sortedEpisodes) {
                 val originalIndex = items.indexOf(episode)
                 listItems.add(PlaylistListItem.Episode(originalIndex))
             }

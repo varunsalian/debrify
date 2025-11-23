@@ -206,6 +206,16 @@ class MainActivity : FlutterActivity() {
                     }
                     handleLaunchTorrentPlayback(args, result)
                 }
+                "updateEpisodeMetadata" -> {
+                    android.util.Log.d("DebrifyTV", "MainActivity: Handling updateEpisodeMetadata")
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments<Map<String, Any?>>()
+                    if (args == null) {
+                        result.error("bad_args", "Missing metadata updates", null)
+                        return@setMethodCallHandler
+                    }
+                    handleUpdateEpisodeMetadata(args, result)
+                }
                 else -> {
                     android.util.Log.w("DebrifyTV", "MainActivity: Method not implemented: ${call.method}")
                     result.notImplemented()
@@ -315,6 +325,37 @@ class MainActivity : FlutterActivity() {
             android.util.Log.e("DebrifyTV", "MainActivity: ❌ Failed to start activity: ${e.message}")
             e.printStackTrace()
             result.error("launch_failed", e.message, null)
+        }
+    }
+
+    private fun handleUpdateEpisodeMetadata(
+        args: Map<String, Any?>,
+        result: MethodChannel.Result,
+    ) {
+        android.util.Log.d("TVMazeUpdate", "MainActivity: handleUpdateEpisodeMetadata CALLED")
+        @Suppress("UNCHECKED_CAST")
+        val updates = args["updates"] as? List<Map<String, Any?>>
+        if (updates.isNullOrEmpty()) {
+            android.util.Log.e("TVMazeUpdate", "MainActivity: updates is null or empty")
+            result.error("bad_args", "updates is required", null)
+            return
+        }
+        android.util.Log.d("TVMazeUpdate", "MainActivity: received ${updates.size} updates")
+
+        try {
+            // Broadcast intent to the active player activity
+            val intent = Intent("com.debrify.app.tv.UPDATE_EPISODE_METADATA").apply {
+                setPackage(packageName)
+                val updatesJson = listToJson(updates).toString()
+                android.util.Log.d("TVMazeUpdate", "MainActivity: updatesJson length=${updatesJson.length}")
+                putExtra("metadataUpdates", updatesJson)
+            }
+            sendBroadcast(intent)
+            android.util.Log.d("TVMazeUpdate", "MainActivity: Broadcast SENT with ${updates.size} updates")
+            result.success(true)
+        } catch (e: Exception) {
+            android.util.Log.e("TVMazeUpdate", "MainActivity: Failed to send metadata update: ${e.message}", e)
+            result.error("update_failed", e.message, null)
         }
     }
 

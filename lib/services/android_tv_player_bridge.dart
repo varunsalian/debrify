@@ -34,6 +34,13 @@ class AndroidTvPlayerBridge {
   static AndroidTvProgressCallback? _torrentProgressCallback;
   static PlaybackFinishedCallback? _torrentFinishedCallback;
   static TorrentStreamProvider? _torrentStreamProvider;
+
+  // Store pending metadata updates for when activity requests them
+  static List<Map<String, dynamic>>? _pendingMetadataUpdates;
+
+  // Session ID to track which launch the metadata belongs to
+  // Prevents stale metadata from previous sessions being sent to new sessions
+  static String? _currentSessionId;
   
   // Deprecated: use _streamNextProvider
   static StreamNextProvider? get _torboxNextProvider => _streamNextProvider;
@@ -163,6 +170,19 @@ class AndroidTvPlayerBridge {
                 message: e.toString(),
               );
             }
+          }
+          return null;
+        case 'requestEpisodeMetadata':
+          debugPrint('TVMazeUpdate: requestEpisodeMetadata received from native');
+          final pending = _pendingMetadataUpdates;
+          if (pending != null && pending.isNotEmpty) {
+            debugPrint('TVMazeUpdate: Sending ${pending.length} pending metadata updates');
+            // Send the pending updates via broadcast
+            await updateEpisodeMetadata(pending);
+            // Clear pending updates after sending
+            _pendingMetadataUpdates = null;
+          } else {
+            debugPrint('TVMazeUpdate: No pending metadata updates to send');
           }
           return null;
         default:
@@ -367,6 +387,9 @@ class AndroidTvPlayerBridge {
     _torrentFinishedCallback = onFinished;
     _torrentStreamProvider = onRequestStream;
 
+    // Clear any stale pending metadata from previous sessions
+    _pendingMetadataUpdates = null;
+
     try {
       final bool? launched = await _channel.invokeMethod<bool>(
         'launchTorrentPlayback',
@@ -387,5 +410,74 @@ class AndroidTvPlayerBridge {
     _torrentFinishedCallback = null;
     _torrentStreamProvider = null;
     return false;
+  }
+
+  /// Store pending metadata updates to be sent when the activity requests them
+  /// The sessionId parameter ensures updates from stale sessions are discarded
+  static void storePendingMetadataUpdates(
+    List<Map<String, dynamic>> updates, {
+    String? sessionId,
+  }) {
+    // Discard updates if session ID doesn't match current session
+    if (sessionId != null && sessionId != _currentSessionId) {
+      debugPrint('TVMazeUpdate: Discarding ${updates.length} updates - stale session (got: $sessionId, current: $_currentSessionId)');
+      return;
+    }
+    debugPrint('TVMazeUpdate: Storing ${updates.length} pending metadata updates');
+    _pendingMetadataUpdates = updates;
+  }
+
+  /// Set the current session ID for metadata tracking
+  /// Call this when launching a new playback session
+  static void setCurrentSessionId(String sessionId) {
+    debugPrint('TVMazeUpdate: Setting current session ID: $sessionId');
+    _currentSessionId = sessionId;
+  }
+
+  /// Get the current session ID
+  static String? get currentSessionId => _currentSessionId;
+
+  /// Check if a session ID matches the current session
+  static bool isCurrentSession(String sessionId) {
+    return sessionId == _currentSessionId;
+  }
+
+  /// Push episode metadata updates to native player (for async TVMaze loading)
+  /// Each update contains: originalIndex, title, description, artwork, rating
+  /// If sessionId is provided, updates will be discarded if it doesn't match current session
+  static Future<bool> updateEpisodeMetadata(
+    List<Map<String, dynamic>> metadataUpdates, {
+    String? sessionId,
+  }) async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+    if (metadataUpdates.isEmpty) {
+      return false;
+    }
+
+    // Discard updates if session ID doesn't match current session
+    if (sessionId != null && sessionId != _currentSessionId) {
+      debugPrint('AndroidTvPlayerBridge: Discarding ${metadataUpdates.length} metadata updates - stale session (got: $sessionId, current: $_currentSessionId)');
+      return false;
+    }
+
+    try {
+      debugPrint('AndroidTvPlayerBridge: Pushing ${metadataUpdates.length} metadata updates to native');
+      final bool? success = await _channel.invokeMethod<bool>(
+        'updateEpisodeMetadata',
+        {
+          'updates': metadataUpdates,
+        },
+      );
+      debugPrint('AndroidTvPlayerBridge: Metadata update result: $success');
+      return success == true;
+    } on PlatformException catch (e) {
+      debugPrint('AndroidTvPlayerBridge: metadata update failed: ${e.code} - ${e.message}');
+      return false;
+    } catch (e) {
+      debugPrint('AndroidTvPlayerBridge: unexpected metadata update error: $e');
+      return false;
+    }
   }
 }
