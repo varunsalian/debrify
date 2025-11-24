@@ -101,6 +101,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var movieGroups: MovieGroups? = null
     private var lastBackPressTime: Long = 0
 
+    // Focus navigation state - prevents focus recovery from interfering with active navigation
+    private var isNavigating = false
+    private var navigationTargetPosition = -1
+    private val focusRecoveryHandler = Handler(Looper.getMainLooper())
+    private var focusRecoveryRunnable: Runnable? = null
+
     private val resizeModes = arrayOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
         AspectRatioFrameLayout.RESIZE_MODE_FILL,
@@ -405,7 +411,73 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun setupPlaylist() {
-        playlistView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        // Configure RecyclerView for optimal focus handling
+        playlistView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false).apply {
+            // Pre-fetch items for smoother scrolling
+            isItemPrefetchEnabled = true
+            initialPrefetchItemCount = 4
+        }
+
+        // Disable item animator to prevent focus issues during view animations
+        playlistView.itemAnimator = null
+
+        // Keep more views in memory to reduce recycling-related focus issues
+        playlistView.setItemViewCacheSize(10)
+
+        // Ensure children can receive focus
+        playlistView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+
+        // Add focus recovery listener for view recycling (with delay to prevent interference with navigation)
+        playlistView.addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
+            override fun onChildViewAttachedToWindow(view: View) {
+                // Don't interfere during active navigation
+                if (isNavigating) {
+                    android.util.Log.d("PlaylistNav", "onChildViewAttached: Skipping - navigation in progress")
+                    return
+                }
+
+                // Only consider recovery if playlist is visible and view is focusable
+                if (playlistVisible && view.isFocusable) {
+                    // Cancel any pending recovery
+                    focusRecoveryRunnable?.let { focusRecoveryHandler.removeCallbacks(it) }
+
+                    // Schedule focus check with delay to let transitions complete
+                    focusRecoveryRunnable = Runnable {
+                        // Double-check focus is actually lost after delay
+                        if (playlistVisible && !isNavigating &&
+                            !playlistView.hasFocus() &&
+                            playlistView.focusedChild == null) {
+                            android.util.Log.d("PlaylistNav", "onChildViewAttached: Recovering focus after delay")
+                            ensureFocusInPlaylist()
+                        }
+                    }
+                    // 100ms delay to let focus transitions complete
+                    focusRecoveryHandler.postDelayed(focusRecoveryRunnable!!, 100)
+                }
+            }
+
+            override fun onChildViewDetachedFromWindow(view: View) {
+                // Only recover if the detached view had focus AND we're not navigating
+                if (view.hasFocus() && playlistVisible && !isNavigating) {
+                    android.util.Log.d("PlaylistNav", "Focused view being detached, scheduling recovery")
+
+                    // Cancel any pending recovery
+                    focusRecoveryRunnable?.let { focusRecoveryHandler.removeCallbacks(it) }
+
+                    // Schedule recovery with delay
+                    focusRecoveryRunnable = Runnable {
+                        if (playlistVisible && !isNavigating &&
+                            !playlistView.hasFocus() &&
+                            playlistView.focusedChild == null) {
+                            android.util.Log.d("PlaylistNav", "onChildViewDetached: Recovering focus after delay")
+                            ensureFocusInPlaylist()
+                        }
+                    }
+                    focusRecoveryHandler.postDelayed(focusRecoveryRunnable!!, 100)
+                }
+            }
+        })
+
         playlistOverlay.visibility = View.GONE
 
         val model = payload ?: return
@@ -583,43 +655,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (event.action == KeyEvent.ACTION_DOWN) {
                 when (keyCode) {
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        val focusedChild = playlistView.focusedChild
-                        val currentPos = if (focusedChild != null) {
-                            playlistView.getChildAdapterPosition(focusedChild)
-                        } else {
-                            -1
-                        }
-                        val itemCount = playlistView.adapter?.itemCount ?: 0
-                        android.util.Log.d("PlaylistNav", "DPAD_RIGHT pressed - currentPos=$currentPos, itemCount=$itemCount")
-
-                        // If we have a valid position and not at the end
-                        if (currentPos >= 0 && currentPos < itemCount - 1) {
-                            // Move focus to next item
-                            movePlaylistFocus(1)
-                            true  // Consume the event to prevent focus escape
-                        } else {
-                            android.util.Log.d("PlaylistNav", "At end of list, consuming event")
-                            true  // At end, consume to prevent focus escape
-                        }
+                        // Simple delegation - movePlaylistFocus handles all logic including boundaries
+                        android.util.Log.d("PlaylistNav", "DPAD_RIGHT pressed")
+                        movePlaylistFocus(1)
+                        true  // Always consume to prevent focus escape
                     }
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        val focusedChild = playlistView.focusedChild
-                        val currentPos = if (focusedChild != null) {
-                            playlistView.getChildAdapterPosition(focusedChild)
-                        } else {
-                            -1
-                        }
-                        android.util.Log.d("PlaylistNav", "DPAD_LEFT pressed - currentPos=$currentPos")
-
-                        // If we have a valid position and not at the start
-                        if (currentPos > 0) {
-                            // Move focus to previous item
-                            movePlaylistFocus(-1)
-                            true  // Consume the event to prevent focus escape
-                        } else {
-                            android.util.Log.d("PlaylistNav", "At start of list, consuming event")
-                            true  // At start, consume to prevent focus escape
-                        }
+                        // Simple delegation - movePlaylistFocus handles all logic including boundaries
+                        android.util.Log.d("PlaylistNav", "DPAD_LEFT pressed")
+                        movePlaylistFocus(-1)
+                        true  // Always consume to prevent focus escape
                     }
                     KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
                         android.util.Log.d("PlaylistNav", "UP/DOWN pressed - allowing navigation to season tabs")
@@ -652,65 +697,244 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun movePlaylistFocus(delta: Int) {
-        android.util.Log.d("PlaylistNav", "movePlaylistFocus: delta=$delta")
-        val adapter = playlistView.adapter ?: return
+    /**
+     * Find the next focusable position starting from a given position, moving in the specified direction.
+     * Skips over non-focusable items like SeasonHeaders (for series playlists).
+     * Works for both series and collection/movie playlists.
+     *
+     * @param startPosition The position to start searching from (inclusive)
+     * @param direction 1 for forward, -1 for backward
+     * @return The next focusable position, or RecyclerView.NO_POSITION if none found
+     */
+    private fun findNextFocusablePosition(startPosition: Int, direction: Int): Int {
+        // Handle series playlist (has SeasonHeaders to skip)
+        val seriesAdapter = seriesPlaylistAdapter
+        if (seriesAdapter != null) {
+            val itemCount = seriesAdapter.itemCount
+            var position = startPosition
+            while (position in 0 until itemCount) {
+                // Check if this position is an Episode (focusable), not a Header
+                if (seriesAdapter.getItemViewType(position) == 1) { // VIEW_TYPE_EPISODE = 1
+                    return position
+                }
+                position += direction
+            }
+            return RecyclerView.NO_POSITION
+        }
+
+        // Handle collection/movie playlist (all items are focusable - no headers)
+        val movieAdapter = moviePlaylistAdapter
+        if (movieAdapter != null) {
+            val itemCount = movieAdapter.itemCount
+            // All items in movie playlist are focusable, just check bounds
+            if (startPosition in 0 until itemCount) {
+                return startPosition
+            }
+            return RecyclerView.NO_POSITION
+        }
+
+        // No playlist adapter available
+        return RecyclerView.NO_POSITION
+    }
+
+    /**
+     * Ensure focus remains within the playlist when it should be visible.
+     * Called when focus might be lost due to view recycling or other issues.
+     */
+    private fun ensureFocusInPlaylist() {
+        // Don't interfere during active navigation
+        if (!playlistVisible || isNavigating) return
+
+        // Check if any child of playlistView currently has focus
+        val hasFocus = playlistView.hasFocus() || playlistView.focusedChild != null
+        if (hasFocus) return
+
+        android.util.Log.d("PlaylistNav", "ensureFocusInPlaylist: Focus lost, recovering...")
+
         val layoutManager = playlistView.layoutManager as? LinearLayoutManager ?: return
+        val firstVisible = layoutManager.findFirstVisibleItemPosition()
+        val lastVisible = layoutManager.findLastVisibleItemPosition()
 
-        // Get current focused position
-        val focusedChild = playlistView.focusedChild
-        val currentPosition = if (focusedChild != null) {
-            playlistView.getChildAdapterPosition(focusedChild)
-        } else {
-            layoutManager.findFirstVisibleItemPosition()
+        if (firstVisible == RecyclerView.NO_POSITION) return
+
+        // If we have a recent navigation target in visible range, prefer that
+        if (navigationTargetPosition in firstVisible..lastVisible) {
+            val holder = playlistView.findViewHolderForAdapterPosition(navigationTargetPosition)
+            if (holder?.itemView != null && holder.itemView.isFocusable) {
+                android.util.Log.d("PlaylistNav", "ensureFocusInPlaylist: Focusing recent target at $navigationTargetPosition")
+                holder.itemView.requestFocus()
+                return
+            }
         }
 
-        android.util.Log.d("PlaylistNav", "movePlaylistFocus: currentPosition=$currentPosition")
-        if (currentPosition == RecyclerView.NO_POSITION) {
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: NO_POSITION, aborting")
-            return
-        }
+        // Find the middle item in the visible range (not the first)
+        // This prevents always jumping back to the beginning
+        val middlePosition = (firstVisible + lastVisible) / 2
 
-        // Calculate target position
-        val targetPosition = (currentPosition + delta).coerceIn(0, adapter.itemCount - 1)
-        android.util.Log.d("PlaylistNav", "movePlaylistFocus: targetPosition=$targetPosition")
-
-        if (targetPosition == currentPosition) {
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Same position, aborting")
-            return
-        }
-
-        // Check if target is already visible
-        val targetHolder = playlistView.findViewHolderForAdapterPosition(targetPosition)
-        if (targetHolder != null && targetHolder.itemView.parent != null) {
-            // Item is visible, focus it directly
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Target visible, focusing directly")
-            targetHolder.itemView.requestFocus()
-        } else {
-            // Item is not visible, scroll to it
-            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Target not visible, scrolling")
-            layoutManager.scrollToPositionWithOffset(targetPosition, 0)
-
-            // Use multiple post calls to ensure layout is complete
-            playlistView.post {
-                playlistView.post {
-                    playlistView.post {
-                        val holder = playlistView.findViewHolderForAdapterPosition(targetPosition)
-                        if (holder != null && holder.itemView.parent != null) {
-                            android.util.Log.d("PlaylistNav", "movePlaylistFocus: After scroll, focusing target")
+        // Search outward from the middle
+        for (offset in 0..(lastVisible - firstVisible)) {
+            val positions = listOf(middlePosition + offset, middlePosition - offset)
+            for (pos in positions) {
+                if (pos in firstVisible..lastVisible) {
+                    val nextFocusable = findNextFocusablePosition(pos, 1)
+                    if (nextFocusable in firstVisible..lastVisible) {
+                        val holder = playlistView.findViewHolderForAdapterPosition(nextFocusable)
+                        if (holder != null && holder.itemView.isFocusable) {
+                            android.util.Log.d("PlaylistNav", "ensureFocusInPlaylist: Recovering focus to position $nextFocusable (middle-out)")
                             holder.itemView.requestFocus()
-                        } else {
-                            // Final fallback: find first visible and focus it
-                            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Failed to find target, using fallback")
-                            val fallbackPosition = layoutManager.findFirstCompletelyVisibleItemPosition()
-                            if (fallbackPosition != RecyclerView.NO_POSITION) {
-                                android.util.Log.d("PlaylistNav", "movePlaylistFocus: Focusing fallback position $fallbackPosition")
-                                playlistView.findViewHolderForAdapterPosition(fallbackPosition)?.itemView?.requestFocus()
-                            }
+                            return
                         }
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Transfer focus to a specific position using ViewTreeObserver for reliable timing.
+     * This ensures layout is complete before attempting to focus.
+     */
+    private fun transferFocusToPosition(targetPosition: Int) {
+        val layoutManager = playlistView.layoutManager as? LinearLayoutManager ?: run {
+            isNavigating = false
+            return
+        }
+
+        android.util.Log.d("PlaylistNav", "transferFocusToPosition: target=$targetPosition")
+
+        // Keep navigation flag active and track target
+        isNavigating = true
+        navigationTargetPosition = targetPosition
+
+        // Scroll to position with some offset for visual comfort
+        layoutManager.scrollToPositionWithOffset(targetPosition, 100)
+
+        // Use ViewTreeObserver for reliable timing instead of nested posts
+        playlistView.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                playlistView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+
+                val holder = playlistView.findViewHolderForAdapterPosition(targetPosition)
+                if (holder?.itemView != null && holder.itemView.isFocusable) {
+                    android.util.Log.d("PlaylistNav", "transferFocusToPosition: Focusing target at $targetPosition")
+                    val focused = holder.itemView.requestFocus()
+                    android.util.Log.d("PlaylistNav", "transferFocusToPosition: Focus result=$focused for position $targetPosition")
+
+                    // Clear navigation flag after a short delay to let focus settle
+                    playlistView.postDelayed({
+                        isNavigating = false
+                        navigationTargetPosition = -1
+                    }, 50)
+
+                    if (!focused) {
+                        // Focus failed, try once more after a short delay
+                        playlistView.postDelayed({
+                            playlistView.findViewHolderForAdapterPosition(targetPosition)?.itemView?.requestFocus()
+                            isNavigating = false
+                            navigationTargetPosition = -1
+                        }, 50)
+                    }
+                } else {
+                    android.util.Log.d("PlaylistNav", "transferFocusToPosition: Holder not found or not focusable, using fallback")
+                    // Clear navigation state before fallback
+                    isNavigating = false
+                    navigationTargetPosition = -1
+                    ensureFocusInPlaylist()
+                }
+            }
+        })
+    }
+
+    private fun movePlaylistFocus(delta: Int) {
+        android.util.Log.d("PlaylistNav", "movePlaylistFocus: delta=$delta")
+
+        // Set navigation flag to prevent focus recovery from interfering
+        isNavigating = true
+
+        val adapter = playlistView.adapter ?: run {
+            isNavigating = false
+            navigationTargetPosition = -1
+            return
+        }
+        val layoutManager = playlistView.layoutManager as? LinearLayoutManager ?: run {
+            isNavigating = false
+            navigationTargetPosition = -1
+            return
+        }
+
+        // Use navigationTargetPosition if we're in the middle of rapid navigation
+        // This prevents stutter like 3 → 4 → 4 → 5 when pressing keys quickly
+        val currentPosition = if (navigationTargetPosition >= 0) {
+            // We have an ongoing navigation, use target as current position
+            navigationTargetPosition
+        } else {
+            // Normal case: get from focused child
+            val focusedChild = playlistView.focusedChild
+            if (focusedChild != null) {
+                playlistView.getChildAdapterPosition(focusedChild)
+            } else {
+                layoutManager.findFirstVisibleItemPosition()
+            }
+        }
+
+        android.util.Log.d("PlaylistNav", "movePlaylistFocus: currentPosition=$currentPosition, navTarget=$navigationTargetPosition")
+        if (currentPosition == RecyclerView.NO_POSITION) {
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: NO_POSITION, aborting")
+            isNavigating = false
+            navigationTargetPosition = -1
+            return
+        }
+
+        // Boundary checks - stop at start/end
+        val itemCount = adapter.itemCount
+        if (delta > 0 && currentPosition >= itemCount - 1) {
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Already at end, ignoring")
+            isNavigating = false
+            navigationTargetPosition = -1
+            return
+        } else if (delta < 0 && currentPosition <= 0) {
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Already at start, ignoring")
+            isNavigating = false
+            navigationTargetPosition = -1
+            return
+        }
+
+        // Find the next focusable position (skipping headers)
+        val searchStart = currentPosition + delta
+        val targetPosition = findNextFocusablePosition(searchStart, delta)
+
+        android.util.Log.d("PlaylistNav", "movePlaylistFocus: searchStart=$searchStart, targetPosition=$targetPosition")
+
+        if (targetPosition == RecyclerView.NO_POSITION || targetPosition == currentPosition) {
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: No valid target found or same position")
+            isNavigating = false
+            navigationTargetPosition = -1
+            return
+        }
+
+        // Track the target position for rapid navigation support
+        navigationTargetPosition = targetPosition
+
+        // Check if target is already visible and can be focused directly
+        val targetHolder = playlistView.findViewHolderForAdapterPosition(targetPosition)
+        if (targetHolder != null && targetHolder.itemView.parent != null && targetHolder.itemView.isFocusable) {
+            // Item is visible and focusable, focus it directly
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Target visible, focusing directly")
+            val focused = targetHolder.itemView.requestFocus()
+            // Clear navigation flag after short delay to let focus settle
+            // Keep navigationTargetPosition for rapid key presses, clear later
+            playlistView.postDelayed({
+                isNavigating = false
+                navigationTargetPosition = -1
+            }, 100)  // Increased to 100ms for better rapid press handling
+            if (!focused) {
+                // Direct focus failed, use transfer method
+                transferFocusToPosition(targetPosition)
+            }
+        } else {
+            // Item is not visible or not ready, use reliable transfer method
+            android.util.Log.d("PlaylistNav", "movePlaylistFocus: Target not visible, using transferFocusToPosition")
+            transferFocusToPosition(targetPosition)
         }
     }
 
@@ -2127,10 +2351,18 @@ private class PlaylistAdapter(
         return findPositionForItemIndex(activeItemIndex)
     }
 
-    // Season Header ViewHolder
+    // Season Header ViewHolder - explicitly non-focusable to prevent focus getting stuck
     class SeasonHeaderViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val titleView: TextView = itemView.findViewById(R.id.season_header_title)
         private val subtitleView: TextView = itemView.findViewById(R.id.season_header_subtitle)
+
+        init {
+            // Headers are visual separators, not interactive items
+            // Must be explicitly non-focusable to prevent D-pad navigation from landing here
+            itemView.isFocusable = false
+            itemView.isFocusableInTouchMode = false
+            itemView.isClickable = false
+        }
 
         fun bind(season: Int, episodeCount: Int) {
             titleView.text = "SEASON $season"
