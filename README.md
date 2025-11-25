@@ -1,12 +1,12 @@
 # Debrify
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.8+-blue?logo=flutter&logoColor=white)
-![Platforms](https://img.shields.io/badge/Platforms-Android%20%7C%20Windows%20%7C%20macOS%20%7C%20Web-lightgrey)
+![Platforms](https://img.shields.io/badge/Platforms-Android%20%7C%20Android%20TV%20%7C%20Windows%20%7C%20macOS%20%7C%20Web-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 > Built as a personal “vibe coded” spare-time project—open-sourced so others can test-drive it or take it further. Most polish currently targets **Android**; the desktop builds work, but expect the occasional rough edge.
 
-A modern torrent search and Real-Debrid companion built with Flutter, featuring a powerful search UI, lean-back TV mode, advanced player, and persistent playlists.
+A modern debrid companion built with Flutter, featuring plugin-based torrent search, a powerful search UI, lean-back Android TV mode, advanced player, and persistent playlists. Supports Real-Debrid and Torbox.
 
 ---
 
@@ -27,15 +27,17 @@ A modern torrent search and Real-Debrid companion built with Flutter, featuring 
 
 ## ✨ Features
 - 🔍 **Multi-source torrent search** with engine toggles, live counts, and smart sorting
-- 🔐 **Real-Debrid integration** for API validation, file-selection defaults, and account snapshot
+- 🔐 **Debrid service integration** (Real-Debrid & Torbox) for API validation, file-selection defaults, and account snapshot
 - 📥 **Smart-ish download manager** (still evolving) with queue persistence, pause/resume, and grouped actions
-- 📺 **Debrify TV mode** for lean-back autoplay, keyword queues, and remote-friendly controls
+- 📺 **Debrify TV mode** with Android TV support for lean-back autoplay, keyword queues, and remote-friendly controls
 - 🎬 **Advanced player** powered by `media_kit`: gestures, audio/subtitle tracks, resume points, and Debrify TV overlays
 - 🧠 **Episode intelligence** via TVMaze enrichment, per-season progress, and resume-last logic
 - 🎞️ **Personal playlists** that recover restricted links, order multi-episode packs, and remember Real-Debrid torrents
 - 🎨 **Material 3 UI** with dark theme, animated navigation, and Android TV aware orientation
 
 > ⚠️ **Heads-up:** Desktop builds are convenient ports of the Android flow. Windows, macOS, and web are fully usable but not yet as polished.
+
+> ℹ️ **Note:** Downloads are not yet supported for Torbox. Streaming and playlist features work fully with both Real-Debrid and Torbox.
 
 ---
 
@@ -44,6 +46,7 @@ A modern torrent search and Real-Debrid companion built with Flutter, featuring 
 | Platform | Status | Notes |
 |----------|--------|-------|
 | Android | ✅ Stable | Primary target; APK ships with each release |
+| Android TV | ✅ Stable | Full TV mode support with D-pad navigation and remote controls |
 | Windows | ✅ Usable | Installer maximizes into fullscreen and stores downloads in `~/Downloads/Debrify` |
 | macOS | ✅ Usable | DMG available; fullscreen & downloads behave similar to Windows |
 | Linux | ⚠️ Dev only | Run from source (`flutter run`) |
@@ -59,11 +62,11 @@ A modern torrent search and Real-Debrid companion built with Flutter, featuring 
 
 ## 📦 Installation Details
 
-### Android
-```bash
-# Sideload the release APK
-adb install debrify-<version>.apk
-```
+### Android Phone/TV
+1. Download the APK from the [GitHub Releases page](https://github.com/varunsalian/debrify/releases)
+2. Install the APK on your Android device (you can use file managers like Downloader or X-plore for TV, or install via ADB)
+
+The app automatically detects Android TV and optimizes the UI for D-pad navigation and remote controls.
 
 ### Windows
 1. Download `debrify-<version>-setup.exe`
@@ -107,7 +110,7 @@ Under the hood, progress is stored via `StorageService` and enriched by `Episode
 - **Flutter** (Material 3, Google Fonts, Animations)
 - **media_kit / media_kit_video** for the player
 - **background_downloader** + custom queue logic for downloads
-- **Real-Debrid APIs** wrapped in `DebridService`
+- **Real-Debrid & Torbox APIs** wrapped in `DebridService`
 - **Provider** for lightweight state management
 - **window_manager** (desktop) for window control
 
