@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../../screens/video_player_screen.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
+import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
+import '../../utils/series_parser.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
   const PikPakFilesScreen({super.key});
@@ -762,6 +764,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _playFolder(file),
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Play'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                   ] else if (isVideo && isComplete) ...[
                     Expanded(
                       child: FilledButton.icon(
@@ -773,14 +786,27 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     ),
                     const SizedBox(width: 8),
                   ],
-                  // Delete button for all files/folders
-                  OutlinedButton.icon(
-                    onPressed: () => _showDeleteDialog(file),
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    label: const Text('Delete'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red.shade400,
-                    ),
+                  // 3-dot menu for actions
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: 'More options',
+                    onSelected: (value) {
+                      if (value == 'delete') {
+                        _showDeleteDialog(file);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            SizedBox(width: 12),
+                            Text('Delete'),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -811,4 +837,334 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       return '';
     }
   }
+
+  /// Play all videos in a folder (recursively scans subfolders)
+  Future<void> _playFolder(Map<String, dynamic> folder) async {
+    final folderId = folder['id'] as String?;
+    final folderName = folder['name'] ?? 'Folder';
+
+    if (folderId == null) {
+      _showSnackBar('Invalid folder ID', isError: true);
+      return;
+    }
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Scanning folder for videos...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Recursively scan folder for all files
+      final allFiles = await PikPakApiService.instance.listFilesRecursive(
+        folderId: folderId,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (!mounted) return;
+
+      // Filter for videos only
+      List<Map<String, dynamic>> videoFiles = allFiles.where((file) {
+        final mimeType = file['mime_type'] ?? '';
+        final phase = file['phase'] ?? '';
+        final isVideo = mimeType.startsWith('video/');
+        final isComplete = phase == 'PHASE_TYPE_COMPLETE';
+        return isVideo && isComplete;
+      }).toList();
+
+      // Apply user settings filters
+      if (_showVideosOnly) {
+        // Already filtered for videos above
+      }
+
+      if (_ignoreSmallVideos) {
+        videoFiles = videoFiles.where((file) {
+          final size = file['size'];
+          if (size == null) return true;
+          final sizeBytes = int.tryParse(size.toString()) ?? 0;
+          final sizeMB = sizeBytes / (1024 * 1024);
+          return sizeMB >= 100;
+        }).toList();
+      }
+
+      if (videoFiles.isEmpty) {
+        _showSnackBar(
+          'This folder doesn\'t contain any videos',
+          isError: true,
+        );
+        return;
+      }
+
+      // Use the same logic as torrent_search_screen.dart
+      await _playPikPakVideos(videoFiles, folderName);
+    } catch (e) {
+      print('Error playing folder: $e');
+      if (mounted) {
+        // Close loading dialog if still open
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to scan folder: $e', isError: true);
+    }
+  }
+
+  /// Play PikPak videos (single or playlist) - mirrors torrent_search_screen.dart logic
+  Future<void> _playPikPakVideos(List<Map<String, dynamic>> videoFiles, String collectionName) async {
+    if (videoFiles.isEmpty) return;
+
+    final pikpak = PikPakApiService.instance;
+
+    // Single video - play with playlist entry for consistent resume key
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      try {
+        final fullData = await pikpak.getFileDetails(file['id']);
+        final url = pikpak.getStreamingUrl(fullData);
+        if (url != null && mounted) {
+          final sizeBytes = int.tryParse(file['size']?.toString() ?? '0') ?? 0;
+          final title = file['name'] ?? collectionName;
+          await VideoPlayerLauncher.push(
+            context,
+            VideoPlayerLaunchArgs(
+              videoUrl: url,
+              title: title,
+              subtitle: Formatters.formatFileSize(sizeBytes),
+              playlist: [
+                PlaylistEntry(
+                  url: url,
+                  title: title,
+                  provider: 'pikpak',
+                  pikpakFileId: file['id'],
+                  sizeBytes: sizeBytes,
+                ),
+              ],
+              startIndex: 0,
+            ),
+          );
+        }
+      } catch (e) {
+        _showSnackBar('Failed to play: ${e.toString()}', isError: true);
+      }
+      return;
+    }
+
+    // Multiple videos - build playlist
+    final entries = <_PikPakPlaylistItem>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final file = videoFiles[i];
+      final displayName = _pikpakDisplayName(file);
+      final info = SeriesParser.parseFilename(displayName);
+      entries.add(_PikPakPlaylistItem(
+        file: file,
+        originalIndex: i,
+        seriesInfo: info,
+        displayName: displayName,
+      ));
+    }
+
+    // Detect if it's a series collection
+    final filenames = entries.map((e) => e.displayName).toList();
+    final bool isSeriesCollection =
+        entries.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+    // Sort entries
+    final sortedEntries = [...entries];
+    if (isSeriesCollection) {
+      sortedEntries.sort((a, b) {
+        final aInfo = a.seriesInfo;
+        final bInfo = b.seriesInfo;
+        final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+        if (seasonCompare != 0) return seasonCompare;
+        final episodeCompare = (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+        if (episodeCompare != 0) return episodeCompare;
+        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+      });
+    } else {
+      sortedEntries.sort(
+        (a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      );
+    }
+
+    // Find first episode to start from
+    final seriesInfos = sortedEntries.map((e) => e.seriesInfo).toList();
+    int startIndex = isSeriesCollection ? _findFirstEpisodeIndex(seriesInfos) : 0;
+    if (startIndex < 0 || startIndex >= sortedEntries.length) {
+      startIndex = 0;
+    }
+
+    // Resolve only the first video URL (lazy loading for rest)
+    String initialUrl = '';
+    try {
+      final firstFile = sortedEntries[startIndex].file;
+      final fullData = await pikpak.getFileDetails(firstFile['id']);
+      initialUrl = pikpak.getStreamingUrl(fullData) ?? '';
+    } catch (e) {
+      _showSnackBar('Failed to prepare stream: ${e.toString()}', isError: true);
+      return;
+    }
+
+    if (initialUrl.isEmpty) {
+      _showSnackBar('Could not get streaming URL', isError: true);
+      return;
+    }
+
+    // Build playlist entries
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sortedEntries.length; i++) {
+      final entry = sortedEntries[i];
+      final seriesInfo = entry.seriesInfo;
+      final episodeLabel = _formatPikPakPlaylistTitle(
+        info: seriesInfo,
+        fallback: entry.displayName,
+        isSeriesCollection: isSeriesCollection,
+      );
+      final combinedTitle = _combineSeriesAndEpisodeTitle(
+        seriesTitle: seriesInfo.title,
+        episodeLabel: episodeLabel,
+        isSeriesCollection: isSeriesCollection,
+        fallback: entry.displayName,
+      );
+      playlistEntries.add(PlaylistEntry(
+        url: i == startIndex ? initialUrl : '',
+        title: combinedTitle,
+        provider: 'pikpak',
+        pikpakFileId: entry.file['id'],
+        sizeBytes: int.tryParse(entry.file['size']?.toString() ?? '0'),
+      ));
+    }
+
+    // Calculate subtitle
+    final totalBytes = sortedEntries.fold<int>(
+      0,
+      (sum, e) => sum + (int.tryParse(e.file['size']?.toString() ?? '0') ?? 0),
+    );
+    final subtitle =
+        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+    if (!mounted) return;
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialUrl,
+        title: collectionName,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
+      ),
+    );
+  }
+
+  String _pikpakDisplayName(Map<String, dynamic> file) {
+    final name = file['name']?.toString() ?? '';
+    if (name.isNotEmpty) {
+      return FileUtils.getFileName(name);
+    }
+    return 'File ${file['id']}';
+  }
+
+  String _formatPikPakPlaylistTitle({
+    required SeriesInfo info,
+    required String fallback,
+    required bool isSeriesCollection,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final season = info.season;
+    final episode = info.episode;
+    if (info.isSeries && season != null && episode != null) {
+      final seasonLabel = season.toString().padLeft(2, '0');
+      final episodeLabel = episode.toString().padLeft(2, '0');
+      final description = info.episodeTitle?.trim().isNotEmpty == true
+          ? info.episodeTitle!.trim()
+          : info.title?.trim().isNotEmpty == true
+          ? info.title!.trim()
+          : fallback;
+      return 'S${seasonLabel}E$episodeLabel · $description';
+    }
+
+    return fallback;
+  }
+
+  String _combineSeriesAndEpisodeTitle({
+    required String? seriesTitle,
+    required String episodeLabel,
+    required bool isSeriesCollection,
+    required String fallback,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final cleanSeriesTitle = seriesTitle
+        ?.replaceAll(RegExp(r'[._\-]+$'), '')
+        .trim();
+    if (cleanSeriesTitle != null && cleanSeriesTitle.isNotEmpty) {
+      return '$cleanSeriesTitle $episodeLabel';
+    }
+
+    return fallback;
+  }
+
+  int _findFirstEpisodeIndex(List<SeriesInfo> infos) {
+    int startIndex = 0;
+    int? bestSeason;
+    int? bestEpisode;
+
+    for (int i = 0; i < infos.length; i++) {
+      final info = infos[i];
+      final season = info.season;
+      final episode = info.episode;
+      if (!info.isSeries || season == null || episode == null) {
+        continue;
+      }
+
+      final bool isBetterSeason = bestSeason == null || season < bestSeason;
+      final bool isBetterEpisode =
+          bestSeason != null &&
+          season == bestSeason &&
+          (bestEpisode == null || episode < bestEpisode);
+
+      if (isBetterSeason || isBetterEpisode) {
+        bestSeason = season;
+        bestEpisode = episode;
+        startIndex = i;
+      }
+    }
+
+    return startIndex;
+  }
+}
+
+/// Helper class for building PikPak playlists
+class _PikPakPlaylistItem {
+  final Map<String, dynamic> file;
+  final int originalIndex;
+  final SeriesInfo seriesInfo;
+  final String displayName;
+
+  const _PikPakPlaylistItem({
+    required this.file,
+    required this.originalIndex,
+    required this.seriesInfo,
+    required this.displayName,
+  });
 }

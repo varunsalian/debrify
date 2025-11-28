@@ -1183,6 +1183,58 @@ class PikPakApiService {
     return fileData;
   }
 
+  /// Recursively list all files in a folder and its subfolders
+  /// Returns a flat list of all files found
+  Future<List<Map<String, dynamic>>> listFilesRecursive({
+    required String folderId,
+    int limit = 50,
+  }) async {
+    final allFiles = <Map<String, dynamic>>[];
+    await _listFilesRecursiveHelper(
+      folderId: folderId,
+      limit: limit,
+      allFiles: allFiles,
+    );
+    return allFiles;
+  }
+
+  /// Helper method for recursive folder traversal
+  Future<void> _listFilesRecursiveHelper({
+    required String folderId,
+    required int limit,
+    required List<Map<String, dynamic>> allFiles,
+  }) async {
+    String? nextPageToken;
+
+    do {
+      // List files in current folder
+      final result = await listFiles(
+        parentId: folderId,
+        limit: limit,
+        pageToken: nextPageToken,
+      );
+
+      // Process each file
+      for (final file in result.files) {
+        final kind = file['kind'] ?? '';
+
+        if (kind == 'drive#folder') {
+          // Recursively scan subfolder
+          await _listFilesRecursiveHelper(
+            folderId: file['id'],
+            limit: limit,
+            allFiles: allFiles,
+          );
+        } else {
+          // Add file to results
+          allFiles.add(file);
+        }
+      }
+
+      nextPageToken = result.nextPageToken;
+    } while (nextPageToken != null && nextPageToken.isNotEmpty);
+  }
+
   // NOTE: Cold storage handling is done entirely in the video player with retry logic
   // Pre-validation was removed because:
   // 1. PikPak has two-stage activation (connection opens, then file becomes playable)
