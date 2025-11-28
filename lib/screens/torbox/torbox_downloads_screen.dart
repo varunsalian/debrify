@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import '../../services/video_player_launcher.dart';
 import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/download_service.dart';
 import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/series_parser.dart';
@@ -107,9 +109,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       enabled: !isLoadingZip,
                       onTap: isLoadingZip
                           ? null
-                          : () {
-                              Navigator.of(sheetContext).pop();
-                              _showComingSoon('Torbox ZIP download');
+                          : () async {
+                              setSheetState(() => isLoadingZip = true);
+                              await _enqueueTorboxZipDownload(
+                                torrent: torrent,
+                                sheetContext: sheetContext,
+                              );
+                              if (!Navigator.of(sheetContext).canPop()) {
+                                setSheetState(() => isLoadingZip = false);
+                              }
                             },
                     ),
                     ListTile(
@@ -1422,7 +1430,25 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     if (key == null || key.isEmpty) {
       Navigator.of(sheetContext).pop();
       if (mounted) {
-        _showComingSoon('Add Torbox API key');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Torbox API key is required. Please add it in Settings.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
+      return true;
+    }
+
+    if (entriesToDownload.isEmpty) {
+      Navigator.of(sheetContext).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No files selected for download.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
       }
       return true;
     }
@@ -1435,15 +1461,224 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     final count = entriesToDownload.length;
     debugPrint(
-      'TorboxDownloadsScreen: download placeholder triggered for torrent ${torrent.id} ($count item(s)).',
+      'TorboxDownloadsScreen: Starting download for torrent ${torrent.id} ($count file(s)).',
     );
-    if (count == 0) {
-      _showComingSoon('No files selected');
-      return true;
+
+    // Show loading indicator
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Preparing $count file${count == 1 ? '' : 's'} for download...'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    int successCount = 0;
+    int failureCount = 0;
+    String? lastError;
+
+    try {
+      for (final entry in entriesToDownload) {
+        try {
+          final file = entry.file;
+          final fileName = file.shortName.isNotEmpty
+              ? file.shortName
+              : FileUtils.getFileName(file.name);
+
+          debugPrint(
+            'TorboxDownloadsScreen: Requesting download link for file ${file.id} in torrent ${torrent.id}',
+          );
+
+          // Request download link
+          final downloadUrl = await TorboxService.requestFileDownloadLink(
+            apiKey: key,
+            torrentId: torrent.id,
+            fileId: file.id,
+          );
+
+          if (downloadUrl.isEmpty) {
+            debugPrint(
+              'TorboxDownloadsScreen: Got empty download URL for file ${file.id}',
+            );
+            failureCount++;
+            lastError = 'Empty download URL returned';
+            continue;
+          }
+
+          debugPrint(
+            'TorboxDownloadsScreen: Got download URL for file ${file.id}, enqueueing...',
+          );
+
+          // Create meta JSON with Torbox-specific fields
+          final meta = jsonEncode({
+            'torboxTorrentId': torrent.id,
+            'torboxFileId': file.id,
+            'apiKey': key,
+            'torboxDownload': true,
+          });
+
+          // Enqueue download
+          await DownloadService.instance.enqueueDownload(
+            url: downloadUrl,
+            fileName: fileName,
+            meta: meta,
+            torrentName: torrent.name,
+          );
+
+          successCount++;
+          debugPrint(
+            'TorboxDownloadsScreen: Successfully enqueued file ${file.id} ($fileName)',
+          );
+        } catch (e, stackTrace) {
+          debugPrint('TorboxDownloadsScreen: Failed to enqueue file ${entry.file.id}: $e');
+          debugPrint('Stack trace: $stackTrace');
+          failureCount++;
+          lastError = e.toString();
+        }
+      }
+
+      if (!mounted) return true;
+
+      // Show result feedback
+      if (successCount > 0 && failureCount == 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '$successCount file${successCount == 1 ? '' : 's'} queued for download',
+            ),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+      } else if (successCount > 0 && failureCount > 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '$successCount file${successCount == 1 ? '' : 's'} queued, $failureCount failed',
+            ),
+            backgroundColor: const Color(0xFFF59E0B),
+          ),
+        );
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to queue downloads${lastError != null ? ': ${lastError.replaceFirst('Exception: ', '')}' : ''}',
+            ),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('TorboxDownloadsScreen: Error during batch download: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
     }
 
-    _showComingSoon('Torbox downloads');
     return true;
+  }
+
+  Future<void> _enqueueTorboxZipDownload({
+    required TorboxTorrent torrent,
+    required BuildContext sheetContext,
+  }) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      Navigator.of(sheetContext).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Torbox API key is required. Please add it in Settings.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
+      return;
+    }
+
+    Navigator.of(sheetContext).pop();
+
+    if (!mounted) {
+      return;
+    }
+
+    debugPrint(
+      'TorboxDownloadsScreen: Starting ZIP download for torrent ${torrent.id}',
+    );
+
+    // Show loading indicator
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Preparing ZIP download...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      // Generate ZIP permalink
+      final zipUrl = TorboxService.createZipPermalink(key, torrent.id);
+
+      if (zipUrl.isEmpty) {
+        debugPrint('TorboxDownloadsScreen: Failed to generate ZIP permalink');
+        if (mounted) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Failed to generate ZIP download link'),
+              backgroundColor: Color(0xFFEF4444),
+            ),
+          );
+        }
+        return;
+      }
+
+      debugPrint('TorboxDownloadsScreen: Generated ZIP permalink: $zipUrl');
+
+      // Create meta JSON with Torbox-specific fields for ZIP
+      final meta = jsonEncode({
+        'torboxTorrentId': torrent.id,
+        'apiKey': key,
+        'torboxDownload': true,
+        'torboxZip': true,
+      });
+
+      // Enqueue ZIP download
+      final zipFileName = '${torrent.name}.zip';
+      await DownloadService.instance.enqueueDownload(
+        url: zipUrl,
+        fileName: zipFileName,
+        meta: meta,
+        torrentName: torrent.name,
+      );
+
+      debugPrint('TorboxDownloadsScreen: Successfully enqueued ZIP download');
+
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('ZIP download queued successfully'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('TorboxDownloadsScreen: Error during ZIP download: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildTorboxRawList({
