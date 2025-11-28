@@ -39,7 +39,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'pikpak-back');
   final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'pikpak-retry');
   final FocusNode _settingsButtonFocusNode = FocusNode(debugLabel: 'pikpak-settings');
-  final List<FocusNode> _fileItemFocusNodes = [];
 
   @override
   void initState() {
@@ -63,9 +62,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _backButtonFocusNode.dispose();
     _retryButtonFocusNode.dispose();
     _settingsButtonFocusNode.dispose();
-    for (final node in _fileItemFocusNodes) {
-      node.dispose();
-    }
     super.dispose();
   }
 
@@ -108,17 +104,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       // Filter files based on settings
       final filteredFiles = _filterFiles(result.files);
 
-      // Dispose old file item focus nodes
-      for (final node in _fileItemFocusNodes) {
-        node.dispose();
-      }
-      _fileItemFocusNodes.clear();
-
-      // Create new focus nodes for each file
-      for (int i = 0; i < filteredFiles.length; i++) {
-        _fileItemFocusNodes.add(FocusNode(debugLabel: 'pikpak-file-$i'));
-      }
-
       setState(() {
         _files.clear();
         _files.addAll(filteredFiles);
@@ -127,15 +112,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _isLoading = false;
         _initialLoad = false;
       });
-
-      // Auto-focus first file after load
-      if (filteredFiles.isNotEmpty && mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_fileItemFocusNodes.isNotEmpty && mounted) {
-            _fileItemFocusNodes[0].requestFocus();
-          }
-        });
-      }
     } catch (e) {
       print('Error loading PikPak files: $e');
       if (!mounted) return;
@@ -166,12 +142,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
       // Filter files based on settings
       final filteredFiles = _filterFiles(result.files);
-
-      // Create focus nodes for new files
-      final startIndex = _fileItemFocusNodes.length;
-      for (int i = 0; i < filteredFiles.length; i++) {
-        _fileItemFocusNodes.add(FocusNode(debugLabel: 'pikpak-file-${startIndex + i}'));
-      }
 
       setState(() {
         _files.addAll(filteredFiles);
@@ -688,16 +658,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // We'll check for actual streaming links when playing
     final hasStreamingLink = isVideo && isComplete;
 
-    // Get focus node for this item (if available)
-    final focusNode = index < _fileItemFocusNodes.length ? _fileItemFocusNodes[index] : null;
-
-    return _TvFocusableFileCard(
-      focusNode: focusNode,
-      onTap: isFolder
-          ? () => _navigateIntoFolder(file['id'], name)
-          : isVideo
-              ? () => _playFile(file)
-              : null,
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -785,37 +747,43 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               ),
             ],
             const SizedBox(height: 12),
-            Row(
-              children: [
-                if (isFolder) ...[
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => _navigateIntoFolder(file['id'], name),
-                      icon: const Icon(Icons.folder_open, size: 18),
-                      label: const Text('Open'),
+            // Wrap buttons in FocusTraversalGroup for horizontal navigation
+            FocusTraversalGroup(
+              policy: OrderedTraversalPolicy(),
+              child: Row(
+                children: [
+                  if (isFolder) ...[
+                    Expanded(
+                      child: FilledButton.icon(
+                        autofocus: index == 0, // Auto-focus first item's button
+                        onPressed: () => _navigateIntoFolder(file['id'], name),
+                        icon: const Icon(Icons.folder_open, size: 18),
+                        label: const Text('Open'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (isVideo && isComplete) ...[
+                    Expanded(
+                      child: FilledButton.icon(
+                        autofocus: index == 0, // Auto-focus first item's button
+                        onPressed: () => _playFile(file),
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Play'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  // Delete button for all files/folders
+                  OutlinedButton.icon(
+                    onPressed: () => _showDeleteDialog(file),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Delete'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade400,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                ] else if (isVideo && isComplete) ...[
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => _playFile(file),
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      label: const Text('Play'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                 ],
-                // Delete button for all files/folders
-                OutlinedButton.icon(
-                  onPressed: () => _showDeleteDialog(file),
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('Delete'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red.shade400,
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -842,134 +810,5 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     } catch (e) {
       return '';
     }
-  }
-}
-
-/// A TV/DPAD-focusable file card with visual focus indication
-class _TvFocusableFileCard extends StatefulWidget {
-  const _TvFocusableFileCard({
-    required this.child,
-    this.focusNode,
-    this.onTap,
-  });
-
-  final Widget child;
-  final FocusNode? focusNode;
-  final VoidCallback? onTap;
-
-  @override
-  State<_TvFocusableFileCard> createState() => _TvFocusableFileCardState();
-}
-
-class _TvFocusableFileCardState extends State<_TvFocusableFileCard> {
-  bool _isFocused = false;
-  late FocusNode _effectiveFocusNode;
-  bool _ownsNode = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.focusNode != null) {
-      _effectiveFocusNode = widget.focusNode!;
-    } else {
-      _effectiveFocusNode = FocusNode();
-      _ownsNode = true;
-    }
-    _effectiveFocusNode.addListener(_handleFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(_TvFocusableFileCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.focusNode != oldWidget.focusNode) {
-      _effectiveFocusNode.removeListener(_handleFocusChange);
-      if (_ownsNode) {
-        _effectiveFocusNode.dispose();
-      }
-      if (widget.focusNode != null) {
-        _effectiveFocusNode = widget.focusNode!;
-        _ownsNode = false;
-      } else {
-        _effectiveFocusNode = FocusNode();
-        _ownsNode = true;
-      }
-      _effectiveFocusNode.addListener(_handleFocusChange);
-    }
-  }
-
-  @override
-  void dispose() {
-    _effectiveFocusNode.removeListener(_handleFocusChange);
-    if (_ownsNode) {
-      _effectiveFocusNode.dispose();
-    }
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (mounted) {
-      setState(() {
-        _isFocused = _effectiveFocusNode.hasFocus;
-      });
-    }
-  }
-
-  void _handleTap() {
-    if (widget.onTap != null) {
-      HapticFeedback.selectionClick();
-      widget.onTap!();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Shortcuts(
-      shortcuts: {
-        const SingleActivator(LogicalKeyboardKey.enter): const ActivateIntent(),
-        const SingleActivator(LogicalKeyboardKey.select): const ActivateIntent(),
-        const SingleActivator(LogicalKeyboardKey.gameButtonA): const ActivateIntent(),
-      },
-      child: Actions(
-        actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              _handleTap();
-              return null;
-            },
-          ),
-        },
-        child: Focus(
-          focusNode: _effectiveFocusNode,
-          child: GestureDetector(
-            onTap: _handleTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: _isFocused
-                    ? Border.all(color: theme.colorScheme.primary, width: 2)
-                    : null,
-                boxShadow: _isFocused
-                    ? [
-                        BoxShadow(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          spreadRadius: 2,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: widget.child,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
