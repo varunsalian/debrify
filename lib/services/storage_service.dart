@@ -1078,15 +1078,43 @@ class StorageService {
   }
 
   /// Update an existing playlist item with poster URL
-  /// Uses rdTorrentId to find and update the item
+  /// Supports both RealDebrid (rdTorrentId) and PikPak (pikpakCollectionId)
   static Future<bool> updatePlaylistItemPoster(
-    String rdTorrentId,
-    String posterUrl,
-  ) async {
+    String posterUrl, {
+    String? rdTorrentId,
+    String? pikpakCollectionId,
+  }) async {
     final items = await getPlaylistItemsRaw();
-    final itemIndex = items.indexWhere(
-      (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
-    );
+    int itemIndex = -1;
+
+    // Search by rdTorrentId if provided (RealDebrid)
+    if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
+      );
+    }
+
+    // Search by pikpakCollectionId if provided and not found yet (PikPak)
+    if (itemIndex == -1 && pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
+      itemIndex = items.indexWhere((item) {
+        // Check single PikPak files
+        final pikpakFileId = item['pikpakFileId'] as String?;
+        if (pikpakFileId == pikpakCollectionId) {
+          return true;
+        }
+
+        // Check PikPak collections (first file ID in array)
+        final pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
+        if (pikpakFileIds != null && pikpakFileIds.isNotEmpty) {
+          final firstId = pikpakFileIds[0].toString();
+          if (firstId == pikpakCollectionId) {
+            return true;
+          }
+        }
+
+        return false;
+      });
+    }
 
     if (itemIndex == -1) return false;
 

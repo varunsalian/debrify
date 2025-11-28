@@ -559,8 +559,22 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       try {
-        debugPrint('PlaylistScreen: Playing PikPak single file, fileId=$pikpakFileId');
-        final fileData = await pikpak.getFileDetails(pikpakFileId);
+        // Check if we have stored metadata for instant access
+        final Map<String, dynamic>? storedFile = item['pikpakFile'] as Map<String, dynamic>?;
+        final bool hasStoredMetadata = storedFile != null && storedFile.isNotEmpty;
+
+        debugPrint('PlaylistScreen: Playing PikPak single file, fileId=$pikpakFileId, hasStoredMetadata=$hasStoredMetadata');
+
+        // Always need to get streaming URL, but can skip metadata fetch if we have it stored
+        final Map<String, dynamic> fileData;
+        if (hasStoredMetadata) {
+          // Use stored metadata and only fetch streaming URL
+          fileData = await pikpak.getFileDetails(pikpakFileId);
+        } else {
+          // Fetch full metadata (backward compatibility)
+          fileData = await pikpak.getFileDetails(pikpakFileId);
+        }
+
         final url = pikpak.getStreamingUrl(fileData);
 
         if (url == null || url.isEmpty) {
@@ -571,10 +585,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           return;
         }
 
-        final String resolvedTitle = (fileData['name'] as String?)?.isNotEmpty == true
-            ? fileData['name'] as String
-            : fallbackTitle;
-        final int? sizeBytes = _asInt(fileData['size']);
+        // Use stored metadata if available, otherwise use fetched data
+        final String resolvedTitle = hasStoredMetadata
+            ? ((storedFile['name'] as String?)?.isNotEmpty == true
+                ? storedFile['name'] as String
+                : fallbackTitle)
+            : ((fileData['name'] as String?)?.isNotEmpty == true
+                ? fileData['name'] as String
+                : fallbackTitle);
+
+        final int? sizeBytes = hasStoredMetadata
+            ? _asInt(storedFile['size'])
+            : _asInt(fileData['size']);
+
         final String? subtitle =
             sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
 
@@ -595,6 +618,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               ),
             ],
             startIndex: 0,
+            pikpakCollectionId: pikpakFileId,
           ),
         );
       } catch (e) {
@@ -608,8 +632,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
 
     // Handle COLLECTION items
+    // Check for new format with metadata first, fallback to old format
+    final List<dynamic>? pikpakFiles = item['pikpakFiles'] as List<dynamic>?;
     final List<dynamic>? pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
-    if (pikpakFileIds == null || pikpakFileIds.isEmpty) {
+
+    if ((pikpakFiles == null || pikpakFiles.isEmpty) &&
+        (pikpakFileIds == null || pikpakFileIds.isEmpty)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Missing PikPak files information.')),
@@ -617,44 +645,69 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       return;
     }
 
+    // Use stored metadata if available (instant), otherwise fetch it (backward compatibility)
+    final bool hasStoredMetadata = pikpakFiles != null && pikpakFiles.isNotEmpty;
+
     if (!mounted) return;
     bool dialogOpen = false;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        dialogOpen = true;
-        return const AlertDialog(
-          backgroundColor: Color(0xFF1E293B),
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Preparing playlist...', style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        );
-      },
-    );
+
+    // Only show loading dialog if we need to fetch metadata
+    if (!hasStoredMetadata) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          dialogOpen = true;
+          return const AlertDialog(
+            backgroundColor: Color(0xFF1E293B),
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Text('Preparing playlist...', style: TextStyle(color: Colors.white)),
+              ],
+            ),
+          );
+        },
+      );
+    }
 
     try {
-      debugPrint('PlaylistScreen: Playing PikPak collection with ${pikpakFileIds.length} files');
-
-      // Fetch file details for all files
       final List<Map<String, dynamic>> videoFiles = [];
-      for (final fileId in pikpakFileIds) {
-        try {
-          final fileData = await pikpak.getFileDetails(fileId.toString());
-          final mimeType = (fileData['mime_type'] as String?) ?? '';
-          final fileName = (fileData['name'] as String?) ?? '';
 
-          // Filter to video files only
-          if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
-            videoFiles.add(fileData);
+      if (hasStoredMetadata) {
+        // NEW: Use stored metadata - instant, no API calls needed!
+        debugPrint('PlaylistScreen: Using stored metadata for ${pikpakFiles.length} PikPak files (instant playback)');
+
+        for (final file in pikpakFiles) {
+          if (file is Map<String, dynamic>) {
+            final mimeType = (file['mime_type'] as String?) ?? '';
+            final fileName = (file['name'] as String?) ?? '';
+
+            // Filter to video files only
+            if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
+              videoFiles.add(file);
+            }
           }
-        } catch (e) {
-          debugPrint('PlaylistScreen: Failed to get PikPak file details for $fileId: $e');
-          // Continue with other files
+        }
+      } else {
+        // OLD: Fallback to fetching metadata for backward compatibility
+        debugPrint('PlaylistScreen: Fetching metadata for ${pikpakFileIds!.length} PikPak files (legacy format)');
+
+        for (final fileId in pikpakFileIds) {
+          try {
+            final fileData = await pikpak.getFileMetadata(fileId.toString());
+            final mimeType = (fileData['mime_type'] as String?) ?? '';
+            final fileName = (fileData['name'] as String?) ?? '';
+
+            // Filter to video files only
+            if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
+              videoFiles.add(fileData);
+            }
+          } catch (e) {
+            debugPrint('PlaylistScreen: Failed to get PikPak file metadata for $fileId: $e');
+            // Continue with other files
+          }
         }
       }
 
@@ -727,11 +780,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         startIndex = 0;
       }
 
-      // Resolve URL for the first video only (lazy loading for rest)
+      // Resolve URL ONLY for the starting episode (lazy loading for rest)
+      // This requires calling getFileDetails with usage=FETCH to get streaming URL
       String initialUrl = '';
       try {
-        final firstFile = candidates[startIndex].file;
-        initialUrl = pikpak.getStreamingUrl(firstFile) ?? '';
+        final firstFileId = candidates[startIndex].file['id'] as String?;
+        if (firstFileId != null) {
+          final fullData = await pikpak.getFileDetails(firstFileId);
+          initialUrl = pikpak.getStreamingUrl(fullData) ?? '';
+        }
       } catch (e) {
         debugPrint('PlaylistScreen: PikPak initial URL resolution failed: $e');
       }
@@ -791,6 +848,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       if (!mounted) return;
+
+      // Use the first file ID as the collection identifier for poster support
+      final firstFileId = candidates.isNotEmpty
+          ? (candidates[0].file['id'] as String?)
+          : null;
+
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -799,6 +862,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           subtitle: subtitle,
           playlist: playlistEntries,
           startIndex: startIndex,
+          pikpakCollectionId: firstFileId,
         ),
       );
     } catch (e) {

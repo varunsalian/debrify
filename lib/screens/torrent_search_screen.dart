@@ -2010,17 +2010,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'title': file['name'] ?? torrentName,
         'kind': 'single',
         'pikpakFileId': file['id'],
+        // Store full metadata for instant playback
+        'pikpakFile': {
+          'id': file['id'],
+          'name': file['name'],
+          'size': file['size'],
+          'mime_type': file['mime_type'],
+        },
         'sizeBytes': int.tryParse(file['size']?.toString() ?? '0'),
       });
       _showPikPakSnack(added ? 'Added to playlist' : 'Already in playlist', isError: !added);
     } else {
-      // Save as collection (like Torbox)
+      // Save as collection with full metadata for instant playback
       final fileIds = videoFiles.map((f) => f['id'] as String).toList();
+      final filesMetadata = videoFiles.map((f) => {
+        'id': f['id'],
+        'name': f['name'],
+        'size': f['size'],
+        'mime_type': f['mime_type'],
+      }).toList();
+
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'pikpak',
         'title': torrentName,
         'kind': 'collection',
-        'pikpakFileIds': fileIds,
+        'pikpakFiles': filesMetadata,  // NEW: Full metadata for instant playback
+        'pikpakFileIds': fileIds,       // KEEP: For backward compatibility and deduplication
         'count': videoFiles.length,
       });
       _showPikPakSnack(

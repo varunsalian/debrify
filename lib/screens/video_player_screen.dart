@@ -38,7 +38,8 @@ class VideoPlayerScreen extends StatefulWidget {
   final String? subtitle;
   final List<PlaylistEntry>? playlist;
   final int? startIndex;
-  final String? rdTorrentId; // For updating playlist poster
+  final String? rdTorrentId; // For updating playlist poster (RealDebrid)
+  final String? pikpakCollectionId; // For updating playlist poster (PikPak)
   // Optional: Debrify TV provider to fetch the next playable item (url & title)
   final Future<Map<String, String>?> Function()? requestMagicNext;
   // Optional: Debrify TV channel switcher (firstUrl, firstTitle, channel metadata)
@@ -69,6 +70,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.playlist,
     this.startIndex,
     this.rdTorrentId,
+    this.pikpakCollectionId,
     this.requestMagicNext,
     this.requestNextChannel,
     this.startFromRandom = false,
@@ -1644,9 +1646,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   ) async {
     if (seriesPlaylist.seriesTitle == null) return;
 
-    // Get the rdTorrentId from the widget parameter
+    // Get identifiers from widget parameters
     final rdTorrentId = widget.rdTorrentId;
-    if (rdTorrentId == null || rdTorrentId.isEmpty) return;
+    final pikpakCollectionId = widget.pikpakCollectionId;
+
+    // Need at least one identifier to save poster
+    if ((rdTorrentId == null || rdTorrentId.isEmpty) &&
+        (pikpakCollectionId == null || pikpakCollectionId.isEmpty)) {
+      return;
+    }
 
     // Try to get series info to extract poster URL
     try {
@@ -1657,8 +1665,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final posterUrl =
             seriesInfo['image']['original'] ?? seriesInfo['image']['medium'];
         if (posterUrl != null && posterUrl.isNotEmpty) {
-          // Save poster URL to playlist item
-          await StorageService.updatePlaylistItemPoster(rdTorrentId, posterUrl);
+          // Save poster URL to playlist item (supports both RealDebrid and PikPak)
+          if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
+            await StorageService.updatePlaylistItemPoster(
+              posterUrl,
+              rdTorrentId: rdTorrentId,
+            );
+          }
+          if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
+            await StorageService.updatePlaylistItemPoster(
+              posterUrl,
+              pikpakCollectionId: pikpakCollectionId,
+            );
+          }
         }
       }
     } catch (e) {

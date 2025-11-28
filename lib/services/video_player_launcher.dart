@@ -36,6 +36,7 @@ class VideoPlayerLaunchArgs {
   final List<PlaylistEntry>? playlist;
   final int? startIndex;
   final String? rdTorrentId;
+  final String? pikpakCollectionId;
   final Future<Map<String, String>?> Function()? requestMagicNext;
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
   final bool startFromRandom;
@@ -56,6 +57,7 @@ class VideoPlayerLaunchArgs {
     this.playlist,
     this.startIndex,
     this.rdTorrentId,
+    this.pikpakCollectionId,
     this.requestMagicNext,
     this.requestNextChannel,
     this.startFromRandom = false,
@@ -78,6 +80,7 @@ class VideoPlayerLaunchArgs {
       playlist: playlist,
       startIndex: startIndex,
       rdTorrentId: rdTorrentId,
+      pikpakCollectionId: pikpakCollectionId,
       requestMagicNext: requestMagicNext,
       requestNextChannel: requestNextChannel,
       startFromRandom: startFromRandom,

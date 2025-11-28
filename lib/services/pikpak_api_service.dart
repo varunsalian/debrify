@@ -17,6 +17,9 @@ class PikPakApiService {
   // User-Agent should match Firefox (as used by rclone) for best compatibility
   static const String _webUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0';
 
+  // Mutex for captcha token refresh to prevent race conditions
+  final Map<String, Completer<String>> _captchaRefreshInProgress = {};
+
   // Web Platform Algorithms for Captcha Sign (from rclone)
   static const List<String> _webAlgorithms = [
     'C9qPpZLN8ucRTaTiUMWYS9cQvWOE',
@@ -71,7 +74,55 @@ class PikPakApiService {
     return '1.$str';
   }
 
-  /// Get captcha token from PikPak
+  /// Get captcha token from PikPak with synchronization to prevent race conditions
+  /// When multiple requests fail with "Verification code is invalid" simultaneously,
+  /// only one will actually fetch a new token, others will wait and use the same token.
+  Future<String> _getCaptchaTokenSynchronized({
+    required String action,
+    required String deviceId,
+    String? email,
+    String? userId,
+  }) async {
+    // Create a unique key for this captcha request
+    final requestKey = '$action:${userId ?? email ?? 'anonymous'}';
+
+    // Check if a refresh is already in progress for this key
+    final existingRefresh = _captchaRefreshInProgress[requestKey];
+    if (existingRefresh != null) {
+      print('PikPak: Captcha refresh already in progress for $action, waiting...');
+      try {
+        return await existingRefresh.future;
+      } catch (e) {
+        // If the existing refresh failed, we'll try ourselves
+        print('PikPak: Existing captcha refresh failed, attempting new request');
+      }
+    }
+
+    // Create a new completer for this refresh
+    final completer = Completer<String>();
+    _captchaRefreshInProgress[requestKey] = completer;
+
+    try {
+      final token = await _getCaptchaToken(
+        action: action,
+        deviceId: deviceId,
+        email: email,
+        userId: userId,
+      );
+      completer.complete(token);
+      return token;
+    } catch (e) {
+      completer.completeError(e);
+      rethrow;
+    } finally {
+      // Remove the completer after a short delay to allow all waiting requests to get the result
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _captchaRefreshInProgress.remove(requestKey);
+      });
+    }
+  }
+
+  /// Get captcha token from PikPak (internal implementation)
   Future<String> _getCaptchaToken({
     required String action,
     required String deviceId,
@@ -171,7 +222,7 @@ class PikPakApiService {
 
       // 2. Get captcha token BEFORE login
       final action = 'POST:/v1/auth/signin';
-      final captchaToken = await _getCaptchaToken(
+      final captchaToken = await _getCaptchaTokenSynchronized(
         action: action,
         deviceId: deviceId,
         email: email,
@@ -542,6 +593,12 @@ class PikPakApiService {
         // Retry the request with new token
         headers['Authorization'] = 'Bearer $_accessToken';
 
+        // Also reload captcha token in case it was refreshed
+        final updatedCaptchaToken = await StorageService.getPikPakCaptchaToken();
+        if (updatedCaptchaToken != null && updatedCaptchaToken.isNotEmpty) {
+          headers['X-Captcha-Token'] = updatedCaptchaToken;
+        }
+
         if (method == 'POST') {
           response = await http.post(
             Uri.parse(url),
@@ -581,6 +638,12 @@ class PikPakApiService {
           print('PikPak: Token refreshed, retrying request...');
           // Retry the request with new token
           headers['Authorization'] = 'Bearer $_accessToken';
+
+          // Also reload captcha token in case it was refreshed
+          final updatedCaptchaToken = await StorageService.getPikPakCaptchaToken();
+          if (updatedCaptchaToken != null && updatedCaptchaToken.isNotEmpty) {
+            headers['X-Captcha-Token'] = updatedCaptchaToken;
+          }
 
           if (method == 'POST') {
             response = await http.post(
@@ -660,7 +723,7 @@ class PikPakApiService {
         }
 
         final action = 'POST:/drive/v1/files';
-        final captchaToken = await _getCaptchaToken(
+        final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
@@ -717,7 +780,7 @@ class PikPakApiService {
 
         final userId = await StorageService.getPikPakUserId();
         final action = 'GET:/drive/v1/tasks';
-        final captchaToken = await _getCaptchaToken(
+        final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
@@ -768,7 +831,7 @@ class PikPakApiService {
 
         final userId = await StorageService.getPikPakUserId();
         final action = 'POST:/drive/v1/files:batchTrash';
-        final captchaToken = await _getCaptchaToken(
+        final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
@@ -820,7 +883,7 @@ class PikPakApiService {
 
         final userId = await StorageService.getPikPakUserId();
         final action = 'POST:/drive/v1/files:batchDelete';
-        final captchaToken = await _getCaptchaToken(
+        final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
@@ -884,7 +947,62 @@ class PikPakApiService {
     }
   }
 
-  /// Get file details by ID
+  /// Get basic file metadata by ID (without resolving streaming URLs)
+  /// This is faster than getFileDetails as it doesn't include usage=FETCH
+  /// Use this when you only need file name, size, mime type, etc. for sorting/filtering
+  Future<Map<String, dynamic>> getFileMetadata(String fileId) async {
+    try {
+      print('PikPak: Getting basic file metadata for $fileId');
+      // Get basic file info WITHOUT usage=FETCH (faster, no streaming URL resolution)
+      final response = await _makeAuthenticatedRequest(
+        'GET',
+        '$_driveBaseUrl/drive/v1/files/$fileId',
+        null,
+      );
+      print('PikPak: File metadata retrieved successfully');
+      return response;
+    } catch (e) {
+      // If captcha verification fails, get fresh token and retry
+      if (e.toString().contains('Verification code is invalid')) {
+        print('PikPak: Captcha token invalid, requesting fresh token...');
+
+        final deviceId = await StorageService.getPikPakDeviceId();
+        if (deviceId == null) {
+          throw Exception('No device ID found. Please login first.');
+        }
+
+        final userId = await StorageService.getPikPakUserId();
+        if (userId == null) {
+          print('PikPak: Warning: No user ID found, this might cause issues');
+        }
+
+        final action = 'GET:/drive/v1/files';
+        final captchaToken = await _getCaptchaTokenSynchronized(
+          action: action,
+          deviceId: deviceId,
+          userId: userId,
+        );
+
+        await StorageService.setPikPakCaptchaToken(captchaToken);
+        print('PikPak: Retrying with fresh captcha token');
+
+        // Retry the request
+        final response = await _makeAuthenticatedRequest(
+          'GET',
+          '$_driveBaseUrl/drive/v1/files/$fileId',
+          null,
+        );
+
+        print('PikPak: File metadata retrieved successfully (after retry)');
+        return response;
+      } else {
+        print('PikPak: Failed to get file metadata: $e');
+        rethrow;
+      }
+    }
+  }
+
+  /// Get file details by ID (including streaming URLs - slower)
   Future<Map<String, dynamic>> getFileDetails(String fileId) async {
     try {
       print('PikPak: Getting file details for $fileId');
@@ -913,7 +1031,7 @@ class PikPakApiService {
         }
 
         final action = 'GET:/drive/v1/files';
-        final captchaToken = await _getCaptchaToken(
+        final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
@@ -975,7 +1093,7 @@ class PikPakApiService {
         }
 
         final action = 'GET:/drive/v1/files';
-        final captchaToken = await _getCaptchaToken(
+        final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,

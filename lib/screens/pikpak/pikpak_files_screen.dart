@@ -793,9 +793,21 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     onSelected: (value) {
                       if (value == 'delete') {
                         _showDeleteDialog(file);
+                      } else if (value == 'add_to_playlist') {
+                        _handleAddToPlaylist(file);
                       }
                     },
                     itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'add_to_playlist',
+                        child: Row(
+                          children: [
+                            Icon(Icons.playlist_add, size: 18, color: Colors.blue),
+                            SizedBox(width: 12),
+                            Text('Add to Playlist'),
+                          ],
+                        ),
+                      ),
                       const PopupMenuItem(
                         value: 'delete',
                         child: Row(
@@ -1069,6 +1081,177 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         startIndex: startIndex,
       ),
     );
+  }
+
+  /// Handle adding a file or folder to playlist
+  Future<void> _handleAddToPlaylist(Map<String, dynamic> file) async {
+    final kind = file['kind'] ?? '';
+    final isFolder = kind == 'drive#folder';
+
+    if (isFolder) {
+      await _addFolderToPlaylist(file);
+    } else {
+      await _addSingleFileToPlaylist(file);
+    }
+  }
+
+  /// Add a single video file to playlist
+  Future<void> _addSingleFileToPlaylist(Map<String, dynamic> file) async {
+    final mimeType = file['mime_type'] ?? '';
+    final isVideo = mimeType.startsWith('video/');
+
+    if (!isVideo) {
+      _showSnackBar('Only video files can be added to playlist', isError: true);
+      return;
+    }
+
+    final added = await StorageService.addPlaylistItemRaw({
+      'provider': 'pikpak',
+      'title': file['name'] ?? 'Video',
+      'kind': 'single',
+      'pikpakFileId': file['id'],
+      // Store full metadata for instant playback
+      'pikpakFile': {
+        'id': file['id'],
+        'name': file['name'],
+        'size': file['size'],
+        'mime_type': file['mime_type'],
+      },
+      'sizeBytes': int.tryParse(file['size']?.toString() ?? '0'),
+    });
+
+    _showSnackBar(
+      added ? 'Added to playlist' : 'Already in playlist',
+      isError: !added,
+    );
+  }
+
+  /// Add all videos in a folder to playlist (recursively scans subfolders)
+  Future<void> _addFolderToPlaylist(Map<String, dynamic> folder) async {
+    final folderId = folder['id'] as String?;
+    final folderName = folder['name'] ?? 'Folder';
+
+    if (folderId == null) {
+      _showSnackBar('Invalid folder ID', isError: true);
+      return;
+    }
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Scanning folder for videos...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Recursively scan folder for all files
+      final allFiles = await PikPakApiService.instance.listFilesRecursive(
+        folderId: folderId,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (!mounted) return;
+
+      // Filter for videos only
+      List<Map<String, dynamic>> videoFiles = allFiles.where((file) {
+        final mimeType = file['mime_type'] ?? '';
+        final phase = file['phase'] ?? '';
+        final isVideo = mimeType.startsWith('video/');
+        final isComplete = phase == 'PHASE_TYPE_COMPLETE';
+        return isVideo && isComplete;
+      }).toList();
+
+      // Apply user settings filters
+      if (_ignoreSmallVideos) {
+        videoFiles = videoFiles.where((file) {
+          final size = file['size'];
+          if (size == null) return true;
+          final sizeBytes = int.tryParse(size.toString()) ?? 0;
+          final sizeMB = sizeBytes / (1024 * 1024);
+          return sizeMB >= 100;
+        }).toList();
+      }
+
+      if (videoFiles.isEmpty) {
+        _showSnackBar(
+          'This folder doesn\'t contain any videos',
+          isError: true,
+        );
+        return;
+      }
+
+      // Add to playlist
+      if (videoFiles.length == 1) {
+        // Single video file - store full metadata for instant playback
+        final file = videoFiles.first;
+        final added = await StorageService.addPlaylistItemRaw({
+          'provider': 'pikpak',
+          'title': file['name'] ?? folderName,
+          'kind': 'single',
+          'pikpakFileId': file['id'],
+          'pikpakFile': {
+            'id': file['id'],
+            'name': file['name'],
+            'size': file['size'],
+            'mime_type': file['mime_type'],
+          },
+          'sizeBytes': int.tryParse(file['size']?.toString() ?? '0'),
+        });
+        _showSnackBar(
+          added ? 'Added to playlist' : 'Already in playlist',
+          isError: !added,
+        );
+      } else {
+        // Multiple videos - save as collection with full metadata for instant playback
+        // Store both pikpakFiles (new format) and pikpakFileIds (for dedupe compatibility)
+        final fileIds = videoFiles.map((f) => f['id'] as String).toList();
+        final filesMetadata = videoFiles.map((f) => {
+          'id': f['id'],
+          'name': f['name'],
+          'size': f['size'],
+          'mime_type': f['mime_type'],
+        }).toList();
+
+        final added = await StorageService.addPlaylistItemRaw({
+          'provider': 'pikpak',
+          'title': folderName,
+          'kind': 'collection',
+          'pikpakFiles': filesMetadata,  // NEW: Full metadata for instant playback
+          'pikpakFileIds': fileIds,       // KEEP: For backward compatibility and deduplication
+          'count': videoFiles.length,
+        });
+        _showSnackBar(
+          added
+              ? 'Added ${videoFiles.length} videos to playlist'
+              : 'Already in playlist',
+          isError: !added,
+        );
+      }
+    } catch (e) {
+      print('Error adding folder to playlist: $e');
+      if (mounted) {
+        // Close loading dialog if still open
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to scan folder: $e', isError: true);
+    }
   }
 
   String _pikpakDisplayName(Map<String, dynamic> file) {
