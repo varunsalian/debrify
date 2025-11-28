@@ -1829,6 +1829,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final fullData = await pikpak.getFileDetails(file['id']);
         final url = pikpak.getStreamingUrl(fullData);
         if (url != null && mounted) {
+          // Launch player immediately - retry logic will handle cold storage
           final sizeBytes = int.tryParse(file['size']?.toString() ?? '0') ?? 0;
           final title = file['name'] ?? torrentName;
           await VideoPlayerLauncher.push(
@@ -1916,6 +1917,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
+    // Launch player immediately - retry logic will handle cold storage for all videos
     // Build playlist entries
     final playlistEntries = <PlaylistEntry>[];
     for (int i = 0; i < sortedEntries.length; i++) {

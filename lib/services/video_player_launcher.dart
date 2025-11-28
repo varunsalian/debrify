@@ -505,6 +505,7 @@ class _AndroidTvPlaybackItem {
   final int durationMs;
   final int updatedAt;
   final String? resumeId;
+  final String? provider;
 
   const _AndroidTvPlaybackItem({
     required this.id,
@@ -520,6 +521,7 @@ class _AndroidTvPlaybackItem {
     required this.durationMs,
     required this.updatedAt,
     required this.resumeId,
+    required this.provider,
   });
 
   Map<String, dynamic> toMap() {
@@ -537,6 +539,7 @@ class _AndroidTvPlaybackItem {
       'durationMs': durationMs,
       'updatedAt': updatedAt,
       'resumeId': resumeId,
+      'provider': provider,
     };
   }
 }
@@ -659,6 +662,7 @@ class _AndroidTvPlaylistResolver {
       'url': url,
       'resumeId': target.resumeId,
       'index': target.index,
+      'provider': target.entry.provider,
     };
   }
 
@@ -738,6 +742,7 @@ class _AndroidTvPlaybackPayloadBuilder {
           durationMs: resumeInfo.durationMs,
           updatedAt: resumeInfo.updatedAt,
           resumeId: resumeId,
+          provider: entry.provider,
         ),
       );
     }

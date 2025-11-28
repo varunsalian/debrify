@@ -76,7 +76,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private static final String PROVIDER_TORBOX = "torbox";
     private static final String PROVIDER_REAL_DEBRID = "real_debrid";
-    
+    private static final String PROVIDER_PIKPAK = "pikpak";
+
     private enum LoadingType {
         STREAM,   // Loading next stream (green)
         CHANNEL   // Switching channel (cyan)
@@ -92,12 +93,19 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private static final long CONTROLS_AUTO_HIDE_DELAY_MS = 4000L;
     private static final int CHANNEL_JUMP_MAX_DIGITS = 10; // Support up to 10 digits
 
+    // PikPak cold storage retry constants
+    private static final int PIKPAK_MAX_RETRIES = 5;
+    private static final int PIKPAK_METADATA_TIMEOUT_MS = 10000; // 10 seconds to wait for metadata
+    private static final int PIKPAK_BASE_DELAY_MS = 2000; // 2 seconds base delay
+    private static final int PIKPAK_MAX_DELAY_MS = 18000; // 18 seconds max delay
+
     private String provider;
     private PlayerView playerView;
     private ExoPlayer player;
     private DefaultTrackSelector trackSelector;
     private RenderersFactory renderersFactory;
     private DefaultBandwidthMeter bandwidthMeter;
+    private Player.Listener subtitleListener; // Track subtitle listener for proper cleanup
     private long currentTargetBufferMs = DEFAULT_TARGET_BUFFER_MS;
     private TextView titleView;
     private TextView hintView;
@@ -220,6 +228,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private static final long CHANNEL_SWITCH_COOLDOWN_MS = 2000L; // 2 second cooldown
     private static final int SEEK_LONG_PRESS_THRESHOLD = 3;
 
+    // PikPak cold storage retry state
+    private boolean isPikPakRetrying = false;
+    private int pikPakRetryCount = 0;
+    private int pikPakRetryId = 0; // Cancellation token
+    private String currentStreamProvider = null; // Track provider of current stream
+    private String currentStreamUrl = null;
+    private String currentStreamTitle = null;
+    private final Handler pikPakRetryHandler = new Handler(Looper.getMainLooper());
+    private View pikPakRetryOverlay;
+    private TextView pikPakRetryText;
+
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
     private final Runnable hideNextOverlayRunnable = this::performHideNextOverlay;
@@ -281,6 +300,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         loadingDot1 = findViewById(R.id.loading_dot_1);
         loadingDot2 = findViewById(R.id.loading_dot_2);
         loadingDot3 = findViewById(R.id.loading_dot_3);
+
+        // Initialize PikPak retry overlay (reuse loading indicator for now)
+        setupPikPakRetryOverlay();
 
         // Initialize Radial Menu Views
         setupChannelJumpOverlay();
@@ -399,14 +421,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         
         // Connect player subtitle output to our custom SubtitleView
         if (subtitleOverlay != null) {
-            player.addListener(new Player.Listener() {
+            // Remove previous subtitle listener if it exists
+            if (subtitleListener != null) {
+                player.removeListener(subtitleListener);
+            }
+            // Create and store new subtitle listener
+            subtitleListener = new Player.Listener() {
                 @Override
                 public void onCues(androidx.media3.common.text.CueGroup cueGroup) {
                     if (subtitleOverlay != null) {
                         subtitleOverlay.setCues(cueGroup.cues);
                     }
                 }
-            });
+            };
+            player.addListener(subtitleListener);
         }
         
         playerView.setKeepScreenOn(true);
@@ -1538,17 +1566,46 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void playMedia(String url, @Nullable String title) {
+        playMedia(url, title, null);
+    }
+
+    private void playMedia(String url, @Nullable String title, @Nullable String providerHint) {
+        if (player == null || url == null || url.isEmpty()) {
+            return;
+        }
+
+        // Store current stream info for retry logic
+        currentStreamUrl = url;
+        currentStreamTitle = title;
+        currentStreamProvider = providerHint;
+
+        // Check if this is a PikPak stream and apply retry logic
+        boolean isPikPak = PROVIDER_PIKPAK.equalsIgnoreCase(currentStreamProvider);
+
+        android.util.Log.d("TorboxTvPlayer", "playMedia: url=" + url.substring(0, Math.min(50, url.length())) +
+                ", title=" + title + ", provider=" + currentStreamProvider + ", isPikPak=" + isPikPak);
+
+        if (isPikPak) {
+            // Use PikPak retry logic for cold storage handling
+            playPikPakVideoWithRetry(url, title);
+        } else {
+            // Standard playback for non-PikPak providers
+            playMediaDirect(url, title);
+        }
+    }
+
+    private void playMediaDirect(String url, @Nullable String title) {
         if (player == null || url == null || url.isEmpty()) {
             return;
         }
         randomApplied = false;
         maybeRecreatePlayerForBandwidth();
-        
+
         // Clear previous video's subtitles before loading new video
         if (subtitleOverlay != null) {
             subtitleOverlay.setCues(java.util.Collections.emptyList());
         }
-        
+
         MediaMetadata metadata = new MediaMetadata.Builder()
                 .setTitle(title != null ? title : "")
                 .build();
@@ -1574,6 +1631,209 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Don't show the old centered title anymore, only use the new badge
         // showTitleTemporarily(title);
         updateTitleBadge(title);
+    }
+
+    /**
+     * PikPak Cold Storage Retry Logic
+     * PikPak uses "cold storage" where files that haven't been accessed recently need 10-30 seconds
+     * to reactivate. This method implements retry logic with exponential backoff.
+     */
+    private void playPikPakVideoWithRetry(String url, @Nullable String title) {
+        android.util.Log.d("TorboxTvPlayer", "PikPak: Starting retry logic for cold storage handling");
+
+        // Cancel any previous retry loops
+        pikPakRetryId++;
+        final int myRetryId = pikPakRetryId;
+
+        // Reset retry state
+        pikPakRetryCount = 0;
+        isPikPakRetrying = false;
+        hidePikPakRetryOverlay();
+
+        // Start first attempt
+        attemptPikPakPlayback(url, title, 0, myRetryId);
+    }
+
+    private void attemptPikPakPlayback(String url, @Nullable String title, int attemptNumber, int retryId) {
+        // Check if this retry has been cancelled
+        if (pikPakRetryId != retryId) {
+            android.util.Log.d("TorboxTvPlayer", "PikPak: Retry cancelled (token mismatch)");
+            hidePikPakRetryOverlay();
+            return;
+        }
+
+        // Null safety check for player
+        if (player == null) {
+            android.util.Log.e("TorboxTvPlayer", "PikPak: Player is null, cannot attempt playback");
+            hidePikPakRetryOverlay();
+            return;
+        }
+
+        android.util.Log.d("TorboxTvPlayer", "PikPak: Playback attempt " + (attemptNumber + 1) + "/" + (PIKPAK_MAX_RETRIES + 1));
+
+        // Clear previous video's subtitles
+        if (subtitleOverlay != null) {
+            subtitleOverlay.setCues(java.util.Collections.emptyList());
+        }
+
+        // Prepare and play the media using existing player instance
+        // Note: We do NOT recreate the player here to avoid TrackSelector reuse issues
+        // PikPak retry doesn't need player recreation - just retry with same URL
+        MediaMetadata metadata = new MediaMetadata.Builder()
+                .setTitle(title != null ? title : "")
+                .build();
+        MediaItem item = new MediaItem.Builder()
+                .setUri(url)
+                .setMediaMetadata(metadata)
+                .build();
+
+        player.setMediaItem(item);
+        player.prepare();
+        player.play();
+
+        if (attemptNumber == 0) {
+            playedCount += 1;
+            updateTitle(title);
+        }
+
+        // Wait for video metadata to load (indicates file is ready)
+        waitForPikPakMetadata(url, title, attemptNumber, retryId);
+    }
+
+    private void waitForPikPakMetadata(String url, @Nullable String title, int attemptNumber, int retryId) {
+        final long startTime = System.currentTimeMillis();
+
+        final Runnable[] checkRunnable = new Runnable[1];
+        checkRunnable[0] = new Runnable() {
+            @Override
+            public void run() {
+                // Check if retry was cancelled
+                if (pikPakRetryId != retryId) {
+                    android.util.Log.d("TorboxTvPlayer", "PikPak: Metadata check cancelled");
+                    // Clean up handler callbacks to prevent memory leaks
+                    pikPakRetryHandler.removeCallbacks(this);
+                    return;
+                }
+
+                long elapsed = System.currentTimeMillis() - startTime;
+
+                // Check if player state is ready or has duration (with null safety)
+                final ExoPlayer currentPlayer = player;
+                if (currentPlayer != null && (currentPlayer.getPlaybackState() == Player.STATE_READY || currentPlayer.getDuration() > 0)) {
+                    android.util.Log.d("TorboxTvPlayer", "PikPak: Video metadata loaded successfully - file is ready!");
+                    hidePikPakRetryOverlay();
+
+                    // Clean up handler callbacks
+                    pikPakRetryHandler.removeCallbacks(this);
+
+                    // Ensure subtitles are selected after successful load
+                    // Use self-removing listener to avoid memory leaks
+                    currentPlayer.addListener(new Player.Listener() {
+                        @Override
+                        public void onTracksChanged(Tracks tracks) {
+                            // Null check before removing listener
+                            final ExoPlayer p = player;
+                            if (p != null) {
+                                p.removeListener(this);
+                            }
+                            ensureDefaultSubtitleSelected();
+                        }
+                    });
+                    return;
+                }
+
+                // Check timeout
+                if (elapsed >= PIKPAK_METADATA_TIMEOUT_MS) {
+                    android.util.Log.d("TorboxTvPlayer", "PikPak: Timeout waiting for metadata - file likely in cold storage");
+                    // Clean up handler callbacks before timeout handling
+                    pikPakRetryHandler.removeCallbacks(this);
+                    handlePikPakMetadataTimeout(url, title, attemptNumber, retryId);
+                    return;
+                }
+
+                // Continue checking
+                pikPakRetryHandler.postDelayed(checkRunnable[0], 500);
+            }
+        };
+
+        // Start checking
+        pikPakRetryHandler.postDelayed(checkRunnable[0], 500);
+    }
+
+    private void handlePikPakMetadataTimeout(String url, @Nullable String title, int attemptNumber, int retryId) {
+        // Check if we have more retries
+        if (attemptNumber < PIKPAK_MAX_RETRIES) {
+            // Calculate exponential backoff delay: 2s, 4s, 8s, 16s, 18s (capped)
+            int delayMs = PIKPAK_BASE_DELAY_MS * (1 << attemptNumber);
+            delayMs = Math.min(delayMs, PIKPAK_MAX_DELAY_MS);
+
+            pikPakRetryCount = attemptNumber + 1;
+            isPikPakRetrying = true;
+            showPikPakRetryOverlay("Reactivating video... (Attempt " + (attemptNumber + 2) + "/" + (PIKPAK_MAX_RETRIES + 1) + ")");
+
+            android.util.Log.d("TorboxTvPlayer", "PikPak: Waiting " + (delayMs / 1000) + "s before retry...");
+
+            pikPakRetryHandler.postDelayed(() -> {
+                // Check if retry was cancelled during delay
+                if (pikPakRetryId == retryId) {
+                    attemptPikPakPlayback(url, title, attemptNumber + 1, retryId);
+                }
+            }, delayMs);
+        } else {
+            // All retries exhausted
+            android.util.Log.e("TorboxTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.");
+            isPikPakRetrying = false;
+            hidePikPakRetryOverlay();
+
+            runOnUiThread(() -> {
+                Toast.makeText(TorboxTvPlayerActivity.this,
+                        "Video failed to load. Skipping to next...",
+                        Toast.LENGTH_SHORT).show();
+
+                // Auto-advance to next video
+                pikPakRetryHandler.postDelayed(() -> requestNextStream(), 1500);
+            });
+        }
+    }
+
+    private void showPikPakRetryOverlay(String message) {
+        runOnUiThread(() -> {
+            if (pikPakRetryOverlay != null) {
+                pikPakRetryOverlay.setVisibility(View.VISIBLE);
+            }
+            if (pikPakRetryText != null) {
+                pikPakRetryText.setText(message);
+            }
+        });
+    }
+
+    private void hidePikPakRetryOverlay() {
+        runOnUiThread(() -> {
+            if (pikPakRetryOverlay != null) {
+                pikPakRetryOverlay.setVisibility(View.GONE);
+            }
+        });
+    }
+
+    private void setupPikPakRetryOverlay() {
+        // Reuse the existing loading indicator for PikPak retry messages
+        pikPakRetryOverlay = loadingIndicator;
+        pikPakRetryText = loadingText;
+    }
+
+    private void cancelPikPakRetry() {
+        // Increment retry ID to invalidate any ongoing retry operations
+        pikPakRetryId++;
+        isPikPakRetrying = false;
+        pikPakRetryCount = 0;
+
+        // Remove any pending retry callbacks
+        if (pikPakRetryHandler != null) {
+            pikPakRetryHandler.removeCallbacksAndMessages(null);
+        }
+
+        hidePikPakRetryOverlay();
+        android.util.Log.d("TorboxTvPlayer", "PikPak: Retry operations cancelled");
     }
 
     private void maybeSeekRandomly() {
@@ -1691,11 +1951,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 Map<String, Object> payload = (Map<String, Object>) result;
                 String nextUrl = safeString(payload.get("url"));
                 String nextTitle = safeString(payload.get("title"));
+                String nextProvider = safeString(payload.get("provider")); // Extract provider info
+
                 if (nextUrl == null || nextUrl.isEmpty()) {
                     handleNoMoreStreams();
                     return;
                 }
-                
+
+                android.util.Log.d("TorboxTvPlayer", "requestNextStream: received provider=" + nextProvider);
+
                 // Update TV static message to show video is ready
                 if (nextTitle != null && !nextTitle.isEmpty()) {
                     runOnUiThread(() -> {
@@ -1708,8 +1972,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         }
                     });
                 }
-                
-                playMedia(nextUrl, nextTitle);
+
+                playMedia(nextUrl, nextTitle, nextProvider); // Pass provider hint
                 scheduleHideNextOverlay(350L);
             }
 
@@ -1808,9 +2072,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 }
                 final String playUrl = switchData.url;
                 final String playTitle = switchData.title;
-                
+                final String playProvider = switchData.provider;
+
+                android.util.Log.d("TorboxTvPlayer", "requestNextChannel: received provider=" + playProvider);
+
                 // Play the first video from the new channel
-                playMedia(playUrl, playTitle);
+                playMedia(playUrl, playTitle, playProvider);
                 scheduleHideNextOverlay(350L);
             }
 
@@ -2423,6 +2690,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         String channelId = safeString(payload.get("channelId"));
         String firstUrl = safeString(payload.get("firstUrl"));
         String firstTitle = safeString(payload.get("firstTitle"));
+        String provider = safeString(payload.get("provider")); // Extract provider info
 
         if (channelId != null && !channelId.isEmpty()) {
             currentChannelId = channelId;
@@ -2478,7 +2746,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             resolvedTitle = "Debrify TV";
         }
 
-        return new ChannelSwitchData(firstUrl, resolvedTitle, resolvedNumber, resolvedName);
+        return new ChannelSwitchData(firstUrl, resolvedTitle, resolvedNumber, resolvedName, provider);
     }
 
     private void requestChannelByEntry(ChannelEntry entry) {
@@ -2549,9 +2817,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
                 final String playUrl = switchData.url;
                 final String playTitle = switchData.title;
+                final String playProvider = switchData.provider;
+
+                android.util.Log.d("TorboxTvPlayer", "requestChannelByEntry: received provider=" + playProvider);
 
                 // Play the new channel video
-                playMedia(playUrl, playTitle);
+                playMedia(playUrl, playTitle, playProvider);
                 scheduleHideNextOverlay(350L);
             }
 
@@ -2709,12 +2980,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         final Integer channelNumber;
         @Nullable
         final String channelName;
+        @Nullable
+        final String provider;
 
-        ChannelSwitchData(String url, String title, @Nullable Integer channelNumber, @Nullable String channelName) {
+        ChannelSwitchData(String url, String title, @Nullable Integer channelNumber, @Nullable String channelName, @Nullable String provider) {
             this.url = url;
             this.title = title;
             this.channelNumber = channelNumber;
             this.channelName = channelName;
+            this.provider = provider;
         }
     }
 
@@ -2919,21 +3193,32 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (player != null && player.isPlaying()) {
             player.pause();
         }
+
+        // Cancel any ongoing PikPak retry operations
+        cancelPikPakRetry();
     }
 
     @Override
     protected void onDestroy() {
+        // Cancel PikPak retry operations
+        cancelPikPakRetry();
+
         // Clean up TV static effect
         stopTvStaticEffect();
         if (staticHandler != null) {
             staticHandler.removeCallbacksAndMessages(null);
         }
-        
+
+        // Clean up PikPak retry handler
+        if (pikPakRetryHandler != null) {
+            pikPakRetryHandler.removeCallbacksAndMessages(null);
+        }
+
         // Clean up loading bar animation
         if (loadingBarAnimator != null && loadingBarAnimator.isRunning()) {
             loadingBarAnimator.cancel();
         }
-        
+
         // Clean up dots animation
         if (dotsAnimator != null && dotsAnimator.isRunning()) {
             dotsAnimator.cancel();
@@ -2941,6 +3226,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         
         if (player != null) {
             player.removeListener(playbackListener);
+            // Remove subtitle listener to prevent memory leaks
+            if (subtitleListener != null) {
+                player.removeListener(subtitleListener);
+                subtitleListener = null;
+            }
             player.stop();
             player.release();
             player = null;

@@ -4699,6 +4699,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           return {
             'url': prepared['url']!,
             'title': prepared['title']!,
+            'provider': prepared['provider'] ?? 'pikpak',
+            'pikpakFileId': prepared['pikpakFileId'] ?? '',
           };
         }
         if (mounted && !_watchCancelled) {
@@ -6040,6 +6042,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return {
           'url': prepared['url']!,
           'title': prepared['title']!,
+          'provider': prepared['provider'] ?? 'pikpak',
+          'pikpakFileId': prepared['pikpakFileId'] ?? '',
         };
       }
       return null;

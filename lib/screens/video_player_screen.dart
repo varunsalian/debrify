@@ -137,6 +137,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String?
   _currentStreamUrl; // Last resolved stream URL for the active playlist entry
 
+  // PikPak cold storage retry logic
+  bool _isPikPakRetrying = false;
+  int _pikPakRetryCount = 0;
+  String? _pikPakRetryMessage;
+  int _pikPakRetryId = 0; // Cancellation token: increments on each new video to cancel old retries
+
   SeriesPlaylist? get _seriesPlaylist {
     if (widget.playlist == null || widget.playlist!.isEmpty) return null;
     if (_cachedSeriesPlaylist == null) {
@@ -439,24 +445,48 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Only open the player if we have a valid URL
     if (initialUrl.isNotEmpty) {
-      _player.open(mk.Media(initialUrl, httpHeaders: widget.httpHeaders)).then((_) async {
-        // Wait for the video to load and duration to be available
-        await _waitForVideoReady();
-        // Random start takes precedence over resume
-        if (widget.startFromRandom) {
-          final offset = _randomStartOffset(_duration);
-          if (offset != null) {
-            await _player.seek(offset);
+      // For PikPak videos from playlist, use retry logic
+      final currentEntry = widget.playlist?[_currentIndex];
+      final isPikPak = currentEntry?.provider?.toLowerCase() == 'pikpak' || currentEntry?.pikpakFileId != null;
+
+      if (isPikPak && widget.playlist != null) {
+        _playPikPakVideoWithRetry(initialUrl).then((_) async {
+          // Wait for the video to load and duration to be available
+          await _waitForVideoReady();
+          // Random start takes precedence over resume
+          if (widget.startFromRandom) {
+            final offset = _randomStartOffset(_duration);
+            if (offset != null) {
+              await _player.seek(offset);
+            } else {
+              await _maybeRestoreResume();
+            }
           } else {
             await _maybeRestoreResume();
           }
-        } else {
-          await _maybeRestoreResume();
-        }
-        _scheduleAutoHide();
-        // Restore audio and subtitle track preferences
-        await _restoreTrackPreferences();
-      });
+          // Restore audio and subtitle track preferences
+          await _restoreTrackPreferences();
+        });
+      } else {
+        _player.open(mk.Media(initialUrl, httpHeaders: widget.httpHeaders)).then((_) async {
+          // Wait for the video to load and duration to be available
+          await _waitForVideoReady();
+          // Random start takes precedence over resume
+          if (widget.startFromRandom) {
+            final offset = _randomStartOffset(_duration);
+            if (offset != null) {
+              await _player.seek(offset);
+            } else {
+              await _maybeRestoreResume();
+            }
+          } else {
+            await _maybeRestoreResume();
+          }
+          _scheduleAutoHide();
+          // Restore audio and subtitle track preferences
+          await _restoreTrackPreferences();
+        });
+      }
     } else {
       // If no valid URL, try to load the first playlist entry
       if (widget.playlist != null && widget.playlist!.isNotEmpty) {
@@ -929,9 +959,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final result = await widget.requestMagicNext!();
         final url = result != null ? (result['url'] ?? '') : '';
         final title = result != null ? (result['title'] ?? '') : '';
+        final provider = result != null ? (result['provider'] ?? '') : '';
+        final pikpakFileId = result != null ? (result['pikpakFileId'] ?? '') : '';
+
         if (url.isNotEmpty) {
-          debugPrint('Player: MagicTV next success. Opening new URL.');
-          
+          debugPrint('Player: MagicTV next success. Opening new URL (provider: $provider, pikpakFileId: $pikpakFileId).');
+
           // Update TV static overlay to show signal acquired
           if (title.isNotEmpty && mounted) {
             setState(() {
@@ -939,8 +972,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               _tvStaticSubtext = '▶ ${title.toUpperCase()}';
             });
           }
-          
-          await _player.open(mk.Media(url, httpHeaders: widget.httpHeaders), play: true);
+
+          // Use PikPak retry logic if this is a PikPak video
+          final isPikPak = provider.toLowerCase() == 'pikpak' || pikpakFileId.isNotEmpty;
+          if (isPikPak) {
+            debugPrint('Player: Detected PikPak video from Debrify TV, using retry logic');
+            // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
+            await _playPikPakVideoWithRetry(url, overrideProvider: provider, overridePikPakFileId: pikpakFileId, isDebrifyTV: true);
+          } else {
+            // Cancel any ongoing PikPak retry when switching to non-PikPak video
+            _pikPakRetryId++;
+            await _player.open(mk.Media(url, httpHeaders: widget.httpHeaders), play: true);
+          }
           _currentStreamUrl = url;
           // If advanced option is enabled, jump to a random timestamp for Debrify TV items
           if (widget.startFromRandom) {
@@ -1061,6 +1104,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     try {
+      // Cancel any ongoing PikPak retry when switching channels
+      _pikPakRetryId++;
       await _player.open(mk.Media(nextUrl, httpHeaders: widget.httpHeaders), play: true);
       _currentStreamUrl = nextUrl;
     } catch (e) {
@@ -1165,9 +1210,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         index >= widget.playlist!.length)
       return;
 
+    print('PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay');
+
     await _saveResume();
     final entry = widget.playlist![index];
     _currentIndex = index;
+
+    print('PikPak: Loading playlist entry - provider: ${entry.provider}, pikpakFileId: ${entry.pikpakFileId}');
 
     // Resolve the actual streaming URL if needed
     String videoUrl = entry.url;
@@ -1210,7 +1259,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _currentStreamUrl = videoUrl;
 
-    await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: autoplay);
+    // Check if this is a PikPak video
+    final currentEntry = widget.playlist?[index];
+    final isPikPak = currentEntry?.provider?.toLowerCase() == 'pikpak' || currentEntry?.pikpakFileId != null;
+
+    // ALWAYS use retry logic for PikPak videos, regardless of autoplay
+    if (isPikPak) {
+      // For PikPak, we need retry logic even if not autoplaying
+      // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
+      if (autoplay) {
+        await _playPikPakVideoWithRetry(videoUrl);
+      } else {
+        // Still use retry but without autoplay
+        await _playPikPakVideoWithRetry(videoUrl);
+        await _player.pause(); // Pause after loading if not autoplaying
+      }
+    } else {
+      // Non-PikPak videos play normally
+      // Cancel any ongoing PikPak retry when switching to non-PikPak video
+      _pikPakRetryId++;
+      await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: autoplay);
+    }
+
     // Wait for the video to load and duration to be available
     await _waitForVideoReady();
     await _maybeRestoreResume();
@@ -1310,6 +1380,241 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     throw Exception('No URL metadata available for this entry');
   }
 
+  /// Waits for video metadata (duration) to become available
+  /// Returns true if metadata loads, false if timeout or cancelled
+  /// This is the only reliable way to detect if a PikPak file is actually loading
+  Future<bool> _waitForVideoMetadata({int timeoutSeconds = 15, required int retryId}) async {
+    final stopwatch = Stopwatch()..start();
+
+    while (stopwatch.elapsed.inSeconds < timeoutSeconds) {
+      // Check if this retry has been cancelled (user navigated to different video)
+      if (_pikPakRetryId != retryId) {
+        print('PikPak: Retry cancelled (token mismatch: current=$_pikPakRetryId, expected=$retryId)');
+        return false;
+      }
+
+      // Check if duration has become available
+      // This indicates the file is actually loading and playable
+      if (_player.state.duration > Duration.zero) {
+        print('PikPak: Video duration available: ${_player.state.duration}');
+        return true;
+      }
+
+      // Wait a bit before checking again
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    // Timeout - video metadata never loaded, file is likely in cold storage
+    print('PikPak: Timeout waiting for video metadata (${timeoutSeconds}s elapsed)');
+    return false;
+  }
+
+  /// Attempts to play a PikPak video with retry logic for cold storage
+  Future<void> _playPikPakVideoWithRetry(String videoUrl, {String? overrideProvider, String? overridePikPakFileId, bool isDebrifyTV = false}) async {
+    // Only apply retry logic for PikPak videos
+    // Support both playlist entries and Debrify TV (requestMagicNext) flows
+    final currentEntry = widget.playlist != null && _currentIndex >= 0 && _currentIndex < widget.playlist!.length
+        ? widget.playlist![_currentIndex]
+        : null;
+    final isPikPak = overrideProvider?.toLowerCase() == 'pikpak' ||
+        overridePikPakFileId != null ||
+        currentEntry?.provider?.toLowerCase() == 'pikpak' ||
+        currentEntry?.pikpakFileId != null;
+
+    print('PikPak: _playPikPakVideoWithRetry called for index $_currentIndex, isPikPak: $isPikPak, overrideProvider: $overrideProvider, overridePikPakFileId: $overridePikPakFileId, isDebrifyTV: $isDebrifyTV');
+
+    if (!isPikPak) {
+      // Not a PikPak video, play normally
+      await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: true);
+      return;
+    }
+
+    print('PikPak: Starting retry logic for cold storage handling');
+
+    // Generate a new retry ID to cancel any previous retry loops
+    _pikPakRetryId++;
+    final myRetryId = _pikPakRetryId;
+    print('PikPak: Generated retry ID: $myRetryId');
+
+    // Reset retry state
+    _pikPakRetryCount = 0;
+    _isPikPakRetrying = false;
+    _pikPakRetryMessage = null;
+
+    // Retry with exponential backoff
+    // Standardized retry parameters to match Java/Kotlin implementation
+    const maxRetries = 5; // 6 total attempts including initial
+    const baseDelaySeconds = 2;
+    const metadataTimeoutSeconds = 10; // Standardized timeout
+    const maxDelaySeconds = 18; // Standardized max delay cap
+
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Check if cancelled before starting attempt
+        if (_pikPakRetryId != myRetryId) {
+          print('PikPak: Retry loop cancelled before attempt ${attempt + 1} (navigation occurred)');
+          if (mounted) {
+            setState(() {
+              _isPikPakRetrying = false;
+              _pikPakRetryMessage = null;
+              _pikPakRetryCount = 0;
+            });
+          }
+          return;
+        }
+
+        print('PikPak: Playback attempt ${attempt + 1}/${maxRetries + 1} - opening media...');
+
+        // Try to play the video
+        await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: true);
+
+        // Wait for video metadata to load (duration becomes available)
+        // This is the ONLY reliable way to detect if file is actually loading
+        // Cold storage files will timeout here
+        print('PikPak: Waiting for video duration to become available...');
+        final loadSuccess = await _waitForVideoMetadata(timeoutSeconds: metadataTimeoutSeconds, retryId: myRetryId);
+
+        if (loadSuccess) {
+          // Success! Duration loaded, file is ready
+          print('PikPak: Video metadata loaded successfully - file is ready!');
+          if (mounted) {
+            setState(() {
+              _isPikPakRetrying = false;
+              _pikPakRetryMessage = null;
+              _pikPakRetryCount = 0;
+            });
+          }
+          return;
+        }
+
+        // Duration didn't load - file is in cold storage
+        print('PikPak: Video metadata failed to load - file likely in cold storage');
+
+        // If not playing and we have more retries, continue
+        if (attempt < maxRetries) {
+          // Exponential backoff: 2s, 4s, 8s, 16s, 18s (capped)
+          final delaySeconds = baseDelaySeconds * (1 << attempt);
+          final nextDelay = delaySeconds > maxDelaySeconds ? maxDelaySeconds : delaySeconds;
+
+          if (mounted) {
+            setState(() {
+              _isPikPakRetrying = true;
+              _pikPakRetryCount = attempt + 1;
+              _pikPakRetryMessage = 'Reactivating video...';
+            });
+          }
+
+          print('PikPak: Waiting ${nextDelay}s before retry...');
+          await Future.delayed(Duration(seconds: nextDelay));
+
+          // Check if cancelled after delay
+          if (_pikPakRetryId != myRetryId) {
+            print('PikPak: Retry loop cancelled after delay (navigation occurred)');
+            if (mounted) {
+              setState(() {
+                _isPikPakRetrying = false;
+                _pikPakRetryMessage = null;
+                _pikPakRetryCount = 0;
+              });
+            }
+            return;
+          }
+        } else {
+          // Final attempt failed - cleanup and handle auto-advance
+          print('PikPak: All retry attempts exhausted. Video failed to load.');
+
+          if (mounted) {
+            setState(() {
+              _isPikPakRetrying = false;
+              _pikPakRetryMessage = null;
+              _pikPakRetryCount = 0;
+            });
+
+            if (isDebrifyTV) {
+              // For Debrify TV, auto-advance to next video
+              print('PikPak: Auto-advancing to next video in Debrify TV queue');
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Video failed to load. Skipping to next...',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+              await _goToNextEpisode();
+            } else {
+              // For regular playlist, show error message
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Failed to play video after multiple attempts. Please try again later.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  backgroundColor: Colors.red,
+                  duration: Duration(seconds: 5),
+                ),
+              );
+            }
+          }
+          return;
+        }
+      } catch (e) {
+        print('PikPak playback attempt ${attempt + 1} failed with error: $e');
+
+        if (attempt < maxRetries) {
+          // Exponential backoff: 2s, 4s, 8s, 16s, 18s (capped)
+          final delaySeconds = baseDelaySeconds * (1 << attempt);
+          final nextDelay = delaySeconds > maxDelaySeconds ? maxDelaySeconds : delaySeconds;
+
+          if (mounted) {
+            setState(() {
+              _isPikPakRetrying = true;
+              _pikPakRetryCount = attempt + 1;
+              _pikPakRetryMessage = 'Reactivating video...';
+            });
+          }
+
+          await Future.delayed(Duration(seconds: nextDelay));
+
+          // Check if cancelled after delay
+          if (_pikPakRetryId != myRetryId) {
+            print('PikPak: Retry loop cancelled after error delay (navigation occurred)');
+            if (mounted) {
+              setState(() {
+                _isPikPakRetrying = false;
+                _pikPakRetryMessage = null;
+                _pikPakRetryCount = 0;
+              });
+            }
+            return;
+          }
+        } else {
+          // Final attempt failed
+          if (mounted) {
+            setState(() {
+              _isPikPakRetrying = false;
+              _pikPakRetryMessage = null;
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Failed to play video after multiple attempts. Please try again later.',
+                  style: TextStyle(color: Colors.white),
+                ),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+          rethrow;
+        }
+      }
+    }
+  }
+
   /// Preload episode information in the background
   Future<void> _preloadEpisodeInfo() async {
     final seriesPlaylist = _seriesPlaylist;
@@ -1365,6 +1670,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void dispose() {
     // Save the current state before disposing
     _saveResume();
+
+    // Cancel any ongoing PikPak retry operations
+    _pikPakRetryId++;
+    _isPikPakRetrying = false;
+    _pikPakRetryCount = 0;
+    _pikPakRetryMessage = null;
+
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
@@ -1432,7 +1744,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 		}
 
 		// Fallback to videoUrl for single items
-		debugPrint('ResumeKey: playlist empty; using widget.videoUrl');
+		// Note: This is the expected path for Debrify TV mode
 		return widget.videoUrl;
 	}
 
@@ -3254,6 +3566,48 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                       duration: const Duration(milliseconds: 400),
                       curve: Curves.easeInOut,
                       child: _buildChannelBadge(channelBadgeText),
+                    ),
+                  ),
+                ),
+              // PikPak retry overlay - non-blocking, positioned at bottom right
+              if (_isPikPakRetrying && _pikPakRetryMessage != null)
+                Positioned(
+                  bottom: 80,
+                  right: 20,
+                  child: IgnorePointer(
+                    ignoring: false,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.75),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            _pikPakRetryMessage!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

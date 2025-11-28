@@ -309,11 +309,17 @@ class PikPakTvService {
 
     // Timeout - try one final file query
     log('Task polling timeout, attempting final file query...');
-    final result = await _queryFileAndExtract(fileId, torrentName, log);
-    if (result == null) {
+    try {
+      final result = await _queryFileAndExtract(fileId, torrentName, log);
+      if (result == null) {
+        await _cleanupFile(fileId, log);
+      }
+      return result;
+    } catch (e) {
+      log('Final file query failed: $e');
       await _cleanupFile(fileId, log);
+      return null;
     }
-    return result;
   }
 
   /// Query file details and extract streaming URL
@@ -366,6 +372,8 @@ class PikPakTvService {
     return {
       'url': streamingUrl,
       'title': title,
+      'provider': 'pikpak',
+      'pikpakFileId': fileId,
     };
   }
 
@@ -392,13 +400,18 @@ class PikPakTvService {
 
         // Recursively check subfolders
         if (fileKind == 'drive#folder') {
-          final subResult = await _findVideoInFolder(
-            file['id'] as String,
-            fallbackTitle,
-            log,
-          );
-          if (subResult != null) {
-            return subResult;
+          try {
+            final subResult = await _findVideoInFolder(
+              file['id'] as String,
+              fallbackTitle,
+              log,
+            );
+            if (subResult != null) {
+              return subResult;
+            }
+          } catch (e) {
+            log('Error scanning subfolder ${file['name']}: $e');
+            // Continue checking other files/folders
           }
           continue;
         }
@@ -440,6 +453,8 @@ class PikPakTvService {
       return {
         'url': streamingUrl,
         'title': title,
+        'provider': 'pikpak',
+        'pikpakFileId': selectedFileId,
       };
     } catch (e) {
       log('Error scanning folder: $e');

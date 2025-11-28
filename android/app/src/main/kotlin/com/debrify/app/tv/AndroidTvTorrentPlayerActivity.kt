@@ -123,6 +123,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val titleHandler = Handler(Looper.getMainLooper())
     private val controlsHandler = Handler(Looper.getMainLooper())
 
+    // PikPak cold storage retry state
+    private var isPikPakRetrying: Boolean = false
+    private var pikPakRetryCount: Int = 0
+    private var pikPakRetryId: Int = 0
+    private val pikPakRetryHandler = Handler(Looper.getMainLooper())
+
     private val progressRunnable = object : Runnable {
         override fun run() {
             sendProgress(completed = false)
@@ -1068,6 +1074,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
 
+        // Cancel any ongoing PikPak retry before starting new item
+        cancelPikPakRetry()
+
         currentIndex = index
         val item = model.items[index]
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
@@ -1089,7 +1098,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setResolvingState(true)
 
         // Request stream from Flutter with async callback
-        requestStreamFromFlutter(item, index) { url ->
+        requestStreamFromFlutter(item, index) { url, provider ->
             android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - received url: $url")
             setResolvingState(false)
 
@@ -1099,14 +1108,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 return@requestStreamFromFlutter
             }
 
-            // Update the item with resolved URL
-            payload?.items?.set(index, item.copy(url = url))
-            android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - starting playback with resolved URL")
+            // Update the item with resolved URL and provider
+            val updatedItem = item.copy(url = url, provider = provider ?: item.provider)
+            payload?.items?.set(index, updatedItem)
+            android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - starting playback with resolved URL, provider: $provider")
             startPlayback(payload!!.items[index])
         }
     }
 
     private fun startPlayback(item: PlaybackItem) {
+        // Check if this is a PikPak provider - use retry logic for cold storage handling
+        val isPikPak = PROVIDER_PIKPAK.equals(item.provider, ignoreCase = true)
+        android.util.Log.d("AndroidTvPlayer", "startPlayback - provider: ${item.provider}, isPikPak: $isPikPak")
+
+        if (isPikPak) {
+            android.util.Log.d("AndroidTvPlayer", "startPlayback - using PikPak retry logic")
+            playPikPakVideoWithRetry(item)
+        } else {
+            android.util.Log.d("AndroidTvPlayer", "startPlayback - using direct playback")
+            playMediaDirect(item)
+        }
+    }
+
+    private fun playMediaDirect(item: PlaybackItem) {
         val metadata = MediaMetadata.Builder()
             .setTitle(item.title)
             .setArtist(item.seasonEpisodeLabel())
@@ -1170,7 +1194,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestStreamFromFlutter(item: PlaybackItem, index: Int, callback: (String?) -> Unit) {
+    private fun requestStreamFromFlutter(item: PlaybackItem, index: Int, callback: (String?, String?) -> Unit) {
         try {
             val args = hashMapOf<String, Any?>(
                 "resumeId" to item.resumeId,
@@ -1187,24 +1211,237 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - Flutter returned: $result")
                         val map = result as? Map<*, *>
                         val url = map?.get("url") as? String
-                        android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - extracted URL: $url")
-                        callback(url)
+                        val provider = map?.get("provider") as? String
+                        android.util.Log.d("AndroidTvPlayer", "requestStreamFromFlutter - extracted URL: $url, provider: $provider")
+                        callback(url, provider)
                     }
 
                     override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
                         android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - error: $errorCode - $errorMessage")
-                        callback(null)
+                        callback(null, null)
                     }
 
                     override fun notImplemented() {
                         android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - not implemented")
-                        callback(null)
+                        callback(null, null)
                     }
                 }
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - exception: ${e.message}", e)
-            callback(null)
+            callback(null, null)
+        }
+    }
+
+    // PikPak Cold Storage Retry Logic
+    // PikPak uses "cold storage" where files that haven't been accessed recently need 10-30 seconds
+    // to reactivate. This implements retry logic with exponential backoff.
+
+    private fun playPikPakVideoWithRetry(item: PlaybackItem) {
+        android.util.Log.d("AndroidTvPlayer", "PikPak: Starting retry logic for cold storage handling")
+
+        // Cancel any previous retry loops
+        pikPakRetryId++
+        val myRetryId = pikPakRetryId
+
+        // Reset retry state
+        pikPakRetryCount = 0
+        isPikPakRetrying = false
+        hidePikPakRetryOverlay()
+
+        // Start first attempt
+        attemptPikPakPlayback(item, 0, myRetryId)
+    }
+
+    private fun attemptPikPakPlayback(item: PlaybackItem, attemptNumber: Int, retryId: Int) {
+        // Check if this retry has been cancelled
+        if (pikPakRetryId != retryId) {
+            android.util.Log.d("AndroidTvPlayer", "PikPak: Retry cancelled (token mismatch)")
+            hidePikPakRetryOverlay()
+            return
+        }
+
+        // Null safety check for player
+        if (player == null) {
+            android.util.Log.e("AndroidTvPlayer", "PikPak: Player is null, cannot attempt playback")
+            hidePikPakRetryOverlay()
+            return
+        }
+
+        android.util.Log.d("AndroidTvPlayer", "PikPak: Playback attempt ${attemptNumber + 1}/${PIKPAK_MAX_RETRIES + 1}")
+
+        // Clear previous video's subtitles
+        subtitleOverlay.setCues(emptyList())
+
+        // Prepare and play the media
+        val metadata = MediaMetadata.Builder()
+            .setTitle(item.title)
+            .setArtist(item.seasonEpisodeLabel())
+            .setDescription(item.description ?: payload?.subtitle ?: payload?.title)
+            .build()
+
+        val mediaItem = MediaItem.Builder()
+            .setUri(item.url)
+            .setMediaMetadata(metadata)
+            .build()
+
+        player?.apply {
+            setMediaItem(mediaItem)
+            prepare()
+            play()
+        }
+
+        if (attemptNumber == 0) {
+            updateTitle(item)
+            playlistAdapter?.setActiveIndex(currentIndex)
+            restartProgressUpdates()
+        }
+
+        // Wait for video metadata to load (indicates file is ready)
+        waitForPikPakMetadata(item, attemptNumber, retryId)
+    }
+
+    private fun waitForPikPakMetadata(item: PlaybackItem, attemptNumber: Int, retryId: Int) {
+        val startTime = System.currentTimeMillis()
+        val checkHandler = Handler(Looper.getMainLooper())
+
+        val checkRunnable = object : Runnable {
+            override fun run() {
+                // Check if retry was cancelled
+                if (pikPakRetryId != retryId) {
+                    android.util.Log.d("AndroidTvPlayer", "PikPak: Metadata check cancelled")
+                    checkHandler.removeCallbacks(this)
+                    return
+                }
+
+                val elapsed = System.currentTimeMillis() - startTime
+
+                // Check if player state is ready or has duration (with null safety)
+                val currentPlayer = player
+                if (currentPlayer != null && (currentPlayer.playbackState == Player.STATE_READY || currentPlayer.duration > 0)) {
+                    android.util.Log.d("AndroidTvPlayer", "PikPak: Video metadata loaded successfully - file is ready!")
+                    hidePikPakRetryOverlay()
+
+                    // Clean up handler callbacks
+                    checkHandler.removeCallbacks(this)
+
+                    // Ensure subtitles are selected after successful load
+                    ensureDefaultSubtitleSelected()
+                    return
+                }
+
+                // Check timeout
+                if (elapsed >= PIKPAK_METADATA_TIMEOUT_MS) {
+                    android.util.Log.d("AndroidTvPlayer", "PikPak: Timeout waiting for metadata - file likely in cold storage")
+                    checkHandler.removeCallbacks(this)
+                    handlePikPakMetadataTimeout(item, attemptNumber, retryId)
+                    return
+                }
+
+                // Continue checking
+                checkHandler.postDelayed(this, 500)
+            }
+        }
+
+        // Start checking
+        checkHandler.postDelayed(checkRunnable, 500)
+    }
+
+    private fun handlePikPakMetadataTimeout(item: PlaybackItem, attemptNumber: Int, retryId: Int) {
+        // Check if we have more retries
+        if (attemptNumber < PIKPAK_MAX_RETRIES) {
+            // Calculate exponential backoff delay: 2s, 4s, 8s, 16s, 18s (capped)
+            var delayMs = PIKPAK_BASE_DELAY_MS * (1 shl attemptNumber)
+            delayMs = delayMs.coerceAtMost(PIKPAK_MAX_DELAY_MS)
+
+            pikPakRetryCount = attemptNumber + 1
+            isPikPakRetrying = true
+            showPikPakRetryOverlay("Reactivating video... (Attempt ${attemptNumber + 2}/${PIKPAK_MAX_RETRIES + 1})")
+
+            android.util.Log.d("AndroidTvPlayer", "PikPak: Waiting ${delayMs / 1000}s before retry...")
+
+            pikPakRetryHandler.postDelayed({
+                // Check if retry was cancelled during delay
+                if (pikPakRetryId == retryId) {
+                    attemptPikPakPlayback(item, attemptNumber + 1, retryId)
+                }
+            }, delayMs.toLong())
+        } else {
+            // All retries exhausted
+            android.util.Log.e("AndroidTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.")
+            isPikPakRetrying = false
+            hidePikPakRetryOverlay()
+
+            runOnUiThread {
+                Toast.makeText(this, "Video failed to load. Skipping to next...", Toast.LENGTH_SHORT).show()
+
+                // Auto-advance to next video
+                pikPakRetryHandler.postDelayed({
+                    playNext()
+                }, 1500)
+            }
+        }
+    }
+
+    private fun showPikPakRetryOverlay(message: String) {
+        runOnUiThread {
+            nextText.text = message
+            nextSubtext.visibility = View.GONE
+            nextOverlay.visibility = View.VISIBLE
+        }
+    }
+
+    private fun hidePikPakRetryOverlay() {
+        runOnUiThread {
+            nextOverlay.visibility = View.GONE
+        }
+    }
+
+    private fun cancelPikPakRetry() {
+        // Increment retry ID to invalidate any ongoing retry operations
+        pikPakRetryId++
+        isPikPakRetrying = false
+        pikPakRetryCount = 0
+
+        // Remove any pending retry callbacks
+        pikPakRetryHandler.removeCallbacksAndMessages(null)
+
+        // Hide overlay
+        hidePikPakRetryOverlay()
+    }
+
+    private fun ensureDefaultSubtitleSelected() {
+        player?.let { currentPlayer ->
+            currentPlayer.addListener(object : Player.Listener {
+                override fun onTracksChanged(tracks: Tracks) {
+                    currentPlayer.removeListener(this)
+
+                    // Find and select default subtitle track
+                    val trackSelector = trackSelector ?: return
+                    val params = trackSelector.parameters
+
+                    for (trackGroup in tracks.groups) {
+                        if (trackGroup.type == C.TRACK_TYPE_TEXT) {
+                            for (i in 0 until trackGroup.length) {
+                                val format = trackGroup.getTrackFormat(i)
+                                if (format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0) {
+                                    // Found default subtitle track
+                                    val override = TrackSelectionOverride(
+                                        trackGroup.mediaTrackGroup,
+                                        listOf(i)
+                                    )
+                                    trackSelector.parameters = params.buildUpon()
+                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                        .addOverride(override)
+                                        .build()
+                                    android.util.Log.d("AndroidTvPlayer", "PikPak: Default subtitle track selected")
+                                    return
+                                }
+                            }
+                        }
+                    }
+                }
+            })
         }
     }
 
@@ -2069,7 +2306,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         })
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Cancel any ongoing PikPak retry operations
+        cancelPikPakRetry()
+    }
+
     override fun onDestroy() {
+        // Cancel PikPak retry operations
+        cancelPikPakRetry()
+        pikPakRetryHandler.removeCallbacksAndMessages(null)
+
         // Unregister broadcast receiver
         metadataUpdateReceiver?.let {
             try {
@@ -2121,6 +2368,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val SEEK_STEP_MS = 10_000L
         private const val SEEK_LONG_PRESS_THRESHOLD = 3
         private const val BACK_PRESS_INTERVAL_MS = 2000L  // 2 seconds
+
+        // PikPak cold storage retry constants
+        private const val PROVIDER_PIKPAK = "pikpak"
+        private const val PIKPAK_MAX_RETRIES = 5
+        private const val PIKPAK_METADATA_TIMEOUT_MS = 10000  // 10 seconds to wait for metadata
+        private const val PIKPAK_BASE_DELAY_MS = 2000  // 2 seconds base delay
+        private const val PIKPAK_MAX_DELAY_MS = 18000  // 18 seconds max delay
     }
 }
 
@@ -2170,6 +2424,7 @@ private data class PlaybackItem(
     val resumeId: String?,
     val sizeBytes: Long?,
     val rating: Double?,
+    val provider: String?,
 ) {
     fun seasonEpisodeLabel(): String {
         return if (season != null && episode != null) {
@@ -2198,6 +2453,7 @@ private data class PlaybackItem(
                 resumeId = obj.optString("resumeId", null),
                 sizeBytes = if (obj.has("sizeBytes")) obj.optLong("sizeBytes") else null,
                 rating = if (obj.has("rating")) obj.optDouble("rating") else null,
+                provider = obj.optString("provider", null),
             )
         }
     }

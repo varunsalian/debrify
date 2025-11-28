@@ -1182,4 +1182,11 @@ class PikPakApiService {
     print('PikPak: Ready for streaming! URL: ${streamingUrl.substring(0, 50)}...');
     return fileData;
   }
+
+  // NOTE: Cold storage handling is done entirely in the video player with retry logic
+  // Pre-validation was removed because:
+  // 1. PikPak has two-stage activation (connection opens, then file becomes playable)
+  // 2. Byte validation only detects stage 1, not stage 2
+  // 3. Player retry logic is more reliable and provides better UX
+  // 4. Hot files play instantly without validation overhead
 }
