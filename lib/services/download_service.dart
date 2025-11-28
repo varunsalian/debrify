@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'debrid_service.dart';
 import 'torbox_service.dart';
+import 'pikpak_api_service.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -390,6 +391,14 @@ class DownloadService {
         // Expecting JSON meta with fields like restrictedLink or (torrentHash,fileIndex)
         final m = jsonDecode(meta);
         if (m is Map) {
+          // PikPak pattern: pp:${fileId} (check BEFORE Torbox)
+          final isPikPak = m['pikpakDownload'] == true;
+          if (isPikPak) {
+            final fileId = (m['pikpakFileId'] ?? '').toString();
+            if (fileId.isNotEmpty) {
+              return 'pp:$fileId';
+            }
+          }
           // Torbox pattern: tb:${torrentId}:${fileId} or tb-zip:${torrentId}
           final isTorbox = m['torboxDownload'] == true;
           if (isTorbox) {
@@ -1609,11 +1618,21 @@ class DownloadService {
         
         if (p.meta != null && p.meta!.isNotEmpty) {
           try {
-            final meta = jsonDecode(p.meta!);
-            final isTorbox = meta['torboxDownload'] == true;
+            final meta = jsonDecode(p.meta!) as Map<String, dynamic>;
 
-            if (isTorbox) {
-              // Torbox download path
+            // CHECK PIKPAK FIRST (before Torbox)
+            final isPikPak = meta['pikpakDownload'] == true;
+            if (isPikPak) {
+              // PikPak: URL already pre-signed, use directly
+              finalUrl = p.url;
+              finalFileName = (meta['pikpakFileName'] as String?) ?? p.providedFileName ?? 'download';
+              debugPrint('DL PIKPAK: Using pre-signed URL');
+            } else {
+              // EXISTING TORBOX/REALDEBRID LOGIC
+              final isTorbox = meta['torboxDownload'] == true;
+
+              if (isTorbox) {
+                // Torbox download path
               final apiKey = meta['apiKey'] as String?;
               final torrentId = meta['torboxTorrentId'] as int?;
               final fileId = meta['torboxFileId'] as int?;
@@ -1685,6 +1704,7 @@ class DownloadService {
                 debugPrint('DL SKIP: Not unrestricting - restrictedLink empty: ${restrictedLink.isEmpty}, apiKey empty: ${apiKey.isEmpty}');
               }
             }
+          }
           } catch (e) {
             debugPrint('DL ERROR: On-demand unrestriction failed: $e');
             throw Exception('Failed to unrestrict link: $e');
@@ -1785,9 +1805,52 @@ class DownloadService {
         try {
           if (p.meta != null && p.meta!.isNotEmpty) {
             final meta = jsonDecode(p.meta!);
-            final isTorbox = meta['torboxDownload'] == true;
 
-            if (isTorbox) {
+            // CHECK PIKPAK FIRST (before Torbox)
+            final isPikPak = meta['pikpakDownload'] == true;
+            if (isPikPak) {
+              final fileId = meta['pikpakFileId'] as String?;
+              if (fileId != null && fileId.isNotEmpty) {
+                try {
+                  debugPrint('DL RETRY PIKPAK: Refreshing URL for file $fileId');
+
+                  // Get fresh file details
+                  final freshData = await PikPakApiService.instance.getFileDetails(fileId);
+                  final freshUrl = PikPakApiService.instance.getStreamingUrl(freshData);
+
+                  if (freshUrl != null && freshUrl.isNotEmpty) {
+                    // Create new pending request with fresh URL
+                    final refreshed = _PendingRequest(
+                      queuedId: p.queuedId,
+                      url: freshUrl,
+                      providedFileName: p.providedFileName,
+                      headers: p.headers,
+                      wifiOnly: p.wifiOnly,
+                      retries: p.retries,
+                      meta: p.meta,
+                      context: p.context,
+                      torrentName: p.torrentName,
+                      contentKey: p.contentKey,
+                      destPath: p.destPath,
+                    );
+                    _pending.insert(0, refreshed);
+                    _pendingById[refreshed.queuedId] = refreshed;
+                    await _persistPending();
+                    retried = true;
+                    debugPrint('DL RETRY PIKPAK: Re-queued with fresh URL');
+                    continue; // try scheduling the refreshed entry immediately
+                  } else {
+                    debugPrint('DL RETRY PIKPAK: Failed to get fresh URL');
+                  }
+                } catch (e) {
+                  debugPrint('DL RETRY PIKPAK: Error refreshing URL: $e');
+                }
+              }
+            } else {
+              // EXISTING TORBOX/REALDEBRID RETRY LOGIC (keep exactly as is)
+              final isTorbox = meta['torboxDownload'] == true;
+
+              if (isTorbox) {
               // Torbox retry path
               final apiKey = meta['apiKey'] as String?;
               final torrentId = meta['torboxTorrentId'] as int?;
@@ -1862,6 +1925,7 @@ class DownloadService {
                 }
               }
             }
+          }
           }
         } catch (_) {}
 

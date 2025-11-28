@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../../screens/video_player_screen.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
@@ -294,6 +296,261 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     } catch (e) {
       print('Error playing file: $e');
       _showSnackBar('Failed to play video: $e', isError: true);
+    }
+  }
+
+  /// Download a single file
+  Future<void> _downloadFile(Map<String, dynamic> file) async {
+    final fileId = file['id'] as String?;
+    final fileName = file['name'] ?? 'download';
+
+    if (fileId == null) {
+      _showSnackBar('Invalid file ID', isError: true);
+      return;
+    }
+
+    // Check if it's a folder
+    final kind = file['kind'];
+    if (kind == 'drive#folder') {
+      _showSnackBar('Cannot download folders directly. Use Download button on folder.', isError: true);
+      return;
+    }
+
+    try {
+      // Show loading indicator
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Preparing download...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      // Get fresh file details with download URLs
+      Map<String, dynamic> freshFileData;
+      try {
+        freshFileData = await PikPakApiService.instance.getFileDetails(fileId);
+      } catch (e) {
+        // Close loading indicator
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        _showSnackBar('Failed to get download URL: $e', isError: true);
+        return;
+      }
+
+      // Extract download URL (use web_content_link for all files)
+      final downloadUrl = freshFileData['web_content_link'] as String?;
+
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (downloadUrl == null || downloadUrl.isEmpty) {
+        _showSnackBar('No download URL available for this file', isError: true);
+        return;
+      }
+
+      // Prepare metadata for download service
+      final meta = jsonEncode({
+        'pikpakDownload': true,
+        'pikpakFileId': fileId,
+        'pikpakFileName': fileName,
+      });
+
+      // Enqueue download
+      await DownloadService.instance.enqueueDownload(
+        url: downloadUrl,
+        fileName: fileName,
+        meta: meta,
+        context: mounted ? context : null,
+      );
+
+      _showSnackBar('Download queued: $fileName', isError: false);
+    } catch (e) {
+      print('Error downloading file: $e');
+      // Close loading indicator if still open
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to download: $e', isError: true);
+    }
+  }
+
+  /// Download all files in a folder
+  Future<void> _downloadFolder(Map<String, dynamic> folder) async {
+    final folderId = folder['id'] as String?;
+    final folderName = folder['name'] ?? 'Folder';
+
+    if (folderId == null) {
+      _showSnackBar('Invalid folder ID', isError: true);
+      return;
+    }
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Scanning folder for files...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Recursively scan folder for all files
+      final allFiles = await PikPakApiService.instance.listFilesRecursive(
+        folderId: folderId,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (!mounted) return;
+
+      // Filter out folders, keep only files
+      final filesOnly = allFiles.where((file) {
+        final kind = file['kind'] ?? '';
+        return kind != 'drive#folder';
+      }).toList();
+
+      if (filesOnly.isEmpty) {
+        _showSnackBar('This folder doesn\'t contain any files', isError: true);
+        return;
+      }
+
+      // Show confirmation dialog
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Download Folder'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Download all files in "$folderName"?'),
+              const SizedBox(height: 16),
+              Text('${filesOnly.length} file${filesOnly.length == 1 ? '' : 's'} will be queued for download.'),
+              const SizedBox(height: 8),
+              Text(
+                'Total size: ${Formatters.formatFileSize(
+                  filesOnly.fold<int>(
+                    0,
+                    (sum, file) => sum + (int.tryParse(file['size']?.toString() ?? '0') ?? 0),
+                  ),
+                )}',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.download),
+              label: const Text('Download All'),
+            ),
+          ],
+        ),
+      ) ?? false;
+
+      if (!confirmed || !mounted) return;
+
+      // Queue downloads for each file
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final file in filesOnly) {
+        try {
+          final fileId = file['id'] as String?;
+          final fileName = file['name'] ?? 'download';
+
+          if (fileId == null) {
+            failCount++;
+            continue;
+          }
+
+          // Get fresh file details with download URLs
+          final freshFileData = await PikPakApiService.instance.getFileDetails(fileId);
+          final downloadUrl = freshFileData['web_content_link'] as String?;
+
+          if (downloadUrl == null || downloadUrl.isEmpty) {
+            failCount++;
+            continue;
+          }
+
+          // Prepare metadata for download service
+          final meta = jsonEncode({
+            'pikpakDownload': true,
+            'pikpakFileId': fileId,
+            'pikpakFileName': fileName,
+          });
+
+          // Enqueue download with folder name for organization
+          await DownloadService.instance.enqueueDownload(
+            url: downloadUrl,
+            fileName: fileName,
+            meta: meta,
+            torrentName: folderName, // Use folder name for organization
+            context: mounted ? context : null,
+          );
+
+          successCount++;
+        } catch (e) {
+          print('Error queuing file for download: $e');
+          failCount++;
+        }
+      }
+
+      // Show result
+      if (successCount > 0 && failCount == 0) {
+        _showSnackBar(
+          'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+          isError: false,
+        );
+      } else if (successCount > 0 && failCount > 0) {
+        _showSnackBar(
+          'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+          isError: true,
+        );
+      } else {
+        _showSnackBar('Failed to queue any files for download', isError: true);
+      }
+    } catch (e) {
+      print('Error downloading folder: $e');
+      if (mounted) {
+        // Close loading dialog if still open
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to scan folder: $e', isError: true);
     }
   }
 
@@ -775,6 +1032,14 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _downloadFolder(file),
+                        icon: const Icon(Icons.download, size: 18),
+                        label: const Text('Download'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                   ] else if (isVideo && isComplete) ...[
                     Expanded(
                       child: FilledButton.icon(
@@ -782,6 +1047,25 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                         onPressed: () => _playFile(file),
                         icon: const Icon(Icons.play_arrow, size: 18),
                         label: const Text('Play'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _downloadFile(file),
+                        icon: const Icon(Icons.download, size: 18),
+                        label: const Text('Download'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (!isFolder && isComplete) ...[
+                    // Non-video files - only show download button
+                    Expanded(
+                      child: FilledButton.icon(
+                        autofocus: index == 0,
+                        onPressed: () => _downloadFile(file),
+                        icon: const Icon(Icons.download, size: 18),
+                        label: const Text('Download'),
                       ),
                     ),
                     const SizedBox(width: 8),
