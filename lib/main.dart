@@ -326,6 +326,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   int? _autoLaunchChannelNumber;
   bool _autoLaunchInProgress = false;
 
+  // Back button press tracking for Android TV exit
+  DateTime? _lastBackPressTime;
+  static const _backPressDuration = Duration(seconds: 2);
+
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
     const PlaylistScreen(),
@@ -771,45 +775,83 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return Stack(
       children: [
         // Main app content
-        AnimatedPremiumBackground(
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              title: PremiumTopNav(
-                currentIndex: currentNavIndex,
-                items: navItems,
-                onTap: (relativeIndex) {
-                  final actualIndex = visibleIndices[relativeIndex];
-                  _onItemTapped(actualIndex);
-                },
-                badges: navBadges,
-                haptics: true,
+        PopScope(
+          canPop: false,
+          onPopInvoked: (bool didPop) async {
+            if (didPop) return;
+
+            // Only apply double back press behavior on Android TV
+            if (!_isAndroidTv) {
+              Navigator.of(context).maybePop();
+              return;
+            }
+
+            // Allow navigation within app
+            if (Navigator.canPop(context)) {
+              Navigator.of(context).pop();
+              return;
+            }
+
+            // At root level - implement double back to exit
+            final currentTime = DateTime.now();
+            final backButtonPressedTwice = _lastBackPressTime != null &&
+                currentTime.difference(_lastBackPressTime!) < _backPressDuration;
+
+            if (backButtonPressedTwice) {
+              // Exit app
+              SystemNavigator.pop();
+              return;
+            }
+
+            // First press - show message
+            _lastBackPressTime = currentTime;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Press back again to exit'),
+                duration: _backPressDuration,
               ),
-              automaticallyImplyLeading: false,
-            ),
-            body: FadeTransition(
-              opacity: _fadeAnimation,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 350),
-                transitionBuilder: (child, animation) {
-                  final offsetAnimation =
-                      Tween<Offset>(
-                        begin: const Offset(0.02, 0.02),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      );
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(position: offsetAnimation, child: child),
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey<int>(_selectedIndex),
-                  child: _pages[_selectedIndex],
+            );
+          },
+          child: AnimatedPremiumBackground(
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              appBar: AppBar(
+                title: PremiumTopNav(
+                  currentIndex: currentNavIndex,
+                  items: navItems,
+                  onTap: (relativeIndex) {
+                    final actualIndex = visibleIndices[relativeIndex];
+                    _onItemTapped(actualIndex);
+                  },
+                  badges: navBadges,
+                  haptics: true,
+                ),
+                automaticallyImplyLeading: false,
+              ),
+              body: FadeTransition(
+                opacity: _fadeAnimation,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, animation) {
+                    final offsetAnimation =
+                        Tween<Offset>(
+                          begin: const Offset(0.02, 0.02),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        );
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(position: offsetAnimation, child: child),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_selectedIndex),
+                    child: _pages[_selectedIndex],
+                  ),
                 ),
               ),
             ),
