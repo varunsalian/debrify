@@ -780,37 +780,52 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           onPopInvoked: (bool didPop) async {
             if (didPop) return;
 
-            // Only apply double back press behavior on Android TV
-            if (!_isAndroidTv) {
-              Navigator.of(context).maybePop();
-              return;
-            }
-
-            // Allow navigation within app
+            // Allow navigation within app for all platforms
             if (Navigator.canPop(context)) {
               Navigator.of(context).pop();
               return;
             }
 
-            // At root level - implement double back to exit
-            final currentTime = DateTime.now();
-            final backButtonPressedTwice = _lastBackPressTime != null &&
-                currentTime.difference(_lastBackPressTime!) < _backPressDuration;
+            // At root level - platform-specific exit behavior
 
-            if (backButtonPressedTwice) {
-              // Exit app
+            // Desktop platforms: Don't exit on back button
+            // Users close windows using OS controls (X button, Cmd+Q, etc.)
+            if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+              return; // Do nothing
+            }
+
+            // iOS: Don't force exit - iOS apps don't have back buttons
+            // Users exit by swiping up or using home button
+            if (Platform.isIOS) {
+              return; // Do nothing
+            }
+
+            // Android Mobile: Exit immediately on back press
+            if (Platform.isAndroid && !_isAndroidTv) {
               SystemNavigator.pop();
               return;
             }
 
-            // First press - show message
-            _lastBackPressTime = currentTime;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Press back again to exit'),
-                duration: _backPressDuration,
-              ),
-            );
+            // Android TV: Double back press to exit
+            if (Platform.isAndroid && _isAndroidTv) {
+              final currentTime = DateTime.now();
+              final backButtonPressedTwice = _lastBackPressTime != null &&
+                  currentTime.difference(_lastBackPressTime!) < _backPressDuration;
+
+              if (backButtonPressedTwice) {
+                SystemNavigator.pop();
+                return;
+              }
+
+              // First press - show message
+              _lastBackPressTime = currentTime;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Press back again to exit'),
+                  duration: _backPressDuration,
+                ),
+              );
+            }
           },
           child: AnimatedPremiumBackground(
             child: Scaffold(
