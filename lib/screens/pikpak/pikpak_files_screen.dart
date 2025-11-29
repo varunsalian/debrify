@@ -1032,14 +1032,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _downloadFolder(file),
-                        icon: const Icon(Icons.download, size: 18),
-                        label: const Text('Download'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
                   ] else if (isVideo && isComplete) ...[
                     Expanded(
                       child: FilledButton.icon(
@@ -1047,25 +1039,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                         onPressed: () => _playFile(file),
                         icon: const Icon(Icons.play_arrow, size: 18),
                         label: const Text('Play'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _downloadFile(file),
-                        icon: const Icon(Icons.download, size: 18),
-                        label: const Text('Download'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ] else if (!isFolder && isComplete) ...[
-                    // Non-video files - only show download button
-                    Expanded(
-                      child: FilledButton.icon(
-                        autofocus: index == 0,
-                        onPressed: () => _downloadFile(file),
-                        icon: const Icon(Icons.download, size: 18),
-                        label: const Text('Download'),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1079,9 +1052,25 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                         _showDeleteDialog(file);
                       } else if (value == 'add_to_playlist') {
                         _handleAddToPlaylist(file);
+                      } else if (value == 'download') {
+                        if (isFolder) {
+                          _downloadFolder(file);
+                        } else {
+                          _downloadFile(file);
+                        }
                       }
                     },
                     itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'download',
+                        child: Row(
+                          children: [
+                            Icon(Icons.download, size: 18, color: Colors.green),
+                            SizedBox(width: 12),
+                            Text('Download'),
+                          ],
+                        ),
+                      ),
                       const PopupMenuItem(
                         value: 'add_to_playlist',
                         child: Row(
