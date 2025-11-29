@@ -1003,44 +1003,43 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     RDTorrent torrent, {
     bool showPlayButtons = false,
   }) async {
-    await showModalBottomSheet(
+    await showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF0F172A).withValues(alpha: 0.98),
-                  const Color(0xFF1E293B).withValues(alpha: 0.98),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0F172A).withValues(alpha: 0.98),
+                    const Color(0xFF1E293B).withValues(alpha: 0.98),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 0),
+                  ),
                 ],
               ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              border: Border.all(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  blurRadius: 30,
-                  offset: const Offset(0, -10),
-                ),
-                BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 0),
-                ),
-              ],
-            ),
-            child: FutureBuilder<Map<String, dynamic>>(
+              child: FutureBuilder<Map<String, dynamic>>(
               future: DebridService.getTorrentInfo(_apiKey!, torrent.id),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -1049,16 +1048,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Drag handle
-                        Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[600],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
@@ -1110,16 +1099,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Drag handle
-                        Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[600],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
@@ -1224,16 +1203,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                           padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
                           child: Column(
                             children: [
-                              // Drag handle
-                              Container(
-                                width: 40,
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[600],
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
                               // Title
                               Text(
                                 '${torrent.filename} (0 files)',
@@ -1354,21 +1323,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Minimal header with just drag handle and title
+                          // Minimal header with title
                           Container(
                             padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
                             child: Column(
                               children: [
-                                // Drag handle
-                                Container(
-                                  width: 40,
-                                  height: 4,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[600],
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
                                 // Simple title
                                 Text(
                                   '${torrent.filename} (${files.length} files)',
@@ -1958,7 +1917,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               },
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }
@@ -2825,54 +2785,42 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   void _showOptionsSheet(List<_ActionSheetOption> options) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF0F172A).withValues(alpha: 0.98),
-                  const Color(0xFF1E293B).withValues(alpha: 0.98),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0F172A).withValues(alpha: 0.98),
+                    const Color(0xFF1E293B).withValues(alpha: 0.98),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 28,
+                    offset: const Offset(0, 16),
+                  ),
                 ],
               ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              border: Border.all(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  blurRadius: 28,
-                  offset: const Offset(0, 16),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
                     for (final option in options) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),

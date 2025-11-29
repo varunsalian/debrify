@@ -77,64 +77,67 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       return;
     }
 
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (sheetContext) {
         bool isLoadingZip = false;
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.archive_outlined),
-                      title: const Text('Download whole torrent as ZIP'),
-                      subtitle: const Text(
-                        'Create a single archive for offline use',
-                      ),
-                      trailing: isLoadingZip
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : null,
-                      enabled: !isLoadingZip,
-                      onTap: isLoadingZip
-                          ? null
-                          : () async {
-                              setSheetState(() => isLoadingZip = true);
-                              await _enqueueTorboxZipDownload(
-                                torrent: torrent,
-                                sheetContext: sheetContext,
-                              );
-                              if (!Navigator.of(sheetContext).canPop()) {
-                                setSheetState(() => isLoadingZip = false);
-                              }
-                            },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.list_alt),
-                      title: const Text('Select files to download'),
-                      subtitle: const Text('Choose specific files to download'),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        _showTorboxFileSelectionSheet(torrent);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: StatefulBuilder(
+            builder: (context, setSheetState) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              ),
-            );
-          },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.archive_outlined),
+                        title: const Text('Download whole torrent as ZIP'),
+                        subtitle: const Text(
+                          'Create a single archive for offline use',
+                        ),
+                        trailing: isLoadingZip
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : null,
+                        enabled: !isLoadingZip,
+                        onTap: isLoadingZip
+                            ? null
+                            : () async {
+                                setSheetState(() => isLoadingZip = true);
+                                await _enqueueTorboxZipDownload(
+                                  torrent: torrent,
+                                  sheetContext: sheetContext,
+                                );
+                                if (!Navigator.of(sheetContext).canPop()) {
+                                  setSheetState(() => isLoadingZip = false);
+                                }
+                              },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.list_alt),
+                        title: const Text('Select files to download'),
+                        subtitle: const Text('Choose specific files to download'),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          _showTorboxFileSelectionSheet(torrent);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         );
       },
     );
@@ -289,51 +292,39 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       ),
     ];
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-              ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              border: Border.all(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  blurRadius: 28,
-                  offset: const Offset(0, 16),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
                 ),
-              ],
-            ),
-            child: SafeArea(
-              top: false,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 28,
+                    offset: const Offset(0, 16),
+                  ),
+                ],
+              ),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
                     for (final option in options) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1049,15 +1040,16 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
     final bool isMovieCollection = !isSeries && hasVideo;
 
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: StatefulBuilder(
-            builder: (context, setSheetState) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: StatefulBuilder(
+              builder: (context, setSheetState) {
               final selectedEntries =
                   entries
                       .where((entry) => selectedIndices.contains(entry.index))
@@ -1162,57 +1154,39 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   ? '0 B'
                   : Formatters.formatFileSize(selectedBytes);
 
-              return SafeArea(
-                top: false,
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.9,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFF0F172A).withValues(alpha: 0.98),
-                        const Color(0xFF1E293B).withValues(alpha: 0.98),
-                      ],
-                    ),
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(28),
-                    ),
-                    border: Border.all(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 30,
-                        offset: const Offset(0, -10),
-                      ),
-                      BoxShadow(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 0),
-                      ),
+              return Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.9,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      const Color(0xFF0F172A).withValues(alpha: 0.98),
+                      const Color(0xFF1E293B).withValues(alpha: 0.98),
                     ],
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[600],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 30,
+                      offset: const Offset(0, 10),
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 0),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 24),
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1412,9 +1386,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       ),
                     ],
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },
