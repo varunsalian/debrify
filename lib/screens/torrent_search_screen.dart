@@ -1364,6 +1364,47 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return KeyEventResult.ignored;
   }
 
+  KeyEventResult _handleSeasonInputKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Arrow Right or Arrow Down -> Episode field
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _episodeInputFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    // Arrow Up or Escape/Back -> Search field
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+        event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleEpisodeInputKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Arrow Left or Arrow Up -> Season field
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _seasonInputFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    // Escape/Back -> Search field
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   // Build active IMDB selection chip
   Widget _buildImdbSelectionChip() {
     // Removed - chip takes up too much space
@@ -1462,6 +1503,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             width: 70,
             child: Focus(
               focusNode: _seasonInputFocusNode,
+              onKeyEvent: (node, event) => _handleSeasonInputKeyEvent(event),
               child: TextField(
                 controller: _seasonController,
                 keyboardType: TextInputType.number,
@@ -1490,6 +1532,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             width: 70,
             child: Focus(
               focusNode: _episodeInputFocusNode,
+              onKeyEvent: (node, event) => _handleEpisodeInputKeyEvent(event),
               child: TextField(
                 controller: _episodeController,
                 keyboardType: TextInputType.number,
