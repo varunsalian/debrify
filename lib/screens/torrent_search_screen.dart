@@ -27,6 +27,11 @@ import '../screens/torbox/torbox_downloads_screen.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/advanced_search_sheet.dart';
 import '../widgets/torrent_filters_sheet.dart';
+import '../services/imdb_lookup_service.dart';
+import 'dart:async';
+
+// Search mode for torrent search
+enum SearchMode { keyword, imdb }
 
 class TorrentSearchScreen extends StatefulWidget {
   const TorrentSearchScreen({super.key});
@@ -44,12 +49,27 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _sortDirectionFocusNode = FocusNode();
   final FocusNode _filterButtonFocusNode = FocusNode();
   final FocusNode _clearFiltersButtonFocusNode = FocusNode();
+
+  // IMDB Smart Search Mode focus nodes
+  final FocusNode _modeSelectorFocusNode = FocusNode();
+  final FocusNode _selectionChipFocusNode = FocusNode();
+  final FocusNode _expandControlsFocusNode = FocusNode();
+  final FocusNode _seasonInputFocusNode = FocusNode();
+  final FocusNode _episodeInputFocusNode = FocusNode();
+  List<FocusNode> _autocompleteFocusNodes = [];
+
   bool _searchFocused = false;
   bool _providerAccordionFocused = false;
   bool _advancedButtonFocused = false;
   bool _sortDirectionFocused = false;
   bool _filterButtonFocused = false;
   bool _clearFiltersButtonFocused = false;
+  bool _modeSelectorFocused = false;
+  bool _selectionChipFocused = false;
+  bool _expandControlsFocused = false;
+  bool _seasonInputFocused = false;
+  bool _episodeInputFocused = false;
+
   List<Torrent> _torrents = [];
   List<Torrent> _allTorrents = [];
   Map<String, int> _engineCounts = {};
@@ -81,6 +101,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final Map<String, bool> _engineTileFocusStates = {};
   bool _showProvidersPanel = false;
   AdvancedSearchSelection? _activeAdvancedSelection;
+
+  // IMDB Smart Search Mode state
+  SearchMode _searchMode = SearchMode.keyword;
+  List<ImdbTitleResult> _imdbAutocompleteResults = [];
+  bool _isImdbSearching = false;
+  String? _imdbSearchError;
+  ImdbTitleResult? _selectedImdbTitle;
+  bool _isSeries = false;
+  bool _imdbControlsCollapsed = false;
+  bool _seriesControlsExpanded = false; // Whether to show Movie/Series chips and S/E inputs
+  Timer? _imdbSearchDebouncer;
+  final TextEditingController _seasonController = TextEditingController();
+  final TextEditingController _episodeController = TextEditingController();
 
   // Sorting options
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
@@ -165,6 +198,41 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (!mounted) return;
       setState(() {
         _clearFiltersButtonFocused = _clearFiltersButtonFocusNode.hasFocus;
+      });
+    });
+
+    _modeSelectorFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _modeSelectorFocused = _modeSelectorFocusNode.hasFocus;
+      });
+    });
+
+    _selectionChipFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _selectionChipFocused = _selectionChipFocusNode.hasFocus;
+      });
+    });
+
+    _expandControlsFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _expandControlsFocused = _expandControlsFocusNode.hasFocus;
+      });
+    });
+
+    _seasonInputFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _seasonInputFocused = _seasonInputFocusNode.hasFocus;
+      });
+    });
+
+    _episodeInputFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _episodeInputFocused = _episodeInputFocusNode.hasFocus;
       });
     });
 
@@ -334,16 +402,60 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Future<void> _loadDefaultSettings() async {
-    // Load available engines dynamically from TorrentService
-    final engines = await TorrentService.getKeywordSearchEngines();
+    // Load available engines based on current search mode
+    List<DynamicEngine> engines;
+
+    if (_searchMode == SearchMode.imdb) {
+      // For IMDB mode, get engines that specifically support IMDB search
+      engines = await TorrentService.getImdbSearchEngines();
+      debugPrint('TorrentSearchScreen: Loading IMDB engines: ${engines.map((e) => e.name).toList()}');
+    } else {
+      // For keyword mode, get all keyword search capable engines
+      engines = await TorrentService.getKeywordSearchEngines();
+      debugPrint('TorrentSearchScreen: Loading keyword engines: ${engines.map((e) => e.name).toList()}');
+    }
+
+    // If no engines available for this mode, try to get any available engines as fallback
+    if (engines.isEmpty) {
+      debugPrint('TorrentSearchScreen: No engines available for $_searchMode mode');
+      engines = await TorrentService.getAvailableEngines();
+
+      // Filter based on mode even from all engines
+      if (_searchMode == SearchMode.imdb) {
+        engines = engines.where((e) => e.supportsImdbSearch).toList();
+      } else {
+        engines = engines.where((e) => e.supportsKeywordSearch).toList();
+      }
+
+      if (engines.isEmpty) {
+        debugPrint('TorrentSearchScreen: Still no engines after fallback filter');
+      }
+    }
+
     final Map<String, bool> states = {};
+
+    // Preserve previous enabled states where possible, but only for available engines
+    final previousStates = Map<String, bool>.from(_engineStates);
 
     // Load enabled state for each engine from SettingsManager
     for (final engine in engines) {
       final engineId = engine.name;
-      final defaultEnabled = engine.settingsConfig.enabled?.defaultBool ?? true;
-      final isEnabled = await _settingsManager.getEnabled(engineId, defaultEnabled);
-      states[engineId] = isEnabled;
+
+      // If we had a previous state for this engine, preserve it
+      // Otherwise, load from settings
+      if (previousStates.containsKey(engineId)) {
+        states[engineId] = previousStates[engineId]!;
+      } else {
+        final defaultEnabled = engine.settingsConfig.enabled?.defaultBool ?? true;
+        final isEnabled = await _settingsManager.getEnabled(engineId, defaultEnabled);
+        states[engineId] = isEnabled;
+      }
+    }
+
+    // If no engines are enabled after switching mode, enable the first available engine
+    if (states.isNotEmpty && !states.values.any((enabled) => enabled)) {
+      final firstEngineId = engines.first.name;
+      states[firstEngineId] = true;
     }
 
     if (!mounted) return;
@@ -421,6 +533,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _sortDirectionFocusNode.dispose();
     _filterButtonFocusNode.dispose();
     _clearFiltersButtonFocusNode.dispose();
+
+    // Dispose IMDB Smart Search Mode resources
+    _modeSelectorFocusNode.dispose();
+    _selectionChipFocusNode.dispose();
+    _expandControlsFocusNode.dispose();
+    _seasonInputFocusNode.dispose();
+    _episodeInputFocusNode.dispose();
+    _seasonController.dispose();
+    _episodeController.dispose();
+    _imdbSearchDebouncer?.cancel();
+    for (final node in _autocompleteFocusNodes) {
+      node.dispose();
+    }
+    _autocompleteFocusNodes.clear();
+
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
@@ -705,6 +832,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _handleSearchFieldChanged(String value) {
+    // In IMDB mode, trigger autocomplete search
+    if (_searchMode == SearchMode.imdb) {
+      _onImdbSearchTextChanged(value);
+      // If user manually edits, clear the active selection
+      final trimmed = value.trim();
+      if (_activeAdvancedSelection != null &&
+          trimmed != _activeAdvancedSelection!.displayQuery) {
+        setState(() {
+          _selectedImdbTitle = null;
+          _activeAdvancedSelection = null;
+        });
+      }
+      return;
+    }
+
+    // Keyword mode: clear advanced selection if user manually edits
     final trimmed = value.trim();
     if (_activeAdvancedSelection != null &&
         trimmed != _activeAdvancedSelection!.displayQuery) {
@@ -784,9 +927,611 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  // Mode selector dropdown for Smart Search Mode
+  Widget _buildModeSelector() {
+    return Focus(
+      focusNode: _modeSelectorFocusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter)) {
+          // Toggle between modes on select/enter
+          _toggleSearchMode();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: _modeSelectorFocused
+              ? Border.all(color: Colors.white, width: 2)
+              : null,
+        ),
+        child: PopupMenuButton<SearchMode>(
+          onSelected: (mode) {
+            setState(() {
+              _searchMode = mode;
+              // Clear autocomplete when switching modes
+              _imdbAutocompleteResults.clear();
+              _selectedImdbTitle = null;
+              _imdbSearchError = null;
+              _seriesControlsExpanded = false; // Reset expansion state
+              if (mode == SearchMode.keyword) {
+                // Clear IMDB-specific state when returning to keyword mode
+                _activeAdvancedSelection = null;
+                _isSeries = false;
+                _seasonController.clear();
+                _episodeController.clear();
+              }
+            });
+            // Reload engines for the new search mode
+            _loadDefaultSettings();
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: SearchMode.keyword,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: _searchMode == SearchMode.keyword
+                        ? const Color(0xFF7C3AED)
+                        : Colors.white70,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Keyword',
+                    style: TextStyle(
+                      color: _searchMode == SearchMode.keyword
+                          ? const Color(0xFF7C3AED)
+                          : Colors.white,
+                      fontWeight: _searchMode == SearchMode.keyword
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: SearchMode.imdb,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.auto_awesome_outlined,
+                    size: 18,
+                    color: _searchMode == SearchMode.imdb
+                        ? const Color(0xFF7C3AED)
+                        : Colors.white70,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'IMDB',
+                    style: TextStyle(
+                      color: _searchMode == SearchMode.imdb
+                          ? const Color(0xFF7C3AED)
+                          : Colors.white,
+                      fontWeight: _searchMode == SearchMode.imdb
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: _searchMode == SearchMode.imdb
+                  ? const Color(0xFF7C3AED)
+                  : const Color(0xFF1E3A8A),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _searchMode == SearchMode.imdb
+                      ? Icons.auto_awesome_outlined
+                      : Icons.search_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _searchMode == SearchMode.imdb ? 'IMDB' : 'Keyword',
+                  style: const TextStyle(fontSize: 12, color: Colors.white),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _toggleSearchMode() {
+    setState(() {
+      _searchMode =
+          _searchMode == SearchMode.keyword ? SearchMode.imdb : SearchMode.keyword;
+      _imdbAutocompleteResults.clear();
+      _selectedImdbTitle = null;
+      _imdbSearchError = null;
+      _seriesControlsExpanded = false; // Reset expansion state
+      if (_searchMode == SearchMode.keyword) {
+        _activeAdvancedSelection = null;
+        _isSeries = false;
+        _seasonController.clear();
+        _episodeController.clear();
+      }
+    });
+    // Reload engines for the new search mode
+    _loadDefaultSettings();
+  }
+
+  // IMDB autocomplete search with debouncing
+  void _onImdbSearchTextChanged(String query) {
+    // Cancel previous timer
+    _imdbSearchDebouncer?.cancel();
+
+    if (query.trim().isEmpty) {
+      setState(() {
+        _imdbAutocompleteResults.clear();
+        _imdbSearchError = null;
+        _isImdbSearching = false;
+      });
+      return;
+    }
+
+    if (query.trim().length < 2) {
+      setState(() {
+        _imdbAutocompleteResults.clear();
+        _imdbSearchError = 'Enter at least 2 characters';
+        _isImdbSearching = false;
+      });
+      return;
+    }
+
+    // Show loading state
+    setState(() {
+      _isImdbSearching = true;
+      _imdbSearchError = null;
+    });
+
+    // Debounce: wait 300ms after user stops typing
+    _imdbSearchDebouncer = Timer(const Duration(milliseconds: 300), () {
+      _performImdbAutocompleteSearch(query.trim());
+    });
+  }
+
+  Future<void> _performImdbAutocompleteSearch(String query) async {
+    try {
+      debugPrint('IMDB Smart Search: Searching for "$query"');
+      final results = await ImdbLookupService.searchTitles(query);
+
+      if (!mounted) return;
+
+      // Dispose old focus nodes and create new ones
+      for (final node in _autocompleteFocusNodes) {
+        node.dispose();
+      }
+      _autocompleteFocusNodes = List.generate(
+        results.take(10).length,
+        (index) => FocusNode(debugLabel: 'imdb_autocomplete_$index'),
+      );
+
+      setState(() {
+        _imdbAutocompleteResults = results.take(10).toList();
+        _isImdbSearching = false;
+        _imdbSearchError = results.isEmpty ? 'No IMDb matches found' : null;
+      });
+
+      debugPrint('IMDB Smart Search: Found ${results.length} results');
+    } catch (e) {
+      debugPrint('IMDB Smart Search: Error - $e');
+      if (!mounted) return;
+      setState(() {
+        _imdbAutocompleteResults.clear();
+        _isImdbSearching = false;
+        _imdbSearchError = e.toString().replaceAll('Exception: ', '');
+      });
+    }
+  }
+
+  // Handle IMDB result selection
+  void _onImdbResultSelected(ImdbTitleResult result) async {
+    debugPrint('IMDB Smart Search: Selected ${result.title} (${result.imdbId})');
+
+    // Clear autocomplete immediately
+    setState(() {
+      _selectedImdbTitle = result;
+      _imdbAutocompleteResults.clear();
+      _imdbSearchError = null;
+      _isImdbSearching = true; // Show loading indicator while fetching details
+      _imdbControlsCollapsed = false; // Expand controls for new selection
+    });
+
+    try {
+      // Fetch title details to determine if it's a movie or series
+      final details = await ImdbLookupService.getTitleDetails(result.imdbId);
+
+      if (!mounted) return;
+
+      // Parse the response to determine type
+      bool isSeries = false;
+      if (details['short'] != null && details['short'] is Map) {
+        final shortData = details['short'] as Map<String, dynamic>;
+        final type = shortData['@type']?.toString() ?? '';
+        isSeries = type == 'TVSeries';
+        debugPrint('IMDB Smart Search: Title type is $type (isSeries: $isSeries)');
+      } else {
+        // Fallback if structure is different
+        debugPrint('IMDB Smart Search: Could not determine type, defaulting to Movie');
+        isSeries = false;
+      }
+
+      setState(() {
+        _isSeries = isSeries;
+        _seasonController.clear();
+        _episodeController.clear();
+        _isImdbSearching = false;
+        // For series, hide controls initially - user can expand to customize
+        _seriesControlsExpanded = !isSeries; // Movies don't need controls, series start collapsed
+      });
+
+      // Search immediately for both movies and series
+      // Series will search with default params (null season/episode means all episodes)
+      _createAdvancedSelectionAndSearch();
+    } catch (e) {
+      debugPrint('IMDB Smart Search: Error fetching title details: $e');
+
+      if (!mounted) return;
+
+      // On error, show type selector so user can manually choose
+      setState(() {
+        _isImdbSearching = false;
+        _imdbSearchError = 'Could not determine title type. Please select manually.';
+        // Default to movie on error
+        _isSeries = false;
+        _seasonController.clear();
+        _episodeController.clear();
+        _seriesControlsExpanded = true; // Show controls on error so user can manually choose
+      });
+
+      // Still allow search for movies by default
+      _createAdvancedSelectionAndSearch();
+    }
+  }
+
+  void _createAdvancedSelectionAndSearch() {
+    if (_selectedImdbTitle == null) return;
+
+    int? season;
+    int? episode;
+
+    if (_isSeries) {
+      final seasonText = _seasonController.text.trim();
+      final episodeText = _episodeController.text.trim();
+
+      if (seasonText.isNotEmpty) {
+        season = int.tryParse(seasonText);
+      }
+
+      if (episodeText.isNotEmpty) {
+        episode = int.tryParse(episodeText);
+      } else if (season != null) {
+        // Default to episode 1 if season is specified
+        episode = 1;
+      }
+    }
+
+    final selection = AdvancedSearchSelection(
+      imdbId: _selectedImdbTitle!.imdbId,
+      isSeries: _isSeries,
+      title: _selectedImdbTitle!.title,
+      year: _selectedImdbTitle!.year,
+      season: season,
+      episode: episode,
+    );
+
+    setState(() {
+      _activeAdvancedSelection = selection;
+      _searchController.text = selection.displayQuery;
+      // Auto-collapse controls after search
+      _imdbControlsCollapsed = true;
+    });
+
+    // Trigger torrent search
+    _searchTorrents(selection.displayQuery);
+  }
+
+  // Clear IMDB selection
+  void _clearImdbSelection() {
+    setState(() {
+      _selectedImdbTitle = null;
+      _activeAdvancedSelection = null;
+      _isSeries = false;
+      _seasonController.clear();
+      _episodeController.clear();
+      _searchController.clear();
+      _imdbSearchError = null; // Clear any errors when clearing selection
+      _isImdbSearching = false; // Reset loading state
+      _imdbControlsCollapsed = false; // Expand controls when clearing
+      _seriesControlsExpanded = false; // Reset expansion state
+    });
+  }
+
+  // Build IMDB autocomplete dropdown
+  Widget _buildImdbAutocompleteDropdown() {
+    if (_imdbAutocompleteResults.isEmpty && !_isImdbSearching && _imdbSearchError == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      constraints: const BoxConstraints(maxHeight: 400),
+      child: _isImdbSearching
+          ? const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
+          : _imdbSearchError != null
+              ? Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    _imdbSearchError!,
+                    style: const TextStyle(color: Color(0xFFF87171)),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _imdbAutocompleteResults.length,
+                  itemBuilder: (context, index) {
+                    final result = _imdbAutocompleteResults[index];
+                    final focusNode = _autocompleteFocusNodes[index];
+                    return _ImdbAutocompleteItem(
+                      result: result,
+                      focusNode: focusNode,
+                      onSelected: () => _onImdbResultSelected(result),
+                      onKeyEvent: (event) => _handleAutocompleteKeyEvent(index, event),
+                    );
+                  },
+                ),
+    );
+  }
+
+  // Handle keyboard events for autocomplete items
+  KeyEventResult _handleAutocompleteKeyEvent(int index, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (index > 0) {
+        _autocompleteFocusNodes[index - 1].requestFocus();
+      } else {
+        _searchFocusNode.requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (index < _autocompleteFocusNodes.length - 1) {
+        _autocompleteFocusNodes[index + 1].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      _onImdbResultSelected(_imdbAutocompleteResults[index]);
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      setState(() {
+        _imdbAutocompleteResults.clear();
+      });
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  // Build active IMDB selection chip
+  Widget _buildImdbSelectionChip() {
+    // Removed - chip takes up too much space
+    return const SizedBox.shrink();
+  }
+
+  // Build movie/series type selector and S/E inputs
+  Widget _buildImdbTypeAndEpisodeControls() {
+    if (_selectedImdbTitle == null) {
+      return const SizedBox.shrink();
+    }
+
+    // For movies: hide when collapsed
+    // For series: never hide (we show either the expandable button or full controls)
+    if (_imdbControlsCollapsed && !_isSeries) {
+      return const SizedBox.shrink();
+    }
+
+    // Show loading indicator while fetching title details
+    if (_isImdbSearching) {
+      return Container(
+        margin: const EdgeInsets.only(top: 8, bottom: 8),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  const Color(0xFF7C3AED),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Detecting title type...',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show error message if present
+    if (_imdbSearchError != null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 8, bottom: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.red.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 16,
+              color: Colors.red,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _imdbSearchError!,
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // For movies, don't show controls at all
+    if (!_isSeries) {
+      return const SizedBox.shrink();
+    }
+
+    // For series, show S/E inputs directly (type is auto-detected)
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      child: Row(
+        children: [
+          // Season input
+          SizedBox(
+            width: 70,
+            child: Focus(
+              focusNode: _seasonInputFocusNode,
+              child: TextField(
+                controller: _seasonController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Season',
+                  labelStyle: const TextStyle(fontSize: 12),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                onChanged: (_) {
+                  _createAdvancedSelectionAndSearch();
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Episode input
+          SizedBox(
+            width: 70,
+            child: Focus(
+              focusNode: _episodeInputFocusNode,
+              child: TextField(
+                controller: _episodeController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Episode',
+                  labelStyle: const TextStyle(fontSize: 12),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                onChanged: (_) {
+                  _createAdvancedSelectionAndSearch();
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildProviderSummaryText(BuildContext context) {
     final enabledCount = _engineStates.values.where((enabled) => enabled).length;
+    final totalAvailable = _availableEngines.length;
+
+    if (totalAvailable == 0) {
+      return Text(
+        _searchMode == SearchMode.imdb
+            ? 'No IMDB engines available - import engines in settings'
+            : 'No keyword engines available - import engines in settings',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+
     if (enabledCount == 0) {
       return Text(
         'No providers selected',
@@ -795,8 +1540,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       );
     }
+
     return Text(
-      '$enabledCount enabled',
+      '$enabledCount of $totalAvailable ${_searchMode == SearchMode.imdb ? "IMDB" : "keyword"} engines enabled',
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
         color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
@@ -909,6 +1655,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildAdvancedProviderHint(BuildContext context) {
+    // Show different hints based on search mode
+    final String hintText;
+    final IconData hintIcon;
+    final Color hintColor;
+
+    if (_searchMode == SearchMode.imdb) {
+      hintText = 'IMDB mode shows only engines that support IMDB search (like Torrentio). Switch to Keyword mode to see all engines.';
+      hintIcon = Icons.info_outline_rounded;
+      hintColor = const Color(0xFF7C3AED);
+    } else {
+      hintText = 'Need IMDb-accurate results? Switch to IMDB mode to search with IMDB IDs, seasons, and episodes.';
+      hintIcon = Icons.auto_awesome_rounded;
+      hintColor = const Color(0xFFFACC15);
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -916,20 +1677,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         color: const Color(0xFF1F2937),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFFFACC15).withValues(alpha: 0.3),
+          color: hintColor.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.auto_awesome_rounded,
-            color: Color(0xFFFACC15),
+          Icon(
+            hintIcon,
+            color: hintColor,
             size: 18,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Need IMDb-accurate results? Use Advanced search to pull Torrentio streams via IMDb ID, seasons, and episodes.',
+              hintText,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.white.withValues(alpha: 0.8),
               ),
@@ -5208,19 +5969,34 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 child: TextField(
                                   controller: _searchController,
                                   focusNode: _searchFocusNode,
-                                  onSubmitted: (query) =>
-                                      _searchTorrents(query),
+                                  onSubmitted: (query) {
+                                    // In IMDB mode, don't trigger search on submit
+                                    // unless a selection has been made
+                                    if (_searchMode == SearchMode.keyword) {
+                                      _searchTorrents(query);
+                                    } else if (_searchMode == SearchMode.imdb &&
+                                        _selectedImdbTitle != null) {
+                                      // Already has selection, can re-search
+                                      _createAdvancedSelectionAndSearch();
+                                    }
+                                  },
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
-                                    hintText: 'Search all engines...',
+                                    hintText: _searchMode == SearchMode.imdb
+                                        ? 'Search IMDB titles...'
+                                        : 'Search all engines...',
                                     hintStyle: TextStyle(
                                       color: Colors.white.withValues(
                                         alpha: 0.5,
                                       ),
                                     ),
-                                    prefixIcon: const Icon(
-                                      Icons.search_rounded,
-                                      color: Color(0xFF6366F1),
+                                    prefixIcon: Icon(
+                                      _searchMode == SearchMode.imdb
+                                          ? Icons.auto_awesome_outlined
+                                          : Icons.search_rounded,
+                                      color: _searchMode == SearchMode.imdb
+                                          ? const Color(0xFF7C3AED)
+                                          : const Color(0xFF6366F1),
                                     ),
                                     suffixIcon:
                                         _searchController.text.isNotEmpty
@@ -5256,9 +6032,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        _buildAdvancedButton(),
+                        _buildModeSelector(),
                       ],
                     ),
+
+                    // IMDB Smart Search Mode UI components
+                    if (_searchMode == SearchMode.imdb) ...[
+                      // Autocomplete dropdown
+                      _buildImdbAutocompleteDropdown(),
+                      // Active selection chip
+                      _buildImdbSelectionChip(),
+                      // Type selector and S/E inputs
+                      _buildImdbTypeAndEpisodeControls(),
+                    ],
+
                     // Search Engine Toggles
                     const SizedBox(height: 16),
                     _buildProvidersAccordion(context),
@@ -6626,6 +7413,125 @@ class _DebridActionTileState extends State<_DebridActionTile> {
           ),
         ),
       ),
+      ),
+    );
+  }
+}
+
+// IMDB autocomplete item widget with DPAD support
+class _ImdbAutocompleteItem extends StatefulWidget {
+  final ImdbTitleResult result;
+  final FocusNode focusNode;
+  final VoidCallback onSelected;
+  final KeyEventResult Function(KeyEvent) onKeyEvent;
+
+  const _ImdbAutocompleteItem({
+    required this.result,
+    required this.focusNode,
+    required this.onSelected,
+    required this.onKeyEvent,
+  });
+
+  @override
+  State<_ImdbAutocompleteItem> createState() => _ImdbAutocompleteItemState();
+}
+
+class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (focused) {
+        setState(() {
+          _isFocused = focused;
+        });
+        if (focused) {
+          // Ensure focused item is visible
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+          );
+        }
+      },
+      onKeyEvent: (node, event) => widget.onKeyEvent(event),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        decoration: BoxDecoration(
+          color: _isFocused
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _isFocused
+                ? Colors.white.withValues(alpha: 0.8)
+                : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: ListTile(
+          onTap: widget.onSelected,
+          leading: widget.result.posterUrl != null
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.network(
+                    widget.result.posterUrl!,
+                    width: 40,
+                    height: 60,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 40,
+                        height: 60,
+                        color: Colors.white.withValues(alpha: 0.1),
+                        child: const Icon(
+                          Icons.movie_outlined,
+                          color: Colors.white54,
+                        ),
+                      );
+                    },
+                  ),
+                )
+              : Container(
+                  width: 40,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    Icons.movie_outlined,
+                    color: Colors.white54,
+                  ),
+                ),
+          title: Text(
+            widget.result.title,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: _isFocused ? FontWeight.w600 : FontWeight.normal,
+              fontSize: 14,
+            ),
+          ),
+          subtitle: widget.result.year != null
+              ? Text(
+                  widget.result.year!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 12,
+                  ),
+                )
+              : null,
+          trailing: _isFocused
+              ? Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Colors.white.withValues(alpha: 0.6),
+                )
+              : null,
+        ),
       ),
     );
   }
