@@ -6800,6 +6800,51 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  /// Build size chip or pack type chip based on coverage type
+  Widget _buildSizeOrPackChip(Torrent torrent) {
+    // For single episodes or unknown coverage: show actual size
+    if (torrent.coverageType == null ||
+        torrent.coverageType == 'singleEpisode') {
+      return StatChip(
+        icon: Icons.storage_rounded,
+        text: Formatters.formatFileSize(torrent.sizeBytes),
+        color: const Color(0xFF0EA5E9), // Sky 500 - Premium blue
+      );
+    }
+
+    // For packs: show pack type label instead of misleading individual file size
+    switch (torrent.coverageType) {
+      case 'completeSeries':
+        return StatChip(
+          icon: Icons.video_library_rounded,
+          text: 'Complete Series',
+          color: const Color(0xFF8B5CF6), // Violet 500 - Rich purple
+        );
+
+      case 'multiSeasonPack':
+        return StatChip(
+          icon: Icons.video_collection_rounded,
+          text: 'Multi-Season',
+          color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
+        );
+
+      case 'seasonPack':
+        return StatChip(
+          icon: Icons.folder_rounded,
+          text: 'Season Pack',
+          color: const Color(0xFF22C55E), // Green 500 - Fresh green
+        );
+
+      default:
+        // Fallback for unknown pack types
+        return StatChip(
+          icon: Icons.folder_rounded,
+          text: 'Multi-file',
+          color: const Color(0xFF6B7280), // Gray 500
+        );
+    }
+  }
+
   Widget _buildTorrentCard(Torrent torrent, int index) {
     final sourceTag = _buildSourceTag(torrent.source);
     final isFocused = index < _cardFocusStates.length && _cardFocusStates[index];
@@ -6886,11 +6931,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               spacing: 6,
               runSpacing: 6,
               children: [
-                StatChip(
-                  icon: Icons.storage_rounded,
-                  text: Formatters.formatFileSize(torrent.sizeBytes),
-                  color: const Color(0xFF0EA5E9), // Sky 500 - Premium blue
-                ),
+                _buildSizeOrPackChip(torrent),
                 StatChip(
                   icon: Icons.upload_rounded,
                   text: '${torrent.seeders}',
