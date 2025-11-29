@@ -108,6 +108,7 @@ class EngineExecutor {
                 rawResult,
                 config.response,
                 config.metadata.id,
+                searchType: searchType,
               );
               // Only add if infohash is valid
               if (torrent.infohash.isNotEmpty) {

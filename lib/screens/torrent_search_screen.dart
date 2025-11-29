@@ -1827,33 +1827,61 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     switch (_sortBy) {
       case 'name':
         sortedTorrents.sort((a, b) {
-          final comparison = a.name.toLowerCase().compareTo(
-            b.name.toLowerCase(),
+          // Primary: coverage type (complete series first)
+          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+          if (coverageComp != 0) return coverageComp;
+
+          // Secondary: name
+          final comparison = a.displayTitle.toLowerCase().compareTo(
+            b.displayTitle.toLowerCase(),
           );
           return _sortAscending ? comparison : -comparison;
         });
         break;
       case 'size':
         sortedTorrents.sort((a, b) {
+          // Primary: coverage type
+          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+          if (coverageComp != 0) return coverageComp;
+
+          // Secondary: size
           final comparison = a.sizeBytes.compareTo(b.sizeBytes);
           return _sortAscending ? comparison : -comparison;
         });
         break;
       case 'seeders':
         sortedTorrents.sort((a, b) {
+          // Primary: coverage type
+          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+          if (coverageComp != 0) return coverageComp;
+
+          // Secondary: seeders
           final comparison = a.seeders.compareTo(b.seeders);
           return _sortAscending ? comparison : -comparison;
         });
         break;
       case 'date':
         sortedTorrents.sort((a, b) {
+          // Primary: coverage type
+          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+          if (coverageComp != 0) return coverageComp;
+
+          // Secondary: date
           final comparison = a.createdUnix.compareTo(b.createdUnix);
           return _sortAscending ? comparison : -comparison;
         });
         break;
       case 'relevance':
       default:
-        // Keep original order (relevance maintained by search engines)
+        // Sort by coverage type first, then maintain original order
+        sortedTorrents.sort((a, b) {
+          // Primary: coverage type (complete series first)
+          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+          if (coverageComp != 0) return coverageComp;
+
+          // Secondary: seeders (best quality indicator for relevance)
+          return b.seeders.compareTo(a.seeders);
+        });
         break;
     }
 
@@ -6819,7 +6847,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               children: [
                 Expanded(
                   child: Text(
-                    torrent.name,
+                    torrent.displayTitle,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
