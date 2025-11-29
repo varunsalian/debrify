@@ -1244,11 +1244,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _openFiltersSheet() async {
     if (_allTorrents.isEmpty && !_hasActiveFilters) return;
 
-    final result = await showModalBottomSheet<TorrentFilterState>(
+    final result = await showDialog<TorrentFilterState>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => TorrentFiltersSheet(initialState: _filters),
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TorrentFiltersSheet(initialState: _filters),
+      ),
     );
 
     if (result == null || result == _filters) return;
