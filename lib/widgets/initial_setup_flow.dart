@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/account_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/torbox_account_service.dart';
+import '../services/pikpak_api_service.dart';
+import '../services/storage_service.dart';
 import '../services/engine/remote_engine_manager.dart';
 import '../services/engine/local_engine_storage.dart';
 import '../services/engine/config_loader.dart';
@@ -45,6 +47,7 @@ class InitialSetupFlow extends StatefulWidget {
 enum _IntegrationType {
   realDebrid,
   torbox,
+  pikpak,
 }
 
 class _IntegrationMeta {
@@ -94,7 +97,7 @@ const Map<_IntegrationType, _IntegrationMeta> _integrationMeta = {
     linkLabel: 'Open torbox.app settings',
     steps: <String>[
       'Visit the Torbox account settings page.',
-      'Log in and scroll to the bottom “API Key” section.',
+      'Log in and scroll to the bottom "API Key" section.',
       'Copy the key displayed under your API details.',
     ],
     inputLabel: 'Torbox API Key',
@@ -102,12 +105,29 @@ const Map<_IntegrationType, _IntegrationMeta> _integrationMeta = {
     gradient: <Color>[Color(0xFF7C3AED), Color(0xFFEC4899)],
     icon: Icons.flash_on_rounded,
   ),
+  _IntegrationType.pikpak: _IntegrationMeta(
+    type: _IntegrationType.pikpak,
+    title: 'PikPak',
+    url: 'https://mypikpak.com/drive/login',
+    linkLabel: 'Open PikPak login page',
+    steps: <String>[
+      'Create a PikPak account if you don\'t have one.',
+      'Remember your email and password.',
+      'Enter your credentials below to connect.',
+    ],
+    inputLabel: 'Email',
+    hint: 'your@email.com',
+    gradient: <Color>[Color(0xFF10B981), Color(0xFF059669)],
+    icon: Icons.cloud_queue_rounded,
+  ),
 };
 
 class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final Set<_IntegrationType> _selection = <_IntegrationType>{};
   final TextEditingController _realDebridController = TextEditingController();
   final TextEditingController _torboxController = TextEditingController();
+  final TextEditingController _pikpakEmailController = TextEditingController();
+  final TextEditingController _pikpakPasswordController = TextEditingController();
   int _stepIndex = 0; // 0 => welcome, >0 => selected integrations, -1 => engine selection
   List<_IntegrationType> _flow = const <_IntegrationType>[];
   bool _isProcessing = false;
@@ -125,11 +145,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final FocusNode _dialogFocusNode = FocusNode(debugLabel: 'initial-setup-dialog');
   final FocusNode _realDebridChipFocusNode = FocusNode(debugLabel: 'rd-chip');
   final FocusNode _torboxChipFocusNode = FocusNode(debugLabel: 'torbox-chip');
+  final FocusNode _pikpakChipFocusNode = FocusNode(debugLabel: 'pikpak-chip');
   final FocusNode _skipButtonFocusNode = FocusNode(debugLabel: 'skip-button');
   final FocusNode _continueButtonFocusNode = FocusNode(debugLabel: 'continue-button');
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'back-button');
   final FocusNode _openLinkButtonFocusNode = FocusNode(debugLabel: 'open-link-button');
   final FocusNode _textFieldFocusNode = FocusNode(debugLabel: 'api-key-field');
+  final FocusNode _pikpakEmailFieldFocusNode = FocusNode(debugLabel: 'pikpak-email-field');
+  final FocusNode _pikpakPasswordFieldFocusNode = FocusNode(debugLabel: 'pikpak-password-field');
   final FocusNode _skipForNowButtonFocusNode = FocusNode(debugLabel: 'skip-for-now');
   final FocusNode _connectButtonFocusNode = FocusNode(debugLabel: 'connect-button');
 
@@ -176,14 +199,19 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   void dispose() {
     _realDebridController.dispose();
     _torboxController.dispose();
+    _pikpakEmailController.dispose();
+    _pikpakPasswordController.dispose();
     _dialogFocusNode.dispose();
     _realDebridChipFocusNode.dispose();
     _torboxChipFocusNode.dispose();
+    _pikpakChipFocusNode.dispose();
     _skipButtonFocusNode.dispose();
     _continueButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
     _openLinkButtonFocusNode.dispose();
     _textFieldFocusNode.dispose();
+    _pikpakEmailFieldFocusNode.dispose();
+    _pikpakPasswordFieldFocusNode.dispose();
     _skipForNowButtonFocusNode.dispose();
     _connectButtonFocusNode.dispose();
     _engineSkipButtonFocusNode.dispose();
@@ -341,8 +369,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               children: _integrationMeta.values.map((meta) {
                 final focusNode = meta.type == _IntegrationType.realDebrid
                     ? _realDebridChipFocusNode
-                    : _torboxChipFocusNode;
-                final order = meta.type == _IntegrationType.realDebrid ? 1.0 : 2.0;
+                    : meta.type == _IntegrationType.torbox
+                        ? _torboxChipFocusNode
+                        : _pikpakChipFocusNode;
+                final order = meta.type == _IntegrationType.realDebrid
+                    ? 1.0
+                    : meta.type == _IntegrationType.torbox
+                        ? 2.0
+                        : 3.0;
                 return SizedBox(
                   width: isNarrow ? width : (width - 16) / 2,
                   child: FocusTraversalOrder(
@@ -378,8 +412,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     order: const NumericFocusOrder(3),
                     child: TextButton(
                       focusNode: _skipButtonFocusNode,
-                      onPressed:
-                          _isProcessing ? null : () => Navigator.of(context).pop(false),
+                      onPressed: _isProcessing ? null : _goToEngineSelection,
                       child: const Text("I don't have any yet"),
                     ),
                   ),
@@ -404,8 +437,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   order: const NumericFocusOrder(3),
                   child: TextButton(
                     focusNode: _skipButtonFocusNode,
-                    onPressed:
-                        _isProcessing ? null : () => Navigator.of(context).pop(false),
+                    onPressed: _isProcessing ? null : _goToEngineSelection,
                     child: const Text("I don't have any yet"),
                   ),
                 ),
@@ -435,9 +467,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   ) {
     final _IntegrationMeta meta = _integrationMeta[type]!;
     final TextEditingController controller =
-        type == _IntegrationType.realDebrid ? _realDebridController : _torboxController;
+        type == _IntegrationType.realDebrid
+            ? _realDebridController
+            : type == _IntegrationType.torbox
+                ? _torboxController
+                : _pikpakEmailController;
     final int currentStep = _stepIndex;
     final int totalSteps = _flow.length;
+    final bool isPikPak = type == _IntegrationType.pikpak;
 
     return Column(
       key: ValueKey<_IntegrationType>(type),
@@ -495,7 +532,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     const SizedBox(height: 4),
                     const SizedBox(height: 4),
                     Text(
-                      'Paste your API key below to connect.',
+                      isPikPak
+                          ? 'Enter your email and password below to connect.'
+                          : 'Paste your API key below to connect.',
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 13,
@@ -508,97 +547,135 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           ),
         ),
         const SizedBox(height: 24),
-        Text(
-          'Where to find the API key',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
+        if (!isPikPak) ...[
+          Text(
+            'Where to find the API key',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                for (int i = 0; i < meta.steps.length; i++)
-                  Padding(
-                    padding: EdgeInsets.only(bottom: i == meta.steps.length - 1 ? 0 : 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: meta.gradient.first.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${i + 1}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
+          const SizedBox(height: 12),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (int i = 0; i < meta.steps.length; i++)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: i == meta.steps.length - 1 ? 0 : 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: meta.gradient.first.withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${i + 1}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            meta.steps[i],
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.white70,
-                              height: 1.3,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              meta.steps[i],
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: Colors.white70,
+                                height: 1.3,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  FocusTraversalOrder(
+                    order: const NumericFocusOrder(2),
+                    child: OutlinedButton.icon(
+                      focusNode: _openLinkButtonFocusNode,
+                      onPressed: _isProcessing ? null : () => _launch(meta.url),
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: Text(meta.linkLabel),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      ),
                     ),
                   ),
-                const SizedBox(height: 16),
-                FocusTraversalOrder(
-                  order: const NumericFocusOrder(2),
-                  child: OutlinedButton.icon(
-                    focusNode: _openLinkButtonFocusNode,
-                    onPressed: _isProcessing ? null : () => _launch(meta.url),
-                    icon: const Icon(Icons.open_in_new_rounded),
-                    label: Text(meta.linkLabel),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 24),
-        FocusTraversalOrder(
-          order: const NumericFocusOrder(3),
-          child: _TvFriendlyTextField(
-            controller: controller,
-            focusNode: _textFieldFocusNode,
-            enabled: !_isProcessing,
-            labelText: meta.inputLabel,
-            hintText: meta.hint,
-            prefixIcon: Icon(meta.icon),
-            errorText: _errorMessage,
-            onSubmitted: (_) {
-              if (_isProcessing) return;
-              _submitCurrent();
-            },
+          const SizedBox(height: 24),
+        ],
+        if (isPikPak) ...[
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(3),
+            child: _TvFriendlyTextField(
+              controller: _pikpakEmailController,
+              focusNode: _pikpakEmailFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: 'Email',
+              hintText: 'your@email.com',
+              prefixIcon: const Icon(Icons.email_outlined),
+              errorText: _errorMessage,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _pikpakPasswordFieldFocusNode.requestFocus();
+              },
+            ),
           ),
-        ),
+          const SizedBox(height: 16),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(4),
+            child: _TvFriendlyTextField(
+              controller: _pikpakPasswordController,
+              focusNode: _pikpakPasswordFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: 'Password',
+              hintText: 'Enter your password',
+              prefixIcon: const Icon(Icons.lock_outline),
+              obscureText: true,
+              errorText: null,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _submitCurrent();
+              },
+            ),
+          ),
+        ] else
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(3),
+            child: _TvFriendlyTextField(
+              controller: controller,
+              focusNode: _textFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: meta.inputLabel,
+              hintText: meta.hint,
+              prefixIcon: Icon(meta.icon),
+              errorText: _errorMessage,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _submitCurrent();
+              },
+            ),
+          ),
         const SizedBox(height: 24),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
@@ -871,6 +948,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       if (_selection.contains(_IntegrationType.realDebrid))
         _IntegrationType.realDebrid,
       if (_selection.contains(_IntegrationType.torbox)) _IntegrationType.torbox,
+      if (_selection.contains(_IntegrationType.pikpak)) _IntegrationType.pikpak,
     ];
 
     if (ordered.isEmpty) return;
@@ -905,48 +983,95 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
   Future<void> _submitCurrent() async {
     final _IntegrationType current = _flow[_stepIndex - 1];
-    final TextEditingController controller =
-        current == _IntegrationType.realDebrid ? _realDebridController : _torboxController;
-    final String value = controller.text.trim();
 
-    if (value.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please paste your API key to continue.';
-      });
-      return;
-    }
+    // Handle PikPak differently (email/password) vs API key services
+    if (current == _IntegrationType.pikpak) {
+      final String email = _pikpakEmailController.text.trim();
+      final String password = _pikpakPasswordController.text.trim();
 
-    setState(() {
-      _isProcessing = true;
-      _errorMessage = null;
-    });
-
-    bool success = false;
-    try {
-      if (current == _IntegrationType.realDebrid) {
-        success = await AccountService.validateAndGetUserInfo(value);
-      } else {
-        success = await TorboxAccountService.validateAndGetUserInfo(value);
+      if (email.isEmpty || password.isEmpty) {
+        setState(() {
+          _errorMessage = 'Please enter both email and password.';
+        });
+        return;
       }
-    } catch (_) {
-      success = false;
-    }
 
-    if (!mounted) return;
-
-    if (success) {
       setState(() {
-        _isProcessing = false;
-        _hasConfigured = true;
+        _isProcessing = true;
         _errorMessage = null;
       });
-      MainPageBridge.notifyIntegrationChanged();
-      _advanceOrFinish();
+
+      bool success = false;
+      try {
+        success = await PikPakApiService.instance.login(email, password);
+        if (success) {
+          await StorageService.setPikPakEnabled(true);
+        }
+      } catch (_) {
+        success = false;
+      }
+
+      if (!mounted) return;
+
+      if (success) {
+        setState(() {
+          _isProcessing = false;
+          _hasConfigured = true;
+          _errorMessage = null;
+        });
+        MainPageBridge.notifyIntegrationChanged();
+        _advanceOrFinish();
+      } else {
+        setState(() {
+          _isProcessing = false;
+          _errorMessage = 'Login failed. Please check your credentials.';
+        });
+      }
     } else {
+      // Handle Real Debrid and Torbox (API key services)
+      final TextEditingController controller =
+          current == _IntegrationType.realDebrid ? _realDebridController : _torboxController;
+      final String value = controller.text.trim();
+
+      if (value.isEmpty) {
+        setState(() {
+          _errorMessage = 'Please paste your API key to continue.';
+        });
+        return;
+      }
+
       setState(() {
-        _isProcessing = false;
-        _errorMessage = 'That key did not work. Double-check it and try again.';
+        _isProcessing = true;
+        _errorMessage = null;
       });
+
+      bool success = false;
+      try {
+        if (current == _IntegrationType.realDebrid) {
+          success = await AccountService.validateAndGetUserInfo(value);
+        } else {
+          success = await TorboxAccountService.validateAndGetUserInfo(value);
+        }
+      } catch (_) {
+        success = false;
+      }
+
+      if (!mounted) return;
+
+      if (success) {
+        setState(() {
+          _isProcessing = false;
+          _hasConfigured = true;
+          _errorMessage = null;
+        });
+        MainPageBridge.notifyIntegrationChanged();
+        _advanceOrFinish();
+      } else {
+        setState(() {
+          _isProcessing = false;
+          _errorMessage = 'That key did not work. Double-check it and try again.';
+        });
+      }
     }
   }
 
@@ -1289,6 +1414,7 @@ class _TvFriendlyTextField extends StatefulWidget {
     required this.prefixIcon,
     this.errorText,
     this.onSubmitted,
+    this.obscureText = false,
   });
 
   final TextEditingController controller;
@@ -1299,6 +1425,7 @@ class _TvFriendlyTextField extends StatefulWidget {
   final Widget prefixIcon;
   final String? errorText;
   final ValueChanged<String>? onSubmitted;
+  final bool obscureText;
 
   @override
   State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
@@ -1405,8 +1532,10 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
           controller: widget.controller,
           focusNode: widget.focusNode,
           enabled: widget.enabled,
-          obscureText: false,
-          autofillHints: const <String>[AutofillHints.password],
+          obscureText: widget.obscureText,
+          autofillHints: widget.obscureText
+              ? const <String>[AutofillHints.password]
+              : null,
           decoration: InputDecoration(
             labelText: widget.labelText,
             hintText: widget.hintText,
