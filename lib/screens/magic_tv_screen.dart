@@ -3046,9 +3046,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     debugPrint('✅ [WATCH] Keywords: ${keywords.length}');
 
     await _syncProviderAvailability();
-    final bool providerReady = _provider == _providerTorbox
-        ? _torboxAvailable
-        : _rdAvailable;
+    final bool providerReady = switch (_provider) {
+      _providerTorbox => _torboxAvailable,
+      _providerPikPak => _pikpakAvailable,
+      _ => _rdAvailable,
+    };
     if (!providerReady) {
       debugPrint('❌ [WATCH] Provider not ready: $_provider');
       MainPageBridge.notifyAutoLaunchFailed('Provider not configured');
