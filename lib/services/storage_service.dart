@@ -15,8 +15,10 @@ class StorageService {
   static const String _torboxIntegrationEnabledKey =
       'torbox_integration_enabled';
   static const String _postTorrentActionKey = 'post_torrent_action';
-  static const String _torboxPostTorrentActionKey = 'torbox_post_torrent_action';
-  static const String _pikpakPostTorrentActionKey = 'pikpak_post_torrent_action';
+  static const String _torboxPostTorrentActionKey =
+      'torbox_post_torrent_action';
+  static const String _pikpakPostTorrentActionKey =
+      'pikpak_post_torrent_action';
   static const String _batteryOptStatusKey =
       'battery_opt_status_v1'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
@@ -29,7 +31,8 @@ class StorageService {
   static const String _defaultSolidTorrentsEnabledKey =
       'default_solid_torrents_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
-  static const String _maxSolidTorrentsResultsKey = 'max_solid_torrents_results';
+  static const String _maxSolidTorrentsResultsKey =
+      'max_solid_torrents_results';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
   static const String _debrifyTvShowChannelNameKey =
@@ -46,7 +49,8 @@ class StorageService {
   static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
 
   // Startup settings
-  static const String _startupAutoLaunchEnabledKey = 'startup_auto_launch_enabled';
+  static const String _startupAutoLaunchEnabledKey =
+      'startup_auto_launch_enabled';
   static const String _startupChannelIdKey = 'startup_channel_id';
 
   // PikPak API settings
@@ -59,34 +63,54 @@ class StorageService {
   static const String _pikpakCaptchaTokenKey = 'pikpak_captcha_token';
   static const String _pikpakUserIdKey = 'pikpak_user_id';
   static const String _pikpakShowVideosOnlyKey = 'pikpak_show_videos_only';
-  static const String _pikpakIgnoreSmallVideosKey = 'pikpak_ignore_small_videos';
+  static const String _pikpakIgnoreSmallVideosKey =
+      'pikpak_ignore_small_videos';
+  static const String _pikpakRestrictedFolderIdKey =
+      'pikpak_restricted_folder_id';
+  static const String _pikpakRestrictedFolderNameKey =
+      'pikpak_restricted_folder_name';
 
   // Debrify TV search engine settings
-  static const String _debrifyTvUseTorrentsCsvKey = 'debrify_tv_use_torrents_csv';
+  static const String _debrifyTvUseTorrentsCsvKey =
+      'debrify_tv_use_torrents_csv';
   static const String _debrifyTvUsePirateBayKey = 'debrify_tv_use_pirate_bay';
   static const String _debrifyTvUseYtsKey = 'debrify_tv_use_yts';
-  static const String _debrifyTvUseSolidTorrentsKey = 'debrify_tv_use_solid_torrents';
+  static const String _debrifyTvUseSolidTorrentsKey =
+      'debrify_tv_use_solid_torrents';
 
   // Channel limits - Small (< threshold keywords)
-  static const String _debrifyTvChannelSmallTorrentsCsvMaxKey = 'debrify_tv_channel_small_torrents_csv_max';
-  static const String _debrifyTvChannelSmallSolidTorrentsMaxKey = 'debrify_tv_channel_small_solid_torrents_max';
-  static const String _debrifyTvChannelSmallYtsMaxKey = 'debrify_tv_channel_small_yts_max';
+  static const String _debrifyTvChannelSmallTorrentsCsvMaxKey =
+      'debrify_tv_channel_small_torrents_csv_max';
+  static const String _debrifyTvChannelSmallSolidTorrentsMaxKey =
+      'debrify_tv_channel_small_solid_torrents_max';
+  static const String _debrifyTvChannelSmallYtsMaxKey =
+      'debrify_tv_channel_small_yts_max';
 
   // Channel limits - Large (>= threshold keywords)
-  static const String _debrifyTvChannelLargeTorrentsCsvMaxKey = 'debrify_tv_channel_large_torrents_csv_max';
-  static const String _debrifyTvChannelLargeSolidTorrentsMaxKey = 'debrify_tv_channel_large_solid_torrents_max';
-  static const String _debrifyTvChannelLargeYtsMaxKey = 'debrify_tv_channel_large_yts_max';
+  static const String _debrifyTvChannelLargeTorrentsCsvMaxKey =
+      'debrify_tv_channel_large_torrents_csv_max';
+  static const String _debrifyTvChannelLargeSolidTorrentsMaxKey =
+      'debrify_tv_channel_large_solid_torrents_max';
+  static const String _debrifyTvChannelLargeYtsMaxKey =
+      'debrify_tv_channel_large_yts_max';
 
   // Quick Play limits
-  static const String _debrifyTvQuickPlayTorrentsCsvMaxKey = 'debrify_tv_quick_play_torrents_csv_max';
-  static const String _debrifyTvQuickPlaySolidTorrentsMaxKey = 'debrify_tv_quick_play_solid_torrents_max';
-  static const String _debrifyTvQuickPlayYtsMaxKey = 'debrify_tv_quick_play_yts_max';
-  static const String _debrifyTvQuickPlayMaxKeywordsKey = 'debrify_tv_quick_play_max_keywords';
+  static const String _debrifyTvQuickPlayTorrentsCsvMaxKey =
+      'debrify_tv_quick_play_torrents_csv_max';
+  static const String _debrifyTvQuickPlaySolidTorrentsMaxKey =
+      'debrify_tv_quick_play_solid_torrents_max';
+  static const String _debrifyTvQuickPlayYtsMaxKey =
+      'debrify_tv_quick_play_yts_max';
+  static const String _debrifyTvQuickPlayMaxKeywordsKey =
+      'debrify_tv_quick_play_max_keywords';
 
   // General settings
-  static const String _debrifyTvChannelBatchSizeKey = 'debrify_tv_channel_batch_size';
-  static const String _debrifyTvKeywordThresholdKey = 'debrify_tv_keyword_threshold';
-  static const String _debrifyTvMinTorrentsPerKeywordKey = 'debrify_tv_min_torrents_per_keyword';
+  static const String _debrifyTvChannelBatchSizeKey =
+      'debrify_tv_channel_batch_size';
+  static const String _debrifyTvKeywordThresholdKey =
+      'debrify_tv_keyword_threshold';
+  static const String _debrifyTvMinTorrentsPerKeywordKey =
+      'debrify_tv_min_torrents_per_keyword';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
@@ -1095,7 +1119,9 @@ class StorageService {
     }
 
     // Search by pikpakCollectionId if provided and not found yet (PikPak)
-    if (itemIndex == -1 && pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
+    if (itemIndex == -1 &&
+        pikpakCollectionId != null &&
+        pikpakCollectionId.isNotEmpty) {
       itemIndex = items.indexWhere((item) {
         // Check single PikPak files
         final pikpakFileId = item['pikpakFileId'] as String?;
@@ -1172,7 +1198,10 @@ class StorageService {
 
   static Future<void> setDebrifyTvChannelSmallTorrentsCsvMax(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelSmallTorrentsCsvMaxKey, value.clamp(25, 500));
+    await prefs.setInt(
+      _debrifyTvChannelSmallTorrentsCsvMaxKey,
+      value.clamp(25, 500),
+    );
   }
 
   static Future<int> getDebrifyTvChannelSmallSolidTorrentsMax() async {
@@ -1180,9 +1209,14 @@ class StorageService {
     return prefs.getInt(_debrifyTvChannelSmallSolidTorrentsMaxKey) ?? 100;
   }
 
-  static Future<void> setDebrifyTvChannelSmallSolidTorrentsMax(int value) async {
+  static Future<void> setDebrifyTvChannelSmallSolidTorrentsMax(
+    int value,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelSmallSolidTorrentsMaxKey, value.clamp(100, 500));
+    await prefs.setInt(
+      _debrifyTvChannelSmallSolidTorrentsMaxKey,
+      value.clamp(100, 500),
+    );
   }
 
   static Future<int> getDebrifyTvChannelSmallYtsMax() async {
@@ -1203,7 +1237,10 @@ class StorageService {
 
   static Future<void> setDebrifyTvChannelLargeTorrentsCsvMax(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelLargeTorrentsCsvMaxKey, value.clamp(25, 100));
+    await prefs.setInt(
+      _debrifyTvChannelLargeTorrentsCsvMaxKey,
+      value.clamp(25, 100),
+    );
   }
 
   static Future<int> getDebrifyTvChannelLargeSolidTorrentsMax() async {
@@ -1211,9 +1248,14 @@ class StorageService {
     return prefs.getInt(_debrifyTvChannelLargeSolidTorrentsMaxKey) ?? 100;
   }
 
-  static Future<void> setDebrifyTvChannelLargeSolidTorrentsMax(int value) async {
+  static Future<void> setDebrifyTvChannelLargeSolidTorrentsMax(
+    int value,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelLargeSolidTorrentsMaxKey, value.clamp(100, 200));
+    await prefs.setInt(
+      _debrifyTvChannelLargeSolidTorrentsMaxKey,
+      value.clamp(100, 200),
+    );
   }
 
   static Future<int> getDebrifyTvChannelLargeYtsMax() async {
@@ -1234,7 +1276,10 @@ class StorageService {
 
   static Future<void> setDebrifyTvQuickPlayTorrentsCsvMax(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvQuickPlayTorrentsCsvMaxKey, value.clamp(100, 500));
+    await prefs.setInt(
+      _debrifyTvQuickPlayTorrentsCsvMaxKey,
+      value.clamp(100, 500),
+    );
   }
 
   static Future<int> getDebrifyTvQuickPlaySolidTorrentsMax() async {
@@ -1244,7 +1289,10 @@ class StorageService {
 
   static Future<void> setDebrifyTvQuickPlaySolidTorrentsMax(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvQuickPlaySolidTorrentsMaxKey, value.clamp(100, 500));
+    await prefs.setInt(
+      _debrifyTvQuickPlaySolidTorrentsMaxKey,
+      value.clamp(100, 500),
+    );
   }
 
   static Future<int> getDebrifyTvQuickPlayYtsMax() async {
@@ -1436,12 +1484,44 @@ class StorageService {
   // PikPak Ignore Small Videos (under 100MB)
   static Future<bool> getPikPakIgnoreSmallVideos() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_pikpakIgnoreSmallVideosKey) ?? true; // Default to true
+    return prefs.getBool(_pikpakIgnoreSmallVideosKey) ??
+        true; // Default to true
   }
 
   static Future<void> setPikPakIgnoreSmallVideos(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_pikpakIgnoreSmallVideosKey, value);
+  }
+
+  // PikPak Restricted Folder
+  static Future<String?> getPikPakRestrictedFolderId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakRestrictedFolderIdKey);
+  }
+
+  static Future<String?> getPikPakRestrictedFolderName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakRestrictedFolderNameKey);
+  }
+
+  static Future<void> setPikPakRestrictedFolder(
+    String? folderId,
+    String? folderName,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (folderId == null) {
+      await prefs.remove(_pikpakRestrictedFolderIdKey);
+      await prefs.remove(_pikpakRestrictedFolderNameKey);
+    } else {
+      await prefs.setString(_pikpakRestrictedFolderIdKey, folderId);
+      if (folderName != null) {
+        await prefs.setString(_pikpakRestrictedFolderNameKey, folderName);
+      }
+    }
+  }
+
+  static Future<void> clearPikPakRestrictedFolder() async {
+    await setPikPakRestrictedFolder(null, null);
   }
 }
 

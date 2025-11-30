@@ -11,6 +11,7 @@ import '../services/engine/remote_engine_manager.dart';
 import '../services/engine/local_engine_storage.dart';
 import '../services/engine/config_loader.dart';
 import '../services/engine/engine_registry.dart';
+import 'pikpak_folder_picker_dialog.dart';
 
 class InitialSetupFlow extends StatefulWidget {
   const InitialSetupFlow({super.key});
@@ -44,11 +45,7 @@ class InitialSetupFlow extends StatefulWidget {
   State<InitialSetupFlow> createState() => _InitialSetupFlowState();
 }
 
-enum _IntegrationType {
-  realDebrid,
-  torbox,
-  pikpak,
-}
+enum _IntegrationType { realDebrid, torbox, pikpak }
 
 class _IntegrationMeta {
   const _IntegrationMeta({
@@ -127,8 +124,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final TextEditingController _realDebridController = TextEditingController();
   final TextEditingController _torboxController = TextEditingController();
   final TextEditingController _pikpakEmailController = TextEditingController();
-  final TextEditingController _pikpakPasswordController = TextEditingController();
-  int _stepIndex = 0; // 0 => welcome, >0 => selected integrations, -1 => engine selection
+  final TextEditingController _pikpakPasswordController =
+      TextEditingController();
+  int _stepIndex =
+      0; // 0 => welcome, >0 => selected integrations, -1 => engine selection
   List<_IntegrationType> _flow = const <_IntegrationType>[];
   bool _isProcessing = false;
   String? _errorMessage;
@@ -142,32 +141,66 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   String? _engineError;
 
   // Focus nodes for TV/DPAD navigation
-  final FocusNode _dialogFocusNode = FocusNode(debugLabel: 'initial-setup-dialog');
+  final FocusNode _dialogFocusNode = FocusNode(
+    debugLabel: 'initial-setup-dialog',
+  );
   final FocusNode _realDebridChipFocusNode = FocusNode(debugLabel: 'rd-chip');
   final FocusNode _torboxChipFocusNode = FocusNode(debugLabel: 'torbox-chip');
   final FocusNode _pikpakChipFocusNode = FocusNode(debugLabel: 'pikpak-chip');
   final FocusNode _skipButtonFocusNode = FocusNode(debugLabel: 'skip-button');
-  final FocusNode _continueButtonFocusNode = FocusNode(debugLabel: 'continue-button');
+  final FocusNode _continueButtonFocusNode = FocusNode(
+    debugLabel: 'continue-button',
+  );
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'back-button');
-  final FocusNode _openLinkButtonFocusNode = FocusNode(debugLabel: 'open-link-button');
+  final FocusNode _openLinkButtonFocusNode = FocusNode(
+    debugLabel: 'open-link-button',
+  );
   final FocusNode _textFieldFocusNode = FocusNode(debugLabel: 'api-key-field');
-  final FocusNode _pikpakEmailFieldFocusNode = FocusNode(debugLabel: 'pikpak-email-field');
-  final FocusNode _pikpakPasswordFieldFocusNode = FocusNode(debugLabel: 'pikpak-password-field');
-  final FocusNode _skipForNowButtonFocusNode = FocusNode(debugLabel: 'skip-for-now');
-  final FocusNode _connectButtonFocusNode = FocusNode(debugLabel: 'connect-button');
+  final FocusNode _pikpakEmailFieldFocusNode = FocusNode(
+    debugLabel: 'pikpak-email-field',
+  );
+  final FocusNode _pikpakPasswordFieldFocusNode = FocusNode(
+    debugLabel: 'pikpak-password-field',
+  );
+  final FocusNode _skipForNowButtonFocusNode = FocusNode(
+    debugLabel: 'skip-for-now',
+  );
+  final FocusNode _connectButtonFocusNode = FocusNode(
+    debugLabel: 'connect-button',
+  );
+  final FocusNode _folderRestrictionSkipButtonFocusNode = FocusNode(
+    debugLabel: 'folder-restriction-skip',
+  );
+  final FocusNode _folderRestrictionSelectButtonFocusNode = FocusNode(
+    debugLabel: 'folder-restriction-select',
+  );
 
   // Engine selection focus nodes
-  final FocusNode _engineSkipButtonFocusNode = FocusNode(debugLabel: 'engine-skip-button');
-  final FocusNode _engineImportButtonFocusNode = FocusNode(debugLabel: 'engine-import-button');
-  final FocusNode _engineRetryButtonFocusNode = FocusNode(debugLabel: 'engine-retry-button');
+  final FocusNode _engineSkipButtonFocusNode = FocusNode(
+    debugLabel: 'engine-skip-button',
+  );
+  final FocusNode _engineImportButtonFocusNode = FocusNode(
+    debugLabel: 'engine-import-button',
+  );
+  final FocusNode _engineRetryButtonFocusNode = FocusNode(
+    debugLabel: 'engine-retry-button',
+  );
   final Map<String, FocusNode> _engineItemFocusNodes = {};
 
   // DPAD shortcuts for arrow key navigation
   static const Map<ShortcutActivator, Intent> _dpadShortcuts = {
-    SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(TraversalDirection.down),
-    SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(TraversalDirection.up),
-    SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(TraversalDirection.right),
-    SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(TraversalDirection.left),
+    SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
+      TraversalDirection.down,
+    ),
+    SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
+      TraversalDirection.up,
+    ),
+    SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(
+      TraversalDirection.right,
+    ),
+    SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(
+      TraversalDirection.left,
+    ),
     SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
     SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
     SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
@@ -214,6 +247,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _pikpakPasswordFieldFocusNode.dispose();
     _skipForNowButtonFocusNode.dispose();
     _connectButtonFocusNode.dispose();
+    _folderRestrictionSkipButtonFocusNode.dispose();
+    _folderRestrictionSelectButtonFocusNode.dispose();
     _engineSkipButtonFocusNode.dispose();
     _engineImportButtonFocusNode.dispose();
     _engineRetryButtonFocusNode.dispose();
@@ -248,21 +283,30 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 shortcuts: _dpadShortcuts,
                 child: Actions(
                   actions: <Type, Action<Intent>>{
-                    DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(
-                      onInvoke: (intent) {
-                        FocusScope.of(innerContext).focusInDirection(intent.direction);
-                        return null;
-                      },
-                    ),
+                    DirectionalFocusIntent:
+                        CallbackAction<DirectionalFocusIntent>(
+                          onInvoke: (intent) {
+                            FocusScope.of(
+                              innerContext,
+                            ).focusInDirection(intent.direction);
+                            return null;
+                          },
+                        ),
                     ActivateIntent: CallbackAction<ActivateIntent>(
                       onInvoke: (_) {
                         // Find the focused widget and activate it
-                        final focusedChild = FocusScope.of(innerContext).focusedChild;
+                        final focusedChild = FocusScope.of(
+                          innerContext,
+                        ).focusedChild;
                         if (focusedChild != null) {
-                          final primaryFocus = FocusManager.instance.primaryFocus;
+                          final primaryFocus =
+                              FocusManager.instance.primaryFocus;
                           if (primaryFocus != null) {
                             // Trigger activation via Actions
-                            Actions.maybeInvoke(primaryFocus.context!, const ActivateIntent());
+                            Actions.maybeInvoke(
+                              primaryFocus.context!,
+                              const ActivateIntent(),
+                            );
                           }
                         }
                         return null;
@@ -270,56 +314,77 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     ),
                   },
                   child: Dialog(
-                    insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                    insetPadding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 32,
+                    ),
                     backgroundColor: Colors.transparent,
                     child: LayoutBuilder(
                       builder: (BuildContext context, BoxConstraints _) {
                         return SingleChildScrollView(
                           physics: const BouncingScrollPhysics(),
                           clipBehavior: Clip.none,
-                          padding: EdgeInsets.only(bottom: keyboardInset > 0 ? keyboardInset : 0),
+                          padding: EdgeInsets.only(
+                            bottom: keyboardInset > 0 ? keyboardInset : 0,
+                          ),
                           child: Center(
                             child: ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                maxWidth: 560,
-                              ),
+                              constraints: const BoxConstraints(maxWidth: 560),
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(28),
                                   gradient: const LinearGradient(
-                                    colors: <Color>[Color(0xFF0F172A), Color(0xFF1F2937)],
+                                    colors: <Color>[
+                                      Color(0xFF0F172A),
+                                      Color(0xFF1F2937),
+                                    ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   boxShadow: <BoxShadow>[
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.35),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.35,
+                                      ),
                                       blurRadius: 28,
                                       offset: const Offset(0, 24),
                                     ),
                                   ],
                                 ),
                                 child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 28,
+                                    vertical: 32,
+                                  ),
                                   child: LayoutBuilder(
                                     builder:
-                                        (BuildContext context, BoxConstraints innerConstraints) {
-                                      return AnimatedSwitcher(
-                                        duration: const Duration(milliseconds: 250),
-                                        switchInCurve: Curves.easeOutCubic,
-                                        switchOutCurve: Curves.easeInCubic,
-                                        child: _stepIndex == 0
-                                            ? _buildWelcomeStep(theme, innerConstraints.maxWidth)
-                                            : _stepIndex > _flow.length
-                                                ? _buildEngineSelectionStep(theme, innerConstraints.maxWidth)
+                                        (
+                                          BuildContext context,
+                                          BoxConstraints innerConstraints,
+                                        ) {
+                                          return AnimatedSwitcher(
+                                            duration: const Duration(
+                                              milliseconds: 250,
+                                            ),
+                                            switchInCurve: Curves.easeOutCubic,
+                                            switchOutCurve: Curves.easeInCubic,
+                                            child: _stepIndex == 0
+                                                ? _buildWelcomeStep(
+                                                    theme,
+                                                    innerConstraints.maxWidth,
+                                                  )
+                                                : _stepIndex > _flow.length
+                                                ? _buildEngineSelectionStep(
+                                                    theme,
+                                                    innerConstraints.maxWidth,
+                                                  )
                                                 : _buildIntegrationStep(
                                                     theme,
                                                     _flow[_stepIndex - 1],
                                                     innerConstraints.maxWidth,
                                                   ),
-                                      );
-                                    },
+                                          );
+                                        },
                                   ),
                                 ),
                               ),
@@ -370,13 +435,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 final focusNode = meta.type == _IntegrationType.realDebrid
                     ? _realDebridChipFocusNode
                     : meta.type == _IntegrationType.torbox
-                        ? _torboxChipFocusNode
-                        : _pikpakChipFocusNode;
+                    ? _torboxChipFocusNode
+                    : _pikpakChipFocusNode;
                 final order = meta.type == _IntegrationType.realDebrid
                     ? 1.0
                     : meta.type == _IntegrationType.torbox
-                        ? 2.0
-                        : 3.0;
+                    ? 2.0
+                    : 3.0;
                 return SizedBox(
                   width: isNarrow ? width : (width - 16) / 2,
                   child: FocusTraversalOrder(
@@ -390,7 +455,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                         children: <Widget>[
                           Icon(meta.icon, size: 18, color: Colors.white),
                           const SizedBox(width: 8),
-                          Text(meta.title, style: const TextStyle(color: Colors.white)),
+                          Text(
+                            meta.title,
+                            style: const TextStyle(color: Colors.white),
+                          ),
                         ],
                       ),
                     ),
@@ -446,8 +514,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   order: const NumericFocusOrder(4),
                   child: FilledButton.icon(
                     focusNode: _continueButtonFocusNode,
-                    onPressed:
-                        _selection.isEmpty || _isProcessing ? null : _startIntegrationFlow,
+                    onPressed: _selection.isEmpty || _isProcessing
+                        ? null
+                        : _startIntegrationFlow,
                     icon: const Icon(Icons.arrow_forward_rounded),
                     label: const Text('Continue'),
                   ),
@@ -466,12 +535,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     double availableWidth,
   ) {
     final _IntegrationMeta meta = _integrationMeta[type]!;
-    final TextEditingController controller =
-        type == _IntegrationType.realDebrid
-            ? _realDebridController
-            : type == _IntegrationType.torbox
-                ? _torboxController
-                : _pikpakEmailController;
+    final TextEditingController controller = type == _IntegrationType.realDebrid
+        ? _realDebridController
+        : type == _IntegrationType.torbox
+        ? _torboxController
+        : _pikpakEmailController;
     final int currentStep = _stepIndex;
     final int totalSteps = _flow.length;
     final bool isPikPak = type == _IntegrationType.pikpak;
@@ -495,7 +563,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             const SizedBox(width: 8),
             Text(
               'Step $currentStep of $totalSteps',
-              style: theme.textTheme.labelLarge?.copyWith(color: Colors.white60),
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: Colors.white60,
+              ),
             ),
           ],
         ),
@@ -569,7 +639,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 children: <Widget>[
                   for (int i = 0; i < meta.steps.length; i++)
                     Padding(
-                      padding: EdgeInsets.only(bottom: i == meta.steps.length - 1 ? 0 : 12),
+                      padding: EdgeInsets.only(
+                        bottom: i == meta.steps.length - 1 ? 0 : 12,
+                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
@@ -614,7 +686,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                       label: Text(meta.linkLabel),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
                       ),
                     ),
                   ),
@@ -722,11 +796,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             }
 
             return Row(
-              children: <Widget>[
-                skipButton,
-                const Spacer(),
-                primaryButton,
-              ],
+              children: <Widget>[skipButton, const Spacer(), primaryButton],
             );
           },
         ),
@@ -779,7 +849,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   const SizedBox(height: 16),
                   Text(
                     'Failed to load engines',
-                    style: theme.textTheme.titleMedium?.copyWith(color: Colors.white),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -800,7 +872,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                         _loadAvailableEngines();
                       },
                       icon: const Icon(Icons.refresh, color: Colors.white),
-                      label: const Text('Retry', style: TextStyle(color: Colors.white)),
+                      label: const Text(
+                        'Retry',
+                        style: TextStyle(color: Colors.white),
+                      ),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.white30),
                       ),
@@ -842,7 +917,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                             child: Checkbox(
                               value: isSelected,
                               onChanged: null,
-                              fillColor: WidgetStateProperty.resolveWith((states) {
+                              fillColor: WidgetStateProperty.resolveWith((
+                                states,
+                              ) {
                                 if (states.contains(WidgetState.selected)) {
                                   return Colors.white;
                                 }
@@ -1020,6 +1097,93 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           _errorMessage = null;
         });
         MainPageBridge.notifyIntegrationChanged();
+
+        // Ask if user wants to set up folder restriction
+        final shouldSetupRestriction = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            // Auto-focus the first button when dialog opens for TV navigation
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _folderRestrictionSkipButtonFocusNode.requestFocus();
+            });
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.folder_special, color: Colors.amber),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Folder Restriction (Optional)')),
+                ],
+              ),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'For enhanced security, you can restrict PikPak access to a specific folder.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '• Full Access: Browse all files in your account',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '• Restricted: Only access files in one folder',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Note: You must logout and login again to change this later.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                Focus(
+                  focusNode: _folderRestrictionSkipButtonFocusNode,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Skip (Full Access)'),
+                  ),
+                ),
+                Focus(
+                  focusNode: _folderRestrictionSelectButtonFocusNode,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    icon: const Icon(Icons.folder_open, size: 18),
+                    label: const Text('Select Folder'),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+
+        // If user wants to set restriction, show folder picker
+        if (shouldSetupRestriction == true && mounted) {
+          final folderResult = await showDialog<Map<String, dynamic>>(
+            context: context,
+            builder: (ctx) => const PikPakFolderPickerDialog(),
+          );
+
+          // Save folder restriction if selected
+          if (folderResult != null) {
+            final folderId = folderResult['folderId'] as String?;
+            final folderName = folderResult['folderName'] as String?;
+            await StorageService.setPikPakRestrictedFolder(
+              folderId,
+              folderName,
+            );
+          }
+        }
+
         _advanceOrFinish();
       } else {
         setState(() {
@@ -1030,7 +1194,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     } else {
       // Handle Real Debrid and Torbox (API key services)
       final TextEditingController controller =
-          current == _IntegrationType.realDebrid ? _realDebridController : _torboxController;
+          current == _IntegrationType.realDebrid
+          ? _realDebridController
+          : _torboxController;
       final String value = controller.text.trim();
 
       if (value.isEmpty) {
@@ -1069,7 +1235,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       } else {
         setState(() {
           _isProcessing = false;
-          _errorMessage = 'That key did not work. Double-check it and try again.';
+          _errorMessage =
+              'That key did not work. Double-check it and try again.';
         });
       }
     }
@@ -1109,7 +1276,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
         // Create focus nodes for each engine
         for (final engine in engines) {
-          _engineItemFocusNodes[engine.id] = FocusNode(debugLabel: 'engine-${engine.id}');
+          _engineItemFocusNodes[engine.id] = FocusNode(
+            debugLabel: 'engine-${engine.id}',
+          );
         }
 
         setState(() {
@@ -1160,7 +1329,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       if (!_selectedEngineIds.contains(engine.id)) continue;
 
       try {
-        final yamlContent = await _remoteEngineManager.downloadEngineYaml(engine.fileName);
+        final yamlContent = await _remoteEngineManager.downloadEngineYaml(
+          engine.fileName,
+        );
         if (yamlContent != null) {
           await localStorage.saveEngine(
             engineId: engine.id,
@@ -1272,8 +1443,8 @@ class _FocusableChipState extends State<_FocusableChip> {
                   color: _isFocused
                       ? Colors.white
                       : widget.selected
-                          ? Colors.white.withValues(alpha: 0.45)
-                          : Colors.white.withValues(alpha: 0.15),
+                      ? Colors.white.withValues(alpha: 0.45)
+                      : Colors.white.withValues(alpha: 0.15),
                   width: _isFocused ? 2 : 1,
                 ),
                 boxShadow: _isFocused
@@ -1380,8 +1551,8 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
                   color: _isFocused
                       ? Colors.white
                       : widget.isSelected
-                          ? Colors.white.withValues(alpha: 0.4)
-                          : Colors.white.withValues(alpha: 0.1),
+                      ? Colors.white.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.1),
                   width: _isFocused ? 2 : 1,
                 ),
                 boxShadow: _isFocused
@@ -1465,8 +1636,13 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
     // Check if selection is valid
     final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart = !isSelectionValid || (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd = !isSelectionValid || (selection.baseOffset == textLength && selection.extentOffset == textLength);
+    final isAtStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == textLength &&
+            selection.extentOffset == textLength);
 
     // Allow escape from TextField with back button (escape key)
     if (key == LogicalKeyboardKey.escape ||
@@ -1515,9 +1691,7 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: _isFocused
-              ? Border.all(color: Colors.white, width: 2)
-              : null,
+          border: _isFocused ? Border.all(color: Colors.white, width: 2) : null,
           boxShadow: _isFocused
               ? <BoxShadow>[
                   BoxShadow(
