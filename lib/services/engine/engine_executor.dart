@@ -234,19 +234,45 @@ class EngineExecutor {
   /// Determine which base URL to use based on params.
   ///
   /// Priority:
-  /// 1. Series URL (if season/episode provided and series URL exists)
-  /// 2. IMDB URL (if imdbId provided and imdb URL exists)
-  /// 3. Keyword URL (if query provided and keyword URL exists)
-  /// 4. Default base URL
+  /// 1. Series URL (if isSeries == true)
+  /// 2. Movie URL (if isSeries == false)
+  /// 3. Series URL (legacy - if season/episode provided and series URL exists)
+  /// 4. Generic IMDB URL (if imdbId provided and imdb URL exists)
+  /// 5. Keyword URL (if query provided and keyword URL exists)
+  /// 6. Default base URL
   String getBaseUrl(RequestConfig config, Map<String, dynamic> params) {
     final String? imdbId = params['imdbId'] as String?;
+    final bool? isSeries = params['isSeries'] as bool?;
     final int? season = params['season'] as int?;
     final int? episode = params['episode'] as int?;
     final String? query = params['query'] as String?;
 
     final Map<String, String>? urls = config.urls;
 
-    // Check for series URL
+    // Priority 1: Series URL (when we know it's a series via isSeries parameter)
+    if (urls != null &&
+        imdbId != null &&
+        imdbId.isNotEmpty &&
+        isSeries == true) {
+      if (urls.containsKey('series') && urls['series']!.isNotEmpty) {
+        return urls['series']!;
+      }
+      // Fall through to imdb URL
+    }
+
+    // Priority 2: Movie URL (when we know it's a movie via isSeries parameter)
+    if (urls != null &&
+        imdbId != null &&
+        imdbId.isNotEmpty &&
+        isSeries == false) {
+      if (urls.containsKey('movie') && urls['movie']!.isNotEmpty) {
+        return urls['movie']!;
+      }
+      // Fall through to imdb URL
+    }
+
+    // Priority 3: Legacy behavior - Check for series URL based on season/episode
+    // (Fallback for engines that don't pass isSeries)
     if (urls != null &&
         imdbId != null &&
         imdbId.isNotEmpty &&
@@ -257,21 +283,21 @@ class EngineExecutor {
       // Fall through to imdb URL
     }
 
-    // Check for IMDB URL
+    // Priority 4: Generic IMDB URL
     if (urls != null && imdbId != null && imdbId.isNotEmpty) {
       if (urls.containsKey('imdb') && urls['imdb']!.isNotEmpty) {
         return urls['imdb']!;
       }
     }
 
-    // Check for keyword URL
+    // Priority 5: Keyword URL
     if (urls != null && query != null && query.isNotEmpty) {
       if (urls.containsKey('keyword') && urls['keyword']!.isNotEmpty) {
         return urls['keyword']!;
       }
     }
 
-    // Default to base URL
+    // Priority 6: Default to base URL
     return config.baseUrl ?? '';
   }
 
@@ -414,10 +440,19 @@ class EngineExecutor {
   /// Determine search type based on params.
   String _determineSearchType(Map<String, dynamic> params) {
     final String? imdbId = params['imdbId'] as String?;
+    final bool? isSeries = params['isSeries'] as bool?;
     final int? season = params['season'] as int?;
     final int? episode = params['episode'] as int?;
 
     if (imdbId != null && imdbId.isNotEmpty) {
+      // Check isSeries parameter first for explicit type
+      if (isSeries == true) {
+        return 'series';
+      }
+      if (isSeries == false) {
+        return 'imdb';
+      }
+      // Legacy fallback: infer from season/episode presence
       if (season != null || episode != null) {
         return 'series';
       }
