@@ -69,6 +69,9 @@ class StorageService {
       'pikpak_restricted_folder_id';
   static const String _pikpakRestrictedFolderNameKey =
       'pikpak_restricted_folder_name';
+  static const String _pikpakTorrentsFolderIdKey =
+      'pikpak_torrents_folder_id';
+  static const String _pikpakTvFolderIdKey = 'pikpak_tv_folder_id';
 
   // Debrify TV search engine settings
   static const String _debrifyTvUseTorrentsCsvKey =
@@ -1522,6 +1525,35 @@ class StorageService {
 
   static Future<void> clearPikPakRestrictedFolder() async {
     await setPikPakRestrictedFolder(null, null);
+    // Also clear subfolder caches when restriction changes
+    await clearPikPakSubfolderCaches();
+  }
+
+  // PikPak Subfolder ID caching (for debrify-torrents and debrify-tv folders)
+  static Future<String?> getPikPakTorrentsFolderId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakTorrentsFolderIdKey);
+  }
+
+  static Future<void> setPikPakTorrentsFolderId(String folderId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakTorrentsFolderIdKey, folderId);
+  }
+
+  static Future<String?> getPikPakTvFolderId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakTvFolderIdKey);
+  }
+
+  static Future<void> setPikPakTvFolderId(String folderId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakTvFolderIdKey, folderId);
+  }
+
+  static Future<void> clearPikPakSubfolderCaches() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pikpakTorrentsFolderIdKey);
+    await prefs.remove(_pikpakTvFolderIdKey);
   }
 }
 

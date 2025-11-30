@@ -256,7 +256,28 @@ class MagnetLinkHandler {
     _showLoadingDialog(torrentName, 'PikPak');
 
     try {
-      final result = await PikPakApiService.instance.addOfflineDownload(magnetUri);
+      // Get parent folder ID (restricted folder or root)
+      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+
+      // Find or create "debrify-torrents" subfolder (same as search)
+      String? subFolderId;
+      try {
+        subFolderId = await PikPakApiService.instance.findOrCreateSubfolder(
+          folderName: 'debrify-torrents',
+          parentFolderId: parentFolderId,
+          getCachedId: StorageService.getPikPakTorrentsFolderId,
+          setCachedId: StorageService.setPikPakTorrentsFolderId,
+        );
+        print('PikPak: Using subfolder ID: $subFolderId');
+      } catch (e) {
+        print('PikPak: Failed to create subfolder, using parent folder: $e');
+        subFolderId = parentFolderId;
+      }
+
+      final result = await PikPakApiService.instance.addOfflineDownload(
+        magnetUri,
+        parentFolderId: subFolderId,
+      );
 
       if (!context.mounted) return;
       Navigator.of(context).pop(); // Close loading dialog

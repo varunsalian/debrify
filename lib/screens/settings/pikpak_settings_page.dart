@@ -205,6 +205,8 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       final folderName = result['folderName'] as String?;
 
       await StorageService.setPikPakRestrictedFolder(folderId, folderName);
+      // Clear subfolder caches when restriction changes
+      await StorageService.clearPikPakSubfolderCaches();
       setState(() {
         _restrictedFolderId = folderId;
         _restrictedFolderName = folderName;

@@ -15,7 +15,8 @@ class PikPakApiService {
   static const String _webClientVersion = '2.0.0';
   static const String _webPackageName = 'mypikpak.com';
   // User-Agent should match Firefox (as used by rclone) for best compatibility
-  static const String _webUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0';
+  static const String _webUserAgent =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0';
 
   // Mutex for captcha token refresh to prevent race conditions
   final Map<String, Completer<String>> _captchaRefreshInProgress = {};
@@ -62,7 +63,12 @@ class PikPakApiService {
     timestamp ??= DateTime.now().millisecondsSinceEpoch.toString();
 
     // Start with: ClientID + ClientVersion + PackageName + DeviceID + Timestamp
-    String str = _webClientId + _webClientVersion + _webPackageName + deviceId + timestamp;
+    String str =
+        _webClientId +
+        _webClientVersion +
+        _webPackageName +
+        deviceId +
+        timestamp;
 
     // Iteratively hash with each algorithm
     for (String algorithm in _webAlgorithms) {
@@ -89,12 +95,16 @@ class PikPakApiService {
     // Check if a refresh is already in progress for this key
     final existingRefresh = _captchaRefreshInProgress[requestKey];
     if (existingRefresh != null) {
-      print('PikPak: Captcha refresh already in progress for $action, waiting...');
+      print(
+        'PikPak: Captcha refresh already in progress for $action, waiting...',
+      );
       try {
         return await existingRefresh.future;
       } catch (e) {
         // If the existing refresh failed, we'll try ourselves
-        print('PikPak: Existing captcha refresh failed, attempting new request');
+        print(
+          'PikPak: Existing captcha refresh failed, attempting new request',
+        );
       }
     }
 
@@ -150,18 +160,22 @@ class PikPakApiService {
 
       // For login action, add email (using username field in rclone)
       if (action == 'POST:/v1/auth/signin' && email != null) {
-        meta['username'] = email;  // rclone uses 'username' not 'email' for login
+        meta['username'] =
+            email; // rclone uses 'username' not 'email' for login
       }
       // For all other actions (file operations), add user_id
       else if (userId != null) {
         meta['user_id'] = userId;
       }
 
-      print('PikPak: Captcha meta fields - captcha_sign: ${captchaSign.substring(0, 10)}..., timestamp: $timestamp');
+      print(
+        'PikPak: Captcha meta fields - captcha_sign: ${captchaSign.substring(0, 10)}..., timestamp: $timestamp',
+      );
 
       final response = await http.post(
-        Uri.parse('$_authBaseUrl/v1/shield/captcha/init')
-            .replace(queryParameters: {'client_id': _webClientId}),
+        Uri.parse(
+          '$_authBaseUrl/v1/shield/captcha/init',
+        ).replace(queryParameters: {'client_id': _webClientId}),
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': _webUserAgent,
@@ -191,7 +205,10 @@ class PikPakApiService {
         try {
           final errorData = jsonDecode(response.body);
           final errorCode = errorData['error_code'];
-          final errorDesc = errorData['error_description'] ?? errorData['error'] ?? 'Unknown error';
+          final errorDesc =
+              errorData['error_description'] ??
+              errorData['error'] ??
+              'Unknown error';
           print('PikPak: Error code: $errorCode, Description: $errorDesc');
         } catch (e) {
           // Ignore parsing errors
@@ -230,8 +247,9 @@ class PikPakApiService {
 
       // 3. Attempt login with captcha token
       final response = await http.post(
-        Uri.parse('$_authBaseUrl/v1/auth/signin')
-            .replace(queryParameters: {'client_id': _webClientId}),
+        Uri.parse(
+          '$_authBaseUrl/v1/auth/signin',
+        ).replace(queryParameters: {'client_id': _webClientId}),
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': _webUserAgent,
@@ -269,7 +287,9 @@ class PikPakApiService {
         return true;
       } else {
         final errorData = jsonDecode(response.body);
-        print('PikPak: Login failed: ${errorData['error_description'] ?? errorData['error'] ?? response.body}');
+        print(
+          'PikPak: Login failed: ${errorData['error_description'] ?? errorData['error'] ?? response.body}',
+        );
         return false;
       }
     } catch (e) {
@@ -306,7 +326,10 @@ class PikPakApiService {
       // Method 1: Standard OAuth2 refresh without client_secret (rclone approach)
       // Method 2: Fallback with re-authentication using stored credentials
 
-      final success = await _tryRefreshWithoutClientSecret(deviceId, captchaToken);
+      final success = await _tryRefreshWithoutClientSecret(
+        deviceId,
+        captchaToken,
+      );
       if (success) {
         return true;
       }
@@ -322,7 +345,10 @@ class PikPakApiService {
 
   /// Attempt token refresh without client_secret (standard OAuth2 flow)
   /// This is the primary method following rclone's implementation
-  Future<bool> _tryRefreshWithoutClientSecret(String? deviceId, String? captchaToken) async {
+  Future<bool> _tryRefreshWithoutClientSecret(
+    String? deviceId,
+    String? captchaToken,
+  ) async {
     // Try JSON format first (rclone approach), then form-urlencoded (standard OAuth2)
     if (await _tryRefreshJson(deviceId, captchaToken)) {
       return true;
@@ -355,7 +381,9 @@ class PikPakApiService {
 
       // OAuth2 refresh WITHOUT client_secret - key fix for the permission_denied error
       final response = await http.post(
-        Uri.parse(refreshUrl).replace(queryParameters: {'client_id': _webClientId}),
+        Uri.parse(
+          refreshUrl,
+        ).replace(queryParameters: {'client_id': _webClientId}),
         headers: headers,
         body: jsonEncode({
           'client_id': _webClientId,
@@ -381,7 +409,10 @@ class PikPakApiService {
   }
 
   /// Try refresh with form-urlencoded body (standard OAuth2 format)
-  Future<bool> _tryRefreshFormUrlEncoded(String? deviceId, String? captchaToken) async {
+  Future<bool> _tryRefreshFormUrlEncoded(
+    String? deviceId,
+    String? captchaToken,
+  ) async {
     try {
       // Standard OAuth2 token endpoint
       const refreshUrl = 'https://user.mypikpak.com/v1/auth/token';
@@ -409,12 +440,16 @@ class PikPakApiService {
       };
 
       final response = await http.post(
-        Uri.parse(refreshUrl).replace(queryParameters: {'client_id': _webClientId}),
+        Uri.parse(
+          refreshUrl,
+        ).replace(queryParameters: {'client_id': _webClientId}),
         headers: headers,
         body: body,
       );
 
-      print('PikPak: Form-urlencoded refresh response status: ${response.statusCode}');
+      print(
+        'PikPak: Form-urlencoded refresh response status: ${response.statusCode}',
+      );
 
       if (response.statusCode == 200) {
         return await _handleSuccessfulRefresh(response.body);
@@ -465,7 +500,9 @@ class PikPakApiService {
       final errorCode = errorData['error_code'];
       final errorType = errorData['error'] ?? '';
       final errorDesc = errorData['error_description'] ?? '';
-      print('PikPak: Error code: $errorCode, type: $errorType, desc: $errorDesc');
+      print(
+        'PikPak: Error code: $errorCode, type: $errorType, desc: $errorDesc',
+      );
 
       // If invalid_grant, the refresh token itself is expired
       if (errorType == 'invalid_grant' ||
@@ -476,7 +513,9 @@ class PikPakApiService {
 
       // If permission_denied (error code 7), this indicates client_secret issue
       if (errorCode == 7 || errorCode == '7') {
-        print('PikPak: Permission denied - this should not happen without client_secret');
+        print(
+          'PikPak: Permission denied - this should not happen without client_secret',
+        );
       }
 
       // If captcha error, clear it
@@ -578,10 +617,7 @@ class PikPakApiService {
         body: body != null ? jsonEncode(body) : null,
       );
     } else if (method == 'GET') {
-      response = await http.get(
-        Uri.parse(url),
-        headers: headers,
-      );
+      response = await http.get(Uri.parse(url), headers: headers);
     } else {
       throw Exception('Unsupported HTTP method: $method');
     }
@@ -594,7 +630,8 @@ class PikPakApiService {
         headers['Authorization'] = 'Bearer $_accessToken';
 
         // Also reload captcha token in case it was refreshed
-        final updatedCaptchaToken = await StorageService.getPikPakCaptchaToken();
+        final updatedCaptchaToken =
+            await StorageService.getPikPakCaptchaToken();
         if (updatedCaptchaToken != null && updatedCaptchaToken.isNotEmpty) {
           headers['X-Captcha-Token'] = updatedCaptchaToken;
         }
@@ -606,10 +643,7 @@ class PikPakApiService {
             body: body != null ? jsonEncode(body) : null,
           );
         } else if (method == 'GET') {
-          response = await http.get(
-            Uri.parse(url),
-            headers: headers,
-          );
+          response = await http.get(Uri.parse(url), headers: headers);
         }
       } else {
         throw Exception('Failed to refresh token. Please login again.');
@@ -625,14 +659,18 @@ class PikPakApiService {
     } else {
       final errorData = jsonDecode(response.body);
       final errorCode = errorData['error_code'];
-      final errorMessage = errorData['error_description'] ?? errorData['error'] ?? '';
+      final errorMessage =
+          errorData['error_description'] ?? errorData['error'] ?? '';
 
       // Check for access token expired (error_code 16 or "unauthenticated")
       // PikPak returns this with non-401 status codes
-      if (errorCode == 16 || errorCode == '16' ||
+      if (errorCode == 16 ||
+          errorCode == '16' ||
           errorMessage.toString().toLowerCase().contains('access token') ||
           errorData['error'] == 'unauthenticated') {
-        print('PikPak: Access token expired (error_code: $errorCode), attempting refresh...');
+        print(
+          'PikPak: Access token expired (error_code: $errorCode), attempting refresh...',
+        );
 
         if (await refreshAccessToken()) {
           print('PikPak: Token refreshed, retrying request...');
@@ -640,7 +678,8 @@ class PikPakApiService {
           headers['Authorization'] = 'Bearer $_accessToken';
 
           // Also reload captcha token in case it was refreshed
-          final updatedCaptchaToken = await StorageService.getPikPakCaptchaToken();
+          final updatedCaptchaToken =
+              await StorageService.getPikPakCaptchaToken();
           if (updatedCaptchaToken != null && updatedCaptchaToken.isNotEmpty) {
             headers['X-Captcha-Token'] = updatedCaptchaToken;
           }
@@ -652,10 +691,7 @@ class PikPakApiService {
               body: body != null ? jsonEncode(body) : null,
             );
           } else if (method == 'GET') {
-            response = await http.get(
-              Uri.parse(url),
-              headers: headers,
-            );
+            response = await http.get(Uri.parse(url), headers: headers);
           }
 
           // Check if retry succeeded
@@ -664,11 +700,17 @@ class PikPakApiService {
           } else {
             // If retry also failed, throw the new error
             final retryErrorData = jsonDecode(response.body);
-            throw Exception(retryErrorData['error_description'] ?? retryErrorData['error'] ?? 'API request failed after token refresh');
+            throw Exception(
+              retryErrorData['error_description'] ??
+                  retryErrorData['error'] ??
+                  'API request failed after token refresh',
+            );
           }
         } else {
           // Refresh failed - clear tokens and require re-login
-          print('PikPak: Token refresh failed, clearing auth and requiring re-login');
+          print(
+            'PikPak: Token refresh failed, clearing auth and requiring re-login',
+          );
           await logout();
           throw Exception('Session expired. Please login again.');
         }
@@ -680,14 +722,204 @@ class PikPakApiService {
         await StorageService.clearPikPakCaptchaToken();
       }
 
-      throw Exception(errorMessage.isNotEmpty ? errorMessage : 'API request failed');
+      throw Exception(
+        errorMessage.isNotEmpty ? errorMessage : 'API request failed',
+      );
+    }
+  }
+
+  /// Create a folder in PikPak
+  /// Returns the created folder's metadata including its ID
+  Future<Map<String, dynamic>> createFolder({
+    required String folderName,
+    String? parentFolderId,
+  }) async {
+    try {
+      print(
+        'PikPak: Creating folder "$folderName" in parent ${parentFolderId ?? "root"}...',
+      );
+
+      // Try using existing captcha token first
+      final response = await _makeAuthenticatedRequest(
+        'POST',
+        '$_driveBaseUrl/drive/v1/files',
+        {
+          'kind': 'drive#folder',
+          'parent_id': parentFolderId ?? '',
+          'name': folderName,
+        },
+      );
+
+      // Extract folder ID from response for logging
+      final folderId = response['file'] != null
+          ? response['file']['id']
+          : response['id'];
+      print('PikPak: Folder created successfully - ID: $folderId');
+      return response;
+    } catch (e) {
+      // If we get verification error, try requesting a fresh captcha token
+      if (e.toString().contains('Verification code is invalid')) {
+        print('PikPak: Captcha token invalid, requesting fresh token...');
+
+        final deviceId = await StorageService.getPikPakDeviceId();
+        if (deviceId == null) {
+          throw Exception('No device ID found. Please login first.');
+        }
+
+        final userId = await StorageService.getPikPakUserId();
+        if (userId == null) {
+          print('PikPak: Warning: No user ID found, this might cause issues');
+        }
+
+        final action = 'POST:/drive/v1/files';
+        final captchaToken = await _getCaptchaTokenSynchronized(
+          action: action,
+          deviceId: deviceId,
+          userId: userId,
+        );
+
+        await StorageService.setPikPakCaptchaToken(captchaToken);
+        print('PikPak: Retrying with fresh captcha token');
+
+        // Retry the request
+        final response = await _makeAuthenticatedRequest(
+          'POST',
+          '$_driveBaseUrl/drive/v1/files',
+          {
+            'kind': 'drive#folder',
+            'parent_id': parentFolderId ?? '',
+            'name': folderName,
+          },
+        );
+
+        // Extract folder ID from response for logging
+        final folderId = response['file'] != null
+            ? response['file']['id']
+            : response['id'];
+        print(
+          'PikPak: Folder created successfully (after retry) - ID: $folderId',
+        );
+        return response;
+      } else {
+        print('PikPak: Failed to create folder: $e');
+        rethrow;
+      }
+    }
+  }
+
+  /// Find or create a subfolder with caching
+  /// First checks cache, then validates folder exists, searches for existing folder, or creates new one
+  /// Returns the folder ID
+  Future<String> findOrCreateSubfolder({
+    required String folderName,
+    String? parentFolderId,
+    required Future<String?> Function() getCachedId,
+    required Future<void> Function(String) setCachedId,
+  }) async {
+    try {
+      // Step 1: Check cache
+      final cachedId = await getCachedId();
+      if (cachedId != null && cachedId.isNotEmpty) {
+        print('PikPak: Found cached folder ID for "$folderName": $cachedId');
+
+        // Step 2: Validate cached folder still exists
+        try {
+          final metadata = await getFileMetadata(cachedId);
+          final name = metadata['name'] as String?;
+          final kind = metadata['kind'] as String?;
+          final parent = metadata['parent_id'] as String?;
+
+          // Verify it's still the right folder
+          if (name == folderName &&
+              kind == 'drive#folder' &&
+              parent == (parentFolderId ?? '')) {
+            print('PikPak: Cached folder validated successfully');
+            return cachedId;
+          } else {
+            print(
+              'PikPak: Cached folder mismatch (name: $name, kind: $kind, parent: $parent)',
+            );
+          }
+        } catch (e) {
+          print('PikPak: Cached folder validation failed: $e');
+        }
+      }
+
+      // Step 3: Search for existing folder in parent
+      print(
+        'PikPak: Searching for existing folder "$folderName" in parent ${parentFolderId ?? "root"}...',
+      );
+      try {
+        final result = await listFiles(parentId: parentFolderId, limit: 100);
+        for (final file in result.files) {
+          final name = file['name'] as String?;
+          final kind = file['kind'] as String?;
+          if (name == folderName && kind == 'drive#folder') {
+            final folderId = file['id'] as String;
+            print('PikPak: Found existing folder - ID: $folderId');
+            // Cache the folder ID (don't fail if caching fails)
+            try {
+              await setCachedId(folderId);
+            } catch (cacheError) {
+              print('PikPak: Warning - failed to cache folder ID: $cacheError');
+              // Continue anyway - we found the folder
+            }
+            return folderId;
+          }
+        }
+      } catch (e) {
+        print('PikPak: Error searching for folder: $e');
+      }
+
+      // Step 4: Create new folder
+      print('PikPak: Folder "$folderName" not found, creating new one...');
+      final folderData = await createFolder(
+        folderName: folderName,
+        parentFolderId: parentFolderId,
+      );
+
+      // Extract folder ID from response (PikPak API can return it in different formats)
+      String? folderId;
+      if (folderData['file'] != null) {
+        folderId = folderData['file']['id'];
+      } else if (folderData['id'] != null) {
+        folderId = folderData['id'];
+      }
+
+      if (folderId == null) {
+        throw Exception(
+          'Could not extract folder ID from createFolder response: $folderData',
+        );
+      }
+
+      // Cache the new folder ID (don't fail if caching fails)
+      try {
+        await setCachedId(folderId);
+      } catch (cacheError) {
+        print('PikPak: Warning - failed to cache folder ID: $cacheError');
+        // Continue anyway - the folder was created successfully
+      }
+
+      return folderId;
+    } catch (e) {
+      print('PikPak: Failed to find or create subfolder "$folderName": $e');
+      // Fall back to parent folder if subfolder creation fails
+      print(
+        'PikPak: Falling back to parent folder ${parentFolderId ?? "root"}',
+      );
+      return parentFolderId ?? '';
     }
   }
 
   /// Add offline download (magnet link)
-  Future<Map<String, dynamic>> addOfflineDownload(String magnetLink) async {
+  Future<Map<String, dynamic>> addOfflineDownload(
+    String magnetLink, {
+    String? parentFolderId,
+  }) async {
     try {
-      print('PikPak: Adding offline download...');
+      print(
+        'PikPak: Adding offline download to folder ${parentFolderId ?? "root"}...',
+      );
 
       // Try using existing captcha token first (from login)
       final response = await _makeAuthenticatedRequest(
@@ -696,10 +928,9 @@ class PikPakApiService {
         {
           'kind': 'drive#file',
           'name': '',
+          'parent_id': parentFolderId ?? '',
           'upload_type': 'UPLOAD_TYPE_URL',
-          'url': {
-            'url': magnetLink,
-          },
+          'url': {'url': magnetLink},
           'folder_type': '',
         },
       );
@@ -739,10 +970,9 @@ class PikPakApiService {
           {
             'kind': 'drive#file',
             'name': '',
+            'parent_id': parentFolderId ?? '',
             'upload_type': 'UPLOAD_TYPE_URL',
-            'url': {
-              'url': magnetLink,
-            },
+            'url': {'url': magnetLink},
             'folder_type': '',
           },
         );
@@ -766,12 +996,16 @@ class PikPakApiService {
         '$_driveBaseUrl/drive/v1/tasks/$taskId',
         null,
       );
-      print('PikPak: Task status retrieved - progress: ${response['progress']}, phase: ${response['phase']}');
+      print(
+        'PikPak: Task status retrieved - progress: ${response['progress']}, phase: ${response['phase']}',
+      );
       return response;
     } catch (e) {
       // If captcha verification fails, get fresh token and retry
       if (e.toString().contains('Verification code is invalid')) {
-        print('PikPak: Captcha token invalid for task status, requesting fresh token...');
+        print(
+          'PikPak: Captcha token invalid for task status, requesting fresh token...',
+        );
 
         final deviceId = await StorageService.getPikPakDeviceId();
         if (deviceId == null) {
@@ -794,7 +1028,9 @@ class PikPakApiService {
           '$_driveBaseUrl/drive/v1/tasks/$taskId',
           null,
         );
-        print('PikPak: Task status retrieved (after retry) - progress: ${response['progress']}, phase: ${response['phase']}');
+        print(
+          'PikPak: Task status retrieved (after retry) - progress: ${response['progress']}, phase: ${response['phase']}',
+        );
         return response;
       } else {
         print('PikPak: Failed to get task status: $e');
@@ -1058,24 +1294,26 @@ class PikPakApiService {
 
   /// List files in a directory with pagination support
   /// Returns a record containing the files list and optional next page token
-  Future<({List<Map<String, dynamic>> files, String? nextPageToken})> listFiles({
-    String? parentId,
-    int limit = 50,
-    String? pageToken,
-  }) async {
+  Future<({List<Map<String, dynamic>> files, String? nextPageToken})>
+  listFiles({String? parentId, int limit = 50, String? pageToken}) async {
     try {
-      print('PikPak: Listing files (parent: ${parentId ?? "root"}, pageToken: ${pageToken ?? "none"})');
+      print(
+        'PikPak: Listing files (parent: ${parentId ?? "root"}, pageToken: ${pageToken ?? "none"})',
+      );
       // IMPORTANT: Adding with_audit=true to get media links populated for each file
       // Adding filters to exclude trashed files (deleted files go to trash first in PikPak)
       final filters = Uri.encodeComponent('{"trashed":{"eq":false}}');
-      String url = '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$filters';
+      String url =
+          '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$filters';
       if (pageToken != null && pageToken.isNotEmpty) {
         url += '&page_token=$pageToken';
       }
       final response = await _makeAuthenticatedRequest('GET', url, null);
       final files = List<Map<String, dynamic>>.from(response['files'] ?? []);
       final nextPageToken = response['next_page_token'] as String?;
-      print('PikPak: Found ${files.length} files, nextPageToken: ${nextPageToken ?? "none"}');
+      print(
+        'PikPak: Found ${files.length} files, nextPageToken: ${nextPageToken ?? "none"}',
+      );
       return (files: files, nextPageToken: nextPageToken);
     } catch (e) {
       // If captcha verification fails, get fresh token and retry
@@ -1104,7 +1342,8 @@ class PikPakApiService {
 
         // Retry the request with same filters
         final retryFilters = Uri.encodeComponent('{"trashed":{"eq":false}}');
-        String retryUrl = '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$retryFilters';
+        String retryUrl =
+            '$_driveBaseUrl/drive/v1/files?parent_id=${parentId ?? ""}&thumbnail_size=SIZE_SMALL&limit=$limit&with_audit=true&filters=$retryFilters';
         if (pageToken != null && pageToken.isNotEmpty) {
           retryUrl += '&page_token=$pageToken';
         }
@@ -1112,7 +1351,9 @@ class PikPakApiService {
 
         final files = List<Map<String, dynamic>>.from(response['files'] ?? []);
         final nextPageToken = response['next_page_token'] as String?;
-        print('PikPak: Found ${files.length} files (after retry), nextPageToken: ${nextPageToken ?? "none"}');
+        print(
+          'PikPak: Found ${files.length} files (after retry), nextPageToken: ${nextPageToken ?? "none"}',
+        );
         return (files: files, nextPageToken: nextPageToken);
       } else {
         print('PikPak: Failed to list files: $e');
@@ -1220,7 +1461,9 @@ class PikPakApiService {
 
               // If no video found, return first file with full details
               if (files.isNotEmpty) {
-                print('PikPak: No video found, using first file: ${files[0]['name']}');
+                print(
+                  'PikPak: No video found, using first file: ${files[0]['name']}',
+                );
                 final firstFileId = files[0]['id'];
                 final fullFileData = await getFileDetails(firstFileId);
                 return fullFileData;
@@ -1243,7 +1486,9 @@ class PikPakApiService {
           final progress = fileData['progress'];
           if (progress != null) {
             try {
-              onProgress(progress is int ? progress : int.parse(progress.toString()));
+              onProgress(
+                progress is int ? progress : int.parse(progress.toString()),
+              );
             } catch (e) {
               // Ignore progress parsing errors
             }
@@ -1256,7 +1501,9 @@ class PikPakApiService {
       }
     }
 
-    throw TimeoutException('Download did not complete within ${timeout.inMinutes} minutes');
+    throw TimeoutException(
+      'Download did not complete within ${timeout.inMinutes} minutes',
+    );
   }
 
   /// Add magnet link and wait for it to be ready for streaming
@@ -1289,7 +1536,10 @@ class PikPakApiService {
     print('PikPak: File ID: $fileId');
 
     // Step 2: Wait for download to complete
-    final fileData = await waitForDownloadComplete(fileId, onProgress: onProgress);
+    final fileData = await waitForDownloadComplete(
+      fileId,
+      onProgress: onProgress,
+    );
 
     // Step 3: Verify streaming URL is available
     final streamingUrl = getStreamingUrl(fileData);
@@ -1297,7 +1547,9 @@ class PikPakApiService {
       throw Exception('File completed but no streaming URL available');
     }
 
-    print('PikPak: Ready for streaming! URL: ${streamingUrl.substring(0, 50)}...');
+    print(
+      'PikPak: Ready for streaming! URL: ${streamingUrl.substring(0, 50)}...',
+    );
     return fileData;
   }
 

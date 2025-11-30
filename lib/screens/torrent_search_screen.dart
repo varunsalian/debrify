@@ -2294,8 +2294,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       bool showingTimeoutOptions = false;
       final startTime = DateTime.now();
 
+      // Get parent folder ID (restricted folder or root)
+      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+
+      // Find or create "debrify-torrents" subfolder
+      String? subFolderId;
+      try {
+        subFolderId = await pikpak.findOrCreateSubfolder(
+          folderName: 'debrify-torrents',
+          parentFolderId: parentFolderId,
+          getCachedId: StorageService.getPikPakTorrentsFolderId,
+          setCachedId: StorageService.setPikPakTorrentsFolderId,
+        );
+        print('PikPak: Using subfolder ID: $subFolderId');
+      } catch (e) {
+        print('PikPak: Failed to create subfolder, using parent folder: $e');
+        subFolderId = parentFolderId;
+      }
+
       // Add to PikPak first
-      final addResult = await pikpak.addOfflineDownload(magnet);
+      final addResult = await pikpak.addOfflineDownload(
+        magnet,
+        parentFolderId: subFolderId,
+      );
       print('PikPak: addOfflineDownload response: $addResult');
 
       // Extract file ID and task ID
