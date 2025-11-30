@@ -872,7 +872,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void _handleSearchFieldChanged(String value) {
     // In IMDB mode, trigger autocomplete search
     if (_searchMode == SearchMode.imdb) {
-      _onImdbSearchTextChanged(value);
+      // On TV: Don't trigger autocomplete as user types (only on Enter/Submit)
+      // On non-TV: Trigger autocomplete as they type (current behavior)
+      if (!_isTelevision) {
+        _onImdbSearchTextChanged(value);
+      }
       // If user manually edits, clear the active selection
       final trimmed = value.trim();
       if (_activeAdvancedSelection != null &&
@@ -1184,6 +1188,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _imdbSearchError = results.isEmpty ? 'No IMDb matches found' : null;
       });
 
+      // On TV: Auto-focus first result after results appear
+      if (_isTelevision && _autocompleteFocusNodes.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_autocompleteFocusNodes.isNotEmpty && mounted) {
+            _autocompleteFocusNodes[0].requestFocus();
+          }
+        });
+      }
+
       debugPrint('IMDB Smart Search: Found ${results.length} results');
     } catch (e) {
       debugPrint('IMDB Smart Search: Error - $e');
@@ -1236,6 +1249,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // For series, hide controls initially - user can expand to customize
         _seriesControlsExpanded = !isSeries; // Movies don't need controls, series start collapsed
       });
+
+      debugPrint('IMDB result selected: isSeries=$isSeries, focusNode canRequestFocus=${_seasonInputFocusNode.canRequestFocus}');
+
+      // For series on TV, automatically focus the Season input after selection
+      if (_isTelevision && isSeries) {
+        debugPrint('=== AUTO-FOCUS TRIGGERED: isTelevision=$_isTelevision, isSeries=$isSeries ===');
+        // Wait for build to complete before requesting focus
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          debugPrint('=== PostFrameCallback: mounted=$mounted ===');
+          if (mounted) {
+            // Small delay to ensure widget is fully rendered and focusable
+            Future.delayed(const Duration(milliseconds: 100), () {
+              debugPrint('=== After delay: mounted=$mounted, canRequestFocus=${_seasonInputFocusNode.canRequestFocus}, hasFocus=${_seasonInputFocusNode.hasFocus} ===');
+              if (mounted && _seasonInputFocusNode.canRequestFocus) {
+                debugPrint('=== REQUESTING FOCUS on Season input (hashCode: ${_seasonInputFocusNode.hashCode}) ===');
+                _seasonInputFocusNode.requestFocus();
+                debugPrint('=== Focus requested. hasFocus=${_seasonInputFocusNode.hasFocus} ===');
+              } else {
+                debugPrint('=== CANNOT AUTO-FOCUS: mounted=$mounted, canRequestFocus=${_seasonInputFocusNode.canRequestFocus} ===');
+              }
+            });
+          }
+        });
+      } else {
+        debugPrint('=== AUTO-FOCUS SKIPPED: isTelevision=$_isTelevision, isSeries=$isSeries ===');
+      }
 
       // Search immediately for both movies and series
       // Series will search with default params (null season/episode means all episodes)
@@ -1392,7 +1431,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       if (index < _autocompleteFocusNodes.length - 1) {
+        debugPrint('=== Autocomplete: Moving to next item (${index + 1}) ===');
         _autocompleteFocusNodes[index + 1].requestFocus();
+      } else {
+        // Last autocomplete item - navigate to Season box if series is selected
+        debugPrint('=== Autocomplete: Last item. isSeries=$_isSeries, selected=${_selectedImdbTitle != null} ===');
+        if (_isSeries && _selectedImdbTitle != null) {
+          debugPrint('=== Autocomplete: Navigating to Season box ===');
+          debugPrint('Season focusNode: hashCode=${_seasonInputFocusNode.hashCode}, canRequestFocus=${_seasonInputFocusNode.canRequestFocus}');
+          _seasonInputFocusNode.requestFocus();
+          debugPrint('After requestFocus: hasFocus=${_seasonInputFocusNode.hasFocus}');
+        } else {
+          debugPrint('=== Autocomplete: Cannot navigate to Season box (not a series or no selection) ===');
+        }
       }
       return KeyEventResult.handled;
     }
@@ -1421,7 +1472,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Arrow Right or Arrow Down -> Episode field
     if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
         event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      debugPrint('=== Season box: Navigating to Episode box ===');
       _episodeInputFocusNode.requestFocus();
+      debugPrint('Episode hasFocus: ${_episodeInputFocusNode.hasFocus}');
       return KeyEventResult.handled;
     }
 
@@ -1429,6 +1482,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
         event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
+      debugPrint('=== Season box: Navigating back to Search field ===');
       _searchFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
@@ -1442,13 +1496,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Arrow Left or Arrow Up -> Season field
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
         event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      debugPrint('=== Episode box: Navigating to Season box ===');
       _seasonInputFocusNode.requestFocus();
+      debugPrint('Season hasFocus: ${_seasonInputFocusNode.hasFocus}');
       return KeyEventResult.handled;
     }
 
     // Escape/Back -> Search field
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
+      debugPrint('=== Episode box: Navigating back to Search field ===');
       _searchFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
@@ -1464,18 +1521,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // Build movie/series type selector and S/E inputs
   Widget _buildImdbTypeAndEpisodeControls() {
+    debugPrint('Building S/E controls: selected=${_selectedImdbTitle != null}, series=$_isSeries, collapsed=$_imdbControlsCollapsed, searching=$_isImdbSearching');
+
     if (_selectedImdbTitle == null) {
+      debugPrint('Not building S/E: no selected title');
       return const SizedBox.shrink();
     }
 
     // For movies: hide when collapsed
     // For series: never hide (we show either the expandable button or full controls)
     if (_imdbControlsCollapsed && !_isSeries) {
+      debugPrint('Not building S/E: controls collapsed and not series');
       return const SizedBox.shrink();
     }
 
     // Show loading indicator while fetching title details
     if (_isImdbSearching) {
+      debugPrint('Building S/E: showing loading indicator');
+
       return Container(
         margin: const EdgeInsets.only(top: 8, bottom: 8),
         padding: const EdgeInsets.all(12),
@@ -1543,10 +1606,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // For movies, don't show controls at all
     if (!_isSeries) {
+      debugPrint('Not building S/E: not a series');
       return const SizedBox.shrink();
     }
 
     // For series, show S/E inputs directly (type is auto-detected)
+    debugPrint('Building S/E inputs for series');
+    debugPrint('Season focusNode: ${_seasonInputFocusNode.hashCode}, canRequestFocus: ${_seasonInputFocusNode.canRequestFocus}');
+    debugPrint('Episode focusNode: ${_episodeInputFocusNode.hashCode}, canRequestFocus: ${_episodeInputFocusNode.canRequestFocus}');
+
     return Container(
       margin: const EdgeInsets.only(top: 8, bottom: 8),
       child: Row(
@@ -1555,9 +1623,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           SizedBox(
             width: 70,
             child: Focus(
-              focusNode: _seasonInputFocusNode,
               onKeyEvent: (node, event) => _handleSeasonInputKeyEvent(event),
               child: TextField(
+                focusNode: _seasonInputFocusNode,
                 controller: _seasonController,
                 keyboardType: TextInputType.number,
                 style: const TextStyle(fontSize: 13),
@@ -1574,6 +1642,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                 ),
                 onChanged: (_) {
+                  debugPrint('Season changed: ${_seasonController.text}');
                   _createAdvancedSelectionAndSearch();
                 },
               ),
@@ -1584,9 +1653,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           SizedBox(
             width: 70,
             child: Focus(
-              focusNode: _episodeInputFocusNode,
               onKeyEvent: (node, event) => _handleEpisodeInputKeyEvent(event),
               child: TextField(
+                focusNode: _episodeInputFocusNode,
                 controller: _episodeController,
                 keyboardType: TextInputType.number,
                 style: const TextStyle(fontSize: 13),
@@ -1603,6 +1672,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                 ),
                 onChanged: (_) {
+                  debugPrint('Episode changed: ${_episodeController.text}');
                   _createAdvancedSelectionAndSearch();
                 },
               ),
@@ -6093,6 +6163,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   NextFocusIntent:
                                       CallbackAction<NextFocusIntent>(
                                         onInvoke: (intent) {
+                                          debugPrint('=== NextFocus from search: autocomplete=${_imdbAutocompleteResults.isNotEmpty}, series=$_isSeries, selected=${_selectedImdbTitle != null} ===');
+                                          // Custom logic: Check if should navigate to autocomplete or Season box
+                                          if (_imdbAutocompleteResults.isNotEmpty && _autocompleteFocusNodes.isNotEmpty) {
+                                            debugPrint('=== Navigating to first autocomplete item ===');
+                                            _autocompleteFocusNodes[0].requestFocus();
+                                            return null;
+                                          }
+                                          if (_isSeries && _selectedImdbTitle != null) {
+                                            debugPrint('=== Navigating to Season input box ===');
+                                            debugPrint('Season focusNode: hashCode=${_seasonInputFocusNode.hashCode}, canRequestFocus=${_seasonInputFocusNode.canRequestFocus}');
+                                            _seasonInputFocusNode.requestFocus();
+                                            debugPrint('After requestFocus: hasFocus=${_seasonInputFocusNode.hasFocus}');
+                                            return null;
+                                          }
+                                          // Default: Let FocusTraversalPolicy handle it
+                                          debugPrint('=== Using default focus traversal ===');
                                           FocusScope.of(context).nextFocus();
                                           return null;
                                         },
@@ -6115,10 +6201,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     // unless a selection has been made
                                     if (_searchMode == SearchMode.keyword) {
                                       _searchTorrents(query);
-                                    } else if (_searchMode == SearchMode.imdb &&
-                                        _selectedImdbTitle != null) {
-                                      // Already has selection, can re-search
-                                      _createAdvancedSelectionAndSearch();
+                                    } else if (_searchMode == SearchMode.imdb) {
+                                      // On TV: Trigger autocomplete when Enter is pressed
+                                      if (_isTelevision && _selectedImdbTitle == null) {
+                                        _onImdbSearchTextChanged(query);
+                                      } else if (_selectedImdbTitle != null) {
+                                        // Already has selection, can re-search
+                                        _createAdvancedSelectionAndSearch();
+                                      }
                                     }
                                   },
                                   style: const TextStyle(color: Colors.white),
