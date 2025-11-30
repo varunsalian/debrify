@@ -1671,6 +1671,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             ? entry.file.name
             : entry.file.absolutePath;
         return Container(
+          key: ValueKey('torbox-file-${entry.index}'),
           margin: const EdgeInsets.only(bottom: 12),
           child: _buildTorboxFileCard(
             entry: entry,
@@ -2029,6 +2030,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   ? 'E${info.episode.toString().padLeft(2, '0')}'
                   : null;
               return Container(
+                key: ValueKey('torbox-episode-${entry.index}'),
                 margin: const EdgeInsets.only(bottom: 12),
                 child: _buildTorboxFileCard(
                   entry: entry,
@@ -2599,6 +2601,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         }
         final torrent = _torrents[index];
         return _TorboxTorrentCard(
+          key: ValueKey(torrent.id),
           torrent: torrent,
           onPlay: () => _handlePlayTorrent(torrent),
           onDownload: () => _showDownloadOptions(torrent),
@@ -2680,6 +2683,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
 class _TorboxTorrentCard extends StatelessWidget {
   const _TorboxTorrentCard({
+    super.key,
     required this.torrent,
     required this.onPlay,
     required this.onDownload,

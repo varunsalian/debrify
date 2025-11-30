@@ -2301,7 +2301,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             }
 
             final torrent = _torrents[index];
-            return _buildTorrentCard(torrent);
+            return KeyedSubtree(
+              key: ValueKey(torrent.id),
+              child: _buildTorrentCard(torrent),
+            );
           },
         ),
       );
@@ -2420,7 +2423,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             }
 
             final download = _downloads[index];
-            return _buildDownloadCard(download);
+            return KeyedSubtree(
+              key: ValueKey(download.id),
+              child: _buildDownloadCard(download),
+            );
           },
         ),
       );
@@ -4770,6 +4776,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         );
 
         return Container(
+          key: ValueKey('season-$seasonNumber'),
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B).withValues(alpha: 0.3),
@@ -4907,6 +4914,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         final isUnrestricting = unrestrictingFiles[fileIndex] ?? false;
 
         return Container(
+          key: ValueKey('file-$fileIndex'),
           margin: const EdgeInsets.only(bottom: 12),
           child: _buildModernFileCard(
             fileName: fileName,

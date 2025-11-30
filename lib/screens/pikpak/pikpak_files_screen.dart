@@ -865,7 +865,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           return _buildLoadingIndicator();
         }
         final file = _files[index];
-        return _buildFileCard(file, index);
+        return KeyedSubtree(
+          key: ValueKey(file['id'] ?? index),
+          child: _buildFileCard(file, index),
+        );
       },
     );
   }

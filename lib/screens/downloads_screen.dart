@@ -622,6 +622,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                   padding: const EdgeInsets.all(12),
                   itemCount: 6,
                   itemBuilder: (context, index) => Container(
+                    key: ValueKey('download-shimmer-$index'),
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
