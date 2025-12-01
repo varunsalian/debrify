@@ -14,6 +14,7 @@ import '../widgets/stat_chip.dart';
 import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
+import '../services/android_native_downloader.dart';
 import 'dart:ui'; // Added for ImageFilter
 
 class DebridDownloadsScreen extends StatefulWidget {
@@ -83,9 +84,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final TextEditingController _linkController = TextEditingController();
   bool _isAddingLink = false;
 
+  // TV/DPAD navigation
+  bool _isTelevision = false;
+  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'rd-back');
+  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
+
   @override
   void initState() {
     super.initState();
+    _checkIfTelevision();
     _loadApiKeyAndData();
     _torrentScrollController.addListener(_onTorrentScroll);
     _downloadScrollController.addListener(_onDownloadScroll);
@@ -107,6 +114,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
     });
   }
+
+  Future<void> _checkIfTelevision() async {
+    final isTv = await AndroidNativeDownloader.isTelevision();
+    if (mounted) {
+      setState(() {
+        _isTelevision = isTv;
+      });
+    }
+  }
+
 
   void _showDownloadMoreOptions(DebridDownload download) {
     final canStream = download.streamable == 1;
@@ -141,6 +158,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _downloadScrollController.dispose();
     _magnetController.dispose();
     _linkController.dispose();
+
+    // Dispose focus nodes
+    _backButtonFocusNode.dispose();
+    _refreshButtonFocusNode.dispose();
+
     super.dispose();
   }
 
@@ -229,6 +251,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           _torrentPage++;
           _isLoadingTorrents = false;
         });
+
       }
     } catch (e) {
       if (mounted) {
@@ -1171,6 +1194,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         _folderPath = [];
         _isLoadingFolder = false;
       });
+
     } catch (e) {
       setState(() {
         _isLoadingFolder = false;
@@ -1187,6 +1211,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       _folderPath.add(folder.name);
       _currentViewNodes = folder.children;
     });
+
   }
 
   /// Navigate up one level
@@ -1200,6 +1225,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         _currentViewNodes = null;
         _folderPath = [];
       });
+
     } else if (_folderPath.isNotEmpty && _currentFolderTree != null) {
       // Go up one folder level
       setState(() {
@@ -1227,6 +1253,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           _currentViewNodes = currentNode.children;
         }
       });
+
     }
   }
 
@@ -1250,11 +1277,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         : _buildDownloadContent();
 
     return Scaffold(
-      body: Column(
-        children: [
-          const SizedBox(height: 8),
-          Expanded(child: content),
-        ],
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Expanded(child: content),
+          ],
+        ),
       ),
     );
   }
@@ -1263,12 +1293,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
+          focusNode: _backButtonFocusNode,
           icon: const Icon(Icons.arrow_back),
           onPressed: _navigateUp,
         ),
         title: Text(_getCurrentFolderTitle()),
         actions: [
           IconButton(
+            focusNode: _refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
             onPressed: _currentTorrent != null
                 ? () => _navigateIntoTorrent(_currentTorrent!)
@@ -1276,7 +1308,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ),
         ],
       ),
-      body: _buildFolderContentsView(),
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: _buildFolderContentsView(),
+      ),
     );
   }
 
@@ -1305,7 +1340,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final borderColor = Colors.white.withValues(alpha: 0.08);
     final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
 
-    return Container(
+    final cardContent = Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -1509,6 +1544,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ],
       ),
     );
+
+    return cardContent;
   }
 
   Widget _buildViewSelector() {
@@ -1680,6 +1717,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
+                autofocus: true,
                 onPressed: () => _fetchTorrents(_apiKey!, reset: true),
                 child: const Text('Retry'),
               ),
@@ -1802,6 +1840,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
+                autofocus: true,
                 onPressed: () => _fetchDownloads(_apiKey!, reset: true),
                 child: const Text('Retry'),
               ),
@@ -1876,7 +1915,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildTorrentCard(RDTorrent torrent, int index) {
     // Always treat torrents as folders - user needs to "Open" to see actual files
     // Never show Play button at root level
-    return Card(
+    final cardContent = Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -2034,6 +2073,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ),
       ),
     );
+
+    return cardContent;
   }
 
   Widget _buildPrimaryActionButton({
