@@ -101,6 +101,8 @@ class PlaylistEntry {
   final int? torboxTorrentId; // Torbox torrent identifier for lazy resolution
   final int? torboxFileId; // Torbox file identifier for lazy resolution
   final String? pikpakFileId; // PikPak file identifier for lazy resolution
+  final String? rdTorrentId; // Real-Debrid torrent ID for lazy resolution
+  final int? rdLinkIndex; // Real-Debrid link index for file in torrent
   const PlaylistEntry({
     required this.url,
     required this.title,
@@ -111,6 +113,8 @@ class PlaylistEntry {
     this.torboxTorrentId,
     this.torboxFileId,
     this.pikpakFileId,
+    this.rdTorrentId,
+    this.rdLinkIndex,
   });
 }
 
