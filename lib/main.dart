@@ -318,7 +318,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _rdIntegrationEnabled = true;
   bool _tbIntegrationEnabled = true;
   bool _rdHiddenFromNav = false;
+  bool _tbHiddenFromNav = false;
   bool _pikpakEnabled = false;
+  bool _pikpakHiddenFromNav = false;
   bool _isAndroidTv = false;
 
   // Auto-launch overlay state
@@ -651,7 +653,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final rdHidden = await StorageService.getRealDebridHiddenFromNav();
+    final tbHidden = await StorageService.getTorboxHiddenFromNav();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
+    final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
 
     if (!mounted) return;
 
@@ -664,7 +668,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       realDebridEnabled: rdEnabled,
       torboxEnabled: torboxEnabled,
       realDebridHidden: rdHidden,
+      torboxHidden: tbHidden,
       pikpakEnabled: pikpakEnabled,
+      pikpakHidden: pikpakHidden,
     );
   }
 
@@ -674,13 +680,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool realDebridEnabled,
     required bool torboxEnabled,
     required bool realDebridHidden,
+    required bool torboxHidden,
     required bool pikpakEnabled,
+    required bool pikpakHidden,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
       hasTorbox: hasTorbox,
       realDebridHidden: realDebridHidden,
+      torboxHidden: torboxHidden,
       pikpakEnabled: pikpakEnabled,
+      pikpakHidden: pikpakHidden,
     );
 
     int nextIndex = _selectedIndex;
@@ -693,7 +703,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _rdIntegrationEnabled == realDebridEnabled &&
         _tbIntegrationEnabled == torboxEnabled &&
         _rdHiddenFromNav == realDebridHidden &&
+        _tbHiddenFromNav == torboxHidden &&
         _pikpakEnabled == pikpakEnabled &&
+        _pikpakHiddenFromNav == pikpakHidden &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -704,7 +716,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _rdIntegrationEnabled = realDebridEnabled;
       _tbIntegrationEnabled = torboxEnabled;
       _rdHiddenFromNav = realDebridHidden;
+      _tbHiddenFromNav = torboxHidden;
       _pikpakEnabled = pikpakEnabled;
+      _pikpakHiddenFromNav = pikpakHidden;
       _selectedIndex = nextIndex;
     });
   }
@@ -713,21 +727,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     bool? hasRealDebrid,
     bool? hasTorbox,
     bool? realDebridHidden,
+    bool? torboxHidden,
     bool? pikpakEnabled,
+    bool? pikpakHidden,
   }) {
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
       final rdHidden = realDebridHidden ?? _rdHiddenFromNav;
       final tb = hasTorbox ?? _hasTorboxKey;
+      final tbHidden = torboxHidden ?? _tbHiddenFromNav;
       final pikpak = pikpakEnabled ?? _pikpakEnabled;
+      final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
       final indices = <int>[0, 1, 3]; // Torrent, Playlist, Debrify TV
       if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
-      if (tb) {
+      if (tb && !tbHidden) {
         indices.add(5); // Torbox downloads
       }
-      if (pikpak) {
+      if (pikpak && !ppHidden) {
         indices.add(6); // PikPak
       }
       indices.add(7); // Settings
@@ -737,15 +755,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final rd = hasRealDebrid ?? _hasRealDebridKey;
     final rdHidden = realDebridHidden ?? _rdHiddenFromNav;
     final tb = hasTorbox ?? _hasTorboxKey;
+    final tbHidden = torboxHidden ?? _tbHiddenFromNav;
     final pikpak = pikpakEnabled ?? _pikpakEnabled;
+    final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
     if (!rd && !tb && !pikpak) {
       return [0, 7];
     }
 
     final indices = <int>[0, 1, 2, 3];
     if (rd && !rdHidden) indices.add(4);
-    if (tb) indices.add(5);
-    if (pikpak) indices.add(6);
+    if (tb && !tbHidden) indices.add(5);
+    if (pikpak && !ppHidden) indices.add(6);
     indices.add(7);
     return indices;
   }

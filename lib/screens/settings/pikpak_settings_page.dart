@@ -21,7 +21,6 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   final FocusNode _emailFocusNode = FocusNode(debugLabel: 'pikpak-email');
   final FocusNode _passwordFocusNode = FocusNode(debugLabel: 'pikpak-password');
   final FocusNode _loginButtonFocusNode = FocusNode(debugLabel: 'pikpak-login');
-  final FocusNode _testButtonFocusNode = FocusNode(debugLabel: 'pikpak-test');
   final FocusNode _logoutButtonFocusNode = FocusNode(
     debugLabel: 'pikpak-logout',
   );
@@ -32,6 +31,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   bool _isConnected = false;
   bool _isConnecting = false;
   bool _loading = true;
+  bool _hiddenFromNav = false;
   String? _restrictedFolderId;
   String? _restrictedFolderName;
 
@@ -48,7 +48,6 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     _emailFocusNode.dispose();
     _passwordFocusNode.dispose();
     _loginButtonFocusNode.dispose();
-    _testButtonFocusNode.dispose();
     _logoutButtonFocusNode.dispose();
     super.dispose();
   }
@@ -61,6 +60,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     final isAuth = await PikPakApiService.instance.isAuthenticated();
     final restrictedId = await StorageService.getPikPakRestrictedFolderId();
     final restrictedName = await StorageService.getPikPakRestrictedFolderName();
+    final hiddenFromNav = await StorageService.getPikPakHiddenFromNav();
 
     if (!mounted) return;
 
@@ -72,6 +72,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       _isConnected = isAuth;
       _restrictedFolderId = restrictedId;
       _restrictedFolderName = restrictedName;
+      _hiddenFromNav = hiddenFromNav;
       _loading = false;
     });
   }
@@ -132,6 +133,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       // Clear folder restriction on logout
       await StorageService.clearPikPakRestrictedFolder();
 
+      // Clear the hidden from nav flag on logout
+      await StorageService.clearPikPakHiddenFromNav();
+
       if (!mounted) return;
 
       setState(() {
@@ -139,33 +143,17 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
         _passwordController.clear();
         _restrictedFolderId = null;
         _restrictedFolderName = null;
+        _hiddenFromNav = false;
       });
+
+      // Notify main page to update navigation
+      MainPageBridge.notifyIntegrationChanged();
 
       _showSnackBar('Logged out successfully', isError: false);
     } catch (e) {
       print('Error logging out: $e');
       if (!mounted) return;
       _showSnackBar('Logout error: $e');
-    }
-  }
-
-  Future<void> _testConnection() async {
-    try {
-      _showSnackBar('Testing connection...', isError: false);
-
-      final success = await PikPakApiService.instance.testConnection();
-
-      if (!mounted) return;
-
-      if (success) {
-        _showSnackBar('Connection test successful!', isError: false);
-      } else {
-        _showSnackBar('Connection test failed');
-      }
-    } catch (e) {
-      print('Error testing connection: $e');
-      if (!mounted) return;
-      _showSnackBar('Test failed: $e');
     }
   }
 
@@ -234,6 +222,102 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     );
   }
 
+  Future<void> _toggleHideFromNav(bool value) async {
+    if (value) {
+      // Show confirmation dialog before enabling
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Hide PikPak?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This will hide the PikPak tab from navigation.',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.amber.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'To show PikPak again, you must logout and login. This is a security measure.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Hide'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) {
+        return;
+      }
+
+      // Enable hiding
+      await StorageService.setPikPakHiddenFromNav(true);
+      setState(() {
+        _hiddenFromNav = true;
+      });
+      MainPageBridge.notifyIntegrationChanged();
+      _showSnackBar('PikPak hidden from navigation', isError: false);
+    } else {
+      // Try to disable - show dialog explaining logout requirement
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Security Restriction'),
+          content: SingleChildScrollView(
+            child: Text(
+              'To show PikPak in navigation again, you must logout and login. This is a security measure to prevent unauthorized changes.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   void _showSnackBar(String message, {bool isError = true}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -298,6 +382,69 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                     isError: false,
                   );
                 },
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Hide from Navigation Toggle
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    value: _hiddenFromNav,
+                    onChanged: _isConnected ? _toggleHideFromNav : null,
+                    title: const Text(
+                      'Hide from Navigation',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      !_isConnected
+                          ? 'Login to enable this option'
+                          : _hiddenFromNav
+                              ? 'PikPak is hidden from navigation'
+                              : 'Show/hide PikPak tab from navigation bar',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    secondary: Icon(
+                      _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
+                      color: _hiddenFromNav ? Colors.amber : null,
+                    ),
+                  ),
+                  if (_hiddenFromNav)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.amber.shade700,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'To show PikPak in navigation again, please logout and login',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.amber.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
 
@@ -537,13 +684,6 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
               ),
             ] else ...[
               const SizedBox(height: 16),
-              FilledButton.icon(
-                focusNode: _testButtonFocusNode,
-                onPressed: _testConnection,
-                icon: const Icon(Icons.cloud_done),
-                label: const Text('Test Connection'),
-              ),
-              const SizedBox(height: 8),
               OutlinedButton.icon(
                 focusNode: _logoutButtonFocusNode,
                 onPressed: _logout,

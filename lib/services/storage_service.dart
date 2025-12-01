@@ -16,6 +16,10 @@ class StorageService {
       'real_debrid_hidden_from_nav';
   static const String _torboxIntegrationEnabledKey =
       'torbox_integration_enabled';
+  static const String _torboxHiddenFromNavKey =
+      'torbox_hidden_from_nav';
+  static const String _pikpakHiddenFromNavKey =
+      'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
       'torbox_post_torrent_action';
@@ -199,6 +203,21 @@ class StorageService {
   static Future<void> setTorboxIntegrationEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_torboxIntegrationEnabledKey, enabled);
+  }
+
+  static Future<bool> getTorboxHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_torboxHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setTorboxHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_torboxHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearTorboxHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_torboxHiddenFromNavKey);
   }
 
   static Future<bool> isInitialSetupComplete() async {
@@ -1571,6 +1590,22 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pikpakTorrentsFolderIdKey);
     await prefs.remove(_pikpakTvFolderIdKey);
+  }
+
+  // PikPak Hidden from Navigation
+  static Future<bool> getPikPakHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_pikpakHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setPikPakHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pikpakHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearPikPakHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pikpakHiddenFromNavKey);
   }
 }
 
