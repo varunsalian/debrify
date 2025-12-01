@@ -12,6 +12,8 @@ class StorageService {
       'torbox_check_cache_before_search';
   static const String _realDebridIntegrationEnabledKey =
       'real_debrid_integration_enabled';
+  static const String _realDebridHiddenFromNavKey =
+      'real_debrid_hidden_from_nav';
   static const String _torboxIntegrationEnabledKey =
       'torbox_integration_enabled';
   static const String _postTorrentActionKey = 'post_torrent_action';
@@ -172,6 +174,21 @@ class StorageService {
   static Future<void> setRealDebridIntegrationEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_realDebridIntegrationEnabledKey, enabled);
+  }
+
+  static Future<bool> getRealDebridHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_realDebridHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setRealDebridHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_realDebridHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearRealDebridHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_realDebridHiddenFromNavKey);
   }
 
   static Future<bool> getTorboxIntegrationEnabled() async {

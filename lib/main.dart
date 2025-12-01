@@ -317,6 +317,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _hasTorboxKey = false;
   bool _rdIntegrationEnabled = true;
   bool _tbIntegrationEnabled = true;
+  bool _rdHiddenFromNav = false;
   bool _pikpakEnabled = false;
   bool _isAndroidTv = false;
 
@@ -649,6 +650,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final torboxKey = await StorageService.getTorboxApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
+    final rdHidden = await StorageService.getRealDebridHiddenFromNav();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
 
     if (!mounted) return;
@@ -661,6 +663,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       hasTorbox: hasTorbox,
       realDebridEnabled: rdEnabled,
       torboxEnabled: torboxEnabled,
+      realDebridHidden: rdHidden,
       pikpakEnabled: pikpakEnabled,
     );
   }
@@ -670,11 +673,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool hasTorbox,
     required bool realDebridEnabled,
     required bool torboxEnabled,
+    required bool realDebridHidden,
     required bool pikpakEnabled,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
       hasTorbox: hasTorbox,
+      realDebridHidden: realDebridHidden,
       pikpakEnabled: pikpakEnabled,
     );
 
@@ -687,6 +692,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _hasTorboxKey == hasTorbox &&
         _rdIntegrationEnabled == realDebridEnabled &&
         _tbIntegrationEnabled == torboxEnabled &&
+        _rdHiddenFromNav == realDebridHidden &&
         _pikpakEnabled == pikpakEnabled &&
         nextIndex == _selectedIndex) {
       return;
@@ -697,6 +703,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _hasTorboxKey = hasTorbox;
       _rdIntegrationEnabled = realDebridEnabled;
       _tbIntegrationEnabled = torboxEnabled;
+      _rdHiddenFromNav = realDebridHidden;
       _pikpakEnabled = pikpakEnabled;
       _selectedIndex = nextIndex;
     });
@@ -705,14 +712,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   List<int> _computeVisibleNavIndices({
     bool? hasRealDebrid,
     bool? hasTorbox,
+    bool? realDebridHidden,
     bool? pikpakEnabled,
   }) {
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
+      final rdHidden = realDebridHidden ?? _rdHiddenFromNav;
       final tb = hasTorbox ?? _hasTorboxKey;
       final pikpak = pikpakEnabled ?? _pikpakEnabled;
       final indices = <int>[0, 1, 3]; // Torrent, Playlist, Debrify TV
-      if (rd) {
+      if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
       if (tb) {
@@ -726,6 +735,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
 
     final rd = hasRealDebrid ?? _hasRealDebridKey;
+    final rdHidden = realDebridHidden ?? _rdHiddenFromNav;
     final tb = hasTorbox ?? _hasTorboxKey;
     final pikpak = pikpakEnabled ?? _pikpakEnabled;
     if (!rd && !tb && !pikpak) {
@@ -733,7 +743,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
 
     final indices = <int>[0, 1, 2, 3];
-    if (rd) indices.add(4);
+    if (rd && !rdHidden) indices.add(4);
     if (tb) indices.add(5);
     if (pikpak) indices.add(6);
     indices.add(7);

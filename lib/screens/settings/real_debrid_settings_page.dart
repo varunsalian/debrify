@@ -23,6 +23,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   bool _obscure = true;
   bool _loading = true;
   bool _integrationEnabled = true;
+  bool _hiddenFromNav = false;
 
   @override
   void initState() {
@@ -42,12 +43,14 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     final postAction = await StorageService.getPostTorrentAction();
     final integrationEnabled =
         await StorageService.getRealDebridIntegrationEnabled();
+    final hiddenFromNav = await StorageService.getRealDebridHiddenFromNav();
     setState(() {
       _savedApiKey = apiKey;
       _fileSelection = selection;
       _postTorrentAction = postAction;
       _loading = false;
       _integrationEnabled = integrationEnabled;
+      _hiddenFromNav = hiddenFromNav;
     });
 
     // Refresh user info if API key exists and integration is enabled
@@ -111,13 +114,16 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   Future<void> _deleteKey() async {
     await StorageService.deleteApiKey();
     AccountService.clearUserInfo();
+    // Clear the hidden from nav flag on logout
+    await StorageService.clearRealDebridHiddenFromNav();
     FocusScope.of(context).unfocus();
     setState(() {
       _savedApiKey = null;
       _isEditing = false;
       _apiKeyController.clear();
+      _hiddenFromNav = false;
     });
-    _snack('API key deleted');
+    _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
   }
 
@@ -147,6 +153,102 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       await AccountService.refreshUserInfo();
       if (!mounted) return;
       setState(() {});
+    }
+  }
+
+  Future<void> _toggleHideFromNav(bool value) async {
+    if (value) {
+      // Show confirmation dialog before enabling
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Hide Real Debrid?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This will hide the Real Debrid tab from navigation.',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.amber.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'To show Real Debrid again, you must logout and login. This is a security measure.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Hide'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) {
+        return;
+      }
+
+      // Enable hiding
+      await StorageService.setRealDebridHiddenFromNav(true);
+      setState(() {
+        _hiddenFromNav = true;
+      });
+      MainPageBridge.notifyIntegrationChanged();
+      _snack('Real Debrid hidden from navigation', err: false);
+    } else {
+      // Try to disable - show dialog explaining logout requirement
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Security Restriction'),
+          content: SingleChildScrollView(
+            child: Text(
+              'To show Real Debrid in navigation again, you must logout and login. This is a security measure to prevent unauthorized changes.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -180,6 +282,77 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+
+            // Hide from Navigation Toggle
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    value: _hiddenFromNav,
+                    onChanged: _savedApiKey != null ? _toggleHideFromNav : null,
+                    title: const Text(
+                      'Hide from Navigation',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      _savedApiKey == null
+                          ? 'Login to enable this option'
+                          : _hiddenFromNav
+                              ? 'Real Debrid is hidden from navigation'
+                              : 'Show/hide Real Debrid tab from navigation bar',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    secondary: Icon(
+                      _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
+                      color: _hiddenFromNav ? Colors.amber : null,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
+                  ),
+                  if (_hiddenFromNav)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.amber.shade700,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'To show Real Debrid in navigation again, please logout and login',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.amber.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 16),
             IgnorePointer(
               ignoring: !_integrationEnabled,
@@ -384,27 +557,16 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: () => _beginEditApiKey(),
-                                        icon: const Icon(Icons.edit),
-                                        label: const Text('Edit'),
-                                      ),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _deleteKey,
+                                    icon: const Icon(Icons.logout),
+                                    label: const Text('Logout'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.red,
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: _deleteKey,
-                                        icon: const Icon(Icons.delete),
-                                        label: const Text('Delete'),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: Colors.red,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ] else ...[
                                 FilledButton.icon(
