@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/rd_torrent.dart';
 import '../models/rd_file_node.dart';
 import '../models/debrid_download.dart';
@@ -1494,6 +1495,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                             : _addNodeFileToPlaylist(node);
                       } else if (value == 'copy_link') {
                         _copyNodeDownloadLink(node);
+                      } else if (value == 'open_external') {
+                        _openWithExternalPlayer(node);
                       }
                     },
                     itemBuilder: (context) => [
@@ -1520,6 +1523,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                               ),
                               SizedBox(width: 12),
                               Text('Add to Playlist'),
+                            ],
+                          ),
+                        ),
+                      // Only show "Open with External Player" for video files, not folders
+                      if (isVideo && !isFolder)
+                        const PopupMenuItem(
+                          value: 'open_external',
+                          child: Row(
+                            children: [
+                              Icon(Icons.open_in_new, size: 18, color: Colors.orange),
+                              SizedBox(width: 12),
+                              Text('Open with External Player'),
                             ],
                           ),
                         ),
@@ -4995,6 +5010,50 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       _showSuccess('Download link copied to clipboard');
     } catch (e) {
       _showError('Failed to get download link: $e');
+    }
+  }
+
+  /// Open video file with external player
+  Future<void> _openWithExternalPlayer(RDFileNode node) async {
+    if (_apiKey == null || _currentTorrentId == null) return;
+
+    try {
+      // Show loading indicator
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Unrestrict the file's link
+      final downloadUrl = await DebridService.getFileDownloadUrl(
+        _apiKey!,
+        _currentTorrentId!,
+        node.linkIndex,
+      );
+
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Launch with external player
+      final Uri uri = Uri.parse(downloadUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        _showSuccess('Opening with external player...');
+      } else {
+        _showError('Could not open external player');
+      }
+    } catch (e) {
+      // Close loading indicator if still open
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      _showError('Failed to open with external player: $e');
     }
   }
 }
