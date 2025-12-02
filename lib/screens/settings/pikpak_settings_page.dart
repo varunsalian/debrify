@@ -24,6 +24,12 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   final FocusNode _logoutButtonFocusNode = FocusNode(
     debugLabel: 'pikpak-logout',
   );
+  final FocusNode _folderRestrictionSkipButtonFocusNode = FocusNode(
+    debugLabel: 'folder-restriction-skip',
+  );
+  final FocusNode _folderRestrictionSelectButtonFocusNode = FocusNode(
+    debugLabel: 'folder-restriction-select',
+  );
 
   bool _pikpakEnabled = false;
   bool _showVideosOnly = true;
@@ -49,6 +55,8 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     _passwordFocusNode.dispose();
     _loginButtonFocusNode.dispose();
     _logoutButtonFocusNode.dispose();
+    _folderRestrictionSkipButtonFocusNode.dispose();
+    _folderRestrictionSelectButtonFocusNode.dispose();
     super.dispose();
   }
 
@@ -109,6 +117,99 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
         // Clear password field for security
         _passwordController.clear();
+
+        // Ask if user wants to set up folder restriction
+        final shouldSetupRestriction = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            // Auto-focus the first button when dialog opens for TV navigation
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _folderRestrictionSkipButtonFocusNode.requestFocus();
+            });
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.folder_special, color: Colors.amber),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Folder Restriction (Optional)')),
+                ],
+              ),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'For enhanced security, you can restrict PikPak access to a specific folder.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '• Full Access: Browse all files in your account',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '• Restricted: Only access files in one folder',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Note: You must logout and login again to change this later.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                Focus(
+                  focusNode: _folderRestrictionSkipButtonFocusNode,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Skip (Full Access)'),
+                  ),
+                ),
+                Focus(
+                  focusNode: _folderRestrictionSelectButtonFocusNode,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    icon: const Icon(Icons.folder_open, size: 18),
+                    label: const Text('Select Folder'),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+
+        // If user wants to set restriction, show folder picker
+        if (shouldSetupRestriction == true && mounted) {
+          final folderResult = await showDialog<Map<String, dynamic>>(
+            context: context,
+            builder: (ctx) => const PikPakFolderPickerDialog(),
+          );
+
+          // Save folder restriction if selected
+          if (folderResult != null) {
+            final folderId = folderResult['folderId'] as String?;
+            final folderName = folderResult['folderName'] as String?;
+            await StorageService.setPikPakRestrictedFolder(
+              folderId,
+              folderName,
+            );
+            // Clear subfolder caches when restriction changes
+            await StorageService.clearPikPakSubfolderCaches();
+            setState(() {
+              _restrictedFolderId = folderId;
+              _restrictedFolderName = folderName;
+            });
+            _showSnackBar('Folder restriction applied', isError: false);
+          }
+        }
       } else {
         _showSnackBar('Login failed. Please check your credentials.');
       }
