@@ -281,77 +281,6 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Hide from Navigation Toggle
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                SwitchListTile(
-                  value: _hiddenFromNav,
-                  onChanged: _savedApiKey != null ? _toggleHideFromNav : null,
-                  title: const Text(
-                    'Hide from Navigation',
-                    style: TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  subtitle: Text(
-                    _savedApiKey == null
-                        ? 'Login to enable this option'
-                        : _hiddenFromNav
-                            ? 'Torbox is hidden from navigation'
-                            : 'Show/hide Torbox tab from navigation bar',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  secondary: Icon(
-                    _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
-                    color: _hiddenFromNav ? Colors.amber : null,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 4,
-                  ),
-                ),
-                if (_hiddenFromNav)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.amber.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            size: 16,
-                            color: Colors.amber.shade700,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'To show Torbox in navigation again, please logout and login',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.amber.shade700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
           IgnorePointer(
             ignoring: !_integrationEnabled,
             child: AnimatedOpacity(
@@ -360,6 +289,75 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Hide from Navigation Toggle
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          value: _hiddenFromNav,
+                          onChanged: _savedApiKey != null ? _toggleHideFromNav : null,
+                          title: const Text(
+                            'Hide from Navigation',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          subtitle: Text(
+                            _savedApiKey == null
+                                ? 'Login to enable this option'
+                                : _hiddenFromNav
+                                    ? 'Torbox is hidden from navigation'
+                                    : 'Show/hide Torbox tab from navigation bar',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          secondary: Icon(
+                            _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
+                            color: _hiddenFromNav ? Colors.amber : null,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 4,
+                          ),
+                        ),
+                        if (_hiddenFromNav)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 16,
+                                    color: Colors.amber.shade700,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'To show Torbox in navigation again, please logout and login',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.amber.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(
