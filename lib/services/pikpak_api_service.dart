@@ -903,7 +903,19 @@ class PikPakApiService {
       return folderId;
     } catch (e) {
       print('PikPak: Failed to find or create subfolder "$folderName": $e');
-      // Fall back to parent folder if subfolder creation fails
+
+      // Check if the error is because the parent folder (restricted folder) was deleted
+      final errorMsg = e.toString().toLowerCase();
+      if (errorMsg.contains('target folder no longer exists') ||
+          errorMsg.contains('parent folder not found') ||
+          errorMsg.contains('folder does not exist')) {
+        print(
+          'PikPak: Parent folder appears to be deleted, not falling back',
+        );
+        throw Exception('RESTRICTED_FOLDER_DELETED: $e');
+      }
+
+      // Fall back to parent folder only for other types of errors
       print(
         'PikPak: Falling back to parent folder ${parentFolderId ?? "root"}',
       );
@@ -1180,6 +1192,50 @@ class PikPakApiService {
     } catch (e) {
       print('PikPak: Connection test failed: $e');
       return false;
+    }
+  }
+
+  /// Check if the restricted folder still exists
+  /// Returns true if folder exists or no restricted folder is set
+  /// Returns false if restricted folder is set but doesn't exist (was deleted)
+  Future<bool> verifyRestrictedFolderExists() async {
+    try {
+      final restrictedFolderId =
+          await StorageService.getPikPakRestrictedFolderId();
+
+      // If no restricted folder is set, return true (nothing to verify)
+      if (restrictedFolderId == null || restrictedFolderId.isEmpty) {
+        return true;
+      }
+
+      print(
+        'PikPak: Verifying restricted folder exists (ID: $restrictedFolderId)...',
+      );
+
+      // Try to get the folder metadata
+      try {
+        final metadata = await getFileMetadata(restrictedFolderId);
+        final kind = metadata['kind'] as String?;
+
+        // Verify it's actually a folder
+        if (kind == 'drive#folder') {
+          print('PikPak: Restricted folder verified - still exists');
+          return true;
+        } else {
+          print(
+            'PikPak: Restricted folder ID points to non-folder (kind: $kind)',
+          );
+          return false;
+        }
+      } catch (e) {
+        print('PikPak: Restricted folder verification failed: $e');
+        // If we can't get metadata, the folder likely doesn't exist
+        return false;
+      }
+    } catch (e) {
+      print('PikPak: Error during restricted folder verification: $e');
+      // On error, assume folder exists to avoid false positives
+      return true;
     }
   }
 

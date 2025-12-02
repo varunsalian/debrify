@@ -73,6 +73,12 @@ class PikPakTvService {
         );
         log('Using debrify-tv subfolder ID: $subFolderId');
       } catch (e) {
+        // Check if this is the restricted folder deleted error
+        if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
+          log('Detected restricted folder was deleted - logging out');
+          await _api.logout();
+          return null;
+        }
         log('Failed to create subfolder, using parent folder: $e');
         subFolderId = parentFolderId;
       }
@@ -270,6 +276,17 @@ class PikPakTvService {
 
     } catch (e) {
       log('Error preparing torrent: $e');
+
+      // Check if the error is because the restricted folder was deleted
+      final folderExists = await _api.verifyRestrictedFolderExists();
+      if (!folderExists) {
+        log(
+          'Restricted folder was deleted externally - logging out user',
+        );
+        await _api.logout();
+        // Note: The UI will be updated when the user navigates or refreshes
+      }
+
       if (fileId != null && fileId.isNotEmpty) {
         await _cleanupFile(fileId, log);
       }

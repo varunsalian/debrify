@@ -270,6 +270,19 @@ class MagnetLinkHandler {
         );
         print('PikPak: Using subfolder ID: $subFolderId');
       } catch (e) {
+        // Check if this is the restricted folder deleted error
+        if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
+          print('PikPak: Detected restricted folder was deleted');
+          if (!context.mounted) return;
+          Navigator.of(context).pop(); // Close loading dialog
+          await PikPakApiService.instance.logout();
+          if (context.mounted) {
+            _showError(
+              'Restricted folder was deleted. You have been logged out.',
+            );
+          }
+          return;
+        }
         print('PikPak: Failed to create subfolder, using parent folder: $e');
         subFolderId = parentFolderId;
       }
@@ -300,6 +313,18 @@ class MagnetLinkHandler {
     } catch (e) {
       if (!context.mounted) return;
       Navigator.of(context).pop(); // Close loading dialog
+
+      // Check if the error is because the restricted folder was deleted
+      final folderExists =
+          await PikPakApiService.instance.verifyRestrictedFolderExists();
+      if (!folderExists) {
+        await PikPakApiService.instance.logout();
+        if (context.mounted) {
+          _showError('Restricted folder was deleted. You have been logged out.');
+        }
+        return;
+      }
+
       _showError('Error adding to PikPak: $e');
     }
   }

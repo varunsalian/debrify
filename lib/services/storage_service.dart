@@ -1471,6 +1471,11 @@ class StorageService {
     await prefs.remove(_pikpakCaptchaTokenKey);
     await prefs.remove(_pikpakUserIdKey);
     await prefs.setBool(_pikpakEnabledKey, false);
+
+    // Also clear restricted folder settings and cached subfolder IDs
+    await clearPikPakRestrictedFolder();
+    await clearPikPakSubfolderCaches();
+    await clearPikPakHiddenFromNav();
   }
 
   // PikPak Device ID and Captcha Token

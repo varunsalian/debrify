@@ -86,6 +86,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
     if (!mounted) return;
 
+    // If enabled and has a restricted folder, verify it still exists
+    if (enabled && restrictedId != null && restrictedId.isNotEmpty) {
+      final folderExists =
+          await PikPakApiService.instance.verifyRestrictedFolderExists();
+      if (!folderExists) {
+        // Restricted folder was deleted externally
+        await _handleRestrictedFolderDeleted();
+        return;
+      }
+    }
+
     setState(() {
       _pikpakEnabled = enabled;
       _showVideosOnly = showVideosOnly;
@@ -105,6 +116,35 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     if (enabled) {
       _loadFiles();
     }
+  }
+
+  /// Handle the case when the restricted folder has been deleted externally
+  Future<void> _handleRestrictedFolderDeleted() async {
+    print(
+      'PikPak: Restricted folder was deleted externally, logging out user...',
+    );
+
+    // Logout from PikPak
+    await PikPakApiService.instance.logout();
+
+    if (!mounted) return;
+
+    // Update state
+    setState(() {
+      _pikpakEnabled = false;
+      _restrictedFolderId = null;
+      _restrictedFolderName = null;
+      _isLoading = false;
+      _initialLoad = false;
+      _errorMessage = '';
+    });
+
+    // Show snackbar
+    _showSnackBar(
+      'Restricted folder was deleted. You have been logged out.',
+      isError: true,
+      duration: const Duration(seconds: 5),
+    );
   }
 
   Future<void> _loadFiles() async {
@@ -140,6 +180,15 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     } catch (e) {
       print('Error loading PikPak files: $e');
       if (!mounted) return;
+
+      // Check if the restricted folder has been deleted externally
+      if (_restrictedFolderId != null &&
+          _currentFolderId == _restrictedFolderId) {
+        // The error is likely because the restricted folder was deleted
+        // Auto-logout the user
+        await _handleRestrictedFolderDeleted();
+        return;
+      }
 
       setState(() {
         _errorMessage = e.toString();

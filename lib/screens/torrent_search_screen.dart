@@ -2308,6 +2308,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
         print('PikPak: Using subfolder ID: $subFolderId');
       } catch (e) {
+        // Check if this is the restricted folder deleted error
+        if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
+          print('PikPak: Detected restricted folder was deleted');
+          await _handlePikPakRestrictedFolderDeleted();
+          return;
+        }
         print('PikPak: Failed to create subfolder, using parent folder: $e');
         subFolderId = parentFolderId;
       }
@@ -2490,8 +2496,36 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     } catch (e) {
       print('Error sending to PikPak: $e');
       if (!mounted) return;
+
+      // Check if the error is because the restricted folder was deleted
+      final folderExists =
+          await PikPakApiService.instance.verifyRestrictedFolderExists();
+      if (!folderExists) {
+        // Restricted folder was deleted - auto logout
+        await _handlePikPakRestrictedFolderDeleted();
+        return;
+      }
+
       _showPikPakSnack('Failed: ${e.toString()}', isError: true);
     }
+  }
+
+  /// Handle the case when PikPak restricted folder has been deleted externally
+  Future<void> _handlePikPakRestrictedFolderDeleted() async {
+    print(
+      'PikPak: Restricted folder was deleted externally, logging out user...',
+    );
+
+    // Logout from PikPak
+    await PikPakApiService.instance.logout();
+
+    if (!mounted) return;
+
+    // Show error message
+    _showPikPakSnack(
+      'Restricted folder was deleted. You have been logged out.',
+      isError: true,
+    );
   }
 
   Future<void> _pollPikPakStatus(
