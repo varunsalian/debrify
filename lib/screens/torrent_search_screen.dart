@@ -58,17 +58,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _episodeInputFocusNode = FocusNode();
   List<FocusNode> _autocompleteFocusNodes = [];
 
-  final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _providerAccordionFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _advancedButtonFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _sortDirectionFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _filterButtonFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _clearFiltersButtonFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _modeSelectorFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _selectionChipFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _expandControlsFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _seasonInputFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _episodeInputFocused = ValueNotifier<bool>(false);
+  // Focus states stored as regular bools for efficiency
+  bool _searchFocused = false;
+  bool _providerAccordionFocused = false;
+  bool _advancedButtonFocused = false;
+  bool _sortDirectionFocused = false;
+  bool _filterButtonFocused = false;
+  bool _clearFiltersButtonFocused = false;
+  bool _modeSelectorFocused = false;
+  bool _selectionChipFocused = false;
+  bool _expandControlsFocused = false;
+  bool _seasonInputFocused = false;
+  bool _episodeInputFocused = false;
 
   List<Torrent> _torrents = [];
   List<Torrent> _allTorrents = [];
@@ -90,7 +91,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _showingTorboxCachedOnly = false;
   bool _isTelevision = false;
   final List<FocusNode> _cardFocusNodes = [];
-  final List<ValueNotifier<bool>> _cardFocusStates = [];
+  int _focusedCardIndex = -1; // -1 means no card is focused
 
   // Search engine toggles - dynamic engine states
   Map<String, bool> _engineStates = {};
@@ -98,7 +99,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final SettingsManager _settingsManager = SettingsManager();
   // Dynamic focus nodes for engine toggles
   final Map<String, FocusNode> _engineTileFocusNodes = {};
-  final Map<String, ValueNotifier<bool>> _engineTileFocusStates = {};
+  final Map<String, bool> _engineTileFocusStates = {}; // Track focus as simple bools
   bool _showProvidersPanel = false;
   AdvancedSearchSelection? _activeAdvancedSelection;
 
@@ -159,60 +160,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
     );
 
-    _searchFocusNode.addListener(() {
-      if (!mounted) return;
-      _searchFocused.value = _searchFocusNode.hasFocus;
-    });
-
-    _providerAccordionFocusNode.addListener(() {
-      if (!mounted) return;
-      _providerAccordionFocused.value = _providerAccordionFocusNode.hasFocus;
-    });
-
-    _advancedButtonFocusNode.addListener(() {
-      if (!mounted) return;
-      _advancedButtonFocused.value = _advancedButtonFocusNode.hasFocus;
-    });
-
-    _sortDirectionFocusNode.addListener(() {
-      if (!mounted) return;
-      _sortDirectionFocused.value = _sortDirectionFocusNode.hasFocus;
-    });
-
-    _filterButtonFocusNode.addListener(() {
-      if (!mounted) return;
-      _filterButtonFocused.value = _filterButtonFocusNode.hasFocus;
-    });
-
-    _clearFiltersButtonFocusNode.addListener(() {
-      if (!mounted) return;
-      _clearFiltersButtonFocused.value = _clearFiltersButtonFocusNode.hasFocus;
-    });
-
-    _modeSelectorFocusNode.addListener(() {
-      if (!mounted) return;
-      _modeSelectorFocused.value = _modeSelectorFocusNode.hasFocus;
-    });
-
-    _selectionChipFocusNode.addListener(() {
-      if (!mounted) return;
-      _selectionChipFocused.value = _selectionChipFocusNode.hasFocus;
-    });
-
-    _expandControlsFocusNode.addListener(() {
-      if (!mounted) return;
-      _expandControlsFocused.value = _expandControlsFocusNode.hasFocus;
-    });
-
-    _seasonInputFocusNode.addListener(() {
-      if (!mounted) return;
-      _seasonInputFocused.value = _seasonInputFocusNode.hasFocus;
-    });
-
-    _episodeInputFocusNode.addListener(() {
-      if (!mounted) return;
-      _episodeInputFocused.value = _episodeInputFocusNode.hasFocus;
-    });
+    // Focus listeners removed - now using onFocusChange callbacks directly in widgets
 
     _listAnimationController.forward();
     _loadDefaultSettings();
@@ -240,27 +188,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Dispose old focus nodes if list shrunk
     while (_cardFocusNodes.length > _torrents.length) {
       _cardFocusNodes.removeLast().dispose();
-      _cardFocusStates.removeLast().dispose();
     }
 
     // Add new focus nodes if list grew
     while (_cardFocusNodes.length < _torrents.length) {
       final index = _cardFocusNodes.length;
       final node = FocusNode(debugLabel: 'torrent-card-$index');
-      final focusState = ValueNotifier<bool>(false);
-      node.addListener(() {
-        if (!mounted) return;
-        focusState.value = node.hasFocus;
-        if (node.hasFocus) {
-          // Auto-scroll to focused card
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            // Will be handled by Scrollable.ensureVisible in the widget
-          });
-        }
-      });
       _cardFocusNodes.add(node);
-      _cardFocusStates.add(focusState);
     }
   }
 
@@ -469,13 +403,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final engineId = engine.name;
       if (!_engineTileFocusNodes.containsKey(engineId)) {
         final node = FocusNode(debugLabel: 'engine-tile-$engineId');
-        final focusState = ValueNotifier<bool>(false);
-        node.addListener(() {
-          if (!mounted) return;
-          focusState.value = node.hasFocus;
-        });
         _engineTileFocusNodes[engineId] = node;
-        _engineTileFocusStates[engineId] = focusState;
+        _engineTileFocusStates[engineId] = false;
       }
     }
   }
@@ -510,13 +439,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _filterButtonFocusNode.dispose();
     _clearFiltersButtonFocusNode.dispose();
 
-    // Dispose ValueNotifiers for focus states
-    _searchFocused.dispose();
-    _providerAccordionFocused.dispose();
-    _advancedButtonFocused.dispose();
-    _sortDirectionFocused.dispose();
-    _filterButtonFocused.dispose();
-    _clearFiltersButtonFocused.dispose();
+    // Focus states are now regular bools - no disposal needed
 
     // Dispose IMDB Smart Search Mode resources
     _modeSelectorFocusNode.dispose();
@@ -524,11 +447,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _expandControlsFocusNode.dispose();
     _seasonInputFocusNode.dispose();
     _episodeInputFocusNode.dispose();
-    _modeSelectorFocused.dispose();
-    _selectionChipFocused.dispose();
-    _expandControlsFocused.dispose();
-    _seasonInputFocused.dispose();
-    _episodeInputFocused.dispose();
     _seasonController.dispose();
     _episodeController.dispose();
     _imdbSearchDebouncer?.cancel();
@@ -540,15 +458,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
-    for (final state in _cardFocusStates) {
-      state.dispose();
-    }
+    // Card focus states now use index tracking - no disposal needed
+
     // Dispose dynamic engine focus nodes
     for (final node in _engineTileFocusNodes.values) {
       node.dispose();
-    }
-    for (final state in _engineTileFocusStates.values) {
-      state.dispose();
     }
     _engineTileFocusNodes.clear();
     _engineTileFocusStates.clear();
@@ -924,6 +838,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final label = selection == null ? 'Adv' : 'Adv*';
     return Focus(
       focusNode: _advancedButtonFocusNode,
+      onFocusChange: (focused) {
+        if (_advancedButtonFocused != focused) {
+          setState(() {
+            _advancedButtonFocused = focused;
+          });
+        }
+      },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
@@ -937,19 +858,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         message: selection == null
             ? 'Search via IMDb + Torrentio'
             : 'Advanced Torrentio search active',
-        child: ValueListenableBuilder<bool>(
-          valueListenable: _advancedButtonFocused,
-          builder: (context, advancedButtonFocused, child) {
-            return Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                border: advancedButtonFocused
-                    ? Border.all(color: Colors.white, width: 2)
-                    : null,
-              ),
-              child: child,
-            );
-          },
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: _advancedButtonFocused
+                ? Border.all(color: Colors.white, width: 2)
+                : null,
+          ),
           child: TextButton.icon(
             onPressed: selection == null
                 ? _openAdvancedSearchDialog
@@ -979,6 +894,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Widget _buildModeSelector() {
     return Focus(
       focusNode: _modeSelectorFocusNode,
+      onFocusChange: (focused) {
+        if (_modeSelectorFocused != focused) {
+          setState(() {
+            _modeSelectorFocused = focused;
+          });
+        }
+      },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
@@ -989,17 +911,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
         return KeyEventResult.ignored;
       },
-      child: ValueListenableBuilder<bool>(
-        valueListenable: _modeSelectorFocused,
-        builder: (context, isFocused, child) {
-          return Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              border: isFocused
-                  ? Border.all(color: Colors.white, width: 2)
-                  : null,
-            ),
-            child: PopupMenuButton<SearchMode>(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: _modeSelectorFocused
+              ? Border.all(color: Colors.white, width: 2)
+              : null,
+        ),
+        child: PopupMenuButton<SearchMode>(
           onSelected: (mode) {
             setState(() {
               _searchMode = mode;
@@ -1105,9 +1024,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
             ),
           ),
-            ),
-          );
-        },
+        ),
       ),
     );
   }
@@ -1168,7 +1085,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Future<void> _performImdbAutocompleteSearch(String query) async {
     try {
-      debugPrint('IMDB Smart Search: Searching for "$query"');
       final results = await ImdbLookupService.searchTitles(query);
 
       if (!mounted) return;
@@ -1189,17 +1105,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       });
 
       // On TV: Auto-focus first result after results appear
-      if (_isTelevision && _autocompleteFocusNodes.isNotEmpty) {
+      if (_isTelevision && _autocompleteFocusNodes.isNotEmpty && results.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_autocompleteFocusNodes.isNotEmpty && mounted) {
-            _autocompleteFocusNodes[0].requestFocus();
-          }
+          Future.delayed(const Duration(milliseconds: 150), () {
+            if (_autocompleteFocusNodes.isNotEmpty && mounted) {
+              _autocompleteFocusNodes[0].requestFocus();
+            }
+          });
         });
       }
-
-      debugPrint('IMDB Smart Search: Found ${results.length} results');
     } catch (e) {
-      debugPrint('IMDB Smart Search: Error - $e');
+      debugPrint('IMDB autocomplete error: $e');
       if (!mounted) return;
       setState(() {
         _imdbAutocompleteResults.clear();
@@ -1211,7 +1127,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // Handle IMDB result selection
   void _onImdbResultSelected(ImdbTitleResult result) async {
-    debugPrint('IMDB Smart Search: Selected ${result.title} (${result.imdbId})');
 
     // Clear autocomplete immediately
     setState(() {
@@ -1234,10 +1149,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final shortData = details['short'] as Map<String, dynamic>;
         final type = shortData['@type']?.toString() ?? '';
         isSeries = type == 'TVSeries';
-        debugPrint('IMDB Smart Search: Title type is $type (isSeries: $isSeries)');
       } else {
         // Fallback if structure is different
-        debugPrint('IMDB Smart Search: Could not determine type, defaulting to Movie');
         isSeries = false;
       }
 
@@ -1250,34 +1163,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _seriesControlsExpanded = !isSeries; // Movies don't need controls, series start collapsed
       });
 
-      debugPrint('IMDB result selected: isSeries=$isSeries, focusNode canRequestFocus=${_seasonInputFocusNode.canRequestFocus}');
-
-      // For series on TV, automatically focus the Season input after selection
-      if (_isTelevision && isSeries) {
-        debugPrint('=== AUTO-FOCUS TRIGGERED: isTelevision=$_isTelevision, isSeries=$isSeries ===');
-        // Wait for build to complete before requesting focus
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          debugPrint('=== PostFrameCallback: mounted=$mounted ===');
-          if (mounted) {
-            // Small delay to ensure widget is fully rendered and focusable
-            Future.delayed(const Duration(milliseconds: 100), () {
-              debugPrint('=== After delay: mounted=$mounted, canRequestFocus=${_seasonInputFocusNode.canRequestFocus}, hasFocus=${_seasonInputFocusNode.hasFocus} ===');
-              if (mounted && _seasonInputFocusNode.canRequestFocus) {
-                debugPrint('=== REQUESTING FOCUS on Season input (hashCode: ${_seasonInputFocusNode.hashCode}) ===');
-                _seasonInputFocusNode.requestFocus();
-                debugPrint('=== Focus requested. hasFocus=${_seasonInputFocusNode.hasFocus} ===');
-              } else {
-                debugPrint('=== CANNOT AUTO-FOCUS: mounted=$mounted, canRequestFocus=${_seasonInputFocusNode.canRequestFocus} ===');
-              }
-            });
-          }
-        });
-      } else {
-        debugPrint('=== AUTO-FOCUS SKIPPED: isTelevision=$_isTelevision, isSeries=$isSeries ===');
-      }
-
       // Search immediately for both movies and series
-      // Series will search with default params (null season/episode means all episodes)
+      // For series, this will search with default params (null season/episode means all episodes)
+      // Users can refine the search later by expanding controls and setting season/episode
       _createAdvancedSelectionAndSearch();
     } catch (e) {
       debugPrint('IMDB Smart Search: Error fetching title details: $e');
@@ -1380,7 +1268,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         ],
       ),
-      constraints: const BoxConstraints(maxHeight: 400),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.5,
+      ),
       child: _isImdbSearching
           ? const Padding(
               padding: EdgeInsets.all(32.0),
@@ -1431,18 +1321,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       if (index < _autocompleteFocusNodes.length - 1) {
-        debugPrint('=== Autocomplete: Moving to next item (${index + 1}) ===');
         _autocompleteFocusNodes[index + 1].requestFocus();
       } else {
         // Last autocomplete item - navigate to Season box if series is selected
-        debugPrint('=== Autocomplete: Last item. isSeries=$_isSeries, selected=${_selectedImdbTitle != null} ===');
         if (_isSeries && _selectedImdbTitle != null) {
-          debugPrint('=== Autocomplete: Navigating to Season box ===');
-          debugPrint('Season focusNode: hashCode=${_seasonInputFocusNode.hashCode}, canRequestFocus=${_seasonInputFocusNode.canRequestFocus}');
           _seasonInputFocusNode.requestFocus();
-          debugPrint('After requestFocus: hasFocus=${_seasonInputFocusNode.hasFocus}');
-        } else {
-          debugPrint('=== Autocomplete: Cannot navigate to Season box (not a series or no selection) ===');
         }
       }
       return KeyEventResult.handled;
@@ -1472,9 +1355,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Arrow Right or Arrow Down -> Episode field
     if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
         event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      debugPrint('=== Season box: Navigating to Episode box ===');
       _episodeInputFocusNode.requestFocus();
-      debugPrint('Episode hasFocus: ${_episodeInputFocusNode.hasFocus}');
       return KeyEventResult.handled;
     }
 
@@ -1482,7 +1363,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
         event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      debugPrint('=== Season box: Navigating back to Search field ===');
       _searchFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
@@ -1496,16 +1376,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Arrow Left or Arrow Up -> Season field
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
         event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      debugPrint('=== Episode box: Navigating to Season box ===');
       _seasonInputFocusNode.requestFocus();
-      debugPrint('Season hasFocus: ${_seasonInputFocusNode.hasFocus}');
       return KeyEventResult.handled;
+    }
+
+    // Arrow Down -> Navigate to first torrent result if available
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_cardFocusNodes.isNotEmpty) {
+        _cardFocusNodes[0].requestFocus();
+        return KeyEventResult.handled;
+      }
     }
 
     // Escape/Back -> Search field
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      debugPrint('=== Episode box: Navigating back to Search field ===');
       _searchFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
@@ -1521,24 +1406,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // Build movie/series type selector and S/E inputs
   Widget _buildImdbTypeAndEpisodeControls() {
-    debugPrint('Building S/E controls: selected=${_selectedImdbTitle != null}, series=$_isSeries, collapsed=$_imdbControlsCollapsed, searching=$_isImdbSearching');
-
     if (_selectedImdbTitle == null) {
-      debugPrint('Not building S/E: no selected title');
       return const SizedBox.shrink();
     }
 
     // For movies: hide when collapsed
     // For series: never hide (we show either the expandable button or full controls)
     if (_imdbControlsCollapsed && !_isSeries) {
-      debugPrint('Not building S/E: controls collapsed and not series');
       return const SizedBox.shrink();
     }
 
     // Show loading indicator while fetching title details
     if (_isImdbSearching) {
-      debugPrint('Building S/E: showing loading indicator');
-
       return Container(
         margin: const EdgeInsets.only(top: 8, bottom: 8),
         padding: const EdgeInsets.all(12),
@@ -1606,15 +1485,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // For movies, don't show controls at all
     if (!_isSeries) {
-      debugPrint('Not building S/E: not a series');
       return const SizedBox.shrink();
     }
 
     // For series, show S/E inputs directly (type is auto-detected)
-    debugPrint('Building S/E inputs for series');
-    debugPrint('Season focusNode: ${_seasonInputFocusNode.hashCode}, canRequestFocus: ${_seasonInputFocusNode.canRequestFocus}');
-    debugPrint('Episode focusNode: ${_episodeInputFocusNode.hashCode}, canRequestFocus: ${_episodeInputFocusNode.canRequestFocus}');
-
     return Container(
       margin: const EdgeInsets.only(top: 8, bottom: 8),
       child: Row(
@@ -1642,7 +1516,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                 ),
                 onChanged: (_) {
-                  debugPrint('Season changed: ${_seasonController.text}');
                   _createAdvancedSelectionAndSearch();
                 },
               ),
@@ -1672,7 +1545,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                 ),
                 onChanged: (_) {
-                  debugPrint('Episode changed: ${_episodeController.text}');
                   _createAdvancedSelectionAndSearch();
                 },
               ),
@@ -1684,27 +1556,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildProvidersAccordion(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: _providerAccordionFocused,
-      builder: (context, providerAccordionFocused, child) {
-        return Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: providerAccordionFocused
-                  ? const Color(0xFF3B82F6).withValues(alpha: 0.6)
-                  : const Color(0xFF3B82F6).withValues(alpha: 0.2),
-              width: providerAccordionFocused ? 2 : 1,
-            ),
-          ),
-          child: child,
-        );
-      },
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _providerAccordionFocused
+              ? const Color(0xFF3B82F6).withValues(alpha: 0.6)
+              : const Color(0xFF3B82F6).withValues(alpha: 0.2),
+          width: _providerAccordionFocused ? 2 : 1,
+        ),
+      ),
       child: Column(
         children: [
           FocusableActionDetector(
             focusNode: _providerAccordionFocusNode,
+            onShowFocusHighlight: (focused) {
+              if (_providerAccordionFocused != focused) {
+                setState(() {
+                  _providerAccordionFocused = focused;
+                });
+              }
+            },
             shortcuts: _activateShortcuts,
             actions: <Type, Action<Intent>>{
               ActivateIntent: CallbackAction<ActivateIntent>(
@@ -1719,20 +1592,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               canRequestFocus: false,
               onTap: () =>
                   setState(() => _showProvidersPanel = !_showProvidersPanel),
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _providerAccordionFocused,
-                builder: (context, providerAccordionFocused, child) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: providerAccordionFocused
-                          ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
-                          : Colors.transparent,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: child,
-                  );
-                },
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: _providerAccordionFocused
+                      ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                      : Colors.transparent,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     Icon(
@@ -1770,42 +1637,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     children: _availableEngines.map((engine) {
                       final engineId = engine.name;
                       final focusNode = _engineTileFocusNodes[engineId];
-                      final focusState = _engineTileFocusStates[engineId];
                       final isEnabled = _engineStates[engineId] ?? false;
+                      final isFocused = _engineTileFocusStates[engineId] ?? false;
 
-                      // If focus state exists, use ValueListenableBuilder to rebuild on focus changes
-                      if (focusState != null) {
-                        return ValueListenableBuilder<bool>(
-                          valueListenable: focusState,
-                          builder: (context, isFocused, child) {
-                            return _buildProviderSwitch(
-                              context,
-                              label: engine.displayName,
-                              value: isEnabled,
-                              onToggle: (value) => _setEngineEnabled(engineId, value),
-                              tileFocusNode: focusNode ?? FocusNode(),
-                              tileFocused: isFocused,
-                              onFocusChange: (visible) {
-                                if (focusState.value != visible) {
-                                  focusState.value = visible;
-                                }
-                              },
-                            );
-                          },
-                        );
-                      }
-
-                      // Fallback if focus state doesn't exist (shouldn't happen)
                       return _buildProviderSwitch(
                         context,
                         label: engine.displayName,
                         value: isEnabled,
                         onToggle: (value) => _setEngineEnabled(engineId, value),
                         tileFocusNode: focusNode ?? FocusNode(),
-                        tileFocused: false,
+                        tileFocused: isFocused,
                         onFocusChange: (visible) {
-                          if (_engineTileFocusStates[engineId]?.value != visible) {
-                            _engineTileFocusStates[engineId]?.value = visible;
+                          if (_engineTileFocusStates[engineId] != visible) {
+                            setState(() {
+                              _engineTileFocusStates[engineId] = visible;
+                            });
                           }
                         },
                       );
@@ -6175,37 +6021,31 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: ValueListenableBuilder<bool>(
-                            valueListenable: _searchFocused,
-                            builder: (context, searchFocused, child) {
-                              return AnimatedContainer(
-                                duration: const Duration(milliseconds: 160),
-                                curve: Curves.easeOutCubic,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: searchFocused
-                                      ? Border.all(
-                                          color: const Color(0xFF6366F1),
-                                          width: 1.6,
-                                        )
-                                      : null,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color:
-                                          (searchFocused
-                                                  ? const Color(0xFF6366F1)
-                                                  : const Color(0xFF6366F1))
-                                              .withValues(
-                                                alpha: searchFocused ? 0.45 : 0.3,
-                                              ),
-                                      blurRadius: searchFocused ? 16 : 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOutCubic,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: _searchFocused
+                                  ? Border.all(
+                                      color: const Color(0xFF6366F1),
+                                      width: 1.6,
+                                    )
+                                  : null,
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      (_searchFocused
+                                              ? const Color(0xFF6366F1)
+                                              : const Color(0xFF6366F1))
+                                          .withValues(
+                                            alpha: _searchFocused ? 0.45 : 0.3,
+                                          ),
+                                  blurRadius: _searchFocused ? 16 : 10,
+                                  offset: const Offset(0, 4),
                                 ),
-                                child: child,
-                              );
-                            },
+                              ],
+                            ),
                             child: Shortcuts(
                               shortcuts: const <ShortcutActivator, Intent>{
                                 SingleActivator(LogicalKeyboardKey.arrowDown):
@@ -6218,22 +6058,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   NextFocusIntent:
                                       CallbackAction<NextFocusIntent>(
                                         onInvoke: (intent) {
-                                          debugPrint('=== NextFocus from search: autocomplete=${_imdbAutocompleteResults.isNotEmpty}, series=$_isSeries, selected=${_selectedImdbTitle != null} ===');
                                           // Custom logic: Check if should navigate to autocomplete or Season box
                                           if (_imdbAutocompleteResults.isNotEmpty && _autocompleteFocusNodes.isNotEmpty) {
-                                            debugPrint('=== Navigating to first autocomplete item ===');
                                             _autocompleteFocusNodes[0].requestFocus();
                                             return null;
                                           }
                                           if (_isSeries && _selectedImdbTitle != null) {
-                                            debugPrint('=== Navigating to Season input box ===');
-                                            debugPrint('Season focusNode: hashCode=${_seasonInputFocusNode.hashCode}, canRequestFocus=${_seasonInputFocusNode.canRequestFocus}');
                                             _seasonInputFocusNode.requestFocus();
-                                            debugPrint('After requestFocus: hasFocus=${_seasonInputFocusNode.hasFocus}');
                                             return null;
                                           }
                                           // Default: Let FocusTraversalPolicy handle it
-                                          debugPrint('=== Using default focus traversal ===');
                                           FocusScope.of(context).nextFocus();
                                           return null;
                                         },
@@ -6248,10 +6082,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         },
                                       ),
                                 },
-                                child: TextField(
-                                  controller: _searchController,
+                                child: Focus(
                                   focusNode: _searchFocusNode,
-                                  onSubmitted: (query) {
+                                  onFocusChange: (focused) {
+                                    if (_searchFocused != focused) {
+                                      setState(() {
+                                        _searchFocused = focused;
+                                      });
+                                    }
+                                  },
+                                  child: TextField(
+                                    controller: _searchController,
+                                    onSubmitted: (query) {
                                     // In IMDB mode, don't trigger search on submit
                                     // unless a selection has been made
                                     if (_searchMode == SearchMode.keyword) {
@@ -6312,6 +6154,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     ),
                                   ),
                                   onChanged: _handleSearchFieldChanged,
+                                  ),
                                 ),
                               ),
                             ),
@@ -6321,6 +6164,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         _buildModeSelector(),
                       ],
                     ),
+
+                    // Helper text for IMDB mode on TV
+                    if (_searchMode == SearchMode.imdb && _isTelevision && _selectedImdbTitle == null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: Color(0xFF7C3AED),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Type a title and press Enter to search IMDB',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     // IMDB Smart Search Mode UI components
                     if (_searchMode == SearchMode.imdb) ...[
@@ -6829,6 +6706,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     const SizedBox(width: 8),
                                     Focus(
                                       focusNode: _sortDirectionFocusNode,
+                                      onFocusChange: (focused) {
+                                        if (_sortDirectionFocused != focused) {
+                                          setState(() {
+                                            _sortDirectionFocused = focused;
+                                          });
+                                        }
+                                      },
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent &&
                                             (event.logicalKey == LogicalKeyboardKey.select ||
@@ -6841,19 +6725,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         }
                                         return KeyEventResult.ignored;
                                       },
-                                      child: ValueListenableBuilder<bool>(
-                                        valueListenable: _sortDirectionFocused,
-                                        builder: (context, sortDirectionFocused, child) {
-                                          return Container(
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: sortDirectionFocused
-                                                  ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                                  : null,
-                                            ),
-                                            child: child,
-                                          );
-                                        },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: _sortDirectionFocused
+                                              ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                              : null,
+                                        ),
                                         child: IconButton(
                                           onPressed: () {
                                             setState(() {
@@ -6880,6 +6758,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     ),
                                     Focus(
                                       focusNode: _filterButtonFocusNode,
+                                      onFocusChange: (focused) {
+                                        if (_filterButtonFocused != focused) {
+                                          setState(() {
+                                            _filterButtonFocused = focused;
+                                          });
+                                        }
+                                      },
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent &&
                                             (event.logicalKey == LogicalKeyboardKey.select ||
@@ -6891,19 +6776,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         }
                                         return KeyEventResult.ignored;
                                       },
-                                      child: ValueListenableBuilder<bool>(
-                                        valueListenable: _filterButtonFocused,
-                                        builder: (context, filterButtonFocused, child) {
-                                          return Container(
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: filterButtonFocused
-                                                  ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                                  : null,
-                                            ),
-                                            child: child,
-                                          );
-                                        },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: _filterButtonFocused
+                                              ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                              : null,
+                                        ),
                                         child: IconButton(
                                           onPressed:
                                               (_allTorrents.isEmpty &&
@@ -6982,6 +6861,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             .toList(),
                                         Focus(
                                           focusNode: _clearFiltersButtonFocusNode,
+                                          onFocusChange: (focused) {
+                                            if (_clearFiltersButtonFocused != focused) {
+                                              setState(() {
+                                                _clearFiltersButtonFocused = focused;
+                                              });
+                                            }
+                                          },
                                           onKeyEvent: (node, event) {
                                             if (event is KeyDownEvent &&
                                                 (event.logicalKey == LogicalKeyboardKey.select ||
@@ -6991,19 +6877,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             }
                                             return KeyEventResult.ignored;
                                           },
-                                          child: ValueListenableBuilder<bool>(
-                                            valueListenable: _clearFiltersButtonFocused,
-                                            builder: (context, clearFiltersButtonFocused, child) {
-                                              return Container(
-                                                decoration: BoxDecoration(
-                                                  borderRadius: BorderRadius.circular(4),
-                                                  border: clearFiltersButtonFocused
-                                                      ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                                      : null,
-                                                ),
-                                                child: child,
-                                              );
-                                            },
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: _clearFiltersButtonFocused
+                                                  ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                                  : null,
+                                            ),
                                             child: TextButton(
                                               onPressed: _clearAllFilters,
                                               child: const Text(
@@ -7573,25 +7453,55 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             _handleTorrentCardActivated(torrent, index);
             return KeyEventResult.handled;
           }
+          // Handle Arrow Up from first card - navigate to Episode input (if series) or Search field
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp &&
+              index == 0) {
+            // If series with selected title, go to Episode input
+            if (_isSeries && _selectedImdbTitle != null) {
+              _episodeInputFocusNode.requestFocus();
+            } else {
+              _searchFocusNode.requestFocus();
+            }
+            return KeyEventResult.handled;
+          }
+          // Handle Back/Escape to return to search field (TV shortcut)
+          if (_isTelevision && event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.escape ||
+                  event.logicalKey == LogicalKeyboardKey.backspace)) {
+            // Only handle if this is the first card (avoid capturing all back presses)
+            if (index == 0) {
+              _searchFocusNode.requestFocus();
+              return KeyEventResult.handled;
+            }
+          }
           return KeyEventResult.ignored;
         },
-        child: ValueListenableBuilder<bool>(
-          valueListenable: _cardFocusStates[index],
-          builder: (context, isFocused, child) {
-            if (isFocused) {
-              // Auto-scroll when focused
-              WidgetsBinding.instance.addPostFrameCallback((_) {
+        onFocusChange: (focused) {
+          final wasFocused = _focusedCardIndex == index;
+          if (focused && !wasFocused) {
+            setState(() {
+              _focusedCardIndex = index;
+            });
+            // Auto-scroll when focused
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final currentContext = _cardFocusNodes[index].context;
+              if (currentContext != null && mounted) {
                 Scrollable.ensureVisible(
-                  context,
+                  currentContext,
                   alignment: 0.2,
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeOutCubic,
                 );
-              });
-            }
-            return buildCardContent(isFocused);
-          },
-        ),
+              }
+            });
+          } else if (!focused && wasFocused) {
+            setState(() {
+              _focusedCardIndex = -1;
+            });
+          }
+        },
+        child: buildCardContent(_focusedCardIndex == index),
       );
     }
 
