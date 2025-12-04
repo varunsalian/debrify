@@ -11,7 +11,6 @@ import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/rd_folder_tree_builder.dart';
-import '../widgets/stat_chip.dart';
 import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
@@ -2422,180 +2421,132 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Widget _buildDownloadCard(DebridDownload download) {
-    final borderColor = Colors.white.withValues(alpha: 0.08);
-    final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
     final canStream = download.streamable == 1;
-    final showProblematicVideo =
-        canStream && FileUtils.isProblematicVideo(download.filename);
-    const playColor = Color(0xFF7F1D1D);
-    const downloadColor = Color(0xFF065F46);
-    const problematicColor = Color(0xFFD97706);
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 12),
-          ),
-          BoxShadow(
-            color: glowColor,
-            blurRadius: 26,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final isVideo = FileUtils.isVideoFile(download.filename);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
+                Icon(
+                  canStream || isVideo
+                      ? Icons.play_circle_outline
+                      : Icons.insert_drive_file,
+                  color: canStream || isVideo ? Colors.blue : Colors.grey,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         download.filename,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           fontSize: 16,
-                          color: Colors.white,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildDownloadMoreOptionsButton(download),
-                  ],
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            Formatters.formatFileSize(download.filesize),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('•', style: TextStyle(color: Colors.grey.shade600)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              download.host,
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    StatChip(
-                      icon: Icons.storage,
-                      text: Formatters.formatFileSize(download.filesize),
-                      color: const Color(0xFF6366F1),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (canStream) ...[
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _handlePlayDownload(download),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play'),
                     ),
-                    const SizedBox(width: 8),
-                    StatChip(
-                      icon: Icons.link,
-                      text:
-                          '${download.chunks} chunk${download.chunks == 1 ? '' : 's'}',
-                      color: const Color(0xFFF59E0B),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _handleQueueDownload(download),
+                    icon: const Icon(Icons.download, size: 18),
+                    label: const Text('Download'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
                     ),
-                    const SizedBox(width: 8),
-                    StatChip(
-                      icon: canStream ? Icons.play_arrow : Icons.download,
-                      text: canStream ? 'Streamable' : 'Download only',
-                      color: canStream
-                          ? const Color(0xFFE50914)
-                          : const Color(0xFF10B981),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(Icons.computer, size: 16, color: Colors.grey[400]),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        download.host,
-                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 8),
+                // 3-dot menu
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  tooltip: 'More options',
+                  onSelected: (value) {
+                    if (value == 'copy_link') {
+                      _handleDownloadAction(download);
+                    } else if (value == 'delete') {
+                      _handleDeleteDownload(download);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'copy_link',
+                      child: Row(
+                        children: [
+                          Icon(Icons.link, size: 18, color: Colors.orange),
+                          SizedBox(width: 12),
+                          Text('Copy Link'),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Generated ${Formatters.formatDateString(download.generated)}',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                          SizedBox(width: 12),
+                          Text('Delete'),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF131E33), Color(0xFF0B1224)],
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(18),
-                bottomRight: Radius.circular(18),
-              ),
-              border: Border(
-                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 380;
-                  final Widget downloadButton = _buildPrimaryActionButton(
-                    icon: Icons.download_rounded,
-                    label: 'Download',
-                    backgroundColor: downloadColor,
-                    onPressed: () => _handleQueueDownload(download),
-                  );
-
-                  if (!canStream) {
-                    return SizedBox(
-                      width: double.infinity,
-                      child: downloadButton,
-                    );
-                  }
-
-                  final Widget playButton = _buildPrimaryActionButton(
-                    icon: showProblematicVideo
-                        ? Icons.warning
-                        : Icons.play_arrow,
-                    label: 'Play',
-                    backgroundColor: showProblematicVideo
-                        ? problematicColor
-                        : playColor,
-                    onPressed: () => _handlePlayDownload(download),
-                  );
-
-                  if (isCompact) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        playButton,
-                        const SizedBox(height: 8),
-                        downloadButton,
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: playButton),
-                      const SizedBox(width: 12),
-                      Expanded(child: downloadButton),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
