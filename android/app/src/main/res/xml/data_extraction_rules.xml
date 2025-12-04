@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <include domain="sharedpref" path="."/>
-        <exclude domain="sharedpref" path="device.xml"/>
+        <!-- Exclude all SharedPreferences to prevent API keys and passwords from being backed up to Google Drive -->
+        <exclude domain="sharedpref" path="."/>
     </cloud-backup>
     <device-transfer>
-        <include domain="sharedpref" path="."/>
-        <exclude domain="sharedpref" path="device.xml"/>
+        <!-- Exclude all SharedPreferences from device-to-device transfer to prevent credential exposure -->
+        <exclude domain="sharedpref" path="."/>
     </device-transfer>
 </data-extraction-rules> 
