@@ -28,6 +28,9 @@ import '../services/engine/engine_registry.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/settings_manager.dart';
 import '../services/debrify_tv_zip_importer.dart';
+import '../services/community/magnet_yaml_service.dart';
+import '../services/community/community_channel_model.dart';
+import '../services/community/community_channels_service.dart';
 import '../services/main_page_bridge.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
@@ -68,11 +71,11 @@ int _parseRandomStartPercent(dynamic value) {
 
 enum _SettingsScope { quickPlay, channels }
 
-enum _ImportChannelsMode { device, url }
+enum _ImportChannelsMode { device, url, community }
 
 enum _ChannelImportOrigin { device, url }
 
-enum _ChannelImportType { zip, yaml, text }
+enum _ChannelImportType { zip, yaml, text, debrify }
 
 String _formatBytes(int bytes) {
   if (bytes <= 0) {
@@ -1915,6 +1918,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       case _ImportChannelsMode.url:
         await _handleImportChannelsFromUrl();
         break;
+      case _ImportChannelsMode.community:
+        await _handleImportChannelsFromCommunity();
+        break;
     }
   }
 
@@ -1937,7 +1943,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   leading: const Icon(Icons.sd_storage_rounded),
                   title: const Text('Import from device'),
                   subtitle: const Text(
-                    'Load a .zip, .yaml, or .txt channel file',
+                    'Load a .zip, .yaml, .txt, or .debrify file',
                   ),
                   onTap: () => Navigator.of(
                     dialogContext,
@@ -1945,12 +1951,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.link_rounded),
-                  title: const Text('Import from URL'),
+                  title: const Text('Import from Link'),
                   subtitle: const Text(
-                    'Download a .zip, .yaml, or .txt channel file',
+                    'Paste a debrify:// link or URL to a channel file',
                   ),
                   onTap: () =>
                       Navigator.of(dialogContext).pop(_ImportChannelsMode.url),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.people_rounded),
+                  title: const Text('Import Community Shared Channels'),
+                  subtitle: const Text(
+                    'Browse and import channels from community repositories',
+                  ),
+                  onTap: () => Navigator.of(dialogContext)
+                      .pop(_ImportChannelsMode.community),
                 ),
               ],
             ),
@@ -1977,7 +1992,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<void> _handleImportChannelsFromDevice() async {
     final selection = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['zip', 'yaml', 'yml', 'txt'],
+      allowedExtensions: const ['zip', 'yaml', 'yml', 'txt', 'debrify'],
       withData: true,
       withReadStream: true,
     );
@@ -2035,20 +2050,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _handleImportChannelsFromUrl() async {
-    final url = await _promptImportUrl();
-    if (url == null) {
+    final input = await _promptImportUrl();
+    if (input == null) {
       return;
     }
 
+    final trimmedInput = input.trim();
+
+    // Check if it's a debrify link (pasted directly)
+    if (MagnetYamlService.isMagnetLink(trimmedInput)) {
+      await _importDebrifyLinkDirectly(trimmedInput);
+      return;
+    }
+
+    // Otherwise, treat as URL
     Uri uri;
     try {
-      uri = Uri.parse(url.trim());
+      uri = Uri.parse(trimmedInput);
       if (!uri.hasAbsolutePath ||
           (uri.scheme != 'http' && uri.scheme != 'https')) {
         throw const FormatException('invalid');
       }
     } catch (_) {
-      _showSnack('Enter a valid http(s) URL.', color: Colors.red);
+      _showSnack('Enter a valid debrify:// link or http(s) URL.', color: Colors.red);
       return;
     }
 
@@ -2120,6 +2144,108 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<void> _handleImportChannelsFromCommunity() async {
+    final selectedChannels = await _promptCommunityChannelsDialog();
+    if (selectedChannels == null || selectedChannels.isEmpty) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _status = 'Importing community channels...';
+    });
+
+    _showChannelCreationDialog('Importing community channels...');
+
+    int successCount = 0;
+    int failureCount = 0;
+    final List<String> errors = [];
+
+    for (int i = 0; i < selectedChannels.length; i++) {
+      final channel = selectedChannels[i];
+      _updateProgress([
+        'Downloading channel ${i + 1} of ${selectedChannels.length}...',
+        channel.name,
+      ], replace: true);
+
+      try {
+        // Download the channel file
+        final bytes = await CommunityChannelsService.downloadChannelFile(channel.url);
+
+        if (bytes.isEmpty) {
+          throw Exception('Downloaded file is empty');
+        }
+
+        // Import using existing method (don't show dialog/summary for each channel)
+        final success = await _importDebrifyBytes(
+          channel.name,
+          bytes,
+          showDialog: false,
+          showSummary: false,
+        );
+
+        if (success) {
+          successCount++;
+        } else {
+          failureCount++;
+          errors.add('${channel.name}: Import failed');
+        }
+      } catch (error) {
+        failureCount++;
+        errors.add('${channel.name}: ${error.toString()}');
+      }
+    }
+
+    _updateProgress([
+      'Import complete!',
+      if (successCount > 0) 'Successfully imported $successCount channel(s)',
+      if (failureCount > 0) 'Failed to import $failureCount channel(s)',
+      ...errors.take(5), // Show first 5 errors
+    ], replace: true);
+
+    // Show summary
+    final Color snackColor = successCount > 0
+        ? (failureCount > 0 ? Colors.orange : Colors.green)
+        : Colors.red;
+
+    final String message = successCount > 0
+        ? 'Imported $successCount channel${successCount > 1 ? 's' : ''}${failureCount > 0 ? ', $failureCount failed' : ''}'
+        : 'Failed to import channels';
+
+    _showSnack(message, color: snackColor);
+
+    // Keep dialog open for 2 seconds to show summary
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (mounted) {
+      setState(() {
+        _isBusy = false;
+        _status = '';
+      });
+      _closeProgressDialog();
+    }
+  }
+
+  Future<List<CommunityChannel>?> _promptCommunityChannelsDialog() async {
+    if (!mounted) {
+      return null;
+    }
+
+    return showDialog<List<CommunityChannel>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return _CommunityChannelsDialog(
+          isAndroidTv: _isAndroidTv,
+        );
+      },
+    );
+  }
+
   Future<Uint8List> _readPickedFileBytes(PlatformFile file) async {
     if (file.bytes != null && file.bytes!.isNotEmpty) {
       return Uint8List.fromList(file.bytes!);
@@ -2145,7 +2271,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final type = _determineImportType(sourceName, bytes);
     if (type == null) {
       _showSnack(
-        'Unsupported file type. Select a .zip, .yaml, or .txt file.',
+        'Unsupported file type. Select a .zip, .yaml, .txt, or .debrify file.',
         color: Colors.orange,
       );
       return false;
@@ -2158,6 +2284,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return await _importYamlBytes(sourceName, bytes, origin);
       case _ChannelImportType.text:
         return await _importTextBytes(sourceName, bytes);
+      case _ChannelImportType.debrify:
+        return await _importDebrifyBytes(sourceName, bytes);
     }
   }
 
@@ -2180,8 +2308,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   _ChannelImportType? _determineImportType(String sourceName, Uint8List bytes) {
     final lower = sourceName.toLowerCase();
+
+    // Check extension first
     if (lower.endsWith('.zip')) {
       return _ChannelImportType.zip;
+    }
+    if (lower.endsWith('.debrify')) {
+      return _ChannelImportType.debrify;
     }
     if (lower.endsWith('.yaml') || lower.endsWith('.yml')) {
       return _ChannelImportType.yaml;
@@ -2190,9 +2323,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return _ChannelImportType.text;
     }
 
+    // Fallback: check file signature for zip
     if (bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4b) {
       // PK — zip signature
       return _ChannelImportType.zip;
+    }
+
+    // Smart content detection for unknown extensions
+    try {
+      final content = utf8.decode(bytes).trim();
+      if (content.startsWith('debrify://')) {
+        return _ChannelImportType.debrify;
+      }
+    } catch (_) {
+      // If UTF-8 decode fails, not a text file
     }
 
     return null;
@@ -2311,6 +2455,87 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return true;
   }
 
+  Future<bool> _importDebrifyBytes(
+    String sourceName,
+    Uint8List bytes, {
+    bool showDialog = true,
+    bool showSummary = true,
+  }) async {
+    final content = utf8.decode(bytes).trim();
+
+    // Validate debrify link format
+    if (!MagnetYamlService.isMagnetLink(content)) {
+      throw const FormatException('Not a valid Debrify link.');
+    }
+
+    if (showDialog) {
+      _showChannelCreationDialog('Importing channel…');
+    }
+    _updateProgress(['Decoding debrify link…']);
+
+    // Decode debrify link
+    final result = MagnetYamlService.decode(content);
+
+    _updateProgress(['Parsing channel data…']);
+
+    // Parse the decoded YAML
+    final channel = await _parseYamlInBackground(
+      result.channelName,
+      result.yamlContent,
+    );
+
+    final parsed = DebrifyTvZipImportResult(
+      channels: [channel],
+      failures: const [],
+    );
+
+    _updateProgress(['Saving channel…']);
+    final persistence = await _persistImportedZipChannels(parsed.channels);
+    _updateProgress([
+      'Saved ${persistence.successes.length} channel(s)',
+      if (persistence.failures.isNotEmpty)
+        '${persistence.failures.length} channel(s) failed',
+    ]);
+
+    if (showSummary) {
+      await _showZipImportSummary(parsed, persistence);
+    }
+    return persistence.successes.isNotEmpty;
+  }
+
+  Future<void> _importDebrifyLinkDirectly(String debrifyLink) async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _status = 'Decoding debrify link…';
+    });
+
+    try {
+      final bytes = utf8.encode(debrifyLink);
+      await _safeImportChannelBytes(
+        sourceName: 'debrify_link',
+        bytes: Uint8List.fromList(bytes),
+        origin: _ChannelImportOrigin.url,
+      );
+    } catch (error) {
+      _showSnack(
+        'Import failed: ${_formatImportError(error)}',
+        color: Colors.red,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+          _status = '';
+        });
+        _closeProgressDialog();
+      }
+    }
+  }
+
   String _stripExtension(String name) {
     final dotIndex = name.lastIndexOf('.');
     if (dotIndex <= 0) {
@@ -2367,7 +2592,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Enter file URL'),
+              title: const Text('Import from Link'),
               content: SizedBox(
                 width: 420,
                 child: Column(
@@ -2376,17 +2601,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     TextField(
                       controller: controller,
                       decoration: InputDecoration(
-                        labelText: 'File URL',
-                        hintText: 'https://example.com/channels.zip',
+                        labelText: 'Debrify Link or File URL',
+                        hintText: 'debrify://channel?... or https://...',
                         errorText: errorText,
                       ),
                       autofocus: true,
                       focusNode: urlFocusNode,
                       keyboardType: TextInputType.url,
+                      maxLines: 3,
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Supports .zip archives, .yaml files, or .txt keyword lists.',
+                      'Paste a debrify:// link or URL to a .zip, .yaml, .txt, or .debrify file.',
                       style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ],
@@ -2402,11 +2628,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     final candidate = controller.text.trim();
                     if (candidate.isEmpty) {
                       setState(() {
-                        errorText = 'Enter a URL to continue.';
+                        errorText = 'Enter a link or URL to continue.';
                       });
                       return;
                     }
 
+                    // Check if it's a debrify link (valid and accepted)
+                    if (MagnetYamlService.isMagnetLink(candidate)) {
+                      Navigator.of(dialogContext).pop(candidate);
+                      return;
+                    }
+
+                    // Otherwise validate as http(s) URL
                     try {
                       final parsed = Uri.parse(candidate);
                       if (!parsed.hasAbsolutePath ||
@@ -2416,14 +2649,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       }
                     } catch (_) {
                       setState(() {
-                        errorText = 'Only http(s) URLs are supported.';
+                        errorText = 'Enter a valid debrify:// link or http(s) URL.';
                       });
                       return;
                     }
 
                     Navigator.of(dialogContext).pop(candidate);
                   },
-                  child: const Text('Download'),
+                  child: const Text('Import'),
                 ),
               ],
             );
@@ -2750,6 +2983,131 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await _deleteChannel(channel.id);
       _showSnack('Channel deleted', color: Colors.orange);
     }
+  }
+
+  Future<void> _handleShareChannelAsMagnet(_DebrifyTvChannel channel) async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _status = 'Generating magnet link…';
+    });
+
+    try {
+      // Generate simplified YAML for sharing (without cached torrents)
+      final yamlContent = _generateChannelYaml(channel);
+
+      // Encode as magnet link
+      final magnetLink = MagnetYamlService.encode(
+        yamlContent: yamlContent,
+        channelName: channel.name,
+      );
+
+      // Estimate sizes for display
+      final estimatedSize = MagnetYamlService.estimateMagnetLinkSize(yamlContent);
+      final compressionRatio = MagnetYamlService.getCompressionRatio(yamlContent);
+
+      if (!mounted) {
+        return;
+      }
+
+      // Show magnet link dialog
+      await showDialog(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Channel Magnet Link'),
+            content: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Share this magnet link with others to import your channel configuration:',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black12,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.black26),
+                    ),
+                    child: SelectableText(
+                      magnetLink,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                      maxLines: 6,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Size: ${_formatBytes(estimatedSize)} • '
+                    'Compression: ${compressionRatio.toStringAsFixed(1)}x',
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Channel: ${channel.name}\n'
+                    'Keywords: ${channel.keywords.length}',
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Close'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: magnetLink));
+                  _showSnack('Magnet link copied!', color: Colors.green);
+                  Navigator.of(dialogContext).pop();
+                },
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Copy Link'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (error) {
+      _showSnack(
+        'Failed to generate magnet link: ${_formatImportError(error)}',
+        color: Colors.red,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+          _status = '';
+        });
+      }
+    }
+  }
+
+  String _generateChannelYaml(_DebrifyTvChannel channel) {
+    // Generate simplified YAML with just channel config (no cached data)
+    final buffer = StringBuffer();
+    buffer.writeln('channel_name: "${channel.name}"');
+    buffer.writeln('avoid_nsfw: ${channel.avoidNsfw}');
+    buffer.writeln('');
+    buffer.writeln('keywords:');
+
+    for (final keyword in channel.keywords) {
+      buffer.writeln('  $keyword:');
+      buffer.writeln('    torrents: []');
+    }
+
+    return buffer.toString();
   }
 
   Future<void> _handleDeleteAllChannels() async {
@@ -6686,6 +7044,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 backgroundColor: const Color(0xFF2563EB),
               ),
               const SizedBox(height: 16),
+              // Share as Magnet Link button
+              _TvFocusableButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  _handleShareChannelAsMagnet(channel);
+                },
+                icon: Icons.share_rounded,
+                label: 'Share as Magnet Link',
+                backgroundColor: const Color(0xFF10B981),
+              ),
+              const SizedBox(height: 16),
               // Delete button
               _TvFocusableButton(
                 onPressed: () {
@@ -9194,6 +9563,596 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
             ],
           ),
       ),
+    );
+  }
+}
+
+/// Dialog for browsing and selecting community shared channels
+class _CommunityChannelsDialog extends StatefulWidget {
+  final bool isAndroidTv;
+
+  const _CommunityChannelsDialog({
+    required this.isAndroidTv,
+  });
+
+  @override
+  State<_CommunityChannelsDialog> createState() =>
+      _CommunityChannelsDialogState();
+}
+
+class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
+  final TextEditingController _repoUrlController = TextEditingController(
+    text: CommunityChannelsService.defaultRepoUrl,
+  );
+  final FocusNode _repoUrlFocusNode = FocusNode();
+  final FocusNode _fetchButtonFocusNode = FocusNode();
+  final FocusNode _selectAllFocusNode = FocusNode();
+  final FocusNode _cancelButtonFocusNode = FocusNode();
+  final FocusNode _importButtonFocusNode = FocusNode();
+
+  CommunityChannelManifest? _manifest;
+  bool _isLoading = false;
+  String? _errorMessage;
+  bool _selectAll = false;
+  final Map<String, FocusNode> _channelFocusNodes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    // Set up focus nodes for keyboard navigation
+    if (widget.isAndroidTv) {
+      _setupFocusNavigation();
+    }
+  }
+
+  void _setupFocusNavigation() {
+    // Setup DPAD navigation for URL input field
+    _repoUrlFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowDown) {
+        _fetchButtonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowRight &&
+          _repoUrlController.selection.baseOffset == _repoUrlController.text.length) {
+        _fetchButtonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+
+    // Setup DPAD navigation for fetch button
+    _fetchButtonFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        _repoUrlFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        _repoUrlFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown) {
+        if (_manifest != null && _manifest!.channels.isNotEmpty) {
+          _selectAllFocusNode.requestFocus();
+        } else {
+          _cancelButtonFocusNode.requestFocus();
+        }
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+
+    // Setup DPAD navigation for select all checkbox
+    _selectAllFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        _fetchButtonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown && _channelFocusNodes.isNotEmpty) {
+        _channelFocusNodes.values.first.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+        setState(() {
+          _toggleSelectAll();
+        });
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+
+    // Setup DPAD navigation for Cancel button
+    _cancelButtonFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        if (_channelFocusNodes.isNotEmpty) {
+          _channelFocusNodes.values.last.requestFocus();
+        } else if (_manifest != null) {
+          _selectAllFocusNode.requestFocus();
+        } else {
+          _fetchButtonFocusNode.requestFocus();
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowRight) {
+        _importButtonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+
+    // Setup DPAD navigation for Import button
+    _importButtonFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        if (_channelFocusNodes.isNotEmpty) {
+          _channelFocusNodes.values.last.requestFocus();
+        } else if (_manifest != null) {
+          _selectAllFocusNode.requestFocus();
+        } else {
+          _fetchButtonFocusNode.requestFocus();
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        _cancelButtonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+  }
+
+  @override
+  void dispose() {
+    _repoUrlController.dispose();
+    _repoUrlFocusNode.dispose();
+    _fetchButtonFocusNode.dispose();
+    _selectAllFocusNode.dispose();
+    _cancelButtonFocusNode.dispose();
+    _importButtonFocusNode.dispose();
+    for (final node in _channelFocusNodes.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      _selectAll = !_selectAll;
+      if (_manifest != null) {
+        for (final channel in _manifest!.channels) {
+          channel.isSelected = _selectAll;
+        }
+      }
+    });
+  }
+
+  void _toggleChannelSelection(CommunityChannel channel) {
+    setState(() {
+      channel.isSelected = !channel.isSelected;
+      // Update select all state if needed
+      if (_manifest != null) {
+        _selectAll = _manifest!.channels.every((c) => c.isSelected);
+      }
+    });
+  }
+
+  Future<void> _fetchChannels() async {
+    final url = _repoUrlController.text.trim();
+    if (url.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter a repository URL';
+      });
+      return;
+    }
+
+    if (!CommunityChannelsService.isValidRepoUrl(url)) {
+      setState(() {
+        _errorMessage = 'Please enter a valid URL';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _manifest = null;
+      _selectAll = false;
+      _channelFocusNodes.clear();
+    });
+
+    try {
+      final manifest = await CommunityChannelsService.fetchManifest(url);
+
+      if (!mounted) return;
+
+      // Create focus nodes for each channel
+      for (final channel in manifest.channels) {
+        _channelFocusNodes[channel.id] = FocusNode();
+      }
+
+      // Setup navigation between channel items
+      if (widget.isAndroidTv) {
+        _setupChannelFocusNavigation(manifest.channels);
+      }
+
+      setState(() {
+        _manifest = manifest;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = CommunityChannelsService.getErrorMessage(e);
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _setupChannelFocusNavigation(List<CommunityChannel> channels) {
+    for (int i = 0; i < channels.length; i++) {
+      final channel = channels[i];
+      final node = _channelFocusNodes[channel.id];
+      if (node == null) continue;
+
+      node.onKeyEvent = (focusNode, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+        final key = event.logicalKey;
+
+        // Navigate up
+        if (key == LogicalKeyboardKey.arrowUp) {
+          if (i > 0) {
+            _channelFocusNodes[channels[i - 1].id]?.requestFocus();
+          } else {
+            _selectAllFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+
+        // Navigate down
+        if (key == LogicalKeyboardKey.arrowDown) {
+          if (i < channels.length - 1) {
+            _channelFocusNodes[channels[i + 1].id]?.requestFocus();
+          } else {
+            _cancelButtonFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+
+        // Toggle selection with Enter/Select
+        if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+          _toggleChannelSelection(channel);
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
+      };
+    }
+  }
+
+  List<CommunityChannel> _getSelectedChannels() {
+    if (_manifest == null) return [];
+    return _manifest!.channels.where((c) => c.isSelected).toList();
+  }
+
+  Widget _buildChannelTile(CommunityChannel channel) {
+    final focusNode = _channelFocusNodes[channel.id];
+
+    return Focus(
+      focusNode: focusNode,
+      onFocusChange: (hasFocus) {
+        if (hasFocus && mounted) {
+          setState(() {}); // Rebuild to show focus highlight
+        }
+      },
+      child: Builder(
+        builder: (context) {
+          final hasFocus = Focus.of(context).hasFocus;
+
+          return Container(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: hasFocus
+                  ? Theme.of(context).focusColor.withOpacity(0.1)
+                  : Colors.transparent,
+              border: Border.all(
+                color: hasFocus
+                    ? Theme.of(context).primaryColor
+                    : Colors.transparent,
+                width: 2,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: CheckboxListTile(
+              value: channel.isSelected,
+              onChanged: (_) => _toggleChannelSelection(channel),
+              title: Text(
+                channel.name,
+                style: TextStyle(
+                  fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (channel.description.isNotEmpty)
+                    Text(
+                      channel.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).primaryColor.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          channel.category,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                      ),
+                      if (channel.updated.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          'Updated: ${channel.updated}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedCount = _getSelectedChannels().length;
+    final totalCount = _manifest?.channels.length ?? 0;
+
+    return AlertDialog(
+      title: const Text('Import Community Shared Channels'),
+      content: SizedBox(
+        width: 600,
+        height: 500,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // URL Input and Fetch Button
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _repoUrlController,
+                    focusNode: _repoUrlFocusNode,
+                    decoration: InputDecoration(
+                      labelText: 'Repository URL',
+                      hintText: 'Enter community repository URL',
+                      errorText: _errorMessage,
+                      border: const OutlineInputBorder(),
+                    ),
+                    autofocus: true,
+                    enabled: !_isLoading,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Focus(
+                  focusNode: _fetchButtonFocusNode,
+                  child: Builder(
+                    builder: (context) {
+                      final hasFocus = Focus.of(context).hasFocus;
+                      return ElevatedButton(
+                        onPressed: _isLoading ? null : _fetchChannels,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 20,
+                          ),
+                          backgroundColor: hasFocus
+                              ? Theme.of(context).primaryColor
+                              : null,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Fetch Channels'),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Select All / Channel count
+            if (_manifest != null && _manifest!.channels.isNotEmpty) ...[
+              Focus(
+                focusNode: _selectAllFocusNode,
+                child: Builder(
+                  builder: (context) {
+                    final hasFocus = Focus.of(context).hasFocus;
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: hasFocus
+                            ? Theme.of(context).focusColor.withOpacity(0.1)
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: hasFocus
+                              ? Theme.of(context).primaryColor
+                              : Colors.transparent,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: CheckboxListTile(
+                        value: _selectAll,
+                        onChanged: (_) => _toggleSelectAll(),
+                        title: Text(
+                          'Select All ($selectedCount / $totalCount selected)',
+                          style: TextStyle(
+                            fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const Divider(),
+              const SizedBox(height: 8),
+            ],
+
+            // Channel List
+            if (_manifest != null && _manifest!.channels.isNotEmpty)
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _manifest!.channels.length,
+                  itemBuilder: (context, index) {
+                    return _buildChannelTile(_manifest!.channels[index]);
+                  },
+                ),
+              )
+            else if (_manifest != null && _manifest!.channels.isEmpty)
+              const Expanded(
+                child: Center(
+                  child: Text('No channels found in this repository'),
+                ),
+              )
+            else if (!_isLoading && _errorMessage == null)
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'Enter a repository URL and click "Fetch Channels" to browse available channels',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            else if (_errorMessage != null)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              const Spacer(),
+          ],
+        ),
+      ),
+      actions: [
+        Focus(
+          focusNode: _cancelButtonFocusNode,
+          child: Builder(
+            builder: (context) {
+              final hasFocus = Focus.of(context).hasFocus;
+              return TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  backgroundColor: hasFocus
+                      ? Colors.grey.withOpacity(0.2)
+                      : null,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
+                    color: Colors.white,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Focus(
+          focusNode: _importButtonFocusNode,
+          child: Builder(
+            builder: (context) {
+              final hasFocus = Focus.of(context).hasFocus;
+              final hasSelection = selectedCount > 0;
+              return ElevatedButton(
+                onPressed: hasSelection
+                    ? () => Navigator.of(context).pop(_getSelectedChannels())
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  backgroundColor: hasSelection
+                      ? (hasFocus ? Colors.blue[700] : Colors.blue)
+                      : null,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text(
+                  selectedCount > 0
+                      ? 'Import Selected ($selectedCount)'
+                      : 'Import Selected',
+                  style: TextStyle(
+                    fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
+                    color: Colors.white,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
