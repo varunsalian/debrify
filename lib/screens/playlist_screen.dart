@@ -15,6 +15,7 @@ import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../services/pikpak_api_service.dart';
 import 'video_player_screen.dart';
+import 'playlist_file_browser_screen.dart';
 
 class PlaylistScreen extends StatefulWidget {
   const PlaylistScreen({super.key});
@@ -1081,6 +1082,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     await _refresh();
   }
 
+  Future<void> _browseFiles(Map<String, dynamic> item) async {
+    if (!mounted) return;
+    
+    // Navigate to file browser screen
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => PlaylistFileBrowserScreen(
+          playlistItem: item,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1474,8 +1488,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                         posterUrl: posterUrl,
                                         metadata: metadata,
                                         addedLabel: addedLabel,
+                                        item: item,
                                         onPlay: () => _playItem(item),
                                         onRemove: () => _removeItem(item),
+                                        onBrowseFiles: () => _browseFiles(item),
                                       ),
                                     );
                                   },
@@ -1501,8 +1517,10 @@ class _PlaylistCard extends StatefulWidget {
   final String? posterUrl;
   final List<String> metadata;
   final String? addedLabel;
+  final Map<String, dynamic> item;
   final VoidCallback onPlay;
   final VoidCallback onRemove;
+  final VoidCallback onBrowseFiles;
 
   const _PlaylistCard({
     required this.title,
@@ -1510,8 +1528,10 @@ class _PlaylistCard extends StatefulWidget {
     this.posterUrl,
     this.metadata = const <String>[],
     this.addedLabel,
+    required this.item,
     required this.onPlay,
     required this.onRemove,
+    required this.onBrowseFiles,
   });
 
   @override
@@ -1791,7 +1811,9 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                             ],
                           ),
                           const SizedBox(height: 18),
-                          Row(
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
                             children: [
                               ElevatedButton.icon(
                                 onPressed: widget.onPlay,
@@ -1816,23 +1838,47 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                                   elevation: 0,
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              if (widget.addedLabel != null &&
-                                  widget.addedLabel!.isNotEmpty)
-                                Expanded(
-                                  child: Text(
-                                    widget.addedLabel!,
+                              // Show Browse Files button only for collection torrents
+                              if ((widget.item['kind'] as String?) == 'collection' &&
+                                  (widget.item['rdTorrentId'] as String?)?.isNotEmpty == true)
+                                ElevatedButton.icon(
+                                  onPressed: widget.onBrowseFiles,
+                                  icon: const Icon(Icons.folder_open, size: 18),
+                                  label: const Text(
+                                    'Browse',
                                     style: TextStyle(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.65),
-                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF6366F1),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: 0,
                                   ),
                                 ),
                             ],
                           ),
+                          if (widget.addedLabel != null &&
+                              widget.addedLabel!.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              widget.addedLabel!,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.65),
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ],
                       ),
                     ),

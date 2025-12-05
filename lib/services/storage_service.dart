@@ -1415,6 +1415,25 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_pikpakIgnoreSmallVideosKey, value);
   }
+
+  // Last played file per playlist
+  static Future<Map<String, dynamic>?> getLastPlayedFile(String playlistId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'last_played_file_$playlistId';
+    final jsonString = prefs.getString(key);
+    if (jsonString == null) return null;
+    try {
+      return json.decode(jsonString) as Map<String, dynamic>;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static Future<void> saveLastPlayedFile(String playlistId, Map<String, dynamic> fileData) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'last_played_file_$playlistId';
+    await prefs.setString(key, json.encode(fileData));
+  }
 }
 
 class ApiKeyValidator {
