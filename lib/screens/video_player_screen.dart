@@ -250,9 +250,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Orientation
   bool _landscapeLocked = false;
 
-  // Disposal flag to prevent operations during cleanup
-  bool _isDisposing = false;
-
   // Rainbow next animation
   late AnimationController _rainbowController;
   late Animation<double> _rainbowOpacity;
@@ -512,7 +509,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
     _posSub = _player.stream.position.listen((d) {
-      if (_isDisposing) return; // Ignore if disposing
       _position = d;
       // throttle UI updates
       if (mounted) setState(() {});
@@ -520,12 +516,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _checkAndMarkEpisodeAsFinished();
     });
     _durSub = _player.stream.duration.listen((d) {
-      if (_isDisposing) return; // Ignore if disposing
       _duration = d;
       if (mounted) setState(() {});
     });
     _playSub = _player.stream.playing.listen((p) {
-      if (_isDisposing) return; // Ignore if disposing
       _isPlaying = p;
       if (p && _transitionRunning) {
         // Total 3s: 1.5s static (phase 1) + 1.5s reveal (phase 2)
@@ -554,8 +548,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     // No need to observe video params for sizing; we use a fixed logical surface
     _completedSub = _player.stream.completed.listen((done) {
-      if (_isDisposing) return; // Ignore if disposing
-      if (done && mounted) _onPlaybackEnded();
+      if (done) _onPlaybackEnded();
     });
 
     _autosaveTimer = Timer.periodic(
@@ -642,8 +635,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _onPlaybackEnded() async {
-    if (_isDisposing) return; // Don't auto-advance if disposing
-    
     // Mark the current episode as finished if it's a series
     await _markCurrentEpisodeAsFinished();
 
@@ -940,8 +931,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Navigate to next episode
   Future<void> _goToNextEpisode() async {
-    if (_isDisposing) return; // Don't navigate if disposing
-    
     // Show black screen during transition to hide previous frame
     setState(() {
       _isTransitioning = true;
@@ -1157,8 +1146,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Navigate to previous episode
   Future<void> _goToPreviousEpisode() async {
-    if (_isDisposing) return; // Don't navigate if disposing
-    
     // Show black screen during transition to hide previous frame
     setState(() {
       _isTransitioning = true;
@@ -1226,21 +1213,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _loadPlaylistIndex(int index, {bool autoplay = false}) async {
-    if (_isDisposing) return; // Don't load if disposing
-    
     if (widget.playlist == null ||
         index < 0 ||
         index >= widget.playlist!.length)
       return;
 
     print('PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay');
-
-    // Cancel subscriptions early to prevent callback issues
-    await _posSub?.cancel();
-    await _durSub?.cancel();
-    await _playSub?.cancel();
-    await _paramsSub?.cancel();
-    await _completedSub?.cancel();
 
     await _saveResume();
     final entry = widget.playlist![index];
@@ -1330,30 +1308,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _maybeRestoreResume();
     // Restore audio and subtitle track preferences
     await _restoreTrackPreferences();
-
-    // Re-create subscriptions for the new video
-    _posSub = _player.stream.position.listen((d) {
-      if (_isDisposing) return; // Ignore if disposing
-      _position = d;
-      // throttle UI updates
-      if (mounted) setState(() {});
-      // Check if episode should be marked as finished (for manual seeking)
-      _checkAndMarkEpisodeAsFinished();
-    });
-    _durSub = _player.stream.duration.listen((d) {
-      if (_isDisposing) return; // Ignore if disposing
-      _duration = d;
-      if (mounted) setState(() {});
-    });
-    _playSub = _player.stream.playing.listen((p) {
-      if (_isDisposing) return; // Ignore if disposing
-      _isPlaying = p;
-      if (mounted) setState(() {});
-    });
-    _completedSub = _player.stream.completed.listen((done) {
-      if (_isDisposing) return; // Ignore if disposing
-      if (done && mounted) _onPlaybackEnded();
-    });
 
     // Clear transition state when video is ready
     if (mounted) {
@@ -1734,52 +1688,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// Handle back navigation with proper cleanup
-  Future<void> _handleBack() async {
-    if (_isDisposing) return; // Prevent double disposal
-    _isDisposing = true;
-    
-    // Save current state
-    try {
-      _saveResume();
-    } catch (e) {
-      debugPrint('Error saving resume: $e');
-    }
-    
-    // Stop player completely and cancel all subscriptions
-    try {
-      await _player.pause();
-    } catch (e) {
-      debugPrint('Error pausing player: $e');
-    }
-    
-    // Cancel all subscriptions
-    await _posSub?.cancel();
-    await _durSub?.cancel();
-    await _playSub?.cancel();
-    await _paramsSub?.cancel();
-    await _completedSub?.cancel();
-    _posSub = null;
-    _durSub = null;
-    _playSub = null;
-    _paramsSub = null;
-    _completedSub = null;
-    
-    // Dispose the player to clean up FFI callbacks
-    try {
-      _player.dispose();
-    } catch (e) {
-      debugPrint('Error disposing player: $e');
-    }
-    
-    // Give more time for native cleanup (800ms helps reduce crashes)
-    await Future.delayed(const Duration(milliseconds: 800));
-    
-    if (mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
   @override
   void dispose() {
     // Save the current state before disposing
@@ -1799,21 +1707,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _controlsVisible.dispose();
     _seekHud.dispose();
     _verticalHud.dispose();
-    
-    // Only cancel subscriptions if not already cancelled by _handleBack
-    if (_posSub != null) _posSub?.cancel();
-    if (_durSub != null) _durSub?.cancel();
-    if (_playSub != null) _playSub?.cancel();
-    if (_paramsSub != null) _paramsSub?.cancel();
-    if (_completedSub != null) _completedSub?.cancel();
-    
-    // Only dispose player if not already disposed by _handleBack
-    try {
-      _player.dispose();
-    } catch (e) {
-      // Player already disposed, ignore
-    }
-    
+    _posSub?.cancel();
+    _durSub?.cancel();
+    _playSub?.cancel();
+    _paramsSub?.cancel();
+    _completedSub?.cancel();
+    _player.dispose();
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
     // Restore system brightness when exiting the player
@@ -3446,7 +3345,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
 
             // Escape key to quit the player
             if (key == LogicalKeyboardKey.escape) {
-              _handleBack();
+              Navigator.of(context).pop();
               return KeyEventResult.handled;
             }
 
@@ -3609,7 +3508,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                           isPlaying: _isPlaying,
                           isReady: isReady,
                           onPlayPause: _togglePlay,
-                          onBack: _handleBack,
+                          onBack: () => Navigator.of(context).pop(),
                           onAspect: _cycleAspectMode,
                           onSpeed: _changeSpeed,
                           speed: _playbackSpeed,
@@ -4548,7 +4447,7 @@ extension on _VideoPlayerScreenState {
                                 color: Colors.white,
                                 size: 20,
                               ),
-                              onPressed: _handleBack,
+                              onPressed: () => Navigator.of(context).pop(),
                               style: IconButton.styleFrom(
                                 padding: const EdgeInsets.all(8),
                                 minimumSize: const Size(36, 36),
