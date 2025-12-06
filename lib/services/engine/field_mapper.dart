@@ -478,6 +478,10 @@ class FieldMapper {
         case 'double':
           return double.tryParse(captured) ?? config.defaultValue ?? 0.0;
 
+        case 'datetime_iso':
+        case 'datetime':
+          return parseDateTimeToUnix(captured) ?? config.defaultValue ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
         default:
           return captured;
       }
@@ -580,5 +584,18 @@ class FieldMapper {
     final String unitPart = match.group(2) ?? 'B';
 
     return parseSizeWithUnit(numberPart, unitPart);
+  }
+
+  /// Parse a datetime string to Unix timestamp
+  /// Supports ISO 8601 and common datetime formats
+  int? parseDateTimeToUnix(String dateTimeStr) {
+    try {
+      // Try parsing as ISO 8601 or standard datetime format
+      final DateTime dateTime = DateTime.parse(dateTimeStr);
+      return dateTime.millisecondsSinceEpoch ~/ 1000;
+    } catch (e) {
+      debugPrint('FieldMapper: Could not parse datetime string: $dateTimeStr');
+      return null;
+    }
   }
 }

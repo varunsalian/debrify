@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:yaml/yaml.dart';
 import '../../services/engine/remote_engine_manager.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/engine/config_loader.dart';
@@ -25,6 +27,7 @@ class _EngineImportPageState extends State<EngineImportPage> {
 
   // Focus nodes for TV/DPAD navigation
   final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'refresh-button');
+  final FocusNode _importLocalButtonFocusNode = FocusNode(debugLabel: 'import-local-button');
   final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'retry-button');
   final Map<String, FocusNode> _importedEngineFocusNodes = {};
   final Map<String, FocusNode> _availableEngineFocusNodes = {};
@@ -39,6 +42,7 @@ class _EngineImportPageState extends State<EngineImportPage> {
   void dispose() {
     _remoteManager.dispose();
     _refreshButtonFocusNode.dispose();
+    _importLocalButtonFocusNode.dispose();
     _retryButtonFocusNode.dispose();
     for (final node in _importedEngineFocusNodes.values) {
       node.dispose();
@@ -231,6 +235,135 @@ class _EngineImportPageState extends State<EngineImportPage> {
     }
   }
 
+  Future<void> _importFromLocalFile() async {
+    try {
+      // Pick YAML file
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['yaml', 'yml'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return; // User cancelled
+      }
+
+      final file = result.files.first;
+      if (file.path == null) {
+        throw Exception('Could not read file path');
+      }
+
+      // Read file contents
+      final fileBytes = await file.xFile.readAsBytes();
+      final yamlContent = String.fromCharCodes(fileBytes);
+
+      // Parse YAML to extract metadata
+      final yaml = loadYaml(yamlContent);
+      if (yaml == null) {
+        throw Exception('Invalid YAML file');
+      }
+
+      final engineId = yaml['id'] as String?;
+      final displayName = yaml['display_name'] as String?;
+      final icon = yaml['icon'] as String?;
+
+      if (engineId == null || engineId.isEmpty) {
+        throw Exception('YAML file must contain an "id" field');
+      }
+
+      if (displayName == null || displayName.isEmpty) {
+        throw Exception('YAML file must contain a "display_name" field');
+      }
+
+      // Check if engine already exists
+      final existingEngines = await _localStorage.getImportedEngines();
+      final alreadyExists = existingEngines.any((e) => e.id == engineId);
+
+      if (alreadyExists) {
+        if (!mounted) return;
+
+        // Confirm overwrite
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Engine Already Exists'),
+            content: Text('An engine with ID "$engineId" already exists. Do you want to replace it?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Replace'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmed != true) return;
+      }
+
+      // Show loading indicator
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            content: Row(
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(width: 16),
+                Text('Importing $displayName...'),
+              ],
+            ),
+          ),
+        );
+      }
+
+      // Save to local storage
+      await _localStorage.saveEngine(
+        engineId: engineId,
+        fileName: file.name,
+        yamlContent: yamlContent,
+        displayName: displayName,
+        icon: icon,
+      );
+
+      // Reload ConfigLoader to pick up new engine
+      ConfigLoader().clearCache();
+      await EngineRegistry.instance.reload();
+
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Refresh the list
+      await _loadEngines();
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$displayName imported successfully')),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to import: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   IconData _getIconForEngine(String? iconName) {
     switch (iconName) {
       case 'sailing':
@@ -238,6 +371,7 @@ class _EngineImportPageState extends State<EngineImportPage> {
       case 'storage':
         return Icons.storage;
       case 'movie':
+      case 'movie_creation':
         return Icons.movie;
       case 'tv':
         return Icons.tv;
@@ -247,6 +381,8 @@ class _EngineImportPageState extends State<EngineImportPage> {
         return Icons.search;
       case 'database':
         return Icons.storage;
+      case 'public':
+        return Icons.public;
       default:
         return Icons.extension;
     }
@@ -258,6 +394,12 @@ class _EngineImportPageState extends State<EngineImportPage> {
       appBar: AppBar(
         title: const Text('Import Engines'),
         actions: [
+          IconButton(
+            focusNode: _importLocalButtonFocusNode,
+            onPressed: _isLoading ? null : _importFromLocalFile,
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'Import from Local File',
+          ),
           IconButton(
             focusNode: _refreshButtonFocusNode,
             onPressed: _isLoading ? null : _loadEngines,
