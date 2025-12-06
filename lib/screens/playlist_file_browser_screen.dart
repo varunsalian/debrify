@@ -19,8 +19,6 @@ class PlaylistFileBrowserScreen extends StatefulWidget {
   State<PlaylistFileBrowserScreen> createState() => _PlaylistFileBrowserScreenState();
 }
 
-enum SortOption { name, size, dateAdded }
-
 class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -29,7 +27,7 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
   List<dynamic> _links = [];
   bool _isLoading = true;
   String? _error;
-  SortOption _selectedSort = SortOption.name;
+  bool _sortAscending = true; // true = A-Z, false = Z-A
   Map<String, dynamic>? _lastPlayedFile;
 
   String get _playlistId {
@@ -140,21 +138,11 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
       return path.contains(_searchQuery.toLowerCase());
     }).toList();
 
-    // Sort files
+    // Sort files by name (A-Z or Z-A)
     files.sort((a, b) {
-      switch (_selectedSort) {
-        case SortOption.name:
-          final nameA = (a['path'] as String? ?? '').toLowerCase();
-          final nameB = (b['path'] as String? ?? '').toLowerCase();
-          return nameA.compareTo(nameB);
-        case SortOption.size:
-          final sizeA = a['bytes'] as int? ?? 0;
-          final sizeB = b['bytes'] as int? ?? 0;
-          return sizeB.compareTo(sizeA); // Descending
-        case SortOption.dateAdded:
-          // If files have a date field, use it; otherwise keep original order
-          return 0;
-      }
+      final nameA = (a['path'] as String? ?? '').toLowerCase();
+      final nameB = (b['path'] as String? ?? '').toLowerCase();
+      return _sortAscending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
     });
 
     return files;
@@ -186,7 +174,7 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
       }
       
       // Debug logging
-      print('Playing file at index $currentIndex of ${sortedFiles.length} (Sort: $_selectedSort)');
+      print('Playing file at index $currentIndex of ${sortedFiles.length} (Sort: ${_sortAscending ? "A-Z" : "Z-A"})');
       print('Current file: ${file['path']}');
 
       final apiKey = await StorageService.getApiKey();
@@ -217,7 +205,7 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
       final List<PlaylistEntry> playlistEntries = [];
       int actualCurrentIndex = -1; // Track the actual index in playlistEntries
       
-      print('Building playlist with ${sortedFiles.length} files (Sort: $_selectedSort)');
+      print('Building playlist with ${sortedFiles.length} files (Sort: ${_sortAscending ? "A-Z" : "Z-A"})');
       
       for (int i = 0; i < sortedFiles.length; i++) {
         if (!mounted) return; // Check periodically during large loops
@@ -245,6 +233,7 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
               restrictedLink: _links[videoFileIndex], // Use video file index
               sizeBytes: bytes,
               provider: 'realdebrid',
+              fileId: sortedFileId, // Save original file ID
             ),
           );
         }
@@ -278,6 +267,7 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
               ? Formatters.formatFileSize(playlistEntries[actualCurrentIndex].sizeBytes!) 
               : null,
           rdTorrentId: rdTorrentId,
+          playlistId: _playlistId,
           playlist: playlistEntries,
           startIndex: actualCurrentIndex,
         ),
@@ -322,68 +312,90 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
       ),
       body: Column(
         children: [
-          // Search bar
+          // Search bar with sort button
           Container(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             color: const Color(0xFF1E293B),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search files...',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                prefixIcon: const Icon(Icons.search, color: Colors.white70),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white70),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {
-                            _searchQuery = '';
-                          });
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: const Color(0xFF0F172A),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
-                ),
-              ),
-            ),
-          ),
-
-          // Sort options
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            color: const Color(0xFF1E293B),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'Sort by:',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
+                    },
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Search files...',
+                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                      prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.white70, size: 20),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _searchQuery = '';
+                                });
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: const Color(0xFF0F172A),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                _buildSortChip('Name', SortOption.name),
-                const SizedBox(width: 6),
-                _buildSortChip('Size', SortOption.size),
-                const SizedBox(width: 6),
-                _buildSortChip('Date', SortOption.dateAdded),
+                const SizedBox(width: 8),
+                // Sort toggle button
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _sortAscending = !_sortAscending;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF6366F1),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _sortAscending ? Icons.sort_by_alpha : Icons.sort_by_alpha,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _sortAscending ? 'A-Z' : 'Z-A',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -403,41 +415,50 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
               ),
               child: Row(
                 children: [
-                  InkWell(
-                    onTap: () => _playFile(_lastPlayedFile),
-                    borderRadius: BorderRadius.circular(6),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.play_circle_filled,
-                          color: Color(0xFFE50914),
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          (_lastPlayedFile!['path'] as String? ?? '').split('/').last,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _playFile(_lastPlayedFile),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.play_circle_filled,
+                            color: Color(0xFFE50914),
+                            size: 20,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              (_lastPlayedFile!['path'] as String? ?? '').split('/').last,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    color: Colors.white54,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () {
-                      setState(() {
-                        _lastPlayedFile = null;
-                      });
-                      StorageService.saveLastPlayedFile(_playlistId, {});
-                    },
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      color: Colors.white54,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        setState(() {
+                          _lastPlayedFile = null;
+                        });
+                        StorageService.saveLastPlayedFile(_playlistId, {});
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -522,30 +543,6 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
                           ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSortChip(String label, SortOption option) {
-    final isSelected = _selectedSort == option;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (selected) {
-        setState(() {
-          _selectedSort = option;
-        });
-      },
-      backgroundColor: const Color(0xFF0F172A),
-      selectedColor: const Color(0xFF6366F1),
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.white70,
-        fontSize: 12,
-        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-      ),
-      side: BorderSide(
-        color: isSelected ? const Color(0xFF6366F1) : Colors.white24,
-        width: 1,
       ),
     );
   }
