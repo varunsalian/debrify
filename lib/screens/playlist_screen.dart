@@ -188,12 +188,25 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           if (downloadLink.isNotEmpty) {
             if (FileUtils.isVideoMimeType(mimeType)) {
               if (!mounted) return;
+              
+              // Create a single-entry playlist for consistency with Continue Watching
+              final playlist = [
+                PlaylistEntry(
+                  url: downloadLink,
+                  title: finalTitle,
+                  torrentHash: torrentHash,
+                ),
+              ];
+              
               await VideoPlayerLauncher.push(
                 context,
                 VideoPlayerLaunchArgs(
                   videoUrl: downloadLink,
                   title: finalTitle,
                   rdTorrentId: rdTorrentId,
+                  playlistId: playlistId,
+                  playlist: playlist,
+                  startIndex: 0,
                 ),
               );
               
@@ -412,6 +425,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Fallback: open single video directly without playlist (for legacy items)
     final String url = (item['url'] as String?) ?? '';
     if (!mounted) return;
+    
+    // Create a single-entry playlist for consistency with Continue Watching
+    final playlist = [
+      PlaylistEntry(
+        url: url,
+        title: title,
+      ),
+    ];
+    
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -419,6 +441,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         title: title,
         rdTorrentId: rdTorrentId,
         playlistId: playlistId,
+        playlist: playlist,
+        startIndex: 0,
       ),
     );
     
@@ -481,6 +505,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             (item['title'] as String?)?.isNotEmpty == true ? item['title'] as String : fallbackTitle;
 
         if (!mounted) return;
+        
+        // Create a single-entry playlist for consistency with Continue Watching
+        final playlist = [
+          PlaylistEntry(
+            url: streamUrl,
+            title: resolvedTitle,
+            sizeBytes: sizeBytes,
+          ),
+        ];
+        
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -488,6 +522,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             title: resolvedTitle,
             subtitle: subtitle,
             playlistId: playlistId,
+            playlist: playlist,
+            startIndex: 0,
           ),
         );
         
@@ -754,6 +790,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             videoUrl: url,
             title: resolvedTitle,
             subtitle: subtitle,
+            playlistId: playlistId,
             playlist: [
               PlaylistEntry(
                 url: url,
@@ -1868,9 +1905,16 @@ class _PlaylistCardState extends State<_PlaylistCard> {
         return;
       }
     }
-    // No progress or couldn't find parent state, just play normally
-    debugPrint('PlayNow: No last played, playing from start');
-    widget.onPlay();
+    // No progress - play first file using _playItemWithPath with null path
+    // This will start from index 0 (first file)
+    debugPrint('PlayNow: No last played, playing first file');
+    final playlistScreenState = context.findAncestorStateOfType<_PlaylistScreenState>();
+    if (playlistScreenState != null) {
+      await playlistScreenState._playItemWithPath(widget.item, null);
+    } else {
+      // Fallback to old behavior if parent state not found
+      widget.onPlay();
+    }
   }
 
   @override
