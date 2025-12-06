@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
@@ -86,16 +87,25 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
         throw Exception('No links found in torrent');
       }
 
-      // Filter only video files
-      final videoFiles = files.where((file) {
+      // Filter only video files and create a mapping to their links
+      final List<dynamic> videoFiles = [];
+      final List<String> videoLinks = [];
+      
+      for (int i = 0; i < files.length; i++) {
+        final file = files[i];
         final path = file['path'] as String? ?? '';
-        return FileUtils.isVideoFile(path);
-      }).toList();
+        if (FileUtils.isVideoFile(path)) {
+          videoFiles.add(file);
+          if (i < links.length) {
+            videoLinks.add(links[i].toString());
+          }
+        }
+      }
 
       setState(() {
         _allFiles = videoFiles;
-        _allTorrentFiles = files;
-        _links = links;
+        _allTorrentFiles = files; // Keep for reference
+        _links = videoLinks; // Only links for video files
         _isLoading = false;
       });
     } catch (e) {
@@ -159,18 +169,7 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
         throw Exception('Invalid file or torrent ID');
       }
 
-      // Find the index of this file in the original torrent files list
-      final fileIndex = _allTorrentFiles.indexWhere((f) => f['id'] == fileId);
-      if (fileIndex == -1 || fileIndex >= _links.length) {
-        throw Exception('File link not found');
-      }
-
-      final apiKey = await StorageService.getApiKey();
-      if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('API key not found');
-      }
-
-      // Save as last played BEFORE launching video player (without setState to avoid issues)
+      // Save as last played BEFORE launching video player
       await StorageService.saveLastPlayedFile(_playlistId, {
         'path': file['path'],
         'bytes': file['bytes'],
@@ -178,7 +177,30 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
         'timestamp': DateTime.now().toIso8601String(),
       });
 
-      // Unrestrict the link
+      // Get the sorted file list
+      final sortedFiles = _filteredAndSortedFiles;
+      final currentIndex = sortedFiles.indexWhere((f) => f['id'] == fileId);
+      
+      if (currentIndex == -1) {
+        throw Exception('File not found in sorted list');
+      }
+      
+      // Debug logging
+      print('Playing file at index $currentIndex of ${sortedFiles.length} (Sort: $_selectedSort)');
+      print('Current file: ${file['path']}');
+
+      final apiKey = await StorageService.getApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('API key not found');
+      }
+
+      // Find current file's index in video files list
+      final fileIndex = _allFiles.indexWhere((f) => f['id'] == fileId);
+      if (fileIndex == -1 || fileIndex >= _links.length) {
+        throw Exception('File link not found');
+      }
+
+      // Unrestrict only the current video
       final unrestrictResult = await DebridService.unrestrictLink(
         apiKey,
         _links[fileIndex],
@@ -189,33 +211,85 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
         throw Exception('Failed to unrestrict link');
       }
 
-      // Launch video player
-      final path = file['path'] as String? ?? 'Video';
-      final bytes = file['bytes'] as int?;
+      // Build playlist with restricted links for lazy resolution
+      if (!mounted) return;
       
+      final List<PlaylistEntry> playlistEntries = [];
+      int actualCurrentIndex = -1; // Track the actual index in playlistEntries
+      
+      print('Building playlist with ${sortedFiles.length} files (Sort: $_selectedSort)');
+      
+      for (int i = 0; i < sortedFiles.length; i++) {
+        if (!mounted) return; // Check periodically during large loops
+        
+        final sortedFile = sortedFiles[i];
+        final sortedFileId = sortedFile['id'];
+        
+        // Find index in _allFiles (which only contains video files)
+        final videoFileIndex = _allFiles.indexWhere((f) => f['id'] == sortedFileId);
+        
+        if (videoFileIndex != -1 && videoFileIndex < _links.length) {
+          final path = sortedFile['path'] as String? ?? 'Video';
+          final bytes = sortedFile['bytes'] as int?;
+          final isCurrentFile = sortedFileId == fileId;
+          
+          // Track the actual index in playlistEntries for the current file
+          if (isCurrentFile) {
+            actualCurrentIndex = playlistEntries.length;
+          }
+          
+          playlistEntries.add(
+            PlaylistEntry(
+              url: isCurrentFile ? downloadLink : '', // Only current has unrestricted URL
+              title: path,
+              restrictedLink: _links[videoFileIndex], // Use video file index
+              sizeBytes: bytes,
+              provider: 'realdebrid',
+            ),
+          );
+        }
+      }
+      
+      print('Playlist built with ${playlistEntries.length} entries, actual current index: $actualCurrentIndex');
+      print('Starting video: ${playlistEntries[actualCurrentIndex].title}');
+      if (actualCurrentIndex > 0) {
+        print('Previous video would be: ${playlistEntries[actualCurrentIndex - 1].title}');
+      }
+      if (actualCurrentIndex < playlistEntries.length - 1) {
+        print('Next video would be: ${playlistEntries[actualCurrentIndex + 1].title}');
+      }
+      
+      if (actualCurrentIndex == -1) {
+        throw Exception('Current file not found in playlist');
+      }
+
+      if (playlistEntries.isEmpty) {
+        throw Exception('No valid video files found');
+      }
+
       if (!mounted) return;
       
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
           videoUrl: downloadLink,
-          title: path,
-          subtitle: bytes != null ? Formatters.formatFileSize(bytes) : null,
+          title: playlistEntries[actualCurrentIndex].title,
+          subtitle: playlistEntries[actualCurrentIndex].sizeBytes != null 
+              ? Formatters.formatFileSize(playlistEntries[actualCurrentIndex].sizeBytes!) 
+              : null,
           rdTorrentId: rdTorrentId,
-          playlist: [
-            PlaylistEntry(
-              url: downloadLink,
-              title: path,
-              sizeBytes: bytes,
-            ),
-          ],
-          startIndex: 0,
+          playlist: playlistEntries,
+          startIndex: actualCurrentIndex,
         ),
       );
       
-      // Reload last played file after returning from video player
+      // Reload ONLY the last played indicator (not full file list)
       if (mounted) {
-        _loadLastPlayedFile();
+        // Small delay to avoid callback issues
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (mounted) {
+          await _loadLastPlayedFile();
+        }
       }
 
     } catch (e) {

@@ -355,9 +355,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           );
         }
       } else {
-        // For non-series playlists, try to restore the last played video
-		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
-			// Try to find the last played video by checking each playlist entry
+        // For non-series playlists, respect the startIndex if explicitly provided
+        // Only search for last played video if no startIndex was provided
+		if (widget.startIndex != null) {
+			// User explicitly selected a video (e.g., from file browser) - respect their choice
+			debugPrint('Resume: using explicit startIndex ${widget.startIndex}');
+			initialIndex = widget.startIndex!;
+		} else if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+			// No explicit startIndex - try to find the last played video
 			int lastPlayedIndex = -1;
 			Map<String, dynamic>? lastPlayedState;
 
@@ -388,11 +393,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 				final indices = _getMainGroupIndices(widget.playlist!);
 				initialIndex = indices.isNotEmpty
 					? indices.first
-					: (widget.startIndex ?? 0);
+					: 0;
 			}
 		} else {
-			// Not a series or no series playlist, use the provided startIndex
-			initialIndex = widget.startIndex ?? 0;
+			// No playlist, use default
+			initialIndex = 0;
 		}
 	}
     } else {}
@@ -772,19 +777,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   int _findNextEpisodeIndex() {
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // For non-series content (movies), advance within the Main group order
+      // For non-series content (movie collections or file browser playlists),
+      // simply advance to next item in the provided playlist order
       if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
-      final indices = _getMainGroupIndices(widget.playlist!);
-      if (indices.isEmpty) return -1;
-      final pos = indices.indexOf(_currentIndex);
-      if (pos == -1) {
-        // If current not in Main, move to first Main
-        return indices.first;
+      
+      // Simple sequential navigation - respect the playlist order from file browser
+      if (_currentIndex + 1 < widget.playlist!.length) {
+        return _currentIndex + 1;
       }
-      if (pos + 1 < indices.length) {
-        return indices[pos + 1];
-      }
-      return -1;
+      return -1; // No next item
     }
 
     try {
@@ -867,18 +868,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   int _findPreviousEpisodeIndex() {
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // For non-series content (movies), move within Main group order
+      // For non-series content (movie collections or file browser playlists),
+      // simply go to previous item in the provided playlist order
       if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
-      final indices = _getMainGroupIndices(widget.playlist!);
-      if (indices.isEmpty) return -1;
-      final pos = indices.indexOf(_currentIndex);
-      if (pos == -1) {
-        return indices.first;
+      
+      // Simple sequential navigation - respect the playlist order from file browser
+      if (_currentIndex - 1 >= 0) {
+        return _currentIndex - 1;
       }
-      if (pos - 1 >= 0) {
-        return indices[pos - 1];
-      }
-      return -1;
+      return -1; // No previous item
     }
 
     try {

@@ -1812,38 +1812,38 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                           ),
                           const SizedBox(height: 18),
                           Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
+                            spacing: 10,
+                            runSpacing: 10,
                             children: [
                               ElevatedButton.icon(
                                 onPressed: widget.onPlay,
-                                icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                                icon: const Icon(Icons.play_arrow_rounded, size: 20),
                                 label: const Text(
                                   'Play now',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
-                                    fontSize: 15,
+                                    fontSize: 14,
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFE50914),
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
+                                    horizontal: 16,
+                                    vertical: 10,
                                   ),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                   elevation: 0,
                                 ),
                               ),
-                              // Show Browse Files button only for collection torrents
+                              // Show Browse Files button second (right side)
                               if ((widget.item['kind'] as String?) == 'collection' &&
                                   (widget.item['rdTorrentId'] as String?)?.isNotEmpty == true)
                                 ElevatedButton.icon(
                                   onPressed: widget.onBrowseFiles,
-                                  icon: const Icon(Icons.folder_open, size: 18),
+                                  icon: const Icon(Icons.folder_open, size: 20),
                                   label: const Text(
                                     'Browse',
                                     style: TextStyle(
@@ -1855,11 +1855,11 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                                     backgroundColor: const Color(0xFF6366F1),
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 12,
+                                      horizontal: 16,
+                                      vertical: 10,
                                     ),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                     elevation: 0,
                                   ),
