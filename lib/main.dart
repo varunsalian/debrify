@@ -310,7 +310,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // Public getter for other widgets to check
   static bool get isAutoLaunchShowingOverlay => _isAutoLaunchShowingOverlay;
 
-  int _selectedIndex = 0;
+  int _selectedIndex = 1; // Start at Playlist screen
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   bool _hasRealDebridKey = false;
