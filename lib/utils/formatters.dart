@@ -10,7 +10,13 @@ class Formatters {
   }
 
   static String formatDate(int unixTimestamp) {
-    final date = DateTime.fromMillisecondsSinceEpoch(unixTimestamp * 1000);
+    // Check if timestamp is in seconds or milliseconds
+    // If it's a small number (less than year 3000 in seconds), assume it's seconds
+    // Otherwise, assume it's already in milliseconds
+    final timestamp = unixTimestamp < 32503680000 
+        ? unixTimestamp * 1000  // Convert seconds to milliseconds
+        : unixTimestamp;         // Already in milliseconds
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
     return DateFormat('MMM dd, yyyy').format(date);
   }
 
