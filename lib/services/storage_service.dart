@@ -1434,6 +1434,46 @@ class StorageService {
     final key = 'last_played_file_$playlistId';
     await prefs.setString(key, json.encode(fileData));
   }
+
+  // Global last played across all playlists
+  static const String _globalLastPlayedKey = 'global_last_played_v1';
+
+  static Future<Map<String, dynamic>?> getGlobalLastPlayed() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_globalLastPlayedKey);
+    if (jsonString == null) return null;
+    try {
+      return json.decode(jsonString) as Map<String, dynamic>;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static Future<void> saveGlobalLastPlayed({
+    required String playlistId,
+    required int videoIndex,
+    required int positionMs,
+    String? videoTitle,
+    String? videoPath,
+    String? playlistTitle,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = {
+      'playlistId': playlistId,
+      'videoIndex': videoIndex,
+      'positionMs': positionMs,
+      'videoTitle': videoTitle,
+      'videoPath': videoPath,
+      'playlistTitle': playlistTitle,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+    await prefs.setString(_globalLastPlayedKey, json.encode(data));
+  }
+
+  static Future<void> clearGlobalLastPlayed() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_globalLastPlayedKey);
+  }
 }
 
 class ApiKeyValidator {

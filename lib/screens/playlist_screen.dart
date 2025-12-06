@@ -32,6 +32,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   bool _searchFocused = false;
   bool _isTelevision = false;
   bool _searchVisible = false;
+  Map<String, dynamic>? _globalLastPlayed;
+  int _rebuildKey = 0; // Counter to force rebuild of cards
 
   @override
   void initState() {
@@ -47,6 +49,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         });
       });
     _detectTelevision();
+    _loadGlobalLastPlayed();
+  }
+
+  Future<void> _loadGlobalLastPlayed() async {
+    final lastPlayed = await StorageService.getGlobalLastPlayed();
+    if (mounted) {
+      setState(() {
+        _globalLastPlayed = lastPlayed;
+      });
+    }
   }
 
   Future<void> _detectTelevision() async {
@@ -67,6 +79,47 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     setState(() {
       _loader = StorageService.getPlaylistItemsRaw();
     });
+    await _loadGlobalLastPlayed();
+  }
+
+  Future<void> _continueLastPlayed() async {
+    if (_globalLastPlayed == null) return;
+    
+    final playlistId = _globalLastPlayed!['playlistId'] as String?;
+    debugPrint('Continue: Looking for playlistId=$playlistId');
+    if (playlistId == null) return;
+
+    final items = await StorageService.getPlaylistItemsRaw();
+    debugPrint('Continue: Found ${items.length} playlist items');
+    
+    for (var i = 0; i < items.length; i++) {
+      final key = StorageService.computePlaylistDedupeKey(items[i]);
+      debugPrint('Continue: Item $i key=$key');
+    }
+    
+    final item = items.firstWhere(
+      (i) => StorageService.computePlaylistDedupeKey(i) == playlistId,
+      orElse: () => {},
+    );
+
+    if (item.isEmpty) {
+      // Item not found, clear global last played
+      debugPrint('Continue: Item not found!');
+      await StorageService.clearGlobalLastPlayed();
+      setState(() {
+        _globalLastPlayed = null;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This playlist item is no longer available')),
+      );
+      return;
+    }
+
+    // Use videoPath if available, otherwise fall back to videoIndex
+    final videoPath = _globalLastPlayed!['videoPath'] as String?;
+    debugPrint('Continue: Found item, videoPath=$videoPath');
+    await _playItemWithPath(item, videoPath);
   }
 
   void _handleSearchChanged() {
@@ -84,15 +137,36 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _playItem(Map<String, dynamic> item) async {
+    await _playItemWithIndex(item, 0);
+  }
+
+  Future<void> _playItemWithPath(Map<String, dynamic> item, String? targetPath) async {
+    // This method finds the correct index based on file path and then plays
+    await _loadGlobalLastPlayed();
+    
+    final playlistId = StorageService.computePlaylistDedupeKey(item);
     final String title = (item['title'] as String?) ?? 'Video';
+    int startIndex = 0; // Default to first video
+    
+    // We'll determine the correct index after building the playlist
+    await _playItemWithIndex(item, startIndex, targetPath);
+  }
+
+  Future<void> _playItemWithIndex(Map<String, dynamic> item, int startIndex, [String? targetPath]) async {
+    // Note: Last played will be saved by video_player_screen with the actual video info
+    final playlistId = StorageService.computePlaylistDedupeKey(item);
+    final String title = (item['title'] as String?) ?? 'Video';
+    
+    await _loadGlobalLastPlayed();
+
     final String provider =
         ((item['provider'] as String?) ?? 'realdebrid').toLowerCase();
     if (provider == 'torbox') {
-      await _playTorboxItem(item, fallbackTitle: title);
+      await _playTorboxItem(item, fallbackTitle: title, startIndex: startIndex, playlistId: playlistId, targetPath: targetPath);
       return;
     }
     if (provider == 'pikpak') {
-      await _playPikPakItem(item, fallbackTitle: title);
+      await _playPikPakItem(item, fallbackTitle: title, startIndex: startIndex, playlistId: playlistId, targetPath: targetPath);
       return;
     }
     final String? rdTorrentId = item['rdTorrentId'] as String?;
@@ -122,6 +196,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   rdTorrentId: rdTorrentId,
                 ),
               );
+              
+              // Refresh global last played after returning from video player
+              await _loadGlobalLastPlayed();
+              // Force rebuild to update cards with new data
+              if (mounted) setState(() {
+                _rebuildKey++;
+              });
             } else {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
@@ -266,8 +347,32 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           return;
         }
 
+        // If targetPath is provided, find the matching index in the built playlist
+        int actualStartIndex = startIndex;
+        if (targetPath != null && targetPath.isNotEmpty) {
+          debugPrint('RD: Searching for targetPath=$targetPath in ${entries.length} entries');
+          for (int i = 0; i < entries.length && i < 5; i++) {
+            debugPrint('RD: Entry $i: ${entries[i].title}');
+          }
+          
+          final matchIndex = entries.indexWhere((entry) => 
+            entry.title == targetPath || 
+            entry.title.endsWith(targetPath) ||
+            targetPath.endsWith(entry.title));
+          if (matchIndex != -1) {
+            actualStartIndex = matchIndex;
+            debugPrint('RD: Found matching file at index $actualStartIndex for path: $targetPath');
+          } else {
+            debugPrint('RD: Could not find matching file for path: $targetPath, using index $startIndex');
+          }
+        }
+
         String initialVideoUrl = '';
-        if (entries.first.url.isNotEmpty) initialVideoUrl = entries.first.url;
+        if (actualStartIndex < entries.length && entries[actualStartIndex].url.isNotEmpty) {
+          initialVideoUrl = entries[actualStartIndex].url;
+        } else if (entries.first.url.isNotEmpty) {
+          initialVideoUrl = entries.first.url;
+        }
 
         if (!mounted) return;
         await VideoPlayerLauncher.push(
@@ -277,10 +382,18 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             title: title,
             subtitle: '${entries.length} files',
             playlist: entries,
-            startIndex: 0,
+            startIndex: actualStartIndex,
             rdTorrentId: rdTorrentId,
+            playlistId: playlistId,
           ),
         );
+        
+        // Refresh global last played after returning from video player
+        await _loadGlobalLastPlayed();
+        // Force rebuild to update cards with new data
+        if (mounted) setState(() {
+          _rebuildKey++;
+        });
       } catch (e) {
         print('❌ PLAY ERROR: Failed to get torrent info for torrentId="$rdTorrentId", error=$e');
         if (Navigator.of(context).canPop()) Navigator.of(context).pop();
@@ -305,13 +418,24 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         videoUrl: url,
         title: title,
         rdTorrentId: rdTorrentId,
+        playlistId: playlistId,
       ),
     );
+    
+    // Refresh global last played after returning from video player
+    await _loadGlobalLastPlayed();
+    // Force rebuild to update cards with new data
+    if (mounted) setState(() {
+      _rebuildKey++;
+    });
   }
 
   Future<void> _playTorboxItem(
     Map<String, dynamic> item, {
     required String fallbackTitle,
+    int startIndex = 0,
+    required String playlistId,
+    String? targetPath,
   }) async {
     final String? apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -363,8 +487,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             videoUrl: streamUrl,
             title: resolvedTitle,
             subtitle: subtitle,
+            playlistId: playlistId,
           ),
         );
+        
+        // Refresh global last played after returning from video player
+        await _loadGlobalLastPlayed();
+        // Force rebuild to update cards with new data
+        if (mounted) setState(() {
+          _rebuildKey++;
+        });
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -460,7 +592,32 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         files: files,
       );
       final playlistEntries = entries.playlistEntries;
-      final startIndex = entries.startIndex;
+      final computedStartIndex = entries.startIndex;
+      
+      // If targetPath is provided, find matching file
+      int actualStartIndex = startIndex;
+      if (targetPath != null && targetPath.isNotEmpty) {
+        final matchIndex = playlistEntries.indexWhere((entry) => 
+          entry.title == targetPath || 
+          entry.title.endsWith(targetPath) ||
+          targetPath.endsWith(entry.title));
+        if (matchIndex != -1) {
+          actualStartIndex = matchIndex;
+          debugPrint('Torbox: Found matching file at index $actualStartIndex for path: $targetPath');
+        } else {
+          debugPrint('Torbox: Could not find matching file for path: $targetPath');
+          // Use provided startIndex if valid, otherwise use computed
+          actualStartIndex = (startIndex >= 0 && startIndex < playlistEntries.length) 
+              ? startIndex 
+              : computedStartIndex;
+        }
+      } else {
+        // Use provided startIndex if valid, otherwise use computed
+        actualStartIndex = (startIndex >= 0 && startIndex < playlistEntries.length) 
+            ? startIndex 
+            : computedStartIndex;
+      }
+      
       final subtitle = entries.subtitle;
 
       String initialUrl = '';
@@ -468,27 +625,27 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         initialUrl = await TorboxService.requestFileDownloadLink(
           apiKey: apiKey,
           torrentId: torrent.id,
-          fileId: playlistEntries[startIndex].torboxFileId!,
+          fileId: playlistEntries[actualStartIndex].torboxFileId!,
         );
       } catch (e) {
         debugPrint('PlaylistScreen: Torbox initial link failed: $e');
       }
 
       if (initialUrl.isNotEmpty) {
-        playlistEntries[startIndex] = PlaylistEntry(
+        playlistEntries[actualStartIndex] = PlaylistEntry(
           url: initialUrl,
-          title: playlistEntries[startIndex].title,
-          provider: playlistEntries[startIndex].provider,
-          torboxTorrentId: playlistEntries[startIndex].torboxTorrentId,
-          torboxFileId: playlistEntries[startIndex].torboxFileId,
-          torrentHash: playlistEntries[startIndex].torrentHash,
-          sizeBytes: playlistEntries[startIndex].sizeBytes,
+          title: playlistEntries[actualStartIndex].title,
+          provider: playlistEntries[actualStartIndex].provider,
+          torboxTorrentId: playlistEntries[actualStartIndex].torboxTorrentId,
+          torboxFileId: playlistEntries[actualStartIndex].torboxFileId,
+          torrentHash: playlistEntries[actualStartIndex].torrentHash,
+          sizeBytes: playlistEntries[actualStartIndex].sizeBytes,
         );
       }
 
       if ((item['kind'] ?? 'single') == 'single') {
         item['torboxFileId'] =
-            playlistEntries[startIndex].torboxFileId ?? item['torboxFileId'];
+            playlistEntries[actualStartIndex].torboxFileId ?? item['torboxFileId'];
         item.remove('torboxFileIds');
       } else {
         final fileIds = playlistEntries
@@ -516,9 +673,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           title: fallbackTitle,
           subtitle: subtitle,
           playlist: playlistEntries,
-          startIndex: startIndex,
+          startIndex: actualStartIndex,
+          playlistId: playlistId,
         ),
       );
+      
+      // Refresh global last played after returning from video player
+      await _loadGlobalLastPlayed();
+      // Force rebuild to update cards with new data
+      if (mounted) setState(() {
+        _rebuildKey++;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -534,6 +699,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Future<void> _playPikPakItem(
     Map<String, dynamic> item, {
     required String fallbackTitle,
+    int startIndex = 0,
+    required String playlistId,
+    String? targetPath,
   }) async {
     final pikpak = PikPakApiService.instance;
 
@@ -598,6 +766,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             startIndex: 0,
           ),
         );
+        
+        // Refresh global last played after returning from video player
+        await _loadGlobalLastPlayed();
+        // Force rebuild to update cards with new data
+        if (mounted) setState(() {
+          _rebuildKey++;
+        });
       } catch (e) {
         debugPrint('PlaylistScreen: PikPak single file playback error: $e');
         if (!mounted) return;
@@ -719,19 +894,59 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       // Find first episode to start from
-      int startIndex = 0;
+      int actualStartIndex = 0;
       if (isSeriesCollection) {
         final seriesInfos = candidates.map((c) => c.info).toList();
-        startIndex = _findFirstEpisodeIndex(seriesInfos);
+        actualStartIndex = _findFirstEpisodeIndex(seriesInfos);
       }
-      if (startIndex < 0 || startIndex >= candidates.length) {
-        startIndex = 0;
+      
+      // If targetPath is provided, find matching file
+      if (targetPath != null && targetPath.isNotEmpty) {
+        final matchIndex = candidates.indexWhere((candidate) {
+          final displayName = candidate.displayName;
+          final seriesInfo = candidate.info;
+          final episodeLabel = _formatPikPakPlaylistTitle(
+            info: seriesInfo,
+            fallback: displayName,
+            isSeriesCollection: isSeriesCollection,
+          );
+          final combinedTitle = _composePikPakEntryTitle(
+            seriesTitle: seriesInfo.title,
+            episodeLabel: episodeLabel,
+            isSeriesCollection: isSeriesCollection,
+            fallback: displayName,
+          );
+          
+          return combinedTitle == targetPath || 
+                 combinedTitle.endsWith(targetPath) ||
+                 targetPath.endsWith(combinedTitle) ||
+                 displayName == targetPath ||
+                 displayName.endsWith(targetPath) ||
+                 targetPath.endsWith(displayName);
+        });
+        
+        if (matchIndex != -1) {
+          actualStartIndex = matchIndex;
+          debugPrint('PikPak: Found matching file at index $actualStartIndex for path: $targetPath');
+        } else {
+          debugPrint('PikPak: Could not find matching file for path: $targetPath');
+          // Use provided startIndex if valid
+          if (startIndex >= 0 && startIndex < candidates.length) {
+            actualStartIndex = startIndex;
+          }
+        }
+      } else if (startIndex >= 0 && startIndex < candidates.length) {
+        actualStartIndex = startIndex;
+      }
+      
+      if (actualStartIndex < 0 || actualStartIndex >= candidates.length) {
+        actualStartIndex = 0;
       }
 
       // Resolve URL for the first video only (lazy loading for rest)
       String initialUrl = '';
       try {
-        final firstFile = candidates[startIndex].file;
+        final firstFile = candidates[actualStartIndex].file;
         initialUrl = pikpak.getStreamingUrl(firstFile) ?? '';
       } catch (e) {
         debugPrint('PlaylistScreen: PikPak initial URL resolution failed: $e');
@@ -770,7 +985,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         final sizeBytes = _asInt(candidate.file['size']);
 
         playlistEntries.add(PlaylistEntry(
-          url: i == startIndex ? initialUrl : '',
+          url: i == actualStartIndex ? initialUrl : '',
           title: combinedTitle,
           provider: 'pikpak',
           pikpakFileId: fileId,
@@ -799,9 +1014,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           title: fallbackTitle,
           subtitle: subtitle,
           playlist: playlistEntries,
-          startIndex: startIndex,
+          startIndex: actualStartIndex,
+          playlistId: playlistId,
         ),
       );
+      
+      // Refresh global last played after returning from video player
+      await _loadGlobalLastPlayed();
+      // Force rebuild to update cards with new data
+      if (mounted) setState(() {
+        _rebuildKey++;
+      });
     } catch (e) {
       debugPrint('PlaylistScreen: PikPak collection playback error: $e');
       if (!mounted) return;
@@ -1093,6 +1316,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ),
       ),
     );
+    
+    // Reload global last played and increment rebuild key to refresh cards
+    await _loadGlobalLastPlayed();
+    setState(() {
+      _rebuildKey++;
+    });
   }
 
   @override
@@ -1360,6 +1589,53 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         ),
                       ),
                     const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                    // Continue Watching section - under search bar with Last Played design
+                    if (_globalLastPlayed != null)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: InkWell(
+                              onTap: _continueLastPlayed,
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.play_circle_filled,
+                                      color: Color(0xFFE50914),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _globalLastPlayed!['videoTitle'] as String? ?? 'Last played video',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     if (filteredItems.isEmpty)
                       SliverFillRemaining(
                         hasScrollBody: false,
@@ -1483,6 +1759,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                         bottom: index == filteredItems.length - 1 ? 0 : 20,
                                       ),
                                       child: _PlaylistCard(
+                                        key: ValueKey('${StorageService.computePlaylistDedupeKey(item)}_$_rebuildKey'),
                                         title: title,
                                         subtitle: subtitle,
                                         posterUrl: posterUrl,
@@ -1523,6 +1800,7 @@ class _PlaylistCard extends StatefulWidget {
   final VoidCallback onBrowseFiles;
 
   const _PlaylistCard({
+    super.key,
     required this.title,
     this.subtitle,
     this.posterUrl,
@@ -1543,6 +1821,7 @@ class _PlaylistCardState extends State<_PlaylistCard> {
   late final FocusNode _removeFocusNode;
   bool _focused = false;
   bool _removeFocused = false;
+  Map<String, dynamic>? _lastPlayedInPlaylist;
 
   static const Map<ShortcutActivator, Intent> _activateShortcuts = <ShortcutActivator, Intent>{
     SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
@@ -1557,6 +1836,41 @@ class _PlaylistCardState extends State<_PlaylistCard> {
       ..addListener(_handleCardFocusChange);
     _removeFocusNode = FocusNode(debugLabel: 'playlist-card-remove-${widget.title}')
       ..addListener(_handleRemoveFocusChange);
+    _loadLastPlayedInPlaylist();
+  }
+
+  Future<void> _loadLastPlayedInPlaylist() async {
+    final playlistId = StorageService.computePlaylistDedupeKey(widget.item);
+    final lastPlayed = await StorageService.getLastPlayedFile(playlistId);
+    if (mounted && lastPlayed != null && lastPlayed.isNotEmpty) {
+      setState(() {
+        _lastPlayedInPlaylist = lastPlayed;
+      });
+    }
+  }
+
+  Future<void> _handlePlayNow() async {
+    // Always check for last played info for this playlist
+    // Load fresh data in case it was updated via Browse
+    final playlistId = StorageService.computePlaylistDedupeKey(widget.item);
+    debugPrint('PlayNow: playlistId=$playlistId');
+    final lastPlayed = await StorageService.getLastPlayedFile(playlistId);
+    debugPrint('PlayNow: lastPlayed=$lastPlayed');
+    
+    if (lastPlayed != null && lastPlayed.isNotEmpty) {
+      // Resume from last played position
+      final playlistScreenState = context.findAncestorStateOfType<_PlaylistScreenState>();
+      if (playlistScreenState != null) {
+        // Pass the saved path to find the correct index in the playlist
+        final savedPath = lastPlayed['path'] as String?;
+        debugPrint('PlayNow: savedPath=$savedPath');
+        await playlistScreenState._playItemWithPath(widget.item, savedPath);
+        return;
+      }
+    }
+    // No progress or couldn't find parent state, just play normally
+    debugPrint('PlayNow: No last played, playing from start');
+    widget.onPlay();
   }
 
   @override
@@ -1816,7 +2130,7 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                             runSpacing: 10,
                             children: [
                               ElevatedButton.icon(
-                                onPressed: widget.onPlay,
+                                onPressed: _handlePlayNow,
                                 icon: const Icon(Icons.play_arrow_rounded, size: 20),
                                 label: const Text(
                                   'Play now',

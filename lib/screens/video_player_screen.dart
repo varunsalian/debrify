@@ -437,6 +437,41 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _currentIndex = initialIndex;
     _dynamicTitle = widget.title;
+    
+    // Save last played BEFORE creating player to avoid callback crashes
+    if (widget.playlistId != null && widget.playlistId!.isNotEmpty && widget.playlist != null && widget.playlist!.isNotEmpty) {
+      try {
+        final entry = widget.playlist![initialIndex];
+        final fileName = entry.title.split('/').last;
+        
+        debugPrint('Saving last played: playlistId=${widget.playlistId}, index=$initialIndex, fileName=$fileName');
+        
+        // Save to playlist-specific storage (for Play Now resume)
+        await StorageService.saveLastPlayedFile(widget.playlistId!, {
+          'path': entry.title,
+          'bytes': entry.sizeBytes,
+          'id': entry.fileId ?? entry.title.hashCode,
+          'videoIndex': initialIndex,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+        
+        // Save to global last played (for Continue Watching)
+        await StorageService.saveGlobalLastPlayed(
+          playlistId: widget.playlistId!,
+          videoIndex: initialIndex,
+          positionMs: 0,
+          videoTitle: fileName,
+          videoPath: entry.title,
+        );
+        
+        debugPrint('Last played saved successfully');
+      } catch (e) {
+        debugPrint('Failed to save last played: $e');
+      }
+    } else {
+      debugPrint('Skipping save: playlistId=${widget.playlistId}, hasPlaylist=${widget.playlist != null}');
+    }
+    
     _player = mk.Player(
       configuration: mk.PlayerConfiguration(
         ready: () {
@@ -1222,6 +1257,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     print('PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay');
 
     await _saveResume();
+    
+    // Just pause before loading new video - don't stop as it causes callback crashes
+    try {
+      await _player.pause();
+    } catch (e) {
+      debugPrint('Error pausing player before loading new video: $e');
+    }
+    
     final entry = widget.playlist![index];
     _currentIndex = index;
 
@@ -1232,8 +1275,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           'path': entry.title, // Use title as path (it contains the file path)
           'bytes': entry.sizeBytes,
           'id': entry.fileId ?? entry.title.hashCode, // Use fileId if available, fallback to title hash
+          'videoIndex': index, // Save the video index in the playlist
           'timestamp': DateTime.now().toIso8601String(),
         });
+        
+        // Also save to global last played with just the filename
+        final fileName = entry.title.split('/').last;
+        await StorageService.saveGlobalLastPlayed(
+          playlistId: widget.playlistId!,
+          videoIndex: index,
+          positionMs: 0,
+          videoTitle: fileName,
+        );
       } catch (e) {
         // Ignore errors for last played
       }

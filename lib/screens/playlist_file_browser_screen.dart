@@ -31,12 +31,8 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
   Map<String, dynamic>? _lastPlayedFile;
 
   String get _playlistId {
-    // Try multiple fields to get a unique ID
-    return (widget.playlistItem['rdTorrentId'] as String?) ??
-           (widget.playlistItem['id'] as String?) ??
-           (widget.playlistItem['hash'] as String?) ??
-           widget.playlistItem['playlistName'] as String? ??
-           'unknown_${widget.playlistItem.hashCode}';
+    // Use the same dedupe key computation as playlist screen
+    return StorageService.computePlaylistDedupeKey(widget.playlistItem);
   }
 
   @override
@@ -151,39 +147,69 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
   Future<void> _playFile(dynamic file) async {
     try {
       final fileId = file['id'];
+      final filePath = file['path'] as String?;
       final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
       
-      if (fileId == null || rdTorrentId == null) {
+      if ((fileId == null && filePath == null) || rdTorrentId == null) {
         throw Exception('Invalid file or torrent ID');
       }
 
-      // Save as last played BEFORE launching video player
+      // Get the sorted file list and current index FIRST
+      final sortedFiles = _filteredAndSortedFiles;
+      
+      // Try to find by ID first, then fall back to path
+      int currentIndex = -1;
+      if (fileId != null) {
+        currentIndex = sortedFiles.indexWhere((f) => f['id'] == fileId);
+      }
+      
+      // If not found by ID, try to find by path
+      if (currentIndex == -1 && filePath != null) {
+        currentIndex = sortedFiles.indexWhere((f) => f['path'] == filePath);
+        // If exact match not found, try matching just the filename
+        if (currentIndex == -1) {
+          final targetFilename = filePath.split('/').last;
+          currentIndex = sortedFiles.indexWhere((f) {
+            final fPath = f['path'] as String?;
+            return fPath != null && fPath.split('/').last == targetFilename;
+          });
+        }
+      }
+      
+      if (currentIndex == -1) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not find file in current list')),
+        );
+        return;
+      }
+      
+      // Use the actual file from sortedFiles to get correct ID
+      final actualFile = sortedFiles[currentIndex];
+
+      // Save as last played BEFORE launching video player (for playlist-level tracking)
       await StorageService.saveLastPlayedFile(_playlistId, {
-        'path': file['path'],
-        'bytes': file['bytes'],
-        'id': file['id'],
+        'path': actualFile['path'],
+        'bytes': actualFile['bytes'],
+        'id': actualFile['id'],
+        'videoIndex': currentIndex,
         'timestamp': DateTime.now().toIso8601String(),
       });
 
-      // Get the sorted file list
-      final sortedFiles = _filteredAndSortedFiles;
-      final currentIndex = sortedFiles.indexWhere((f) => f['id'] == fileId);
-      
-      if (currentIndex == -1) {
-        throw Exception('File not found in sorted list');
-      }
+      // Note: Global last played will be saved by video_player_screen.dart after video loads
       
       // Debug logging
       print('Playing file at index $currentIndex of ${sortedFiles.length} (Sort: ${_sortAscending ? "A-Z" : "Z-A"})');
-      print('Current file: ${file['path']}');
+      print('Current file: ${actualFile['path']}');
 
       final apiKey = await StorageService.getApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('API key not found');
       }
 
-      // Find current file's index in video files list
-      final fileIndex = _allFiles.indexWhere((f) => f['id'] == fileId);
+      // Find current file's index in video files list using the actualFile
+      final actualFileId = actualFile['id'];
+      final fileIndex = _allFiles.indexWhere((f) => f['id'] == actualFileId);
       if (fileIndex == -1 || fileIndex >= _links.length) {
         throw Exception('File link not found');
       }
@@ -219,7 +245,7 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
         if (videoFileIndex != -1 && videoFileIndex < _links.length) {
           final path = sortedFile['path'] as String? ?? 'Video';
           final bytes = sortedFile['bytes'] as int?;
-          final isCurrentFile = sortedFileId == fileId;
+          final isCurrentFile = sortedFileId == actualFileId; // Compare with actualFileId
           
           // Track the actual index in playlistEntries for the current file
           if (isCurrentFile) {
@@ -413,54 +439,34 @@ class _PlaylistFileBrowserScreenState extends State<PlaylistFileBrowserScreen> {
                   width: 1,
                 ),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _playFile(_lastPlayedFile),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.play_circle_filled,
-                            color: Color(0xFFE50914),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              (_lastPlayedFile!['path'] as String? ?? '').split('/').last,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
+              child: InkWell(
+                onTap: () => _playFile(_lastPlayedFile),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.play_circle_filled,
+                        color: Color(0xFFE50914),
+                        size: 20,
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          (_lastPlayedFile!['path'] as String? ?? '').split('/').last,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      color: Colors.white54,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () {
-                        setState(() {
-                          _lastPlayedFile = null;
-                        });
-                        StorageService.saveLastPlayedFile(_playlistId, {});
-                      },
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
 
