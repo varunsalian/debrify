@@ -140,6 +140,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
   String?
   _currentStreamUrl; // Last resolved stream URL for the active playlist entry
+  bool _isDisposing = false; // Flag to prevent double dispose
 
   // PikPak cold storage retry logic
   bool _isPikPakRetrying = false;
@@ -1690,6 +1691,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    if (_isDisposing) return;
+    _isDisposing = true;
+    
     // Save the current state before disposing
     _saveResume();
 
@@ -1699,22 +1703,43 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _pikPakRetryCount = 0;
     _pikPakRetryMessage = null;
 
+    // Cancel all timers first
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
     _channelBadgeTimer?.cancel();
     _titleBadgeTimer?.cancel();
+    _transitionStopTimer?.cancel();
+    
+    // Cancel all subscriptions BEFORE touching the player
+    _posSub?.cancel();
+    _posSub = null;
+    _durSub?.cancel();
+    _durSub = null;
+    _playSub?.cancel();
+    _playSub = null;
+    _paramsSub?.cancel();
+    _paramsSub = null;
+    _completedSub?.cancel();
+    _completedSub = null;
+    
+    // Stop player but DON'T dispose - let GC handle it to avoid native callback crash
+    try {
+      _player.pause();
+      _player.stop();
+      // Note: We intentionally do NOT call _player.dispose() here
+      // The native mpv callbacks continue running after dispose(), causing crashes
+      // Let the garbage collector clean up when it's safe
+    } catch (e) {
+      debugPrint('Error stopping player: $e');
+    }
+    
+    // Dispose other resources
     _controlsVisible.dispose();
     _seekHud.dispose();
     _verticalHud.dispose();
-    _posSub?.cancel();
-    _durSub?.cancel();
-    _playSub?.cancel();
-    _paramsSub?.cancel();
-    _completedSub?.cancel();
-    _player.dispose();
-    _transitionStopTimer?.cancel();
     _rainbowController.dispose();
+    
     // Restore system brightness when exiting the player
     try {
       ScreenBrightness().resetScreenBrightness();

@@ -24,6 +24,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
   MovieGroup _group = MovieGroup.main;
   final Map<int, Map<String, dynamic>> _progressByIndex = {};
   int _lastCurrentIndex = -1;
+  bool _sortAscending = true; // A-Z by default
 
   @override
   void initState() {
@@ -76,38 +77,16 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
 
   Map<MovieGroup, List<int>> _groups() {
     final entries = widget.playlist;
-    final main = <int>[];
-    final extras = <int>[];
-    int maxSize = -1;
-    for (int i = 0; i < entries.length; i++) {
-      final s = entries[i].sizeBytes ?? -1;
-      if (s > maxSize) maxSize = s;
-    }
-    final double threshold = maxSize > 0 ? maxSize * 0.40 : -1;
-    for (int i = 0; i < entries.length; i++) {
-      final e = entries[i];
-      final isSmall = threshold > 0 && (e.sizeBytes != null && e.sizeBytes! < threshold);
-      if (isSmall) {
-        extras.add(i);
-      } else {
-        main.add(i);
-      }
-    }
-    int sizeOf(int idx) => entries[idx].sizeBytes ?? -1;
-    int? yearOf(int idx) => _extractYear(entries[idx].title);
+    // All files in main group
+    final main = List.generate(entries.length, (i) => i);
+    final extras = <int>[]; // Empty extras
+    
+    // Sort by title (A-Z or Z-A)
     main.sort((a, b) {
-      final ya = yearOf(a);
-      final yb = yearOf(b);
-      if (ya != null && yb != null) {
-        return ya.compareTo(yb); // older first
-      }
-      return sizeOf(b).compareTo(sizeOf(a));
+      final comparison = entries[a].title.toLowerCase().compareTo(entries[b].title.toLowerCase());
+      return _sortAscending ? comparison : -comparison;
     });
-    extras.sort((a, b) {
-      final sa = entries[a].sizeBytes ?? 0;
-      final sb = entries[b].sizeBytes ?? 0;
-      return sa.compareTo(sb);
-    });
+    
     return {MovieGroup.main: main, MovieGroup.extras: extras};
   }
 
@@ -131,18 +110,11 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
               const SizedBox(width: 8),
               const Text('Movie Files', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
               const Spacer(),
-              PopupMenuButton<MovieGroup>(
-                color: const Color(0xFF1A1A1A),
-                initialValue: _group,
-                onSelected: (v) {
-                  if (_group != v) {
-                    setState(() => _group = v);
-                  }
+              InkWell(
+                onTap: () {
+                  setState(() => _sortAscending = !_sortAscending);
                 },
-                itemBuilder: (context) => [
-                  PopupMenuItem(value: MovieGroup.main, child: Text('Main ($mainCount)', style: const TextStyle(color: Colors.white))),
-                  PopupMenuItem(value: MovieGroup.extras, child: Text('Extras ($extrasCount)', style: const TextStyle(color: Colors.white))),
-                ],
+                borderRadius: BorderRadius.circular(8),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
@@ -152,11 +124,12 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.filter_list, color: Colors.white, size: 18),
+                      const Icon(Icons.sort_by_alpha, color: Colors.white, size: 18),
                       const SizedBox(width: 6),
-                      Text(_group == MovieGroup.main ? 'Main ($mainCount)' : 'Extras ($extrasCount)', style: const TextStyle(color: Colors.white, fontSize: 12)),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
+                      Text(
+                        _sortAscending ? 'A-Z ($mainCount)' : 'Z-A ($mainCount)',
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
@@ -215,7 +188,12 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                              Text(
+                                _extractFilename(e.title),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                              ),
                               const SizedBox(height: 2),
                               Row(
                                 children: [
@@ -288,6 +266,16 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
       unit++;
     }
     return '${size.toStringAsFixed(unit == 0 ? 0 : 1)} ${units[unit]}';
+  }
+
+  String _extractFilename(String path) {
+    // Remove leading slash if present
+    String cleanPath = path.startsWith('/') ? path.substring(1) : path;
+    // Get filename after last slash
+    if (cleanPath.contains('/')) {
+      return cleanPath.split('/').last;
+    }
+    return cleanPath;
   }
 }
 
