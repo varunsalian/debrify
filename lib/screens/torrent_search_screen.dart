@@ -6269,8 +6269,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     try {
       // Get torrent info to get file list
       final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
-      final files = (torrentInfo['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final allFiles = (torrentInfo['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final links = (torrentInfo['links'] as List?)?.cast<String>() ?? [];
+
+      // Filter to only selected files (files that were selected when adding to RD)
+      // Only selected files have corresponding links and can be downloaded
+      final files = allFiles.where((file) => file['selected'] == 1).toList();
 
       if (mounted) Navigator.of(context).pop();
 
