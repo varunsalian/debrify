@@ -237,11 +237,11 @@ class _EngineImportPageState extends State<EngineImportPage> {
 
   Future<void> _importFromLocalFile() async {
     try {
-      // Pick YAML file
+      // Pick YAML file - use FileType.any for better Android compatibility
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['yaml', 'yml'],
+        type: FileType.any,
         allowMultiple: false,
+        withData: true, // Loads file bytes directly (works better on Android)
       );
 
       if (result == null || result.files.isEmpty) {
@@ -249,13 +249,23 @@ class _EngineImportPageState extends State<EngineImportPage> {
       }
 
       final file = result.files.first;
-      if (file.path == null) {
-        throw Exception('Could not read file path');
+
+      // Validate file extension
+      final fileName = file.name.toLowerCase();
+      if (!fileName.endsWith('.yaml') && !fileName.endsWith('.yml')) {
+        throw Exception('Please select a YAML file (.yaml or .yml)');
       }
 
-      // Read file contents
-      final fileBytes = await file.xFile.readAsBytes();
-      final yamlContent = String.fromCharCodes(fileBytes);
+      // Read file contents (prefer bytes if available, otherwise read from path)
+      final String yamlContent;
+      if (file.bytes != null) {
+        yamlContent = String.fromCharCodes(file.bytes!);
+      } else if (file.path != null) {
+        final fileBytes = await file.xFile.readAsBytes();
+        yamlContent = String.fromCharCodes(fileBytes);
+      } else {
+        throw Exception('Could not read file content');
+      }
 
       // Parse YAML to extract metadata
       final yaml = loadYaml(yamlContent);
