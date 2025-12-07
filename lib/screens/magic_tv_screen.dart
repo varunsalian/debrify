@@ -9603,6 +9603,10 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
     if (widget.isAndroidTv) {
       _setupFocusNavigation();
     }
+    // Auto-fetch channels on dialog open
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchChannels();
+    });
   }
 
   void _setupFocusNavigation() {
@@ -9980,15 +9984,15 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                           backgroundColor: hasFocus
                               ? Theme.of(context).primaryColor
                               : null,
-                          foregroundColor: Colors.white,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
                         ),
                         child: _isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: Theme.of(context).colorScheme.onPrimary,
                                 ),
                               )
                             : const Text('Fetch Channels'),
@@ -10070,16 +10074,16 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.error_outline,
                         size: 48,
-                        color: Colors.red,
+                        color: Theme.of(context).colorScheme.error,
                       ),
                       const SizedBox(height: 16),
                       Text(
                         _errorMessage!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
+                        style: TextStyle(color: Theme.of(context).colorScheme.error),
                       ),
                     ],
                   ),
@@ -10104,15 +10108,14 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                     vertical: 12,
                   ),
                   backgroundColor: hasFocus
-                      ? Colors.grey.withOpacity(0.2)
+                      ? Theme.of(context).colorScheme.surfaceVariant
                       : null,
-                  foregroundColor: Colors.white,
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
                 ),
                 child: Text(
                   'Cancel',
                   style: TextStyle(
                     fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
-                    color: Colors.white,
                   ),
                 ),
               );
@@ -10135,9 +10138,11 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                     vertical: 12,
                   ),
                   backgroundColor: hasSelection
-                      ? (hasFocus ? Colors.blue[700] : Colors.blue)
+                      ? (hasFocus
+                          ? Theme.of(context).primaryColor.withOpacity(0.8)
+                          : Theme.of(context).primaryColor)
                       : null,
-                  foregroundColor: Colors.white,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 ),
                 child: Text(
                   selectedCount > 0
@@ -10145,7 +10150,6 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                       : 'Import Selected',
                   style: TextStyle(
                     fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
-                    color: Colors.white,
                   ),
                 ),
               );
