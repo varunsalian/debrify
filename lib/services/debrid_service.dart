@@ -690,7 +690,9 @@ class DebridService {
       final filesMaps = files.map((f) => f as Map<String, dynamic>).toList();
 
       // Build and return the complete folder tree
-      return RDFolderTreeBuilder.buildTree(filesMaps);
+      final tree = RDFolderTreeBuilder.buildTree(filesMaps);
+
+      return tree;
     } catch (e) {
       throw Exception('Failed to build torrent folder tree: $e');
     }

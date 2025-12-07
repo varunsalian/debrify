@@ -1180,6 +1180,84 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     });
 
     try {
+      // Get torrent info to check for RAR archives
+      final torrentInfo = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
+      final files = (torrentInfo['files'] as List<dynamic>?)?.map((f) => f as Map<String, dynamic>).toList() ?? [];
+      final links = (torrentInfo['links'] as List<dynamic>?) ?? [];
+
+      // Check if this is a RAR archive
+      final isRarArchive = RDFolderTreeBuilder.isRarArchive(files, links);
+
+      if (isRarArchive) {
+        // Show a message that this cannot be browsed
+        setState(() {
+          _isLoadingFolder = false;
+        });
+
+        // Show dialog explaining RAR archives and offering to download
+        if (mounted) {
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.archive, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'RAR Archive Detected',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                'This is a RAR archive that Real-Debrid has not extracted yet. '
+                'The folder structure shown represents the archive contents, but only the RAR file itself can be downloaded.\n\n'
+                'You can download the RAR archive to extract it locally.',
+                style: const TextStyle(color: Colors.grey),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    // Download the single RAR file
+                    if (links.isNotEmpty) {
+                      try {
+                        final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, links[0]);
+                        final downloadUrl = unrestrictResult['download'] as String?;
+                        if (downloadUrl != null) {
+                          _copyToClipboard(downloadUrl);
+                        }
+                      } catch (e) {
+                        _showError('Failed to get download link: ${e.toString()}');
+                      }
+                    }
+                  },
+                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF60A5FA)),
+                  child: const Text('Copy Download Link'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      // Not a RAR archive - proceed with normal folder navigation
       // Get the folder tree for this torrent
       final folderTree = await DebridService.getTorrentFolderTree(
         _apiKey!,

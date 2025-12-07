@@ -26,11 +26,15 @@ class RDFolderTreeBuilder {
       final fileId = file['id'] as int?;
       final bytes = _parseBytes(file['bytes']);
 
-      if (path.isEmpty) continue;
+      if (path.isEmpty) {
+        continue;
+      }
 
       // Split path into segments and remove empty ones
       final segments = path.split('/').where((s) => s.isNotEmpty).toList();
-      if (segments.isEmpty) continue;
+      if (segments.isEmpty) {
+        continue;
+      }
 
       // Navigate through the tree, creating folders as needed
       RDFileNode currentNode = rootNode;
@@ -172,6 +176,20 @@ class RDFolderTreeBuilder {
     }
 
     return false;
+  }
+
+  /// Detect if torrent is a RAR archive (multiple selected files but only 1 link)
+  /// This indicates Real-Debrid has a RAR file showing extracted contents list,
+  /// but hasn't actually extracted it yet. Only the RAR itself can be downloaded.
+  static bool isRarArchive(List<Map<String, dynamic>> files, List<dynamic> links) {
+    // Filter selected files
+    final selectedFiles = files.where((file) {
+      final selectedValue = file['selected'];
+      return selectedValue == 1 || selectedValue == true;
+    }).toList();
+
+    // RAR detection: multiple selected files but only one link
+    return selectedFiles.length > 1 && links.length == 1;
   }
 
   /// Create a flattened root for torrents with files at root level

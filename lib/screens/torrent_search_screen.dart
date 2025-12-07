@@ -16,6 +16,7 @@ import '../services/android_native_downloader.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
+import '../utils/rd_folder_tree_builder.dart';
 import '../widgets/stat_chip.dart';
 import '../widgets/file_selection_dialog.dart';
 import 'video_player_screen.dart';
@@ -5044,6 +5045,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final files = result['files'] as List<dynamic>?;
     final updatedInfo = result['updatedInfo'] as Map<String, dynamic>?;
 
+    // Check if this is a RAR archive (multiple files but only 1 link)
+    final isRarArchive = (files != null && files.isNotEmpty)
+        ? RDFolderTreeBuilder.isRarArchive(
+            files.map((f) => f as Map<String, dynamic>).toList(),
+            links,
+          )
+        : false;
+
     // Special case: if user prefers auto-download and torrent is media-only, download all immediately
     final hasAnyVideo = (files ?? []).any((f) {
       final name =
@@ -5169,9 +5178,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         title: 'Open in Real-Debrid',
                         subtitle: rdHidden
                             ? 'Enable Real-Debrid navigation in settings to use this'
-                            : 'View this torrent in Real-Debrid tab',
-                        enabled: !rdHidden,
-                        autofocus: !rdHidden,
+                            : isRarArchive
+                                ? 'Not available for RAR archives (not extracted by Real-Debrid)'
+                                : 'View this torrent in Real-Debrid tab',
+                        enabled: !rdHidden && !isRarArchive,
+                        autofocus: !rdHidden && !isRarArchive,
                         onTap: () {
                           Navigator.of(ctx).pop();
                           // Create RDTorrent object and open it in Real-Debrid tab
@@ -5215,11 +5226,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         icon: Icons.download_rounded,
                         color: const Color(0xFF4ADE80),
                         title: 'Download to device',
-                        subtitle: 'Downloads the files to your device',
+                        subtitle: isRarArchive
+                            ? 'Downloads the RAR archive to your device'
+                            : 'Downloads the files to your device',
                         enabled: true,
                         onTap: () async {
                           Navigator.of(ctx).pop();
-                          if (hasAnyVideo) {
+                          // RAR archives: always download the single link directly
+                          if (isRarArchive) {
+                            _downloadFile(downloadLink, torrentName);
+                          } else if (hasAnyVideo) {
                             if (links.length == 1) {
                               _downloadFile(downloadLink, torrentName);
                             } else {
