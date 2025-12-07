@@ -17,6 +17,7 @@ import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../widgets/stat_chip.dart';
+import '../widgets/pikpak_file_selection_dialog.dart';
 import 'video_player_screen.dart';
 import '../models/rd_torrent.dart';
 import '../services/main_page_bridge.dart';
@@ -2555,7 +2556,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final hasVideo = videoFiles.isNotEmpty;
     final postAction = await StorageService.getPikPakPostTorrentAction();
     final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
-    final showOpen = !pikpakHidden;
 
     // Handle automatic actions
     switch (postAction) {
@@ -2645,20 +2645,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ),
                   const Divider(height: 1, color: Color(0xFF1E293B)),
-                  if (showOpen)
-                    _DebridActionTile(
-                      icon: Icons.open_in_new,
-                      color: const Color(0xFFF59E0B),
-                      title: 'Open in PikPak',
-                      subtitle: 'View folder in PikPak files tab',
-                      enabled: true,
-                      autofocus: true,
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        // Navigate to the specific PikPak folder
-                        MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
-                      },
-                    ),
+                  _DebridActionTile(
+                    icon: Icons.open_in_new,
+                    color: const Color(0xFFF59E0B),
+                    title: 'Open in PikPak',
+                    subtitle: pikpakHidden
+                        ? 'Enable PikPak navigation in settings to use this'
+                        : 'View folder in PikPak files tab',
+                    enabled: !pikpakHidden,
+                    autofocus: !pikpakHidden,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      // Navigate to the specific PikPak folder
+                      MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
+                    },
+                  ),
                   _DebridActionTile(
                     icon: Icons.play_circle_fill_rounded,
                     color: const Color(0xFF60A5FA),
@@ -2667,10 +2668,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ? 'Stream instantly from PikPak.'
                         : 'No video files found.',
                     enabled: hasVideo,
-                    autofocus: !showOpen,
+                    autofocus: pikpakHidden && hasVideo,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _playPikPakVideos(videoFiles, torrentName);
+                    },
+                  ),
+                  _DebridActionTile(
+                    icon: Icons.download_rounded,
+                    color: const Color(0xFF4ADE80),
+                    title: 'Download to device',
+                    subtitle: 'Grab files from PikPak instantly.',
+                    enabled: true,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _downloadPikPakFiles(fileId, torrentName);
                     },
                   ),
                   _DebridActionTile(
@@ -2928,6 +2940,215 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  Future<void> _downloadPikPakFiles(String fileId, String torrentName) async {
+    // Show selection dialog for downloading files
+    if (!mounted) return;
+
+    final pikpak = PikPakApiService.instance;
+
+    // Show loading dialog while we fetch the file structure
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Scanning files...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Get all files from the folder (recursively)
+      final fileData = await pikpak.getFileDetails(fileId);
+      final kind = fileData['kind'];
+      List<Map<String, dynamic>> allFiles = [];
+
+      if (kind == 'drive#folder') {
+        // Extract all files recursively
+        allFiles = await _extractAllPikPakFiles(pikpak, fileId);
+      } else {
+        // Single file
+        allFiles = [fileData];
+      }
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (allFiles.isEmpty) {
+        _showPikPakSnack('No files found to download', isError: true);
+        return;
+      }
+
+      // Show file selection dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return PikPakFileSelectionDialog(
+            files: allFiles,
+            torrentName: torrentName,
+            onDownload: (selectedFiles) {
+              if (selectedFiles.isEmpty) return;
+              _downloadSelectedPikPakFiles(selectedFiles, torrentName);
+            },
+          );
+        },
+      );
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showPikPakSnack('Failed to fetch files: $e', isError: true);
+    }
+  }
+
+  /// Downloads selected files from PikPak with folder grouping (similar to Real-Debrid)
+  Future<void> _downloadSelectedPikPakFiles(List<Map<String, dynamic>> files, String torrentName) async {
+    if (files.isEmpty) return;
+
+    int successCount = 0;
+    int failCount = 0;
+    final pikpak = PikPakApiService.instance;
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Preparing ${files.length} file${files.length > 1 ? 's' : ''}...',
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    for (final file in files) {
+      try {
+        final fileId = file['id'] as String?;
+        if (fileId == null) continue;
+
+        // Get fresh file details with download URL
+        final freshFileData = await pikpak.getFileDetails(fileId);
+        final downloadUrl = freshFileData['web_content_link'] as String?;
+
+        if (downloadUrl == null || downloadUrl.isEmpty) {
+          failCount++;
+          continue;
+        }
+
+        // Extract file path and name - use the full path if available (from folder navigation)
+        final fullPath = file['_fullPath'] as String? ?? file['name'] as String? ?? 'download';
+        final displayName = file['_displayName'] as String? ?? file['name'] as String? ?? 'download';
+
+        // Create metadata with folder structure info (similar to Real-Debrid pattern)
+        final meta = jsonEncode({
+          'pikpakDownload': true,
+          'pikpakFileId': fileId,
+          'pikpakFileName': fullPath,  // Store full path for folder structure
+          'pikpakDisplayName': displayName,  // Display name for UI
+        });
+
+        // Enqueue download with torrentName for grouping (like Real-Debrid does)
+        // This groups all files under the same torrent name in the downloads screen
+        await DownloadService.instance.enqueueDownload(
+          url: downloadUrl,
+          fileName: displayName,  // Use display name (just the filename, not the full path)
+          meta: meta,
+          torrentName: torrentName,  // KEY: This groups downloads under the torrent folder
+          context: mounted ? context : null,
+        );
+        successCount++;
+      } catch (e) {
+        print('Error queueing file for download: $e');
+        failCount++;
+      }
+    }
+
+    // Close loading dialog
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    if (successCount > 0) {
+      _showPikPakSnack('Queued $successCount file${successCount > 1 ? 's' : ''} for download');
+    }
+    if (failCount > 0) {
+      _showPikPakSnack('Failed to queue $failCount file${failCount > 1 ? 's' : ''}', isError: true);
+    }
+  }
+
+  /// Recursively extract all files (not just videos) from a PikPak folder
+  /// Preserves folder structure by prefixing file names with their relative path
+  Future<List<Map<String, dynamic>>> _extractAllPikPakFiles(
+    PikPakApiService pikpak,
+    String folderId, {
+    int maxDepth = 5,
+    int currentDepth = 0,
+    String currentPath = '',  // Track the current folder path
+  }) async {
+    if (currentDepth >= maxDepth) {
+      return [];
+    }
+
+    final List<Map<String, dynamic>> files = [];
+
+    try {
+      final result = await pikpak.listFiles(parentId: folderId);
+      final items = result.files;
+
+      for (final item in items) {
+        final kind = item['kind'] ?? '';
+        final itemName = item['name'] ?? 'unknown';
+
+        if (kind == 'drive#folder') {
+          // Build the path for this subfolder
+          final subPath = currentPath.isEmpty ? itemName : '$currentPath/$itemName';
+
+          // Recursively scan subfolder with updated path
+          final subFiles = await _extractAllPikPakFiles(
+            pikpak,
+            item['id'],
+            maxDepth: maxDepth,
+            currentDepth: currentDepth + 1,
+            currentPath: subPath,
+          );
+          files.addAll(subFiles);
+        } else {
+          // It's a file - add folder path to the file name
+          final fileWithPath = Map<String, dynamic>.from(item);
+          if (currentPath.isNotEmpty) {
+            // Prefix the file name with its folder path
+            fileWithPath['name'] = '$currentPath/$itemName';
+          }
+          files.add(fileWithPath);
+        }
+      }
+    } catch (e) {
+      print('Error extracting PikPak files: $e');
+    }
+
+    return files;
+  }
+
   void _showPikPakSnack(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2962,11 +3183,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Recursively extract all video files from a PikPak folder and its subfolders
+  /// Preserves folder structure by prefixing file names with their relative path
   Future<List<Map<String, dynamic>>> _extractAllPikPakVideos(
     PikPakApiService pikpak,
     String folderId, {
     int maxDepth = 5,
     int currentDepth = 0,
+    String currentPath = '',  // Track the current folder path
   }) async {
     if (currentDepth >= maxDepth) {
       print('PikPak: Max depth reached at $currentDepth');
@@ -2984,25 +3207,34 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       for (final file in files) {
         final kind = file['kind'] ?? '';
         final mimeType = file['mime_type'] ?? '';
-        final name = file['name'] ?? 'unknown';
+        final itemName = file['name'] ?? 'unknown';
 
-        print('PikPak: Item: $name, kind: $kind, mime: $mimeType');
+        print('PikPak: Item: $itemName, kind: $kind, mime: $mimeType');
 
         if (kind == 'drive#folder') {
-          // Recursively scan subfolder
-          print('PikPak: Entering subfolder: $name');
+          // Build the path for this subfolder
+          final subPath = currentPath.isEmpty ? itemName : '$currentPath/$itemName';
+
+          // Recursively scan subfolder with updated path
+          print('PikPak: Entering subfolder: $itemName');
           final subVideos = await _extractAllPikPakVideos(
             pikpak,
             file['id'],
             maxDepth: maxDepth,
             currentDepth: currentDepth + 1,
+            currentPath: subPath,
           );
-          print('PikPak: Found ${subVideos.length} videos in subfolder: $name');
+          print('PikPak: Found ${subVideos.length} videos in subfolder: $itemName');
           videos.addAll(subVideos);
         } else if (mimeType.startsWith('video/')) {
-          // It's a video file
-          print('PikPak: Found video: $name');
-          videos.add(file);
+          // It's a video file - add folder path to the file name
+          print('PikPak: Found video: $itemName');
+          final videoWithPath = Map<String, dynamic>.from(file);
+          if (currentPath.isNotEmpty) {
+            // Prefix the file name with its folder path
+            videoWithPath['name'] = '$currentPath/$itemName';
+          }
+          videos.add(videoWithPath);
         }
       }
     } catch (e) {
@@ -3779,7 +4011,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Get the post-torrent action preference
     final postAction = await StorageService.getTorboxPostTorrentAction();
     final torboxHidden = await StorageService.getTorboxHiddenFromNav();
-    final showOpen = !torboxHidden;
 
     // Check if torrent is video-only for auto-download handling
     final isVideoOnly = torrent.files.isNotEmpty &&
@@ -3892,20 +4123,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ),
                   const Divider(height: 1, color: Color(0xFF1E293B)),
-                  if (showOpen)
-                    _DebridActionTile(
-                      icon: Icons.open_in_new,
-                      color: const Color(0xFFF59E0B),
-                      title: 'Open in Torbox',
-                      subtitle: 'View this torrent in Torbox tab',
-                      enabled: true,
-                      autofocus: true,
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        // Open the torrent in Torbox tab
-                        MainPageBridge.openTorboxFolder?.call(torrent);
-                      },
-                    ),
+                  _DebridActionTile(
+                    icon: Icons.open_in_new,
+                    color: const Color(0xFFF59E0B),
+                    title: 'Open in Torbox',
+                    subtitle: torboxHidden
+                        ? 'Enable Torbox navigation in settings to use this'
+                        : 'View this torrent in Torbox tab',
+                    enabled: !torboxHidden,
+                    autofocus: !torboxHidden,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      // Open the torrent in Torbox tab
+                      MainPageBridge.openTorboxFolder?.call(torrent);
+                    },
+                  ),
                   _DebridActionTile(
                     icon: Icons.play_circle_fill_rounded,
                     color: const Color(0xFF60A5FA),
@@ -3914,7 +4146,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ? 'Open instantly in the Torbox player experience.'
                         : 'Available for torrents with video files.',
                     enabled: hasVideo,
-                    autofocus: !showOpen,
+                    autofocus: torboxHidden && hasVideo,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _playTorboxTorrent(torrent);
@@ -4621,7 +4853,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   ) async {
     final postAction = await StorageService.getPostTorrentAction();
     final rdHidden = await StorageService.getRealDebridHiddenFromNav();
-    final showOpen = !rdHidden;
     final downloadLink = result['downloadLink'] as String;
     final fileSelection = result['fileSelection'] as String;
     final links = result['links'] as List<dynamic>;
@@ -4747,32 +4978,33 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ),
                       const Divider(height: 1, color: Color(0xFF1E293B)),
-                      if (showOpen)
-                        _DebridActionTile(
-                          icon: Icons.open_in_new,
-                          color: const Color(0xFFF59E0B),
-                          title: 'Open in Real-Debrid',
-                          subtitle: 'View this torrent in Real-Debrid tab',
-                          enabled: true,
-                          autofocus: true,
-                          onTap: () {
-                            Navigator.of(ctx).pop();
-                            // Create RDTorrent object and open it in Real-Debrid tab
-                            final rdTorrent = RDTorrent(
-                              id: result['torrentId'].toString(),
-                              filename: torrentName,
-                              hash: '',
-                              bytes: 0,
-                              host: '',
-                              split: 0,
-                              progress: 0,
-                              status: '',
-                              added: DateTime.now().toIso8601String(),
-                              links: links.map((e) => e.toString()).toList(),
-                            );
-                            MainPageBridge.openDebridOptions?.call(rdTorrent);
-                          },
-                        ),
+                      _DebridActionTile(
+                        icon: Icons.open_in_new,
+                        color: const Color(0xFFF59E0B),
+                        title: 'Open in Real-Debrid',
+                        subtitle: rdHidden
+                            ? 'Enable Real-Debrid navigation in settings to use this'
+                            : 'View this torrent in Real-Debrid tab',
+                        enabled: !rdHidden,
+                        autofocus: !rdHidden,
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          // Create RDTorrent object and open it in Real-Debrid tab
+                          final rdTorrent = RDTorrent(
+                            id: result['torrentId'].toString(),
+                            filename: torrentName,
+                            hash: '',
+                            bytes: 0,
+                            host: '',
+                            split: 0,
+                            progress: 0,
+                            status: '',
+                            added: DateTime.now().toIso8601String(),
+                            links: links.map((e) => e.toString()).toList(),
+                          );
+                          MainPageBridge.openDebridOptions?.call(rdTorrent);
+                        },
+                      ),
                       _DebridActionTile(
                         icon: Icons.play_circle_rounded,
                         color: const Color(0xFF60A5FA),
@@ -4781,7 +5013,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ? 'Unrestrict and open instantly in the built-in player.'
                             : 'Available for video torrents only.',
                         enabled: hasAnyVideo,
-                        autofocus: !showOpen,
+                        autofocus: rdHidden && hasAnyVideo,
                         onTap: () async {
                           Navigator.of(ctx).pop();
                           await _playFromResult(

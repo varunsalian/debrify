@@ -1611,24 +1611,41 @@ class PikPakApiService {
 
   /// Recursively list all files in a folder and its subfolders
   /// Returns a flat list of all files found
+  ///
+  /// Parameters:
+  /// - [folderId]: The root folder ID to scan
+  /// - [limit]: Page size for listing (default 50)
+  /// - [includePaths]: When true, adds '_fullPath' and '_displayName' fields to each file
+  ///   preserving the folder structure in file names (e.g., "Season 1/Episode 1.mkv")
+  ///   Default is false for backward compatibility with existing callers
   Future<List<Map<String, dynamic>>> listFilesRecursive({
     required String folderId,
     int limit = 50,
+    bool includePaths = false,
   }) async {
     final allFiles = <Map<String, dynamic>>[];
     await _listFilesRecursiveHelper(
       folderId: folderId,
       limit: limit,
       allFiles: allFiles,
+      includePaths: includePaths,
+      currentPath: '', // Start with empty path at root
     );
     return allFiles;
   }
 
   /// Helper method for recursive folder traversal
+  ///
+  /// When [includePaths] is true:
+  /// - Each file gets '_fullPath' field containing path from scan root (e.g., "Season 1/Episode 1.mkv")
+  /// - Each file gets '_displayName' field containing just the filename without path
+  /// - Original 'name' field is preserved unchanged
   Future<void> _listFilesRecursiveHelper({
     required String folderId,
     required int limit,
     required List<Map<String, dynamic>> allFiles,
+    required bool includePaths,
+    required String currentPath,
   }) async {
     String? nextPageToken;
 
@@ -1643,17 +1660,40 @@ class PikPakApiService {
       // Process each file
       for (final file in result.files) {
         final kind = file['kind'] ?? '';
+        final fileName = file['name'] as String? ?? 'Unknown';
 
         if (kind == 'drive#folder') {
+          // Build path for subfolder
+          final subfolderPath = includePaths
+              ? (currentPath.isEmpty ? fileName : '$currentPath/$fileName')
+              : '';
+
           // Recursively scan subfolder
           await _listFilesRecursiveHelper(
             folderId: file['id'],
             limit: limit,
             allFiles: allFiles,
+            includePaths: includePaths,
+            currentPath: subfolderPath,
           );
         } else {
           // Add file to results
-          allFiles.add(file);
+          if (includePaths) {
+            // Create a copy of the file with path information
+            final fileWithPath = Map<String, dynamic>.from(file);
+
+            // Build full path from root of scan
+            final fullPath = currentPath.isEmpty ? fileName : '$currentPath/$fileName';
+
+            // Add path metadata fields
+            fileWithPath['_fullPath'] = fullPath;
+            fileWithPath['_displayName'] = fileName; // Just the filename
+
+            allFiles.add(fileWithPath);
+          } else {
+            // Original behavior - just add the file as-is
+            allFiles.add(file);
+          }
         }
       }
 

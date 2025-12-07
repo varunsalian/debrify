@@ -8,6 +8,7 @@ import '../../services/video_player_launcher.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
+import '../../widgets/pikpak_file_selection_dialog.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
   final String? initialFolderId;
@@ -500,7 +501,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
   }
 
-  /// Download all files in a folder
+  /// Download all files in a folder with file selection dialog
+  /// Works for both root folders and subfolders
+  /// When downloading a subfolder, only shows that subfolder's contents (not parent structure)
   Future<void> _downloadFolder(Map<String, dynamic> folder) async {
     final folderId = folder['id'] as String?;
     final folderName = folder['name'] ?? 'Folder';
@@ -531,9 +534,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     );
 
     try {
-      // Recursively scan folder for all files
+      // Recursively scan folder for all files WITH path tracking
+      // This ensures the dialog shows folder structure starting from this folder
       final allFiles = await PikPakApiService.instance.listFilesRecursive(
         folderId: folderId,
+        includePaths: true, // Enable path tracking for folder structure
       );
 
       // Close loading dialog
@@ -554,54 +559,67 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         return;
       }
 
-      // Show confirmation dialog
-      final confirmed =
-          await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Download Folder'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Download all files in "$folderName"?'),
-                  const SizedBox(height: 16),
-                  Text(
-                    '${filesOnly.length} file${filesOnly.length == 1 ? '' : 's'} will be queued for download.',
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Total size: ${Formatters.formatFileSize(filesOnly.fold<int>(0, (sum, file) => sum + (int.tryParse(file['size']?.toString() ?? '0') ?? 0)))}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  autofocus: true,
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download All'),
-                ),
-              ],
+      // Show file selection dialog
+      await showDialog(
+        context: context,
+        builder: (context) => PikPakFileSelectionDialog(
+          files: filesOnly,
+          torrentName: folderName,
+          onDownload: (selectedFiles) {
+            _downloadSelectedPikPakFiles(selectedFiles, folderName);
+          },
+        ),
+      );
+    } catch (e) {
+      print('Error downloading folder: $e');
+      if (mounted) {
+        // Close loading dialog if still open
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to scan folder: $e', isError: true);
+    }
+  }
+
+  /// Download selected PikPak files from the file selection dialog
+  /// Handles error reporting and uses folder name for download organization
+  Future<void> _downloadSelectedPikPakFiles(
+    List<Map<String, dynamic>> selectedFiles,
+    String folderName,
+  ) async {
+    if (selectedFiles.isEmpty) {
+      _showSnackBar('No files selected', isError: true);
+      return;
+    }
+
+    int successCount = 0;
+    int failCount = 0;
+
+    // Show progress indicator
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Queuing ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}...',
+              style: const TextStyle(color: Colors.white),
             ),
-          ) ??
-          false;
+          ],
+        ),
+      ),
+    );
 
-      if (!confirmed || !mounted) return;
-
-      // Queue downloads for each file
-      int successCount = 0;
-      int failCount = 0;
-
-      for (final file in filesOnly) {
+    try {
+      for (final file in selectedFiles) {
         try {
           final fileId = file['id'] as String?;
-          final fileName = file['name'] ?? 'download';
+          // Use _fullPath if available (from path tracking), otherwise use original name
+          final fileName = (file['_fullPath'] as String?) ?? file['name'] ?? 'download';
 
           if (fileId == null) {
             failCount++;
@@ -641,28 +659,28 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           failCount++;
         }
       }
-
-      // Show result
-      if (successCount > 0 && failCount == 0) {
-        _showSnackBar(
-          'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
-          isError: false,
-        );
-      } else if (successCount > 0 && failCount > 0) {
-        _showSnackBar(
-          'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
-          isError: true,
-        );
-      } else {
-        _showSnackBar('Failed to queue any files for download', isError: true);
-      }
-    } catch (e) {
-      print('Error downloading folder: $e');
+    } finally {
+      // Close progress dialog
       if (mounted) {
-        // Close loading dialog if still open
         Navigator.of(context, rootNavigator: true).pop();
       }
-      _showSnackBar('Failed to scan folder: $e', isError: true);
+    }
+
+    if (!mounted) return;
+
+    // Show result
+    if (successCount > 0 && failCount == 0) {
+      _showSnackBar(
+        'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+        isError: false,
+      );
+    } else if (successCount > 0 && failCount > 0) {
+      _showSnackBar(
+        'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+        isError: true,
+      );
+    } else {
+      _showSnackBar('Failed to queue any files for download', isError: true);
     }
   }
 
