@@ -2554,6 +2554,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final hasVideo = videoFiles.isNotEmpty;
     final postAction = await StorageService.getPikPakPostTorrentAction();
+    final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
+    final showOpen = !pikpakHidden;
 
     // Handle automatic actions
     switch (postAction) {
@@ -2643,6 +2645,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ),
                   const Divider(height: 1, color: Color(0xFF1E293B)),
+                  if (showOpen)
+                    _DebridActionTile(
+                      icon: Icons.open_in_new,
+                      color: const Color(0xFFF59E0B),
+                      title: 'Open in PikPak',
+                      subtitle: 'View folder in PikPak files tab',
+                      enabled: true,
+                      autofocus: true,
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        // Navigate to the specific PikPak folder
+                        MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
+                      },
+                    ),
                   _DebridActionTile(
                     icon: Icons.play_circle_fill_rounded,
                     color: const Color(0xFF60A5FA),
@@ -2651,7 +2667,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ? 'Stream instantly from PikPak.'
                         : 'No video files found.',
                     enabled: hasVideo,
-                    autofocus: true,
+                    autofocus: !showOpen,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _playPikPakVideos(videoFiles, torrentName);
@@ -3762,6 +3778,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Get the post-torrent action preference
     final postAction = await StorageService.getTorboxPostTorrentAction();
+    final torboxHidden = await StorageService.getTorboxHiddenFromNav();
+    final showOpen = !torboxHidden;
 
     // Check if torrent is video-only for auto-download handling
     final isVideoOnly = torrent.files.isNotEmpty &&
@@ -3874,6 +3892,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ),
                   const Divider(height: 1, color: Color(0xFF1E293B)),
+                  if (showOpen)
+                    _DebridActionTile(
+                      icon: Icons.open_in_new,
+                      color: const Color(0xFFF59E0B),
+                      title: 'Open in Torbox',
+                      subtitle: 'View this torrent in Torbox tab',
+                      enabled: true,
+                      autofocus: true,
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        // Open the torrent in Torbox tab
+                        MainPageBridge.openTorboxFolder?.call(torrent);
+                      },
+                    ),
                   _DebridActionTile(
                     icon: Icons.play_circle_fill_rounded,
                     color: const Color(0xFF60A5FA),
@@ -3882,7 +3914,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ? 'Open instantly in the Torbox player experience.'
                         : 'Available for torrents with video files.',
                     enabled: hasVideo,
-                    autofocus: true,
+                    autofocus: !showOpen,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _playTorboxTorrent(torrent);
@@ -4298,14 +4330,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _openTorboxFiles(TorboxTorrent torrent) {
-    if (MainPageBridge.openTorboxAction != null) {
-      MainPageBridge.openTorboxAction!(torrent, TorboxQuickAction.files);
+    if (MainPageBridge.openTorboxFolder != null) {
+      MainPageBridge.openTorboxFolder!(torrent);
     } else {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => TorboxDownloadsScreen(
-            initialTorrentForAction: torrent,
-            initialAction: TorboxQuickAction.files,
+            initialTorrentToOpen: torrent,
           ),
         ),
       );
@@ -4589,6 +4620,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     int index,
   ) async {
     final postAction = await StorageService.getPostTorrentAction();
+    final rdHidden = await StorageService.getRealDebridHiddenFromNav();
+    final showOpen = !rdHidden;
     final downloadLink = result['downloadLink'] as String;
     final fileSelection = result['fileSelection'] as String;
     final links = result['links'] as List<dynamic>;
@@ -4714,6 +4747,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ),
                       const Divider(height: 1, color: Color(0xFF1E293B)),
+                      if (showOpen)
+                        _DebridActionTile(
+                          icon: Icons.open_in_new,
+                          color: const Color(0xFFF59E0B),
+                          title: 'Open in Real-Debrid',
+                          subtitle: 'View this torrent in Real-Debrid tab',
+                          enabled: true,
+                          autofocus: true,
+                          onTap: () {
+                            Navigator.of(ctx).pop();
+                            // Create RDTorrent object and open it in Real-Debrid tab
+                            final rdTorrent = RDTorrent(
+                              id: result['torrentId'].toString(),
+                              filename: torrentName,
+                              hash: '',
+                              bytes: 0,
+                              host: '',
+                              split: 0,
+                              progress: 0,
+                              status: '',
+                              added: DateTime.now().toIso8601String(),
+                              links: links.map((e) => e.toString()).toList(),
+                            );
+                            MainPageBridge.openDebridOptions?.call(rdTorrent);
+                          },
+                        ),
                       _DebridActionTile(
                         icon: Icons.play_circle_rounded,
                         color: const Color(0xFF60A5FA),
@@ -4722,7 +4781,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ? 'Unrestrict and open instantly in the built-in player.'
                             : 'Available for video torrents only.',
                         enabled: hasAnyVideo,
-                        autofocus: true,
+                        autofocus: !showOpen,
                         onTap: () async {
                           Navigator.of(ctx).pop();
                           await _playFromResult(

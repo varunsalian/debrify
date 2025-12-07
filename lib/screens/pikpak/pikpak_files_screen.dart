@@ -10,7 +10,14 @@ import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
-  const PikPakFilesScreen({super.key});
+  final String? initialFolderId;
+  final String? initialFolderName;
+
+  const PikPakFilesScreen({
+    super.key,
+    this.initialFolderId,
+    this.initialFolderName,
+  });
 
   @override
   State<PikPakFilesScreen> createState() => _PikPakFilesScreenState();
@@ -105,8 +112,14 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       _restrictedFolderId = restrictedId;
       _restrictedFolderName = restrictedName;
 
-      // Initialize at restricted folder instead of root
-      if (restrictedId != null) {
+      // If initial folder is provided, navigate to it
+      if (widget.initialFolderId != null && widget.initialFolderName != null) {
+        _currentFolderId = widget.initialFolderId;
+        _currentFolderName = widget.initialFolderName!;
+        _isAtRestrictedRoot = false;
+      }
+      // Otherwise, initialize at restricted folder instead of root
+      else if (restrictedId != null) {
         _currentFolderId = restrictedId;
         _currentFolderName = restrictedName ?? 'Restricted Folder';
         _isAtRestrictedRoot = true;

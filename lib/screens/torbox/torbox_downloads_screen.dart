@@ -23,12 +23,10 @@ import '../video_player_screen.dart';
 class TorboxDownloadsScreen extends StatefulWidget {
   const TorboxDownloadsScreen({
     super.key,
-    this.initialTorrentForAction,
-    this.initialAction,
+    this.initialTorrentToOpen,
   });
 
-  final TorboxTorrent? initialTorrentForAction;
-  final TorboxQuickAction? initialAction;
+  final TorboxTorrent? initialTorrentToOpen;
 
   @override
   State<TorboxDownloadsScreen> createState() => _TorboxDownloadsScreenState();
@@ -47,7 +45,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   String _errorMessage = '';
   String? _apiKey;
   TorboxTorrent? _pendingInitialTorrent;
-  TorboxQuickAction? _pendingInitialAction;
   bool _initialActionHandled = false;
 
   // Folder navigation state
@@ -62,94 +59,18 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _pendingInitialTorrent = widget.initialTorrentForAction;
-    _pendingInitialAction = widget.initialAction;
+    _pendingInitialTorrent = widget.initialTorrentToOpen;
     _loadApiKeyAndTorrents();
   }
 
   @override
   void didUpdateWidget(TorboxDownloadsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialTorrentForAction != null &&
-        widget.initialAction != null) {
-      _pendingInitialTorrent = widget.initialTorrentForAction;
-      _pendingInitialAction = widget.initialAction;
+    if (widget.initialTorrentToOpen != null) {
+      _pendingInitialTorrent = widget.initialTorrentToOpen;
       _initialActionHandled = false;
       _maybeTriggerInitialAction();
     }
-  }
-
-  Future<void> _showDownloadOptions(TorboxTorrent torrent) async {
-    final key = _apiKey;
-    if (key == null || key.isEmpty) {
-      _showComingSoon('Add Torbox API key');
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (sheetContext) {
-        bool isLoadingZip = false;
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: StatefulBuilder(
-            builder: (context, setSheetState) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.archive_outlined),
-                        title: const Text('Download whole torrent as ZIP'),
-                        subtitle: const Text(
-                          'Create a single archive for offline use',
-                        ),
-                        trailing: isLoadingZip
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : null,
-                        enabled: !isLoadingZip,
-                        onTap: isLoadingZip
-                            ? null
-                            : () async {
-                                setSheetState(() => isLoadingZip = true);
-                                await _enqueueTorboxZipDownload(
-                                  torrent: torrent,
-                                  sheetContext: sheetContext,
-                                );
-                                if (!Navigator.of(sheetContext).canPop()) {
-                                  setSheetState(() => isLoadingZip = false);
-                                }
-                              },
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.download_outlined),
-                        title: const Text('Download all files'),
-                        subtitle: Text('Download all ${torrent.files.length} files individually'),
-                        onTap: () {
-                          Navigator.of(sheetContext).pop();
-                          _downloadAllTorrentFiles(torrent);
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
   }
 
   /// Download all files in a torrent
@@ -902,8 +823,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       return;
     }
     final pendingTorrent = _pendingInitialTorrent;
-    final pendingAction = _pendingInitialAction;
-    if (pendingTorrent == null || pendingAction == null) {
+    if (pendingTorrent == null) {
       return;
     }
 
@@ -921,22 +841,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     _initialActionHandled = true;
     _pendingInitialTorrent = null;
-    _pendingInitialAction = null;
 
     final selected = target;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      switch (pendingAction) {
-        case TorboxQuickAction.play:
-          _handlePlayTorrent(selected);
-          break;
-        case TorboxQuickAction.download:
-          _showDownloadOptions(selected);
-          break;
-        case TorboxQuickAction.files:
-          _showTorboxFileSelectionSheet(selected);
-          break;
-      }
+      // Navigate directly into the torrent folder instead of showing popups
+      // This matches the Real-Debrid behavior
+      _navigateIntoTorrent(selected);
     });
   }
 
@@ -3397,8 +3308,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   icon: const Icon(Icons.more_vert),
                   tooltip: 'More options',
                   onSelected: (value) {
-                    if (value == 'download') {
-                      _showDownloadOptions(torrent);
+                    if (value == 'open') {
+                      _navigateIntoTorrent(torrent);
                     } else if (value == 'add_to_playlist') {
                       _handleAddToPlaylist(torrent);
                     } else if (value == 'delete') {
@@ -3407,12 +3318,12 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(
-                      value: 'download',
+                      value: 'open',
                       child: Row(
                         children: [
-                          Icon(Icons.download, size: 18, color: Colors.green),
+                          Icon(Icons.folder_open, size: 18, color: Colors.blue),
                           SizedBox(width: 12),
-                          Text('Download'),
+                          Text('Open'),
                         ],
                       ),
                     ),

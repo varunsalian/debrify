@@ -404,7 +404,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         }
       });
     };
-    MainPageBridge.openTorboxAction = (torboxTorrent, action) {
+    MainPageBridge.openTorboxFolder = (torboxTorrent) {
       if (!mounted) return;
       if (!_hasTorboxKey) {
         _showMissingApiKeySnack('Torbox');
@@ -412,8 +412,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       }
       setState(() {
         _pages[5] = TorboxDownloadsScreen(
-          initialTorrentForAction: torboxTorrent,
-          initialAction: action,
+          initialTorrentToOpen: torboxTorrent,
         );
       });
       _onItemTapped(5);
@@ -421,6 +420,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         if (mounted) {
           setState(() {
             _pages[5] = const TorboxDownloadsScreen();
+          });
+        }
+      });
+    };
+    MainPageBridge.openPikPakFolder = (fileId, folderName) {
+      if (!mounted) return;
+      if (!_pikpakEnabled) {
+        _showMissingApiKeySnack('PikPak');
+        return;
+      }
+      setState(() {
+        _pages[6] = PikPakFilesScreen(
+          initialFolderId: fileId,
+          initialFolderName: folderName,
+        );
+      });
+      _onItemTapped(6);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _pages[6] = const PikPakFilesScreen();
           });
         }
       });
@@ -465,7 +485,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.switchTab = null;
     MainPageBridge.openDebridOptions = null;
-    MainPageBridge.openTorboxAction = null;
+    MainPageBridge.openTorboxFolder = null;
+    MainPageBridge.openPikPakFolder = null;
     MainPageBridge.hideAutoLaunchOverlay = null;
     _animationController.dispose();
     DeepLinkService().dispose();

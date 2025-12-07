@@ -3,17 +3,11 @@ import 'package:flutter/foundation.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
 
-enum TorboxQuickAction {
-  play,
-  download,
-  files,
-}
-
 class MainPageBridge {
   static void Function(int index)? switchTab;
   static void Function(RDTorrent torrent)? openDebridOptions;
-  static void Function(TorboxTorrent torrent, TorboxQuickAction action)?
-      openTorboxAction;
+  static void Function(TorboxTorrent torrent)? openTorboxFolder;
+  static void Function(String fileId, String folderName)? openPikPakFolder;
   static Future<void> Function(Map<String, dynamic> result, String torrentName, String apiKey)? handleRealDebridResult;
   static Future<void> Function(TorboxTorrent torrent)? handleTorboxResult;
   static VoidCallback? hideAutoLaunchOverlay;
