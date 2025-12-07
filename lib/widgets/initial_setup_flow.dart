@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -11,6 +13,7 @@ import '../services/engine/remote_engine_manager.dart';
 import '../services/engine/local_engine_storage.dart';
 import '../services/engine/config_loader.dart';
 import '../services/engine/engine_registry.dart';
+import '../utils/platform_util.dart';
 import 'pikpak_folder_picker_dialog.dart';
 
 class InitialSetupFlow extends StatefulWidget {
@@ -140,6 +143,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   bool _isLoadingEngines = false;
   String? _engineError;
 
+  // Scroll controller for auto-scrolling when keyboard appears
+  final ScrollController _scrollController = ScrollController();
+  Timer? _scrollTimer;
+
   // Focus nodes for TV/DPAD navigation
   final FocusNode _dialogFocusNode = FocusNode(
     debugLabel: 'initial-setup-dialog',
@@ -209,9 +216,22 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   @override
   void initState() {
     super.initState();
-    // Request focus IMMEDIATELY, not waiting for postFrameCallback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+
+    // Add listeners to text field focus nodes for auto-scrolling
+    _textFieldFocusNode.addListener(_onTextFieldFocusChange);
+    _pikpakEmailFieldFocusNode.addListener(_onTextFieldFocusChange);
+    _pikpakPasswordFieldFocusNode.addListener(_onTextFieldFocusChange);
+
+    // Only auto-focus on TV devices (not on mobile/tablet)
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      // Check if this is an Android TV device
+      final isTV = await PlatformUtil.isAndroidTV();
+      if (!mounted) return;
+
+      // Only request focus on TV devices for D-pad navigation
+      if (isTV) {
         // Force unfocus from anything else first
         FocusManager.instance.primaryFocus?.unfocus();
         // Then request focus on the first chip
@@ -228,8 +248,42 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     });
   }
 
+  void _onTextFieldFocusChange() {
+    // Cancel any pending scroll to prevent race conditions
+    _scrollTimer?.cancel();
+
+    // When any text field gains focus, scroll it into view
+    // This is especially important on TV when keyboard appears
+    if (_textFieldFocusNode.hasFocus ||
+        _pikpakEmailFieldFocusNode.hasFocus ||
+        _pikpakPasswordFieldFocusNode.hasFocus) {
+      // Wait for keyboard to appear, then scroll
+      _scrollTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted && _scrollController.hasClients) {
+          // Scroll to the bottom to ensure input field is visible
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
+
   @override
   void dispose() {
+    // Cancel any pending scroll timer
+    _scrollTimer?.cancel();
+
+    // Remove text field focus listeners
+    _textFieldFocusNode.removeListener(_onTextFieldFocusChange);
+    _pikpakEmailFieldFocusNode.removeListener(_onTextFieldFocusChange);
+    _pikpakPasswordFieldFocusNode.removeListener(_onTextFieldFocusChange);
+
+    // Dispose scroll controller
+    _scrollController.dispose();
+
     _realDebridController.dispose();
     _torboxController.dispose();
     _pikpakEmailController.dispose();
@@ -322,10 +376,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     child: LayoutBuilder(
                       builder: (BuildContext context, BoxConstraints _) {
                         return SingleChildScrollView(
+                          controller: _scrollController,
                           physics: const BouncingScrollPhysics(),
                           clipBehavior: Clip.none,
                           padding: EdgeInsets.only(
-                            bottom: keyboardInset > 0 ? keyboardInset : 0,
+                            bottom: keyboardInset > 0 ? keyboardInset + 24 : 0,
                           ),
                           child: Center(
                             child: ConstrainedBox(
