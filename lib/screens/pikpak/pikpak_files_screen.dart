@@ -8,7 +8,7 @@ import '../../services/video_player_launcher.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
-import '../../widgets/pikpak_file_selection_dialog.dart';
+import '../../widgets/file_selection_dialog.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
   final String? initialFolderId;
@@ -562,7 +562,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       // Show file selection dialog
       await showDialog(
         context: context,
-        builder: (context) => PikPakFileSelectionDialog(
+        builder: (context) => FileSelectionDialog(
           files: filesOnly,
           torrentName: folderName,
           onDownload: (selectedFiles) {

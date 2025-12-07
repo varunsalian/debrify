@@ -38,12 +38,12 @@ class _FolderItem {
   }
 }
 
-class PikPakFileSelectionDialog extends StatefulWidget {
+class FileSelectionDialog extends StatefulWidget {
   final List<Map<String, dynamic>> files;
   final String torrentName;
   final void Function(List<Map<String, dynamic>>) onDownload;
 
-  const PikPakFileSelectionDialog({
+  const FileSelectionDialog({
     super.key,
     required this.files,
     required this.torrentName,
@@ -51,10 +51,10 @@ class PikPakFileSelectionDialog extends StatefulWidget {
   });
 
   @override
-  State<PikPakFileSelectionDialog> createState() => _PikPakFileSelectionDialogState();
+  State<FileSelectionDialog> createState() => _FileSelectionDialogState();
 }
 
-class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
+class _FileSelectionDialogState extends State<FileSelectionDialog> {
   late _FolderItem _rootFolder;
   late _FolderItem _currentFolder;
   final List<_FolderItem> _navigationStack = [];
@@ -391,46 +391,23 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
     return Dialog(
       backgroundColor: const Color(0xFF1E293B),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
           maxWidth: 600,
         ),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
+              // Minimal header with just close button
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Select Files to Download',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          selectionText,
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                   Focus(
                     focusNode: _cancelButtonFocusNode,
                     onKeyEvent: (node, event) {
@@ -448,55 +425,62 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                       icon: const Icon(
                         Icons.close_rounded,
                         color: Colors.white70,
+                        size: 20,
                       ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 4),
 
               // Breadcrumb / Current Path
               if (_navigationStack.isNotEmpty)
-                Row(
-                  children: [
-                    Focus(
-                      focusNode: _backButtonFocusNode,
-                      onKeyEvent: (node, event) {
-                        if (event is KeyDownEvent &&
-                            (event.logicalKey == LogicalKeyboardKey.select ||
-                                event.logicalKey == LogicalKeyboardKey.enter ||
-                                event.logicalKey == LogicalKeyboardKey.space)) {
-                          _navigateBack();
-                          return KeyEventResult.handled;
-                        }
-                        return KeyEventResult.ignored;
-                      },
-                      child: TextButton.icon(
-                        onPressed: _navigateBack,
-                        icon: const Icon(Icons.arrow_back, size: 18),
-                        label: const Text('Back'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF3B82F6),
+                SizedBox(
+                  height: 32,
+                  child: Row(
+                    children: [
+                      Focus(
+                        focusNode: _backButtonFocusNode,
+                        onKeyEvent: (node, event) {
+                          if (event is KeyDownEvent &&
+                              (event.logicalKey == LogicalKeyboardKey.select ||
+                                  event.logicalKey == LogicalKeyboardKey.enter ||
+                                  event.logicalKey == LogicalKeyboardKey.space)) {
+                            _navigateBack();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: TextButton.icon(
+                          onPressed: _navigateBack,
+                          icon: const Icon(Icons.arrow_back, size: 16),
+                          label: const Text('Back', style: TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF3B82F6),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _currentFolder.name,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          _currentFolder.name,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
 
-              if (_navigationStack.isNotEmpty) const SizedBox(height: 8),
+              if (_navigationStack.isNotEmpty) const SizedBox(height: 4),
 
               // Select All / Deselect All (for current folder)
               if (_currentFolder.files.isNotEmpty || _currentFolder.subfolders.isNotEmpty)
@@ -513,6 +497,7 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                     return KeyEventResult.ignored;
                   },
                   child: Container(
+                    height: 36,
                     decoration: BoxDecoration(
                       border: _selectAllFocusNode.hasFocus
                           ? Border.all(
@@ -520,17 +505,20 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                               width: 2,
                             )
                           : null,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: CheckboxListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                       value: allItemsSelectedInCurrentFolder,
                       tristate: true,
                       onChanged: (_) => _toggleSelectAllInCurrentFolder(),
                       title: Text(
-                        allItemsSelectedInCurrentFolder ? 'Deselect All in Folder' : 'Select All in Folder',
+                        allItemsSelectedInCurrentFolder ? 'Deselect All' : 'Select All',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
+                          fontSize: 13,
                         ),
                       ),
                       controlAffinity: ListTileControlAffinity.leading,
@@ -538,14 +526,14 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                       checkColor: Colors.white,
                       tileColor: Colors.transparent,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                     ),
                   ),
                 ),
 
               if (_currentFolder.files.isNotEmpty || _currentFolder.subfolders.isNotEmpty)
-                const Divider(color: Colors.white24, height: 24),
+                const Divider(color: Colors.white24, height: 12),
 
               // Folder and file list
               Flexible(
@@ -578,11 +566,34 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                               _navigateToFolder(folder);
                               return KeyEventResult.handled;
                             }
+                            // Use left arrow to navigate back
+                            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                              if (_navigationStack.isNotEmpty) {
+                                _navigateBack();
+                                return KeyEventResult.handled;
+                              }
+                            }
+                            // Arrow down to next item
+                            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                              final nextIndex = index + 1;
+                              if (nextIndex < _itemFocusNodes.length) {
+                                _itemFocusNodes[nextIndex].requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                            }
+                            // Arrow up to previous item
+                            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                              final prevIndex = index - 1;
+                              if (prevIndex >= 0) {
+                                _itemFocusNodes[prevIndex].requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                            }
                           }
                           return KeyEventResult.ignored;
                         },
                         child: Container(
-                          margin: const EdgeInsets.only(bottom: 4),
+                          margin: const EdgeInsets.only(bottom: 2),
                           decoration: BoxDecoration(
                             border: isFocused
                                 ? Border.all(
@@ -590,47 +601,57 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                                     width: 2,
                                   )
                                 : null,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                          child: CheckboxListTile(
-                            value: isFolderSelected,
-                            onChanged: (_) => _toggleFolder(folder),
-                            title: Row(
-                              children: [
-                                const Icon(
-                                  Icons.folder,
-                                  color: Color(0xFFFBBF24),
+                          child: InkWell(
+                            onTap: () => _navigateToFolder(folder),
+                            borderRadius: BorderRadius.circular(6),
+                            child: CheckboxListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.only(left: 8, right: 4),
+                              visualDensity: VisualDensity.compact,
+                              value: isFolderSelected,
+                              onChanged: (_) => _toggleFolder(folder),
+                              title: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.folder,
+                                    color: Color(0xFFFBBF24),
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      folder.name,
+                                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              subtitle: Text(
+                                '$fileCount file${fileCount != 1 ? 's' : ''}',
+                                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                              ),
+                              secondary: IconButton(
+                                icon: const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.white54,
                                   size: 20,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    folder.name,
-                                    style: const TextStyle(color: Colors.white),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Text(
-                              '$fileCount file${fileCount != 1 ? 's' : ''}',
-                              style: const TextStyle(color: Colors.white54, fontSize: 12),
-                            ),
-                            secondary: IconButton(
-                              icon: const Icon(
-                                Icons.chevron_right,
-                                color: Colors.white54,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _navigateToFolder(folder),
+                                tooltip: 'Open folder',
                               ),
-                              onPressed: () => _navigateToFolder(folder),
-                              tooltip: 'Open folder',
-                            ),
-                            controlAffinity: ListTileControlAffinity.leading,
-                            activeColor: const Color(0xFF10B981),
-                            checkColor: Colors.white,
-                            tileColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              controlAffinity: ListTileControlAffinity.leading,
+                              activeColor: const Color(0xFF10B981),
+                              checkColor: Colors.white,
+                              tileColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
                             ),
                           ),
                         ),
@@ -649,17 +670,42 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                       return Focus(
                         focusNode: _itemFocusNodes[index],
                         onKeyEvent: (node, event) {
-                          if (event is KeyDownEvent &&
-                              (event.logicalKey == LogicalKeyboardKey.select ||
-                                  event.logicalKey == LogicalKeyboardKey.enter ||
-                                  event.logicalKey == LogicalKeyboardKey.space)) {
-                            _toggleFile(file);
-                            return KeyEventResult.handled;
+                          if (event is KeyDownEvent) {
+                            // Space/Enter/Select to toggle file selection
+                            if (event.logicalKey == LogicalKeyboardKey.select ||
+                                event.logicalKey == LogicalKeyboardKey.enter ||
+                                event.logicalKey == LogicalKeyboardKey.space) {
+                              _toggleFile(file);
+                              return KeyEventResult.handled;
+                            }
+                            // Use left arrow to navigate back
+                            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                              if (_navigationStack.isNotEmpty) {
+                                _navigateBack();
+                                return KeyEventResult.handled;
+                              }
+                            }
+                            // Arrow down to next item
+                            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                              final nextIndex = index + 1;
+                              if (nextIndex < _itemFocusNodes.length) {
+                                _itemFocusNodes[nextIndex].requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                            }
+                            // Arrow up to previous item
+                            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                              final prevIndex = index - 1;
+                              if (prevIndex >= 0) {
+                                _itemFocusNodes[prevIndex].requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                            }
                           }
                           return KeyEventResult.ignored;
                         },
                         child: Container(
-                          margin: const EdgeInsets.only(bottom: 4),
+                          margin: const EdgeInsets.only(bottom: 2),
                           decoration: BoxDecoration(
                             border: isFocused
                                 ? Border.all(
@@ -667,31 +713,35 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                                     width: 2,
                                   )
                                 : null,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: CheckboxListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.only(left: 8, right: 8),
+                            visualDensity: VisualDensity.compact,
                             value: isSelected,
                             onChanged: (_) => _toggleFile(file),
                             title: Text(
                               fileName,
-                              style: const TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
                               sizeStr,
-                              style: const TextStyle(color: Colors.white54, fontSize: 12),
+                              style: const TextStyle(color: Colors.white54, fontSize: 11),
                             ),
                             secondary: const Icon(
                               Icons.insert_drive_file,
                               color: Colors.white70,
+                              size: 18,
                             ),
                             controlAffinity: ListTileControlAffinity.leading,
                             activeColor: const Color(0xFF10B981),
                             checkColor: Colors.white,
                             tileColor: Colors.transparent,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(6),
                             ),
                           ),
                         ),
@@ -701,44 +751,66 @@ class _PikPakFileSelectionDialogState extends State<PikPakFileSelectionDialog> {
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
 
-              // Download button
-              Focus(
-                focusNode: _downloadButtonFocusNode,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent &&
-                      (event.logicalKey == LogicalKeyboardKey.select ||
-                          event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.space)) {
-                    if (selectedFileCount > 0) {
-                      _onDownloadPressed();
-                      return KeyEventResult.handled;
-                    }
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: selectedFileCount > 0 ? _onDownloadPressed : null,
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: const Color(0xFF10B981),
-                      disabledBackgroundColor: Colors.white24,
-                      disabledForegroundColor: Colors.white38,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+              // Selection counter and download button
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    // Selection counter
+                    Expanded(
+                      child: Text(
+                        selectionText,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    icon: const Icon(Icons.download_rounded),
-                    label: Text(
-                      selectedFileCount > 0
-                          ? 'Download $selectedFileCount file${selectedFileCount > 1 ? 's' : ''}'
-                          : 'No files selected',
+                    const SizedBox(width: 8),
+                    // Download button
+                    Focus(
+                      focusNode: _downloadButtonFocusNode,
+                      onKeyEvent: (node, event) {
+                        if (event is KeyDownEvent &&
+                            (event.logicalKey == LogicalKeyboardKey.select ||
+                                event.logicalKey == LogicalKeyboardKey.enter ||
+                                event.logicalKey == LogicalKeyboardKey.space)) {
+                          if (selectedFileCount > 0) {
+                            _onDownloadPressed();
+                            return KeyEventResult.handled;
+                          }
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: ElevatedButton.icon(
+                        onPressed: selectedFileCount > 0 ? _onDownloadPressed : null,
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: const Color(0xFF10B981),
+                          disabledBackgroundColor: Colors.white24,
+                          disabledForegroundColor: Colors.white38,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        icon: const Icon(Icons.download_rounded, size: 18),
+                        label: Text(
+                          selectedFileCount > 0
+                              ? 'Download ($selectedFileCount)'
+                              : 'Download',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],

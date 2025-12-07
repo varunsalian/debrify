@@ -16,6 +16,7 @@ import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
 import '../services/android_native_downloader.dart';
 import 'dart:ui'; // Added for ImageFilter
+import '../widgets/file_selection_dialog.dart';
 
 class DebridDownloadsScreen extends StatefulWidget {
   const DebridDownloadsScreen({super.key, this.initialTorrentForOptions});
@@ -2145,7 +2146,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               CircularProgressIndicator(),
               SizedBox(height: 16),
               Text(
-                'Preparing downloads...',
+                'Loading torrent files...',
                 style: TextStyle(color: Colors.white),
               ),
             ],
@@ -2153,81 +2154,55 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ),
       );
 
-      // Get torrent info to access links
+      // Get torrent info to access files and links
       final torrentInfo = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
+      final files = (torrentInfo['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final links = (torrentInfo['links'] as List).cast<String>();
 
       if (mounted) Navigator.of(context).pop();
 
-      if (links.isEmpty) {
+      if (files.isEmpty || links.isEmpty) {
         _showError('No files available for download');
         return;
       }
 
-      // Show confirmation for large torrents
-      if (links.length > 10) {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Download All Files'),
-            content: Text(
-              'Download all ${links.length} files from "${torrent.filename}"?',
-            ),
-            actions: [
-              TextButton(
-                autofocus: true,
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop(true),
-                icon: const Icon(Icons.download),
-                label: const Text('Download All'),
-              ),
-            ],
-          ),
-        ) ?? false;
+      // Format files for FileSelectionDialog
+      final formattedFiles = <Map<String, dynamic>>[];
+      for (int i = 0; i < files.length; i++) {
+        final file = files[i];
+        final path = (file['path'] as String?) ?? '';
+        final bytes = file['bytes'] as int? ?? 0;
 
-        if (!confirmed || !mounted) return;
+        formattedFiles.add({
+          '_fullPath': path,  // Use path field for full path
+          'name': path,
+          'size': bytes.toString(),
+          '_linkIndex': i,  // Store the link index for later use
+        });
       }
 
-      // Queue all files with lazy unrestriction
-      int successCount = 0;
-      for (int i = 0; i < links.length; i++) {
-        try {
-          final link = links[i];
-
-          // Pass metadata for lazy unrestriction
-          final meta = jsonEncode({
-            'restrictedLink': link,
-            'apiKey': _apiKey,
-            'torrentHash': torrent.hash,
-            'fileIndex': i,
-          });
-
-          // Queue download (download service will unrestrict lazily)
-          await DownloadService.instance.enqueueDownload(
-            url: link,
-            fileName: torrent.filename, // Download service will get real filename when unrestricting
-            meta: meta,
+      // Show file selection dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return FileSelectionDialog(
+            files: formattedFiles,
             torrentName: torrent.filename,
-            context: mounted ? context : null,
+            onDownload: (selectedFiles) {
+              if (selectedFiles.isEmpty) return;
+              _downloadSelectedRealDebridFiles(
+                selectedFiles: selectedFiles,
+                links: links,
+                folderName: torrent.filename,
+              );
+            },
           );
-
-          successCount++;
-        } catch (e) {
-          // Silently handle individual file failures during batch operations
-        }
-      }
-
-      if (successCount > 0) {
-        _showSuccess('Queued $successCount file${successCount == 1 ? '' : 's'} for download');
-      } else {
-        _showError('Failed to queue any files for download');
-      }
+        },
+      );
     } catch (e) {
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
-      _showError('Failed to download torrent: $e');
+      _showError('Failed to load torrent: $e');
     }
   }
 
@@ -4663,7 +4638,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
-  /// Download all files in a folder
+  /// Download files from a folder with file selection dialog
   Future<void> _downloadFolder(RDFileNode folder) async {
     if (_apiKey == null || _currentTorrentId == null) {
       _showError('No API key or torrent ID available');
@@ -4704,100 +4679,113 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         return;
       }
 
-      // Show confirmation dialog
-      final totalSize = allFiles.fold<int>(
-        0,
-        (sum, file) => sum + (file.bytes ?? 0),
+      // Format files for FileSelectionDialog
+      final formattedFiles = <Map<String, dynamic>>[];
+      for (final file in allFiles) {
+        // Build relative path from folder name
+        final fullPath = file.path ?? file.name;
+        // Remove the parent folder name from the path if present
+        final relativePath = fullPath.contains('/')
+            ? fullPath.substring(fullPath.indexOf('/') + 1)
+            : fullPath;
+
+        formattedFiles.add({
+          '_fullPath': relativePath,
+          'name': file.name,
+          'size': (file.bytes ?? 0).toString(),
+          '_linkIndex': file.linkIndex,
+          '_rdFileNode': file, // Store original node for download
+        });
+      }
+
+      // Show file selection dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return FileSelectionDialog(
+            files: formattedFiles,
+            torrentName: folder.name,
+            onDownload: (selectedFiles) {
+              if (selectedFiles.isEmpty) return;
+              _downloadSelectedRealDebridFiles(
+                selectedFiles: selectedFiles,
+                links: links,
+                folderName: folder.name,
+              );
+            },
+          );
+        },
       );
-      final confirmed =
-          await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Download Folder'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Download all files in "${folder.name}"?'),
-                  const SizedBox(height: 16),
-                  Text(
-                    '${allFiles.length} file${allFiles.length == 1 ? '' : 's'} will be queued for download.',
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Total size: ${Formatters.formatFileSize(totalSize)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  autofocus: true,
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download All'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showError('Failed to load folder: $e');
+    }
+  }
 
-      if (!confirmed || !mounted) return;
+  /// Download selected Real-Debrid files from file selection dialog
+  Future<void> _downloadSelectedRealDebridFiles({
+    required List<Map<String, dynamic>> selectedFiles,
+    required List<String> links,
+    required String folderName,
+  }) async {
+    if (!mounted) return;
 
+    try {
       // Show progress
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
+        builder: (context) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
               Text(
-                'Queueing downloads...',
-                style: TextStyle(color: Colors.white),
+                'Queuing ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}...',
+                style: const TextStyle(color: Colors.white),
               ),
             ],
           ),
         ),
       );
 
-      // Queue downloads for each file
+      // Queue downloads for each selected file
       int successCount = 0;
       int failCount = 0;
 
-      for (final file in allFiles) {
+      for (final fileData in selectedFiles) {
         try {
+          // Extract link index and file name
+          final linkIndex = fileData['_linkIndex'] as int;
+          final fileName = (fileData['_fullPath'] as String?) ?? (fileData['name'] as String? ?? 'download');
+
           // Validate linkIndex
-          if (file.linkIndex >= links.length) {
+          if (linkIndex >= links.length) {
             failCount++;
             continue;
           }
 
           // Get restricted link (no API call - instant!)
-          final restrictedLink = links[file.linkIndex];
-          final fileName = file.name;
+          final restrictedLink = links[linkIndex];
 
           // Pass metadata for lazy unrestriction
           final meta = jsonEncode({
             'restrictedLink': restrictedLink,
             'apiKey': _apiKey,
             'torrentHash': _currentTorrent?.hash,
-            'fileIndex': file.linkIndex,
+            'fileIndex': linkIndex,
           });
 
           // Queue download instantly (download service will unrestrict when ready)
           await DownloadService.instance.enqueueDownload(
-            url:
-                restrictedLink, // Pass restricted link (will be replaced by download service)
+            url: restrictedLink, // Pass restricted link (will be replaced by download service)
             fileName: fileName,
             meta: meta,
-            torrentName: _currentTorrent?.filename ?? folder.name,
+            torrentName: _currentTorrent?.filename ?? folderName,
             context: mounted ? context : null,
           );
 
@@ -4828,7 +4816,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
-      _showError('Failed to download folder: $e');
+      _showError('Failed to queue downloads: $e');
     }
   }
 
