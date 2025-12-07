@@ -6,6 +6,7 @@ import 'debrid_service.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
+  static const String _rdEndpointKey = 'real_debrid_endpoint';
   static const String _fileSelectionKey = 'real_debrid_file_selection';
   static const String _torboxApiKey = 'torbox_api_key';
   static const String _torboxCacheCheckPref =
@@ -142,6 +143,23 @@ class StorageService {
   static Future<void> deleteApiKey() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_apiKeyKey);
+  }
+
+  // Real-Debrid endpoint preference (for fallback to backup endpoint)
+  static Future<String> getRdEndpoint() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Default to primary endpoint
+    return prefs.getString(_rdEndpointKey) ?? 'https://api.real-debrid.com/rest/1.0';
+  }
+
+  static Future<void> saveRdEndpoint(String endpoint) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_rdEndpointKey, endpoint);
+  }
+
+  static Future<void> deleteRdEndpoint() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_rdEndpointKey);
   }
 
   // Torbox API key helpers

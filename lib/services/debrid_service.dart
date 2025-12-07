@@ -9,13 +9,105 @@ import '../utils/file_utils.dart';
 import '../utils/rd_folder_tree_builder.dart';
 
 class DebridService {
-  static const String _baseUrl = 'https://api.real-debrid.com/rest/1.0';
+  static const String _primaryEndpoint = 'https://api.real-debrid.com/rest/1.0';
+  static const String _backupEndpoint = 'https://api-2.real-debrid.com/rest/1.0';
+
+  // Get the saved endpoint preference (defaults to primary)
+  static Future<String> _getBaseUrl() async {
+    return await StorageService.getRdEndpoint();
+  }
+
+  // Validate API key with automatic fallback to backup endpoint
+  // Returns map with: {success: bool, user: RDUser?, endpoint: String?}
+  static Future<Map<String, dynamic>> validateApiKeyWithFallback(String apiKey) async {
+    // Try primary endpoint first
+    try {
+      final response = await http.get(
+        Uri.parse('$_primaryEndpoint/user'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        // Primary endpoint works - save it
+        await StorageService.saveRdEndpoint(_primaryEndpoint);
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'user': RDUser.fromJson(data),
+          'endpoint': _primaryEndpoint,
+        };
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        // Invalid API key - don't try backup
+        return {
+          'success': false,
+          'error': response.statusCode == 401 ? 'Invalid API key' : 'Account locked',
+        };
+      } else if (response.statusCode >= 500 || response.statusCode == 429) {
+        // Server errors or rate limiting - trigger backup attempt
+        throw Exception('Server error: ${response.statusCode}');
+      } else {
+        // Other client errors (400, 404, etc.) - don't try backup
+        return {
+          'success': false,
+          'error': 'Request failed: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      // Primary endpoint failed (timeout or network error) - try backup
+      try {
+        final response = await http.get(
+          Uri.parse('$_backupEndpoint/user'),
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+            'Content-Type': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200) {
+          // Backup endpoint works - save it
+          await StorageService.saveRdEndpoint(_backupEndpoint);
+          final data = json.decode(response.body);
+          return {
+            'success': true,
+            'user': RDUser.fromJson(data),
+            'endpoint': _backupEndpoint,
+          };
+        } else if (response.statusCode == 401 || response.statusCode == 403) {
+          return {
+            'success': false,
+            'error': response.statusCode == 401 ? 'Invalid API key' : 'Account locked',
+          };
+        } else {
+          // Other errors - backup also failed
+          return {
+            'success': false,
+            'error': 'Failed to validate API key: ${response.statusCode}',
+          };
+        }
+      } catch (backupError) {
+        // Both endpoints failed
+        return {
+          'success': false,
+          'error': 'Could not connect to Real-Debrid. Please check your internet connection.',
+        };
+      }
+    }
+
+    return {
+      'success': false,
+      'error': 'Failed to validate API key',
+    };
+  }
 
   // Get user information
   static Future<RDUser> getUserInfo(String apiKey) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.get(
-        Uri.parse('$_baseUrl/user'),
+        Uri.parse('$baseUrl/user'),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',
@@ -53,12 +145,13 @@ class DebridService {
     int limit = 100,
   }) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final queryParams = <String, String>{
         'page': page.toString(),
         'limit': limit.toString(),
       };
 
-      final uri = Uri.parse('$_baseUrl/downloads').replace(queryParameters: queryParams);
+      final uri = Uri.parse('$baseUrl/downloads').replace(queryParameters: queryParams);
       
       final response = await http.get(
         uri,
@@ -108,16 +201,17 @@ class DebridService {
     String? filter,
   }) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final queryParams = <String, String>{
         'page': page.toString(),
         'limit': limit.toString(),
       };
-      
+
       if (filter != null) {
         queryParams['filter'] = filter;
       }
 
-      final uri = Uri.parse('$_baseUrl/torrents').replace(queryParameters: queryParams);
+      final uri = Uri.parse('$baseUrl/torrents').replace(queryParameters: queryParams);
       
 
       final response = await http.get(
@@ -165,8 +259,9 @@ class DebridService {
   // Add magnet to Real Debrid
   static Future<Map<String, dynamic>> addMagnet(String apiKey, String magnetLink) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.post(
-        Uri.parse('$_baseUrl/torrents/addMagnet'),
+        Uri.parse('$baseUrl/torrents/addMagnet'),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -191,8 +286,9 @@ class DebridService {
   // Get torrent info
   static Future<Map<String, dynamic>> getTorrentInfo(String apiKey, String torrentId) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.get(
-        Uri.parse('$_baseUrl/torrents/info/$torrentId'),
+        Uri.parse('$baseUrl/torrents/info/$torrentId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
         },
@@ -213,15 +309,16 @@ class DebridService {
   // Select files (select the largest file or all files)
   static Future<void> selectFiles(String apiKey, String torrentId, List<int> fileIds) async {
     try {
+      final baseUrl = await _getBaseUrl();
       String fileIdsString;
       if (fileIds.isEmpty) {
         fileIdsString = 'all';
       } else {
         fileIdsString = fileIds.join(',');
       }
-      
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/torrents/selectFiles/$torrentId'),
+        Uri.parse('$baseUrl/torrents/selectFiles/$torrentId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -246,8 +343,9 @@ class DebridService {
   // Unrestrict link
   static Future<Map<String, dynamic>> unrestrictLink(String apiKey, String link) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.post(
-        Uri.parse('$_baseUrl/unrestrict/link'),
+        Uri.parse('$baseUrl/unrestrict/link'),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -301,8 +399,9 @@ class DebridService {
   // Delete torrent
   static Future<void> deleteTorrent(String apiKey, String torrentId) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.delete(
-        Uri.parse('$_baseUrl/torrents/delete/$torrentId'),
+        Uri.parse('$baseUrl/torrents/delete/$torrentId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
         },
@@ -323,8 +422,9 @@ class DebridService {
   // Delete download
   static Future<void> deleteDownload(String apiKey, String downloadId) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.delete(
-        Uri.parse('$_baseUrl/downloads/delete/$downloadId'),
+        Uri.parse('$baseUrl/downloads/delete/$downloadId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
         },

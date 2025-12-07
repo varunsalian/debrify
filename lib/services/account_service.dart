@@ -12,19 +12,27 @@ class AccountService {
   // Check if currently validating
   static bool get isValidating => _isValidating;
 
-  // Validate API key and get user info
+  // Validate API key and get user info (with automatic endpoint fallback)
   static Future<bool> validateAndGetUserInfo(String apiKey) async {
     if (_isValidating) return false;
-    
+
     _isValidating = true;
     try {
-      final user = await DebridService.getUserInfo(apiKey);
-      _currentUser = user;
-      
-      // Save to secure storage immediately after validation
-      await StorageService.saveApiKey(apiKey);
-      
-      return true;
+      // Use fallback validation which tries primary then backup endpoint
+      final result = await DebridService.validateApiKeyWithFallback(apiKey);
+
+      if (result['success'] == true) {
+        _currentUser = result['user'] as RDUser;
+
+        // Save API key to storage
+        await StorageService.saveApiKey(apiKey);
+        // Endpoint is already saved by validateApiKeyWithFallback
+
+        return true;
+      } else {
+        _currentUser = null;
+        return false;
+      }
     } catch (e) {
       _currentUser = null;
       return false;
