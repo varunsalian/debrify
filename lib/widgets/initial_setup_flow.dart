@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -143,16 +141,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   bool _isLoadingEngines = false;
   String? _engineError;
 
-  // Scroll controller for auto-scrolling when keyboard appears (Android TV only)
-  final ScrollController _scrollController = ScrollController();
-  Timer? _scrollTimer;
   bool _isAndroidTv = false; // Store TV detection result
-
-  // GlobalKeys for text fields to enable precise scroll positioning
-  final GlobalKey _rdFieldKey = GlobalKey();
-  final GlobalKey _tbFieldKey = GlobalKey();
-  final GlobalKey _pikpakEmailFieldKey = GlobalKey();
-  final GlobalKey _pikpakPasswordFieldKey = GlobalKey();
 
   // Focus nodes for TV/DPAD navigation
   final FocusNode _dialogFocusNode = FocusNode(
@@ -236,13 +225,6 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         _isAndroidTv = isTV;
       });
 
-      // Add listeners to text field focus nodes for auto-scrolling ONLY on Android TV
-      if (_isAndroidTv) {
-        _textFieldFocusNode.addListener(_onTextFieldFocusChange);
-        _pikpakEmailFieldFocusNode.addListener(_onTextFieldFocusChange);
-        _pikpakPasswordFieldFocusNode.addListener(_onTextFieldFocusChange);
-      }
-
       // Only request focus on TV devices for D-pad navigation
       if (_isAndroidTv) {
         // Force unfocus from anything else first
@@ -261,63 +243,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     });
   }
 
-  void _onTextFieldFocusChange() {
-    // This method is ONLY called on Android TV (listeners added conditionally)
-    // Cancel any pending scroll to prevent race conditions
-    _scrollTimer?.cancel();
-
-    // Determine which field has focus and get its GlobalKey
-    GlobalKey? focusedFieldKey;
-    if (_textFieldFocusNode.hasFocus) {
-      focusedFieldKey = _rdFieldKey.currentContext != null
-          ? _rdFieldKey
-          : _tbFieldKey; // RealDebrid or Torbox
-    } else if (_pikpakEmailFieldFocusNode.hasFocus) {
-      focusedFieldKey = _pikpakEmailFieldKey;
-    } else if (_pikpakPasswordFieldFocusNode.hasFocus) {
-      focusedFieldKey = _pikpakPasswordFieldKey;
-    }
-
-    // If a text field has focus, scroll it into view
-    if (focusedFieldKey != null) {
-      // Wait for keyboard to appear and layout to settle
-      _scrollTimer = Timer(const Duration(milliseconds: 350), () {
-        if (!mounted) return;
-
-        final BuildContext? fieldContext = focusedFieldKey?.currentContext;
-        if (fieldContext != null) {
-          // Use Scrollable.ensureVisible to scroll the EXACT field into view
-          // This is far more reliable than scrolling to maxScrollExtent
-          Scrollable.ensureVisible(
-            fieldContext,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
-            // Align the field at 30% from top of viewport
-            // This ensures it's visible above the keyboard with some breathing room
-            alignment: 0.3,
-            // Add extra scroll offset to account for keyboard overlap
-            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-          );
-        }
-      });
-    }
-  }
-
   @override
   void dispose() {
-    // Cancel any pending scroll timer
-    _scrollTimer?.cancel();
-
-    // Remove text field focus listeners (only if they were added for Android TV)
-    if (_isAndroidTv) {
-      _textFieldFocusNode.removeListener(_onTextFieldFocusChange);
-      _pikpakEmailFieldFocusNode.removeListener(_onTextFieldFocusChange);
-      _pikpakPasswordFieldFocusNode.removeListener(_onTextFieldFocusChange);
-    }
-
-    // Dispose scroll controller
-    _scrollController.dispose();
-
     _realDebridController.dispose();
     _torboxController.dispose();
     _pikpakEmailController.dispose();
@@ -351,8 +278,6 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final mediaQuery = MediaQuery.of(context);
-    final double keyboardInset = mediaQuery.viewInsets.bottom;
     return PopScope(
       canPop: false,
       child: FocusScope(
@@ -410,17 +335,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     child: LayoutBuilder(
                       builder: (BuildContext context, BoxConstraints _) {
                         return SingleChildScrollView(
-                          controller: _scrollController,
                           physics: const BouncingScrollPhysics(),
                           clipBehavior: Clip.none,
-                          padding: EdgeInsets.only(
-                            // Only add padding for keyboard on Android TV
-                            // On Android phone, the system handles this automatically
-                            // Add extra padding to ensure text fields can scroll above keyboard
-                            bottom: _isAndroidTv && keyboardInset > 0
-                                ? keyboardInset + 150
-                                : 0,
-                          ),
                           child: Center(
                             child: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 560),
@@ -682,36 +598,176 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               Icon(meta.icon, color: Colors.white, size: 32),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      meta.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const SizedBox(height: 4),
-                    Text(
-                      isPikPak
-                          ? 'Enter your email and password below to connect.'
-                          : 'Paste your API key below to connect.',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  meta.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 24),
-        if (!isPikPak) ...[
+        // TEXT FIELDS MOVED TO TOP - Right after the header
+        if (isPikPak) ...[
+          Text(
+            'Email',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(2),
+            child: _TvFriendlyTextField(
+              controller: _pikpakEmailController,
+              focusNode: _pikpakEmailFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: '',
+              hintText: 'your@email.com',
+              prefixIcon: const Icon(Icons.email_outlined),
+              errorText: _errorMessage,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _pikpakPasswordFieldFocusNode.requestFocus();
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Password',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(3),
+            child: _TvFriendlyTextField(
+              controller: _pikpakPasswordController,
+              focusNode: _pikpakPasswordFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: '',
+              hintText: 'Enter your password',
+              prefixIcon: const Icon(Icons.lock_outline),
+              obscureText: true,
+              errorText: null,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _submitCurrent();
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'How to get started',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 12),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (int i = 0; i < meta.steps.length; i++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: i == meta.steps.length - 1 ? 0 : 12,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: meta.gradient.first.withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${i + 1}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              meta.steps[i],
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: Colors.white70,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  FocusTraversalOrder(
+                    order: const NumericFocusOrder(4),
+                    child: OutlinedButton.icon(
+                      focusNode: _openLinkButtonFocusNode,
+                      onPressed: _isProcessing ? null : () => _launch(meta.url),
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      label: Text(meta.linkLabel),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ] else ...[
+          Text(
+            meta.inputLabel,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(2),
+            child: _TvFriendlyTextField(
+              controller: controller,
+              focusNode: _textFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: '',
+              hintText: meta.hint,
+              prefixIcon: Icon(meta.icon),
+              errorText: _errorMessage,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _submitCurrent();
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
           Text(
             'Where to find the API key',
             style: theme.textTheme.titleMedium?.copyWith(
@@ -772,7 +828,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     ),
                   const SizedBox(height: 16),
                   FocusTraversalOrder(
-                    order: const NumericFocusOrder(2),
+                    order: const NumericFocusOrder(3),
                     child: OutlinedButton.icon(
                       focusNode: _openLinkButtonFocusNode,
                       onPressed: _isProcessing ? null : () => _launch(meta.url),
@@ -790,65 +846,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
         ],
-        if (isPikPak) ...[
-          FocusTraversalOrder(
-            order: const NumericFocusOrder(3),
-            child: _TvFriendlyTextField(
-              key: _pikpakEmailFieldKey,
-              controller: _pikpakEmailController,
-              focusNode: _pikpakEmailFieldFocusNode,
-              enabled: !_isProcessing,
-              labelText: 'Email',
-              hintText: 'your@email.com',
-              prefixIcon: const Icon(Icons.email_outlined),
-              errorText: _errorMessage,
-              onSubmitted: (_) {
-                if (_isProcessing) return;
-                _pikpakPasswordFieldFocusNode.requestFocus();
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          FocusTraversalOrder(
-            order: const NumericFocusOrder(4),
-            child: _TvFriendlyTextField(
-              key: _pikpakPasswordFieldKey,
-              controller: _pikpakPasswordController,
-              focusNode: _pikpakPasswordFieldFocusNode,
-              enabled: !_isProcessing,
-              labelText: 'Password',
-              hintText: 'Enter your password',
-              prefixIcon: const Icon(Icons.lock_outline),
-              obscureText: true,
-              errorText: null,
-              onSubmitted: (_) {
-                if (_isProcessing) return;
-                _submitCurrent();
-              },
-            ),
-          ),
-        ] else
-          FocusTraversalOrder(
-            order: const NumericFocusOrder(3),
-            child: _TvFriendlyTextField(
-              key: type == _IntegrationType.realDebrid
-                  ? _rdFieldKey
-                  : _tbFieldKey,
-              controller: controller,
-              focusNode: _textFieldFocusNode,
-              enabled: !_isProcessing,
-              labelText: meta.inputLabel,
-              hintText: meta.hint,
-              prefixIcon: Icon(meta.icon),
-              errorText: _errorMessage,
-              onSubmitted: (_) {
-                if (_isProcessing) return;
-                _submitCurrent();
-              },
-            ),
-          ),
         const SizedBox(height: 24),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
@@ -857,7 +855,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 : availableWidth;
             final bool isCompact = width < 420;
             final Widget primaryButton = FocusTraversalOrder(
-              order: const NumericFocusOrder(6),
+              order: const NumericFocusOrder(5),
               child: FilledButton(
                 focusNode: _connectButtonFocusNode,
                 onPressed: _isProcessing ? null : _submitCurrent,
@@ -871,7 +869,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               ),
             );
             final Widget skipButton = FocusTraversalOrder(
-              order: const NumericFocusOrder(5),
+              order: const NumericFocusOrder(4),
               child: TextButton(
                 focusNode: _skipForNowButtonFocusNode,
                 onPressed: _isProcessing ? null : _skipCurrent,
@@ -1134,6 +1132,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _stepIndex = 1;
       _errorMessage = null;
     });
+
+    // On Android TV, auto-focus the first focusable element after step change
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
   }
 
   void _goBack() {
@@ -1146,6 +1152,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       setState(() {
         _stepIndex -= 1;
         _errorMessage = null;
+      });
+    }
+
+    // On Android TV, auto-focus the first focusable element after step change
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
       });
     }
   }
@@ -1245,19 +1259,53 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 ],
               ),
               actions: [
-                Focus(
-                  focusNode: _folderRestrictionSkipButtonFocusNode,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, false),
-                    child: const Text('Skip (Full Access)'),
+                Shortcuts(
+                  shortcuts: const <ShortcutActivator, Intent>{
+                    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+                  },
+                  child: Actions(
+                    actions: <Type, Action<Intent>>{
+                      ActivateIntent: CallbackAction<ActivateIntent>(
+                        onInvoke: (_) {
+                          Navigator.pop(dialogContext, false);
+                          return null;
+                        },
+                      ),
+                    },
+                    child: Focus(
+                      focusNode: _folderRestrictionSkipButtonFocusNode,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const Text('Skip (Full Access)'),
+                      ),
+                    ),
                   ),
                 ),
-                Focus(
-                  focusNode: _folderRestrictionSelectButtonFocusNode,
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.pop(dialogContext, true),
-                    icon: const Icon(Icons.folder_open, size: 18),
-                    label: const Text('Select Folder'),
+                Shortcuts(
+                  shortcuts: const <ShortcutActivator, Intent>{
+                    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+                  },
+                  child: Actions(
+                    actions: <Type, Action<Intent>>{
+                      ActivateIntent: CallbackAction<ActivateIntent>(
+                        onInvoke: (_) {
+                          Navigator.pop(dialogContext, true);
+                          return null;
+                        },
+                      ),
+                    },
+                    child: Focus(
+                      focusNode: _folderRestrictionSelectButtonFocusNode,
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        icon: const Icon(Icons.folder_open, size: 18),
+                        label: const Text('Select Folder'),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1352,6 +1400,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _stepIndex += 1;
       _errorMessage = null;
     });
+
+    // On Android TV, auto-focus the first focusable element after step change
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
   }
 
   void _goToEngineSelection() {
@@ -1361,6 +1417,34 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _engineError = null;
     });
     _loadAvailableEngines();
+  }
+
+  /// Request focus on the appropriate widget for the current step (Android TV)
+  void _requestFocusForCurrentStep() {
+    if (_stepIndex == 0) {
+      // Welcome screen - focus first chip
+      _realDebridChipFocusNode.requestFocus();
+    } else if (_stepIndex > 0 && _stepIndex <= _flow.length) {
+      // Integration step - focus the text field
+      final currentType = _flow[_stepIndex - 1];
+      if (currentType == _IntegrationType.pikpak) {
+        // PikPak has email field first
+        _pikpakEmailFieldFocusNode.requestFocus();
+      } else if (currentType == _IntegrationType.realDebrid) {
+        // Real Debrid uses the shared text field focus node
+        _textFieldFocusNode.requestFocus();
+      } else if (currentType == _IntegrationType.torbox) {
+        // TorBox uses the shared text field focus node
+        _textFieldFocusNode.requestFocus();
+      }
+    } else if (_stepIndex > _flow.length) {
+      // Engine selection step
+      if (_engineError != null) {
+        _engineRetryButtonFocusNode.requestFocus();
+      } else if (!_isLoadingEngines && _availableEngines.isNotEmpty) {
+        _engineImportButtonFocusNode.requestFocus();
+      }
+    }
   }
 
   Future<void> _loadAvailableEngines() async {
