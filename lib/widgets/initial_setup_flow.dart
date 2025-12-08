@@ -143,9 +143,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   bool _isLoadingEngines = false;
   String? _engineError;
 
-  // Scroll controller for auto-scrolling when keyboard appears
+  // Scroll controller for auto-scrolling when keyboard appears (Android TV only)
   final ScrollController _scrollController = ScrollController();
   Timer? _scrollTimer;
+  bool _isAndroidTv = false; // Store TV detection result
+
+  // GlobalKeys for text fields to enable precise scroll positioning
+  final GlobalKey _rdFieldKey = GlobalKey();
+  final GlobalKey _tbFieldKey = GlobalKey();
+  final GlobalKey _pikpakEmailFieldKey = GlobalKey();
+  final GlobalKey _pikpakPasswordFieldKey = GlobalKey();
 
   // Focus nodes for TV/DPAD navigation
   final FocusNode _dialogFocusNode = FocusNode(
@@ -217,12 +224,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   void initState() {
     super.initState();
 
-    // Add listeners to text field focus nodes for auto-scrolling
-    _textFieldFocusNode.addListener(_onTextFieldFocusChange);
-    _pikpakEmailFieldFocusNode.addListener(_onTextFieldFocusChange);
-    _pikpakPasswordFieldFocusNode.addListener(_onTextFieldFocusChange);
-
-    // Only auto-focus on TV devices (not on mobile/tablet)
+    // Detect Android TV and setup accordingly
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
@@ -230,8 +232,19 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       final isTV = await PlatformUtil.isAndroidTV();
       if (!mounted) return;
 
+      setState(() {
+        _isAndroidTv = isTV;
+      });
+
+      // Add listeners to text field focus nodes for auto-scrolling ONLY on Android TV
+      if (_isAndroidTv) {
+        _textFieldFocusNode.addListener(_onTextFieldFocusChange);
+        _pikpakEmailFieldFocusNode.addListener(_onTextFieldFocusChange);
+        _pikpakPasswordFieldFocusNode.addListener(_onTextFieldFocusChange);
+      }
+
       // Only request focus on TV devices for D-pad navigation
-      if (isTV) {
+      if (_isAndroidTv) {
         // Force unfocus from anything else first
         FocusManager.instance.primaryFocus?.unfocus();
         // Then request focus on the first chip
@@ -249,22 +262,41 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   }
 
   void _onTextFieldFocusChange() {
+    // This method is ONLY called on Android TV (listeners added conditionally)
     // Cancel any pending scroll to prevent race conditions
     _scrollTimer?.cancel();
 
-    // When any text field gains focus, scroll it into view
-    // This is especially important on TV when keyboard appears
-    if (_textFieldFocusNode.hasFocus ||
-        _pikpakEmailFieldFocusNode.hasFocus ||
-        _pikpakPasswordFieldFocusNode.hasFocus) {
-      // Wait for keyboard to appear, then scroll
-      _scrollTimer = Timer(const Duration(milliseconds: 300), () {
-        if (mounted && _scrollController.hasClients) {
-          // Scroll to the bottom to ensure input field is visible
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
+    // Determine which field has focus and get its GlobalKey
+    GlobalKey? focusedFieldKey;
+    if (_textFieldFocusNode.hasFocus) {
+      focusedFieldKey = _rdFieldKey.currentContext != null
+          ? _rdFieldKey
+          : _tbFieldKey; // RealDebrid or Torbox
+    } else if (_pikpakEmailFieldFocusNode.hasFocus) {
+      focusedFieldKey = _pikpakEmailFieldKey;
+    } else if (_pikpakPasswordFieldFocusNode.hasFocus) {
+      focusedFieldKey = _pikpakPasswordFieldKey;
+    }
+
+    // If a text field has focus, scroll it into view
+    if (focusedFieldKey != null) {
+      // Wait for keyboard to appear and layout to settle
+      _scrollTimer = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted) return;
+
+        final BuildContext? fieldContext = focusedFieldKey?.currentContext;
+        if (fieldContext != null) {
+          // Use Scrollable.ensureVisible to scroll the EXACT field into view
+          // This is far more reliable than scrolling to maxScrollExtent
+          Scrollable.ensureVisible(
+            fieldContext,
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
+            // Align the field at 30% from top of viewport
+            // This ensures it's visible above the keyboard with some breathing room
+            alignment: 0.3,
+            // Add extra scroll offset to account for keyboard overlap
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
           );
         }
       });
@@ -276,10 +308,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     // Cancel any pending scroll timer
     _scrollTimer?.cancel();
 
-    // Remove text field focus listeners
-    _textFieldFocusNode.removeListener(_onTextFieldFocusChange);
-    _pikpakEmailFieldFocusNode.removeListener(_onTextFieldFocusChange);
-    _pikpakPasswordFieldFocusNode.removeListener(_onTextFieldFocusChange);
+    // Remove text field focus listeners (only if they were added for Android TV)
+    if (_isAndroidTv) {
+      _textFieldFocusNode.removeListener(_onTextFieldFocusChange);
+      _pikpakEmailFieldFocusNode.removeListener(_onTextFieldFocusChange);
+      _pikpakPasswordFieldFocusNode.removeListener(_onTextFieldFocusChange);
+    }
 
     // Dispose scroll controller
     _scrollController.dispose();
@@ -380,7 +414,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                           physics: const BouncingScrollPhysics(),
                           clipBehavior: Clip.none,
                           padding: EdgeInsets.only(
-                            bottom: keyboardInset > 0 ? keyboardInset + 24 : 0,
+                            // Only add padding for keyboard on Android TV
+                            // On Android phone, the system handles this automatically
+                            // Add extra padding to ensure text fields can scroll above keyboard
+                            bottom: _isAndroidTv && keyboardInset > 0
+                                ? keyboardInset + 150
+                                : 0,
                           ),
                           child: Center(
                             child: ConstrainedBox(
@@ -757,6 +796,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           FocusTraversalOrder(
             order: const NumericFocusOrder(3),
             child: _TvFriendlyTextField(
+              key: _pikpakEmailFieldKey,
               controller: _pikpakEmailController,
               focusNode: _pikpakEmailFieldFocusNode,
               enabled: !_isProcessing,
@@ -774,6 +814,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
             child: _TvFriendlyTextField(
+              key: _pikpakPasswordFieldKey,
               controller: _pikpakPasswordController,
               focusNode: _pikpakPasswordFieldFocusNode,
               enabled: !_isProcessing,
@@ -792,6 +833,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           FocusTraversalOrder(
             order: const NumericFocusOrder(3),
             child: _TvFriendlyTextField(
+              key: type == _IntegrationType.realDebrid
+                  ? _rdFieldKey
+                  : _tbFieldKey,
               controller: controller,
               focusNode: _textFieldFocusNode,
               enabled: !_isProcessing,
@@ -1632,6 +1676,7 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
 /// A TV-friendly TextField that allows escaping with DPAD
 class _TvFriendlyTextField extends StatefulWidget {
   const _TvFriendlyTextField({
+    super.key,
     required this.controller,
     required this.focusNode,
     required this.enabled,
