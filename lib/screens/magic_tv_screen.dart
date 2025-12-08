@@ -419,31 +419,45 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         await Future.delayed(const Duration(milliseconds: 100));
         attempts++;
         if (!mounted) {
-          debugPrint('DebrifyTVScreen: Widget unmounted while waiting for channels');
+          debugPrint(
+            'DebrifyTVScreen: Widget unmounted while waiting for channels',
+          );
           return;
         }
       }
 
       if (_channels.isEmpty) {
-        debugPrint('DebrifyTVScreen: Channels list is still empty after waiting');
+        debugPrint(
+          'DebrifyTVScreen: Channels list is still empty after waiting',
+        );
         MainPageBridge.notifyAutoLaunchFailed('Channels not loaded');
         return;
       }
 
-      debugPrint('DebrifyTVScreen: Channels loaded (${_channels.length} channels)');
+      debugPrint(
+        'DebrifyTVScreen: Channels loaded (${_channels.length} channels)',
+      );
 
       // Find the channel in the loaded channels list
-      final channel = _channels.firstWhereOrNull((c) => c.id == startupChannelId);
+      final channel = _channels.firstWhereOrNull(
+        (c) => c.id == startupChannelId,
+      );
 
       if (channel == null) {
-        debugPrint('DebrifyTVScreen: Channel with ID $startupChannelId not found in ${_channels.length} channels');
-        debugPrint('DebrifyTVScreen: Available channel IDs: ${_channels.map((c) => c.id).join(", ")}');
+        debugPrint(
+          'DebrifyTVScreen: Channel with ID $startupChannelId not found in ${_channels.length} channels',
+        );
+        debugPrint(
+          'DebrifyTVScreen: Available channel IDs: ${_channels.map((c) => c.id).join(", ")}',
+        );
         MainPageBridge.notifyAutoLaunchFailed('Startup channel not found');
         return;
       }
 
       debugPrint('🚀 [AUTO-LAUNCH] Found channel: ${channel.name}');
-      debugPrint('🚀 [AUTO-LAUNCH] Keywords: ${channel.keywords.length}, isAndroidTv: $_isAndroidTv');
+      debugPrint(
+        '🚀 [AUTO-LAUNCH] Keywords: ${channel.keywords.length}, isAndroidTv: $_isAndroidTv',
+      );
 
       // Small delay to ensure UI is ready
       await Future.delayed(const Duration(milliseconds: 500));
@@ -456,7 +470,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       // Call the existing watch channel method
       _watchChannel(channel);
-
     } catch (e, stackTrace) {
       debugPrint('DebrifyTVScreen: Failed to auto-play startup channel: $e');
       debugPrint('DebrifyTVScreen: Stack trace: $stackTrace');
@@ -612,33 +625,66 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Load Debrify TV search settings via SettingsManager
     // Engine enabled states (TV mode)
-    final useTorrentsCsv = await _settingsManager.getTvEnabled('torrents_csv', true);
-    final usePirateBay = await _settingsManager.getTvEnabled('pirate_bay', true);
+    final useTorrentsCsv = await _settingsManager.getTvEnabled(
+      'torrents_csv',
+      true,
+    );
+    final usePirateBay = await _settingsManager.getTvEnabled(
+      'pirate_bay',
+      true,
+    );
     final useYts = await _settingsManager.getTvEnabled('yts', false);
-    final useSolidTorrents = await _settingsManager.getTvEnabled('solid_torrents', false);
+    final useSolidTorrents = await _settingsManager.getTvEnabled(
+      'solid_torrents',
+      false,
+    );
 
     // Small channel limits per engine
-    final channelSmallTorrentsCsvMax = await _settingsManager.getTvSmallChannelMax('torrents_csv', 100);
-    final channelSmallSolidTorrentsMax = await _settingsManager.getTvSmallChannelMax('solid_torrents', 100);
-    final channelSmallPirateBayMax = await _settingsManager.getTvSmallChannelMax('pirate_bay', 100);
-    final channelSmallYtsMax = await _settingsManager.getTvSmallChannelMax('yts', 50);
+    final channelSmallTorrentsCsvMax = await _settingsManager
+        .getTvSmallChannelMax('torrents_csv', 100);
+    final channelSmallSolidTorrentsMax = await _settingsManager
+        .getTvSmallChannelMax('solid_torrents', 100);
+    final channelSmallPirateBayMax = await _settingsManager
+        .getTvSmallChannelMax('pirate_bay', 100);
+    final channelSmallYtsMax = await _settingsManager.getTvSmallChannelMax(
+      'yts',
+      50,
+    );
 
     // Large channel limits per engine
-    final channelLargeTorrentsCsvMax = await _settingsManager.getTvLargeChannelMax('torrents_csv', 25);
-    final channelLargeSolidTorrentsMax = await _settingsManager.getTvLargeChannelMax('solid_torrents', 100);
-    final channelLargePirateBayMax = await _settingsManager.getTvLargeChannelMax('pirate_bay', 100);
-    final channelLargeYtsMax = await _settingsManager.getTvLargeChannelMax('yts', 50);
+    final channelLargeTorrentsCsvMax = await _settingsManager
+        .getTvLargeChannelMax('torrents_csv', 25);
+    final channelLargeSolidTorrentsMax = await _settingsManager
+        .getTvLargeChannelMax('solid_torrents', 100);
+    final channelLargePirateBayMax = await _settingsManager
+        .getTvLargeChannelMax('pirate_bay', 100);
+    final channelLargeYtsMax = await _settingsManager.getTvLargeChannelMax(
+      'yts',
+      50,
+    );
 
     // Quick play limits per engine
-    final quickPlayTorrentsCsvMax = await _settingsManager.getTvQuickPlayMax('torrents_csv', 500);
-    final quickPlaySolidTorrentsMax = await _settingsManager.getTvQuickPlayMax('solid_torrents', 200);
-    final quickPlayPirateBayMax = await _settingsManager.getTvQuickPlayMax('pirate_bay', 100);
+    final quickPlayTorrentsCsvMax = await _settingsManager.getTvQuickPlayMax(
+      'torrents_csv',
+      500,
+    );
+    final quickPlaySolidTorrentsMax = await _settingsManager.getTvQuickPlayMax(
+      'solid_torrents',
+      200,
+    );
+    final quickPlayPirateBayMax = await _settingsManager.getTvQuickPlayMax(
+      'pirate_bay',
+      100,
+    );
     final quickPlayYtsMax = await _settingsManager.getTvQuickPlayMax('yts', 50);
 
     // Global TV settings
     final channelBatchSize = await _settingsManager.getGlobalBatchSize(4);
-    final keywordThreshold = await _settingsManager.getGlobalKeywordThreshold(10);
-    final minTorrentsPerKeyword = await _settingsManager.getGlobalMinTorrentsPerKeyword(5);
+    final keywordThreshold = await _settingsManager.getGlobalKeywordThreshold(
+      10,
+    );
+    final minTorrentsPerKeyword = await _settingsManager
+        .getGlobalMinTorrentsPerKeyword(5);
     final quickPlayMaxKeywords = await _settingsManager.getGlobalMaxKeywords(5);
 
     final rdAvailable =
@@ -661,8 +707,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _hideSeekbar = hideOptions;
         _showChannelName = showChannelName;
         _showVideoTitle = showVideoTitle;
-        _hideOptions = false;  // Hardcoded to false
-        _hideBackButton = false;  // Hardcoded to false
+        _hideOptions = false; // Hardcoded to false
+        _hideBackButton = false; // Hardcoded to false
         _rdAvailable = rdAvailable;
         _torboxAvailable = torboxAvailable;
         _pikpakAvailable = pikpakAvailable;
@@ -674,8 +720,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _quickHideSeekbar = hideOptions;
         _quickShowChannelName = showChannelName;
         _quickShowVideoTitle = showVideoTitle;
-        _quickHideOptions = false;  // Hardcoded to false
-        _quickHideBackButton = false;  // Hardcoded to false
+        _quickHideOptions = false; // Hardcoded to false
+        _quickHideBackButton = false; // Hardcoded to false
         _quickAvoidNsfw = avoidNsfw;
         _quickProvider = defaultProvider;
 
@@ -960,7 +1006,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         solidResult = await solidFuture;
       }
     } catch (e) {
-      debugPrint('DebrifyTV: Cache warm SolidTorrents failed for "$keyword": $e');
+      debugPrint(
+        'DebrifyTV: Cache warm SolidTorrents failed for "$keyword": $e',
+      );
       solidFailure =
           'SolidTorrents search failed. Some torrents may be missing.';
     }
@@ -996,7 +1044,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }).toList();
 
       final totalBefore = csvBefore + pirateBefore + solidBefore;
-      final totalAfter = csvTorrents.length + pirateTorrents.length + solidTorrents.length;
+      final totalAfter =
+          csvTorrents.length + pirateTorrents.length + solidTorrents.length;
       if (totalBefore != totalAfter) {
         debugPrint(
           'DebrifyTV: Cache NSFW filter for "$keyword": $totalBefore → $totalAfter torrents',
@@ -1005,7 +1054,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     // Check minimum torrents per keyword threshold
-    final totalTorrents = csvTorrents.length + pirateTorrents.length + solidTorrents.length;
+    final totalTorrents =
+        csvTorrents.length + pirateTorrents.length + solidTorrents.length;
     if (totalTorrents < minTorrentsPerKeyword) {
       debugPrint(
         'DebrifyTV: Skipping keyword "$keyword" – only $totalTorrents torrent(s), minimum is $minTorrentsPerKeyword',
@@ -1020,7 +1070,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         keyword: keyword,
         addedHashes: const <String>{},
         stat: stat,
-        failureMessage: 'Too few torrents for "$keyword" (found $totalTorrents, need $minTorrentsPerKeyword)',
+        failureMessage:
+            'Too few torrents for "$keyword" (found $totalTorrents, need $minTorrentsPerKeyword)',
       );
     }
 
@@ -1086,7 +1137,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       failureMessage = pirateFailure;
     } else if (solidFailure != null) {
       failureMessage = solidFailure;
-    } else if (csvTorrentsResult.isEmpty && pirateResult.isEmpty && solidResult.isEmpty) {
+    } else if (csvTorrentsResult.isEmpty &&
+        pirateResult.isEmpty &&
+        solidResult.isEmpty) {
       failureMessage = 'No torrents found for "$keyword" yet.';
     }
 
@@ -1931,52 +1984,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     return showDialog<_ImportChannelsMode>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Import Channels'),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.sd_storage_rounded),
-                  title: const Text('Import from device'),
-                  subtitle: const Text(
-                    'Load a .zip, .yaml, .txt, or .debrify file',
-                  ),
-                  onTap: () => Navigator.of(
-                    dialogContext,
-                  ).pop(_ImportChannelsMode.device),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.link_rounded),
-                  title: const Text('Import from Link'),
-                  subtitle: const Text(
-                    'Paste a debrify:// link or URL to a channel file',
-                  ),
-                  onTap: () =>
-                      Navigator.of(dialogContext).pop(_ImportChannelsMode.url),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.people_rounded),
-                  title: const Text('Import Community Shared Channels'),
-                  subtitle: const Text(
-                    'Browse and import channels from community repositories',
-                  ),
-                  onTap: () => Navigator.of(dialogContext)
-                      .pop(_ImportChannelsMode.community),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
+        return _ImportChannelsDialog(isAndroidTv: _isAndroidTv);
       },
     );
   }
@@ -2072,7 +2082,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         throw const FormatException('invalid');
       }
     } catch (_) {
-      _showSnack('Enter a valid debrify:// link or http(s) URL.', color: Colors.red);
+      _showSnack(
+        'Enter a valid debrify:// link or http(s) URL.',
+        color: Colors.red,
+      );
       return;
     }
 
@@ -2174,7 +2187,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       try {
         // Download the channel file
-        final bytes = await CommunityChannelsService.downloadChannelFile(channel.url);
+        final bytes = await CommunityChannelsService.downloadChannelFile(
+          channel.url,
+        );
 
         if (bytes.isEmpty) {
           throw Exception('Downloaded file is empty');
@@ -2239,9 +2254,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
-        return _CommunityChannelsDialog(
-          isAndroidTv: _isAndroidTv,
-        );
+        return _CommunityChannelsDialog(isAndroidTv: _isAndroidTv);
       },
     );
   }
@@ -2649,7 +2662,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       }
                     } catch (_) {
                       setState(() {
-                        errorText = 'Enter a valid debrify:// link or http(s) URL.';
+                        errorText =
+                            'Enter a valid debrify:// link or http(s) URL.';
                       });
                       return;
                     }
@@ -3006,8 +3020,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
 
       // Estimate sizes for display
-      final estimatedSize = MagnetYamlService.estimateMagnetLinkSize(yamlContent);
-      final compressionRatio = MagnetYamlService.getCompressionRatio(yamlContent);
+      final estimatedSize = MagnetYamlService.estimateMagnetLinkSize(
+        yamlContent,
+      );
+      final compressionRatio = MagnetYamlService.getCompressionRatio(
+        yamlContent,
+      );
 
       if (!mounted) {
         return;
@@ -3435,7 +3453,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (!cacheEntry.isReady) {
       debugPrint('❌ [WATCH] Cache not ready, status: ${cacheEntry.status}');
-      MainPageBridge.notifyAutoLaunchFailed('Cache not ready: ${cacheEntry.status}');
+      MainPageBridge.notifyAutoLaunchFailed(
+        'Cache not ready: ${cacheEntry.status}',
+      );
       final message =
           cacheEntry.errorMessage ??
           'Channel cache failed to build. Try editing and saving again.';
@@ -3471,7 +3491,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final cachedTorrents = playbackSelection
         .map((cached) => cached.toTorrent())
         .toList();
-    debugPrint('✅ [WATCH] Selected ${cachedTorrents.length} torrents for playback');
+    debugPrint(
+      '✅ [WATCH] Selected ${cachedTorrents.length} torrents for playback',
+    );
 
     if (_provider == _providerTorbox) {
       debugPrint('🎬 [WATCH] Launching Torbox flow...');
@@ -3583,8 +3605,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final providerLabel = _quickProvider == _providerTorbox
         ? 'Torbox'
         : _quickProvider == _providerPikPak
-            ? 'PikPak'
-            : 'Real Debrid';
+        ? 'PikPak'
+        : 'Real Debrid';
     // ignore: unawaited_futures
     showDialog(
       context: context,
@@ -5079,7 +5101,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _closeProgressDialog();
         if (mounted && !_watchCancelled) {
           setState(() {
-            _status = 'No playable PikPak streams found. Try different keywords.';
+            _status =
+                'No playable PikPak streams found. Try different keywords.';
           });
           MainPageBridge.notifyAutoLaunchFailed('No PikPak streams available');
           _showSnack(
@@ -5754,7 +5777,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           Map<String, dynamic> unrestrict;
           try {
-            unrestrict = await DebridService.unrestrictLink(apiKey, selectedLink);
+            unrestrict = await DebridService.unrestrictLink(
+              apiKey,
+              selectedLink,
+            );
           } catch (error) {
             debugPrint(
               'DebrifyTV: Real-Debrid unrestrict failed for candidate ${candidate.infohash}: $error',
@@ -6265,7 +6291,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _status = 'No playable Torbox streams found. Try refreshing.';
           _isBusy = false;
         });
-        MainPageBridge.notifyAutoLaunchFailed('No cached Torbox streams available');
+        MainPageBridge.notifyAutoLaunchFailed(
+          'No cached Torbox streams available',
+        );
         _showSnack(
           'No cached Torbox streams are playable. Try refreshing the channel.',
           color: Colors.orange,
@@ -6598,7 +6626,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Skip showing dialog during auto-launch (overlay handles loading UI)
     if (MainPage.isAutoLaunchShowingOverlay) {
-      debugPrint('DebrifyTVScreen: Skipping progress dialog during auto-launch');
+      debugPrint(
+        'DebrifyTVScreen: Skipping progress dialog during auto-launch',
+      );
       return;
     }
 
@@ -6788,7 +6818,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 const SizedBox(width: 12),
                 // Delete All button
                 _TvCompactButton(
-                  onPressed: _isBusy || _channels.isEmpty ? null : _handleDeleteAllChannels,
+                  onPressed: _isBusy || _channels.isEmpty
+                      ? null
+                      : _handleDeleteAllChannels,
                   icon: Icons.delete_outline_rounded,
                   label: 'Delete All',
                   backgroundColor: Colors.redAccent,
@@ -6852,10 +6884,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     child: TextField(
                       focusNode: _channelSearchFocusNode,
                       controller: _channelSearchController,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
                       decoration: InputDecoration(
                         hintText: 'Search channels...',
                         hintStyle: TextStyle(
@@ -6896,14 +6925,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             child: filteredChannels.isEmpty
                 ? _buildTvEmptyState()
                 : GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4, // 4 columns for TV
-                      mainAxisSpacing: 24,
-                      crossAxisSpacing: 24,
-                      childAspectRatio: 1.5, // Width:Height ratio for consistent sizing
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 4,
                     ),
-                    itemCount: filteredChannels.length + 1, // +1 for "Add Channel" card
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 4, // 4 columns for TV
+                          mainAxisSpacing: 24,
+                          crossAxisSpacing: 24,
+                          childAspectRatio:
+                              1.5, // Width:Height ratio for consistent sizing
+                        ),
+                    itemCount:
+                        filteredChannels.length +
+                        1, // +1 for "Add Channel" card
                     itemBuilder: (context, index) {
                       if (index == filteredChannels.length) {
                         // "Add Channel" card at the end
@@ -6942,10 +6978,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           const SizedBox(height: 12),
           const Text(
             'Import channels or create your first channel to get started',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.white54,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.white54),
           ),
           const SizedBox(height: 32),
           _TvFocusableButton(
@@ -6969,7 +7002,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _watchChannel(channel);
       },
       onLongPress: () {
-        print('[TV] Card onLongPress callback triggered for channel: ${channel.name}');
+        print(
+          '[TV] Card onLongPress callback triggered for channel: ${channel.name}',
+        );
         _showTvChannelOptionsMenu(channel);
       },
       showLongPressHint: true,
@@ -7291,8 +7326,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _quickHideSeekbar = true;
                       _quickShowChannelName = true;
                       _quickShowVideoTitle = true;
-                      _quickHideOptions = false;  // Hardcoded to false
-                      _quickHideBackButton = false;  // Hardcoded to false
+                      _quickHideOptions = false; // Hardcoded to false
+                      _quickHideBackButton = false; // Hardcoded to false
                       _quickAvoidNsfw = true;
                       _quickProvider = defaultProvider;
                     } else {
@@ -7301,8 +7336,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       _hideSeekbar = true;
                       _showChannelName = true;
                       _showVideoTitle = true;
-                      _hideOptions = false;  // Hardcoded to false
-                      _hideBackButton = false;  // Hardcoded to false
+                      _hideOptions = false; // Hardcoded to false
+                      _hideBackButton = false; // Hardcoded to false
                       _provider = defaultProvider;
                     }
                   });
@@ -7671,8 +7706,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _quickHideSeekbar = _hideSeekbar;
                         _quickShowChannelName = _showChannelName;
                         _quickShowVideoTitle = _showVideoTitle;
-                        _quickHideOptions = false;  // Always false now
-                        _quickHideBackButton = false;  // Always false now
+                        _quickHideOptions = false; // Always false now
+                        _quickHideBackButton = false; // Always false now
                         _quickAvoidNsfw = avoidNsfw;
                         _quickProvider = _provider;
                       });
@@ -9015,9 +9050,7 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: _isFocused
-              ? const Color(0xFF2A2A2A)
-              : const Color(0xFF1A1A1A),
+          color: _isFocused ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _isFocused ? Colors.white : Colors.white12,
@@ -9149,9 +9182,7 @@ class _SwitchRowState extends State<_SwitchRow> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
-          color: _isFocused
-              ? const Color(0xFF2A2A2A)
-              : const Color(0xFF1A1A1A),
+          color: _isFocused ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _isFocused ? Colors.white : Colors.white12,
@@ -9168,12 +9199,21 @@ class _SwitchRowState extends State<_SwitchRow> {
               : null,
         ),
         child: SwitchListTile(
-          title: Text(widget.title, style: const TextStyle(color: Colors.white)),
-          subtitle: Text(widget.subtitle, style: const TextStyle(color: Colors.white70)),
+          title: Text(
+            widget.title,
+            style: const TextStyle(color: Colors.white),
+          ),
+          subtitle: Text(
+            widget.subtitle,
+            style: const TextStyle(color: Colors.white70),
+          ),
           value: widget.value,
           onChanged: widget.onChanged,
           activeColor: const Color(0xFFE50914),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 0,
+          ),
         ),
       ),
     );
@@ -9221,7 +9261,8 @@ class _TvCompactButtonState extends State<_TvCompactButton> {
           }
           // Also handle context menu button as a secondary action
           if (event.logicalKey == LogicalKeyboardKey.contextMenu &&
-              widget.label == null) { // Only for settings button
+              widget.label == null) {
+            // Only for settings button
             widget.onPressed?.call();
             return KeyEventResult.handled;
           }
@@ -9249,7 +9290,9 @@ class _TvCompactButtonState extends State<_TvCompactButton> {
               border: Border.all(
                 color: _isFocused
                     ? Colors.white
-                    : (isDisabled ? Colors.grey.withOpacity(0.2) : Colors.white24),
+                    : (isDisabled
+                          ? Colors.grey.withOpacity(0.2)
+                          : Colors.white24),
                 width: _isFocused ? 2 : 1,
               ),
               boxShadow: _isFocused
@@ -9420,15 +9463,18 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
         // Handle Select/Enter button press
         if (event.logicalKey == LogicalKeyboardKey.select ||
             event.logicalKey == LogicalKeyboardKey.enter) {
-
           if (event is KeyDownEvent) {
-            print('[TvFocusableCard] Select/Enter key DOWN - starting long press timer');
+            print(
+              '[TvFocusableCard] Select/Enter key DOWN - starting long press timer',
+            );
             _longPressTriggered = false;
 
             // Start timer for long press (800ms)
             _longPressTimer?.cancel();
             _longPressTimer = Timer(const Duration(milliseconds: 800), () {
-              print('[TvFocusableCard] Long press detected! Triggering onLongPress');
+              print(
+                '[TvFocusableCard] Long press detected! Triggering onLongPress',
+              );
               _longPressTriggered = true;
               _lastLongPressTime = DateTime.now();
               if (widget.onLongPress != null) {
@@ -9451,7 +9497,9 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
               print('[TvFocusableCard] Short press - triggering onPressed');
               widget.onPressed();
             } else if (timeSinceLongPress <= 500) {
-              print('[TvFocusableCard] Ignoring key up - too soon after long press dialog');
+              print(
+                '[TvFocusableCard] Ignoring key up - too soon after long press dialog',
+              );
             }
             _longPressTriggered = false;
 
@@ -9460,7 +9508,9 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
         }
 
         if (event is KeyDownEvent) {
-          print('[TvFocusableCard] Other key pressed: ${event.logicalKey.keyLabel} (${event.logicalKey.keyId})');
+          print(
+            '[TvFocusableCard] Other key pressed: ${event.logicalKey.keyLabel} (${event.logicalKey.keyId})',
+          );
         }
 
         return KeyEventResult.ignored;
@@ -9472,7 +9522,9 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
         },
         onLongPress: widget.onLongPress != null
             ? () {
-                print('[TvFocusableCard] GestureDetector onLongPress triggered!');
+                print(
+                  '[TvFocusableCard] GestureDetector onLongPress triggered!',
+                );
                 widget.onLongPress!();
               }
             : null,
@@ -9488,14 +9540,8 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: _isFocused
-                      ? [
-                          const Color(0xFF2A2A2A),
-                          const Color(0xFF1A1A1A),
-                        ]
-                      : [
-                          const Color(0xFF1A1A1A),
-                          const Color(0xFF0F0F0F),
-                        ],
+                      ? [const Color(0xFF2A2A2A), const Color(0xFF1A1A1A)]
+                      : [const Color(0xFF1A1A1A), const Color(0xFF0F0F0F)],
                 ),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
@@ -9521,7 +9567,9 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
               child: widget.child,
             ),
             // Long press hint (bottom-right when focused)
-            if (_isFocused && widget.showLongPressHint && widget.onLongPress != null)
+            if (_isFocused &&
+                widget.showLongPressHint &&
+                widget.onLongPress != null)
               Positioned(
                 bottom: 8,
                 right: 8,
@@ -9529,7 +9577,10 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
                   opacity: _isFocused ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 300),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.7),
                       borderRadius: BorderRadius.circular(6),
@@ -9560,8 +9611,8 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
                   ),
                 ),
               ),
-            ],
-          ),
+          ],
+        ),
       ),
     );
   }
@@ -9571,9 +9622,7 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
 class _CommunityChannelsDialog extends StatefulWidget {
   final bool isAndroidTv;
 
-  const _CommunityChannelsDialog({
-    required this.isAndroidTv,
-  });
+  const _CommunityChannelsDialog({required this.isAndroidTv});
 
   @override
   State<_CommunityChannelsDialog> createState() =>
@@ -9620,7 +9669,8 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowRight &&
-          _repoUrlController.selection.baseOffset == _repoUrlController.text.length) {
+          _repoUrlController.selection.baseOffset ==
+              _repoUrlController.text.length) {
         _fetchButtonFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
@@ -9660,7 +9710,8 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
         _fetchButtonFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.arrowDown && _channelFocusNodes.isNotEmpty) {
+      if (key == LogicalKeyboardKey.arrowDown &&
+          _channelFocusNodes.isNotEmpty) {
         _channelFocusNodes.values.first.requestFocus();
         return KeyEventResult.handled;
       }
@@ -9712,6 +9763,14 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
       }
       if (key == LogicalKeyboardKey.arrowLeft) {
         _cancelButtonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+        // Trigger import action if there are selected channels
+        final selectedChannels = _getSelectedChannels();
+        if (selectedChannels.isNotEmpty) {
+          Navigator.of(context).pop(selectedChannels);
+        }
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -9838,7 +9897,8 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
         }
 
         // Toggle selection with Enter/Select
-        if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+        if (key == LogicalKeyboardKey.select ||
+            key == LogicalKeyboardKey.enter) {
           _toggleChannelSelection(channel);
           return KeyEventResult.handled;
         }
@@ -9856,6 +9916,29 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
   Widget _buildChannelTile(CommunityChannel channel) {
     final focusNode = _channelFocusNodes[channel.id];
 
+    // Define category colors for better visual appeal
+    Color getCategoryColor(String category) {
+      switch (category.toLowerCase()) {
+        case 'movies':
+          return const Color(0xFF9C27B0); // Purple
+        case 'series':
+        case 'tv':
+          return const Color(0xFF2196F3); // Blue
+        case 'sports':
+          return const Color(0xFF4CAF50); // Green
+        case 'news':
+          return const Color(0xFFFF5722); // Deep Orange
+        case 'kids':
+          return const Color(0xFFFFC107); // Amber
+        case 'documentary':
+          return const Color(0xFF00BCD4); // Cyan
+        case 'music':
+          return const Color(0xFFE91E63); // Pink
+        default:
+          return const Color(0xFF607D8B); // Blue Grey
+      }
+    }
+
     return Focus(
       focusNode: focusNode,
       onFocusChange: (hasFocus) {
@@ -9866,64 +9949,129 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
       child: Builder(
         builder: (context) {
           final hasFocus = Focus.of(context).hasFocus;
+          final categoryColor = getCategoryColor(channel.category);
 
-          return Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
             decoration: BoxDecoration(
               color: hasFocus
-                  ? Theme.of(context).focusColor.withOpacity(0.1)
-                  : Colors.transparent,
+                  ? Theme.of(context).primaryColor.withOpacity(0.15)
+                  : Theme.of(context).colorScheme.surface,
               border: Border.all(
                 color: hasFocus
                     ? Theme.of(context).primaryColor
-                    : Colors.transparent,
-                width: 2,
+                    : Theme.of(context).dividerColor.withOpacity(0.3),
+                width: hasFocus ? 2 : 1,
               ),
               borderRadius: BorderRadius.circular(8),
+              boxShadow: hasFocus
+                  ? [
+                      BoxShadow(
+                        color: Theme.of(context).primaryColor.withOpacity(0.2),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 2,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
             ),
             child: CheckboxListTile(
               value: channel.isSelected,
               onChanged: (_) => _toggleChannelSelection(channel),
+              activeColor: Theme.of(context).primaryColor,
+              checkColor: Colors.white,
+              dense: true,
+              visualDensity: VisualDensity.compact,
               title: Text(
                 channel.name,
                 style: TextStyle(
-                  fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
+                  fontSize: hasFocus ? 15 : 14,
+                  color: hasFocus
+                      ? Theme.of(context).colorScheme.onSurface
+                      : Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.9),
                 ),
               ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (channel.description.isNotEmpty)
+                  if (channel.description.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
                       channel.description,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
+                  ],
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Container(
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
+                          horizontal: 6,
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
+                          gradient: LinearGradient(
+                            colors: [
+                              categoryColor.withOpacity(hasFocus ? 0.9 : 0.8),
+                              categoryColor.withOpacity(hasFocus ? 1.0 : 0.9),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: categoryColor.withOpacity(0.2),
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
                         ),
                         child: Text(
-                          channel.category,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).primaryColor,
+                          channel.category.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ),
                       if (channel.updated.isNotEmpty) ...[
                         const SizedBox(width: 8),
+                        Icon(
+                          Icons.update,
+                          size: 12,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                        const SizedBox(width: 3),
                         Text(
-                          'Updated: ${channel.updated}',
-                          style: Theme.of(context).textTheme.bodySmall,
+                          channel.updated,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.5),
+                          ),
                         ),
                       ],
                     ],
@@ -9931,6 +10079,10 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                 ],
               ),
               controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 4,
+              ),
             ),
           );
         },
@@ -9944,113 +10096,293 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
     final totalCount = _manifest?.channels.length ?? 0;
 
     return AlertDialog(
-      title: const Text('Import Community Shared Channels'),
-      content: SizedBox(
-        width: 600,
-        height: 500,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 8,
+      title: Row(
+        children: [
+          Icon(
+            Icons.cloud_download,
+            color: Theme.of(context).primaryColor,
+            size: 28,
+          ),
+          const SizedBox(width: 12),
+          const Text(
+            'Import Community Shared Channels',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+      content: Container(
+        width: 750,
+        height: 650,
+        padding: const EdgeInsets.all(4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // URL Input and Fetch Button
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _repoUrlController,
-                    focusNode: _repoUrlFocusNode,
-                    decoration: InputDecoration(
-                      labelText: 'Repository URL',
-                      hintText: 'Enter community repository URL',
-                      errorText: _errorMessage,
-                      border: const OutlineInputBorder(),
-                    ),
-                    autofocus: true,
-                    enabled: !_isLoading,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Focus(
-                  focusNode: _fetchButtonFocusNode,
-                  child: Builder(
-                    builder: (context) {
-                      final hasFocus = Focus.of(context).hasFocus;
-                      return ElevatedButton(
-                        onPressed: _isLoading ? null : _fetchChannels,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 20,
-                          ),
-                          backgroundColor: hasFocus
-                              ? Theme.of(context).primaryColor
-                              : null,
-                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            // URL Input and Fetch Button - More compact
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _repoUrlController,
+                      focusNode: _repoUrlFocusNode,
+                      decoration: InputDecoration(
+                        labelText: 'Repository URL',
+                        hintText: 'Enter community repository URL',
+                        errorText: _errorMessage,
+                        prefixIcon: Icon(
+                          Icons.link,
+                          size: 20,
+                          color: Theme.of(
+                            context,
+                          ).primaryColor.withOpacity(0.7),
                         ),
-                        child: _isLoading
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Theme.of(context).colorScheme.onPrimary,
-                                ),
-                              )
-                            : const Text('Fetch Channels'),
-                      );
-                    },
+                        isDense: true,
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                            width: 2,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      autofocus: true,
+                      enabled: !_isLoading,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Focus(
+                    focusNode: _fetchButtonFocusNode,
+                    child: Builder(
+                      builder: (context) {
+                        final hasFocus = Focus.of(context).hasFocus;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            gradient: LinearGradient(
+                              colors: _isLoading
+                                  ? [Colors.grey.shade400, Colors.grey.shade500]
+                                  : hasFocus
+                                  ? [
+                                      const Color(0xFF2196F3),
+                                      const Color(0xFF1976D2),
+                                    ]
+                                  : [
+                                      const Color(0xFF42A5F5),
+                                      const Color(0xFF2196F3),
+                                    ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            boxShadow: hasFocus
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF2196F3,
+                                      ).withOpacity(0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 1,
+                                    ),
+                                  ]
+                                : [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.15),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: _isLoading ? null : _fetchChannels,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            icon: _isLoading
+                                ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.download_rounded, size: 18),
+                            label: Text(
+                              _isLoading ? 'Fetching...' : 'Fetch',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
-            // Select All / Channel count
+            // Select All / Channel count - More compact
             if (_manifest != null && _manifest!.channels.isNotEmpty) ...[
               Focus(
                 focusNode: _selectAllFocusNode,
                 child: Builder(
                   builder: (context) {
                     final hasFocus = Focus.of(context).hasFocus;
-                    return Container(
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
                       decoration: BoxDecoration(
-                        color: hasFocus
-                            ? Theme.of(context).focusColor.withOpacity(0.1)
-                            : Colors.transparent,
+                        gradient: LinearGradient(
+                          colors: hasFocus
+                              ? [
+                                  Theme.of(
+                                    context,
+                                  ).primaryColor.withOpacity(0.1),
+                                  Theme.of(
+                                    context,
+                                  ).primaryColor.withOpacity(0.05),
+                                ]
+                              : [
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceVariant.withOpacity(0.5),
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceVariant.withOpacity(0.3),
+                                ],
+                        ),
                         border: Border.all(
                           color: hasFocus
                               ? Theme.of(context).primaryColor
-                              : Colors.transparent,
-                          width: 2,
+                              : Theme.of(context).dividerColor.withOpacity(0.3),
+                          width: hasFocus ? 2 : 1,
                         ),
                         borderRadius: BorderRadius.circular(8),
+                        boxShadow: hasFocus
+                            ? [
+                                BoxShadow(
+                                  color: Theme.of(
+                                    context,
+                                  ).primaryColor.withOpacity(0.15),
+                                  blurRadius: 6,
+                                  spreadRadius: 0,
+                                ),
+                              ]
+                            : [],
                       ),
                       child: CheckboxListTile(
                         value: _selectAll,
                         onChanged: (_) => _toggleSelectAll(),
-                        title: Text(
-                          'Select All ($selectedCount / $totalCount selected)',
-                          style: TextStyle(
-                            fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
-                          ),
+                        activeColor: Theme.of(context).primaryColor,
+                        checkColor: Colors.white,
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        title: Row(
+                          children: [
+                            Text(
+                              'Select All',
+                              style: TextStyle(
+                                fontWeight: hasFocus
+                                    ? FontWeight.bold
+                                    : FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: selectedCount > 0
+                                    ? Theme.of(
+                                        context,
+                                      ).primaryColor.withOpacity(0.2)
+                                    : Colors.grey.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '$selectedCount / $totalCount',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: selectedCount > 0
+                                      ? Theme.of(context).primaryColor
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                       ),
                     );
                   },
                 ),
               ),
-              const Divider(),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              Divider(
+                color: Theme.of(context).dividerColor.withOpacity(0.2),
+                thickness: 0.5,
+                height: 1,
+              ),
+              const SizedBox(height: 6),
             ],
 
-            // Channel List
+            // Channel List - Optimized padding
             if (_manifest != null && _manifest!.channels.isNotEmpty)
               Expanded(
-                child: ListView.builder(
-                  itemCount: _manifest!.channels.length,
-                  itemBuilder: (context, index) {
-                    return _buildChannelTile(_manifest!.channels[index]);
-                  },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.background.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: ListView.builder(
+                    itemCount: _manifest!.channels.length,
+                    itemBuilder: (context, index) {
+                      return _buildChannelTile(_manifest!.channels[index]);
+                    },
+                  ),
                 ),
               )
             else if (_manifest != null && _manifest!.channels.isEmpty)
@@ -10083,7 +10415,9 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                       Text(
                         _errorMessage!,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ],
                   ),
@@ -10094,62 +10428,144 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
           ],
         ),
       ),
+      actionsPadding: const EdgeInsets.all(12),
       actions: [
         Focus(
           focusNode: _cancelButtonFocusNode,
           child: Builder(
             builder: (context) {
               final hasFocus = Focus.of(context).hasFocus;
-              return TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  gradient: LinearGradient(
+                    colors: hasFocus
+                        ? [Colors.grey.shade600, Colors.grey.shade700]
+                        : [Colors.grey.shade500, Colors.grey.shade600],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  backgroundColor: hasFocus
-                      ? Theme.of(context).colorScheme.surfaceVariant
-                      : null,
-                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  boxShadow: hasFocus
+                      ? [
+                          BoxShadow(
+                            color: Colors.grey.shade600.withOpacity(0.3),
+                            blurRadius: 6,
+                            spreadRadius: 0,
+                          ),
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 3,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                 ),
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(
-                    fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.close, size: 18),
+                  label: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: hasFocus ? FontWeight.bold : FontWeight.w600,
+                    ),
                   ),
                 ),
               );
             },
           ),
         ),
+        const SizedBox(width: 12),
         Focus(
           focusNode: _importButtonFocusNode,
           child: Builder(
             builder: (context) {
               final hasFocus = Focus.of(context).hasFocus;
               final hasSelection = selectedCount > 0;
-              return ElevatedButton(
-                onPressed: hasSelection
-                    ? () => Navigator.of(context).pop(_getSelectedChannels())
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
+
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  gradient: LinearGradient(
+                    colors: !hasSelection
+                        ? [
+                            Colors.grey.shade400.withOpacity(0.5),
+                            Colors.grey.shade500.withOpacity(0.5),
+                          ]
+                        : hasFocus
+                        ? [const Color(0xFF4CAF50), const Color(0xFF45A049)]
+                        : [const Color(0xFF66BB6A), const Color(0xFF4CAF50)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  backgroundColor: hasSelection
-                      ? (hasFocus
-                          ? Theme.of(context).primaryColor.withOpacity(0.8)
-                          : Theme.of(context).primaryColor)
-                      : null,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  boxShadow: hasSelection
+                      ? hasFocus
+                            ? [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF4CAF50,
+                                  ).withOpacity(0.3),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.15),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                      : [],
                 ),
-                child: Text(
-                  selectedCount > 0
-                      ? 'Import Selected ($selectedCount)'
-                      : 'Import Selected',
-                  style: TextStyle(
-                    fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
+                child: ElevatedButton.icon(
+                  onPressed: hasSelection
+                      ? () => Navigator.of(context).pop(_getSelectedChannels())
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: hasSelection
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.5),
+                    disabledBackgroundColor: Colors.transparent,
+                    disabledForegroundColor: Colors.white.withOpacity(0.5),
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: Icon(
+                    hasSelection
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    size: 20,
+                  ),
+                  label: Text(
+                    selectedCount > 0
+                        ? 'Import Selected ($selectedCount)'
+                        : 'Import Selected',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: hasFocus ? FontWeight.bold : FontWeight.w600,
+                    ),
                   ),
                 ),
               );
@@ -10161,3 +10577,451 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
   }
 }
 
+/// Dialog for selecting import mode with DPAD support and awesome TV-optimized UI
+class _ImportChannelsDialog extends StatefulWidget {
+  final bool isAndroidTv;
+
+  const _ImportChannelsDialog({required this.isAndroidTv});
+
+  @override
+  State<_ImportChannelsDialog> createState() => _ImportChannelsDialogState();
+}
+
+class _ImportChannelsDialogState extends State<_ImportChannelsDialog> {
+  // Focus nodes for DPAD navigation
+  final FocusNode _deviceFocusNode = FocusNode();
+  final FocusNode _linkFocusNode = FocusNode();
+  final FocusNode _communityFocusNode = FocusNode();
+  final FocusNode _cancelFocusNode = FocusNode();
+
+  // Track current focused index for visual feedback
+  int _focusedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Set up focus listeners
+    _deviceFocusNode.addListener(() {
+      if (_deviceFocusNode.hasFocus) {
+        setState(() => _focusedIndex = 0);
+      }
+    });
+
+    _linkFocusNode.addListener(() {
+      if (_linkFocusNode.hasFocus) {
+        setState(() => _focusedIndex = 1);
+      }
+    });
+
+    _communityFocusNode.addListener(() {
+      if (_communityFocusNode.hasFocus) {
+        setState(() => _focusedIndex = 2);
+      }
+    });
+
+    _cancelFocusNode.addListener(() {
+      if (_cancelFocusNode.hasFocus) {
+        setState(() => _focusedIndex = 3);
+      }
+    });
+
+    // Auto-focus first option for TV
+    if (widget.isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _deviceFocusNode.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _deviceFocusNode.dispose();
+    _linkFocusNode.dispose();
+    _communityFocusNode.dispose();
+    _cancelFocusNode.dispose();
+    super.dispose();
+  }
+
+  Widget _buildImportOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color accentColor,
+    required FocusNode focusNode,
+    required VoidCallback onSelect,
+    required bool isFocused,
+  }) {
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space ||
+              event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+            onSelect();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: AnimatedScale(
+        scale: isFocused ? 1.02 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: isFocused
+                ? const Color(0xFF1E293B).withOpacity(0.8)
+                : const Color(0xFF0F172A).withOpacity(0.6),
+            border: Border.all(
+              color: isFocused
+                  ? accentColor.withOpacity(0.4)
+                  : Colors.white.withOpacity(0.05),
+              width: 1,
+            ),
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: accentColor.withOpacity(0.15),
+                      blurRadius: 16,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 4),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              children: [
+                // Left accent strip on focus
+                if (isFocused)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 4,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            accentColor,
+                            accentColor.withOpacity(0.6),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                    ),
+                  ),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: widget.isAndroidTv ? null : onSelect,
+                    borderRadius: BorderRadius.circular(12),
+                    splashColor: accentColor.withOpacity(0.1),
+                    highlightColor: accentColor.withOpacity(0.05),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        isFocused ? 16 : 14,
+                        12,
+                        14,
+                        12,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            icon,
+                            size: 28,
+                            color: isFocused
+                                ? accentColor
+                                : Colors.white.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: widget.isAndroidTv ? 17 : 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  subtitle,
+                                  style: TextStyle(
+                                    fontSize: widget.isAndroidTv ? 13 : 12,
+                                    color: Colors.white.withOpacity(0.65),
+                                    height: 1.3,
+                                    letterSpacing: 0.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isFocused)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                color: accentColor.withOpacity(0.8),
+                                size: 18,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dialogWidth = widget.isAndroidTv ? 540.0 : 500.0;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        width: dialogWidth,
+        constraints: BoxConstraints(
+          maxWidth: dialogWidth,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.08),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 32,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white.withOpacity(0.06),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.download_rounded,
+                    color: Colors.white.withOpacity(0.9),
+                    size: widget.isAndroidTv ? 24 : 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Import Channels',
+                    style: TextStyle(
+                      fontSize: widget.isAndroidTv ? 22 : 20,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: FocusTraversalGroup(
+                  policy: OrderedTraversalPolicy(),
+                  child: Column(
+                    children: [
+                      // Device Import Option
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(1),
+                        child: _buildImportOption(
+                          icon: Icons.sd_storage_rounded,
+                          title: 'Import from Device',
+                          subtitle:
+                              'Load a .zip, .yaml, .txt, or .debrify file',
+                          accentColor: const Color(0xFF2563EB),
+                          focusNode: _deviceFocusNode,
+                          isFocused: _focusedIndex == 0,
+                          onSelect: () {
+                            Navigator.of(
+                              context,
+                            ).pop(_ImportChannelsMode.device);
+                          },
+                        ),
+                      ),
+
+                      // Link Import Option
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(2),
+                        child: _buildImportOption(
+                          icon: Icons.link_rounded,
+                          title: 'Import from Link',
+                          subtitle:
+                              'Paste a debrify:// link or URL to a channel file',
+                          accentColor: const Color(0xFF7C3AED),
+                          focusNode: _linkFocusNode,
+                          isFocused: _focusedIndex == 1,
+                          onSelect: () {
+                            Navigator.of(context).pop(_ImportChannelsMode.url);
+                          },
+                        ),
+                      ),
+
+                      // Community Import Option
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(3),
+                        child: _buildImportOption(
+                          icon: Icons.people_rounded,
+                          title: 'Import Community Shared Channels',
+                          subtitle:
+                              'Browse and import channels from community repositories',
+                          accentColor: const Color(0xFF10B981),
+                          focusNode: _communityFocusNode,
+                          isFocused: _focusedIndex == 2,
+                          onSelect: () {
+                            Navigator.of(
+                              context,
+                            ).pop(_ImportChannelsMode.community);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Cancel Button
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.white.withOpacity(0.06),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: FocusTraversalOrder(
+                order: const NumericFocusOrder(4),
+                child: Focus(
+                  focusNode: _cancelFocusNode,
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent) {
+                      if (event.logicalKey == LogicalKeyboardKey.select ||
+                          event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.space ||
+                          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+                        Navigator.of(context).pop();
+                        return KeyEventResult.handled;
+                      }
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: _focusedIndex == 3
+                          ? Colors.white.withOpacity(0.08)
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: _focusedIndex == 3
+                            ? Colors.white.withOpacity(0.2)
+                            : Colors.white.withOpacity(0.1),
+                        width: 1,
+                      ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: widget.isAndroidTv
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.close_rounded,
+                                color: _focusedIndex == 3
+                                    ? Colors.white.withOpacity(0.9)
+                                    : Colors.white.withOpacity(0.6),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  fontSize: widget.isAndroidTv ? 16 : 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: _focusedIndex == 3
+                                      ? Colors.white.withOpacity(0.9)
+                                      : Colors.white.withOpacity(0.6),
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
