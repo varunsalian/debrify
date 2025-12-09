@@ -9638,12 +9638,14 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
   final FocusNode _selectAllFocusNode = FocusNode();
   final FocusNode _cancelButtonFocusNode = FocusNode();
   final FocusNode _importButtonFocusNode = FocusNode();
+  final ScrollController _channelListScrollController = ScrollController();
 
   CommunityChannelManifest? _manifest;
   bool _isLoading = false;
   String? _errorMessage;
   bool _selectAll = false;
-  final Map<String, FocusNode> _channelFocusNodes = {};
+  Map<String, FocusNode> _channelFocusNodes = {};
+  bool _isFetching = false;
 
   @override
   void initState() {
@@ -9785,6 +9787,7 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
     _selectAllFocusNode.dispose();
     _cancelButtonFocusNode.dispose();
     _importButtonFocusNode.dispose();
+    _channelListScrollController.dispose();
     for (final node in _channelFocusNodes.values) {
       node.dispose();
     }
@@ -9792,6 +9795,17 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
   }
 
   void _toggleSelectAll() {
+    // Track which specific node was focused by finding the focused channel ID
+    String? focusedChannelId;
+    if (widget.isAndroidTv) {
+      for (final entry in _channelFocusNodes.entries) {
+        if (entry.value.hasFocus) {
+          focusedChannelId = entry.key;
+          break;
+        }
+      }
+    }
+
     setState(() {
       _selectAll = !_selectAll;
       if (_manifest != null) {
@@ -9800,9 +9814,27 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
         }
       }
     });
+
+    // Restore focus to the specific channel that was focused
+    if (widget.isAndroidTv && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        if (focusedChannelId != null) {
+          final node = _channelFocusNodes[focusedChannelId];
+          _safeRequestFocus(node);
+        } else {
+          // Fallback to select all if no channel was focused
+          _safeRequestFocus(_selectAllFocusNode);
+        }
+      });
+    }
   }
 
   void _toggleChannelSelection(CommunityChannel channel) {
+    // Track the specific channel ID that's being toggled
+    final channelId = channel.id;
+
     setState(() {
       channel.isSelected = !channel.isSelected;
       // Update select all state if needed
@@ -9810,11 +9842,39 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
         _selectAll = _manifest!.channels.every((c) => c.isSelected);
       }
     });
+
+    // Restore focus to the specific channel that was interacted with
+    if (widget.isAndroidTv && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        // Use the specific channel's focus node to avoid race conditions
+        final node = _channelFocusNodes[channelId];
+        _safeRequestFocus(node);
+      });
+    }
+  }
+
+  void _safeRequestFocus(FocusNode? node) {
+    if (node != null && mounted) {
+      try {
+        node.requestFocus();
+      } catch (e) {
+        // Silently catch any disposal race conditions
+        debugPrint('[_CommunityChannelsDialog] Failed to request focus: $e');
+      }
+    }
   }
 
   Future<void> _fetchChannels() async {
+    // Prevent concurrent fetches
+    if (_isFetching) {
+      return;
+    }
+
     final url = _repoUrlController.text.trim();
     if (url.isEmpty) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Please enter a repository URL';
       });
@@ -9822,9 +9882,20 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
     }
 
     if (!CommunityChannelsService.isValidRepoUrl(url)) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Please enter a valid URL';
       });
+      return;
+    }
+
+    _isFetching = true;
+
+    // Keep reference to old focus nodes but DON'T dispose them yet
+    final oldFocusNodes = Map<String, FocusNode>.from(_channelFocusNodes);
+
+    if (!mounted) {
+      _isFetching = false;
       return;
     }
 
@@ -9833,35 +9904,81 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
       _errorMessage = null;
       _manifest = null;
       _selectAll = false;
-      _channelFocusNodes.clear();
     });
 
     try {
       final manifest = await CommunityChannelsService.fetchManifest(url);
 
-      if (!mounted) return;
-
-      // Create focus nodes for each channel
-      for (final channel in manifest.channels) {
-        _channelFocusNodes[channel.id] = FocusNode();
+      if (!mounted) {
+        _isFetching = false;
+        return;
       }
+
+      // Create NEW focus nodes BEFORE disposing old ones
+      final newFocusNodes = <String, FocusNode>{};
+      for (final channel in manifest.channels) {
+        if (!mounted) {
+          // Clean up any nodes we created if widget was disposed
+          for (final node in newFocusNodes.values) {
+            node.dispose();
+          }
+          _isFetching = false;
+          return;
+        }
+        newFocusNodes[channel.id] = FocusNode();
+      }
+
+      // Only proceed if still mounted
+      if (!mounted) {
+        // Dispose new nodes if widget was disposed during async operation
+        for (final node in newFocusNodes.values) {
+          node.dispose();
+        }
+        _isFetching = false;
+        return;
+      }
+
+      // Atomically swap the focus nodes
+      _channelFocusNodes = newFocusNodes;
 
       // Setup navigation between channel items
       if (widget.isAndroidTv) {
         _setupChannelFocusNavigation(manifest.channels);
       }
 
+      if (!mounted) {
+        _isFetching = false;
+        return;
+      }
+
       setState(() {
         _manifest = manifest;
         _isLoading = false;
       });
+
+      // Dispose old nodes AFTER setState completes and new nodes are in use
+      // Schedule disposal for next frame to ensure rebuild is complete
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          for (final node in oldFocusNodes.values) {
+            node.dispose();
+          }
+        });
+      }
+
+      _isFetching = false;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        _isFetching = false;
+        return;
+      }
 
       setState(() {
         _errorMessage = CommunityChannelsService.getErrorMessage(e);
         _isLoading = false;
       });
+
+      _isFetching = false;
     }
   }
 
@@ -9916,6 +10033,36 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
   Widget _buildChannelTile(CommunityChannel channel) {
     final focusNode = _channelFocusNodes[channel.id];
 
+    // Handle null focusNode gracefully - return simple tile without focus handling
+    if (focusNode == null) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(
+            color: Theme.of(context).dividerColor.withOpacity(0.3),
+            width: 1,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: CheckboxListTile(
+          value: channel.isSelected,
+          onChanged: widget.isAndroidTv ? null : (_) => _toggleChannelSelection(channel),
+          activeColor: Theme.of(context).primaryColor,
+          checkColor: Colors.white,
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          title: Text(channel.name),
+          subtitle: Text(channel.category),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
+          ),
+        ),
+      );
+    }
+
     // Define category colors for better visual appeal
     Color getCategoryColor(String category) {
       switch (category.toLowerCase()) {
@@ -9944,6 +10091,32 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
       onFocusChange: (hasFocus) {
         if (hasFocus && mounted) {
           setState(() {}); // Rebuild to show focus highlight
+
+          // Auto-scroll to make focused item visible
+          if (widget.isAndroidTv) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              // Check all conditions before attempting scroll
+              if (!mounted) return;
+              if (!_channelListScrollController.hasClients) return;
+
+              final context = focusNode.context;
+              if (context == null) return;
+
+              final renderObject = context.findRenderObject();
+              if (renderObject == null || !renderObject.attached) return;
+
+              try {
+                _channelListScrollController.position.ensureVisible(
+                  renderObject,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  alignment: 0.5, // Center the item in the viewport
+                );
+              } catch (e) {
+                debugPrint('[_CommunityChannelsDialog] Scroll error: $e');
+              }
+            });
+          }
         }
       },
       child: Builder(
@@ -9983,7 +10156,7 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
             ),
             child: CheckboxListTile(
               value: channel.isSelected,
-              onChanged: (_) => _toggleChannelSelection(channel),
+              onChanged: widget.isAndroidTv ? null : (_) => _toggleChannelSelection(channel),
               activeColor: Theme.of(context).primaryColor,
               checkColor: Colors.white,
               dense: true,
@@ -10304,7 +10477,7 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                       ),
                       child: CheckboxListTile(
                         value: _selectAll,
-                        onChanged: (_) => _toggleSelectAll(),
+                        onChanged: widget.isAndroidTv ? null : (_) => _toggleSelectAll(),
                         activeColor: Theme.of(context).primaryColor,
                         checkColor: Colors.white,
                         dense: true,
@@ -10378,6 +10551,7 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                   ),
                   padding: const EdgeInsets.all(4),
                   child: ListView.builder(
+                    controller: _channelListScrollController,
                     itemCount: _manifest!.channels.length,
                     itemBuilder: (context, index) {
                       return _buildChannelTile(_manifest!.channels[index]);
