@@ -92,6 +92,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _pikpakEnabled = false;
   bool _showingTorboxCachedOnly = false;
   bool _isTelevision = false;
+  bool _isBulkAdding = false;
   final List<FocusNode> _cardFocusNodes = [];
   int _focusedCardIndex = -1; // -1 means no card is focused
 
@@ -2374,6 +2375,424 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       'Restricted folder was deleted. You have been logged out.',
       isError: true,
     );
+  }
+
+  /// Show bulk add provider selection dialog
+  Future<void> _showBulkAddDialog() async {
+    final List<Widget> options = [];
+
+    // Add Torbox option (greyed out/disabled)
+    options.add(
+      ListTile(
+        leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
+        title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+        subtitle: const Text('Coming soon', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        enabled: false,
+        onTap: null,
+      ),
+    );
+
+    // Add Real-Debrid option (greyed out/disabled)
+    options.add(
+      ListTile(
+        leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
+        title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+        subtitle: const Text('Coming soon', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        enabled: false,
+        onTap: null,
+      ),
+    );
+
+    // Add PikPak option (enabled if configured)
+    if (_pikpakEnabled) {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.folder_rounded, color: Color(0xFF0088CC)),
+          title: const Text('PikPak', style: TextStyle(color: Colors.white)),
+          onTap: () => Navigator.of(context).pop('pikpak'),
+        ),
+      );
+    } else {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.folder_rounded, color: Color(0xFF0088CC)),
+          title: const Text('PikPak', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Not configured', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          enabled: false,
+          onTap: null,
+        ),
+      );
+    }
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.playlist_add, color: Color(0xFF6366F1), size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Bulk Add Torrents',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add all ${_torrents.length} torrents to:',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...options,
+          ],
+        ),
+      ),
+    );
+
+    if (result == 'pikpak') {
+      _bulkAddToPikPak();
+    }
+  }
+
+  /// Bulk add all torrents to PikPak with batching and progress tracking
+  Future<void> _bulkAddToPikPak() async {
+    if (_torrents.isEmpty) return;
+
+    setState(() {
+      _isBulkAdding = true;
+    });
+
+    final pikpak = PikPakApiService.instance;
+    final totalTorrents = _torrents.length;
+    int successCount = 0;
+    int failureCount = 0;
+    int currentIndex = 0;
+    bool cancelled = false;
+
+    // Track status of each torrent
+    final Map<String, String> torrentStatus = {};
+    for (final torrent in _torrents) {
+      torrentStatus[torrent.infohash] = 'pending';
+    }
+
+    try {
+      // Get or create the debrify-torrents subfolder once
+      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+      String? subFolderId;
+
+      try {
+        subFolderId = await pikpak.findOrCreateSubfolder(
+          folderName: 'debrify-torrents',
+          parentFolderId: parentFolderId,
+          getCachedId: StorageService.getPikPakTorrentsFolderId,
+          setCachedId: StorageService.setPikPakTorrentsFolderId,
+        );
+        print('PikPak Bulk: Using subfolder ID: $subFolderId');
+      } catch (e) {
+        if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
+          await _handlePikPakRestrictedFolderDeleted();
+          setState(() {
+            _isBulkAdding = false;
+          });
+          return;
+        }
+        print('PikPak Bulk: Failed to create subfolder, using parent folder: $e');
+        subFolderId = parentFolderId;
+      }
+
+      if (!mounted) return;
+
+      // Capture the dialog state setter for use in async operations
+      StateSetter? dialogSetState;
+
+      // Show progress dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              // Capture the setDialogState for async operations
+              dialogSetState = setDialogState;
+
+              return AlertDialog(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFAA00).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.cloud_upload, color: Color(0xFFFFAA00), size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Adding to PikPak',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(
+                        value: totalTorrents > 0 ? currentIndex / totalTorrents : 0,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFAA00)),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Progress: $currentIndex of $totalTorrents',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Success: $successCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.error, color: Color(0xFFEF4444), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Failed: $failureCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFFEF4444),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: _torrents.length,
+                          itemBuilder: (context, index) {
+                            final torrent = _torrents[index];
+                            final status = torrentStatus[torrent.infohash] ?? 'pending';
+
+                            IconData icon;
+                            Color iconColor;
+
+                            if (status == 'success') {
+                              icon = Icons.check_circle;
+                              iconColor = const Color(0xFF10B981);
+                            } else if (status == 'error') {
+                              icon = Icons.error;
+                              iconColor = const Color(0xFFEF4444);
+                            } else if (status == 'processing') {
+                              icon = Icons.hourglass_empty;
+                              iconColor = const Color(0xFFFFAA00);
+                            } else {
+                              icon = Icons.circle_outlined;
+                              iconColor = Colors.white54;
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(icon, color: iconColor, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      torrent.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.7),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      cancelled = true;
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      // Process torrents in batches of 3 concurrent requests
+      const batchSize = 3;
+
+      for (int i = 0; i < _torrents.length && !cancelled; i += batchSize) {
+        final batchEnd = (i + batchSize).clamp(0, _torrents.length);
+        final batch = _torrents.sublist(i, batchEnd);
+
+        // Process batch concurrently
+        await Future.wait(
+          batch.map((torrent) async {
+            if (cancelled) return;
+
+            try {
+              // Update status to processing
+              if (mounted) {
+                dialogSetState?.call(() {
+                  torrentStatus[torrent.infohash] = 'processing';
+                  currentIndex++;
+                });
+              }
+
+              final magnet = 'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+
+              await pikpak.addOfflineDownload(
+                magnet,
+                parentFolderId: subFolderId,
+              );
+
+              // Update status to success
+              if (mounted) {
+                dialogSetState?.call(() {
+                  torrentStatus[torrent.infohash] = 'success';
+                  successCount++;
+                });
+              }
+
+              print('PikPak Bulk: Successfully added ${torrent.name}');
+            } catch (e) {
+              // Update status to error
+              if (mounted) {
+                dialogSetState?.call(() {
+                  torrentStatus[torrent.infohash] = 'error';
+                  failureCount++;
+                });
+              }
+
+              print('PikPak Bulk: Failed to add ${torrent.name}: $e');
+            }
+          }),
+        );
+
+        // Small delay between batches to avoid overwhelming the API
+        if (i + batchSize < _torrents.length && !cancelled) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show summary
+      if (!cancelled && mounted) {
+        if (successCount > 0 && failureCount == 0) {
+          _showPikPakSnack('Successfully added $successCount/${totalTorrents} torrents to PikPak');
+        } else if (successCount > 0 && failureCount > 0) {
+          _showPikPakSnack(
+            'Added $successCount/${totalTorrents} torrents. $failureCount failed.',
+            isError: true,
+          );
+        } else {
+          _showPikPakSnack('Failed to add torrents to PikPak', isError: true);
+        }
+      }
+    } catch (e) {
+      print('Error in bulk add to PikPak: $e');
+
+      if (mounted) {
+        Navigator.of(context).pop();
+
+        // Check if the error is because the restricted folder was deleted
+        final folderExists = await PikPakApiService.instance.verifyRestrictedFolderExists();
+        if (!folderExists) {
+          await _handlePikPakRestrictedFolderDeleted();
+          return;
+        }
+
+        _showPikPakSnack('Bulk add failed: ${e.toString()}', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBulkAdding = false;
+        });
+      }
+    }
   }
 
   Future<void> _pollPikPakStatus(
@@ -6700,24 +7119,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF0F172A), // Slate 900 - Deep blue-black
-            const Color(0xFF1E293B), // Slate 800 - Rich blue-grey
-            const Color(0xFF1E3A8A), // Blue 900 - Deep premium blue
-          ],
-        ),
-      ),
-      child: SafeArea(
-        child: FocusTraversalGroup(
-          policy: OrderedTraversalPolicy(),
-          child: Column(
-            children: [
-              // Search Box
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF0F172A), // Slate 900 - Deep blue-black
+                const Color(0xFF1E293B), // Slate 800 - Rich blue-grey
+                const Color(0xFF1E3A8A), // Blue 900 - Deep premium blue
+              ],
+            ),
+          ),
+          child: SafeArea(
+            child: FocusTraversalGroup(
+              policy: OrderedTraversalPolicy(),
+              child: Column(
+                children: [
+                  // Search Box
               Container(
                 margin: const EdgeInsets.all(8),
                 padding: const EdgeInsets.all(12),
@@ -7653,6 +8074,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         ),
       ),
+        ),
+        // Bulk Add Floating Action Button
+        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              onPressed: _showBulkAddDialog,
+              backgroundColor: const Color(0xFF6366F1),
+              elevation: 8,
+              icon: const Icon(Icons.playlist_add, color: Colors.white),
+              label: const Text(
+                'Bulk Add',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
