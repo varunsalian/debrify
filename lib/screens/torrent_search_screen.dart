@@ -679,6 +679,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'ST';
       case 'torrentio':
         return 'TIO';
+      case 'knaben':
+        return 'KNB';
       default:
         return null;
     }
@@ -761,6 +763,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'torrentio':
         sourceColor = const Color(0xFF8B5CF6); // Violet 500
+        break;
+      case 'knaben':
+        sourceColor = const Color(0xFFEC4899); // Pink 500
         break;
       default:
         sourceColor = const Color(0xFF6B7280); // Gray 500
@@ -7017,6 +7022,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       {'key': 'yts', 'short': 'YTS', 'name': 'YTS'},
       {'key': 'solid_torrents', 'short': 'ST', 'name': 'SolidTorrents'},
       {'key': 'torrentio', 'short': 'TIO', 'name': 'Torrentio'},
+      {'key': 'knaben', 'short': 'KNB', 'name': 'Knaben'},
     ];
 
     for (final engine in engines) {
