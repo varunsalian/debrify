@@ -14,7 +14,19 @@
         app:resize_mode="fit"
         app:controller_layout_id="@layout/view_debrify_tv_controls"
         app:show_timeout="5000"
-        app:surface_type="surface_view" />
+        app:surface_type="surface_view"
+        android:elevation="0dp" />
+
+    <!-- Custom SubtitleView - Must be ABOVE video but BELOW controls -->
+    <androidx.media3.ui.SubtitleView
+        android:id="@+id/player_subtitles_custom"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="bottom|center_horizontal"
+        android:paddingLeft="48dp"
+        android:paddingRight="48dp"
+        android:paddingBottom="24dp"
+        android:elevation="10dp" />
 
     <LinearLayout
         android:id="@+id/player_header_container"
@@ -63,7 +75,7 @@
         android:paddingTop="8dp"
         android:paddingBottom="8dp"
         android:background="@drawable/channel_badge_blur_background"
-        android:elevation="8dp"
+        android:elevation="20dp"
         android:translationY="-40dp"
         android:alpha="0"
         android:visibility="gone">
@@ -124,7 +136,7 @@
         android:paddingTop="8dp"
         android:paddingBottom="8dp"
         android:background="@drawable/channel_badge_blur_background"
-        android:elevation="8dp"
+        android:elevation="20dp"
         android:translationY="-40dp"
         android:alpha="0"
         android:visibility="gone">
@@ -260,23 +272,14 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Custom SubtitleView - positioned independently of video -->
-    <androidx.media3.ui.SubtitleView
-        android:id="@+id/player_subtitles_custom"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="bottom|center_horizontal"
-        android:paddingLeft="48dp"
-        android:paddingRight="48dp"
-        android:paddingBottom="24dp" />
-
     <!-- Retro TV Static Effect Overlay -->
     <FrameLayout
         android:id="@+id/player_next_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#000000"
-        android:visibility="gone">
+        android:visibility="gone"
+        android:elevation="40dp">
 
         <!-- Animated TV static background -->
         <View
@@ -353,7 +356,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#000000"
-        android:visibility="gone">
+        android:visibility="gone"
+        android:elevation="40dp">
 
         <!-- Animated slide/wipe effect background -->
         <View
@@ -443,7 +447,8 @@
         android:id="@+id/player_search_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone">
+        android:visibility="gone"
+        android:elevation="200dp">
 
         <View
             android:layout_width="match_parent"
@@ -551,5 +556,8 @@
 
     <!-- Custom Seekbar Overlay -->
     <include layout="@layout/view_custom_seekbar" />
+
+    <!-- Seek Feedback Overlay -->
+    <include layout="@layout/view_seek_feedback" />
 
 </FrameLayout>

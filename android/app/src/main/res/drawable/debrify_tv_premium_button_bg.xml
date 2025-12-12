@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Focused state - Netflix style with solid white border -->
+    <item android:state_focused="true">
+        <layer-list>
+            <!-- Solid background for focused button -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="100dp" />
+                    <solid android:color="@color/netflix_button_focused" />
+                    <stroke
+                        android:width="3dp"
+                        android:color="@color/netflix_button_focused_border" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- Pressed state -->
+    <item android:state_pressed="true">
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="100dp" />
+                    <solid android:color="@color/netflix_button_focused" />
+                    <stroke
+                        android:width="2dp"
+                        android:color="@color/netflix_button_focused_border" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- Default idle state - Solid dark grey -->
+    <item>
+        <layer-list>
+            <!-- Main solid background -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="100dp" />
+                    <solid android:color="@color/netflix_button_idle" />
+                    <stroke
+                        android:width="1.5dp"
+                        android:color="@color/netflix_button_border" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+</selector>

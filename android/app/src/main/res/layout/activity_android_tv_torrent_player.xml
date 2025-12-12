@@ -15,7 +15,19 @@
         app:resize_mode="fit"
         app:controller_layout_id="@layout/view_torrent_tv_controls"
         app:show_timeout="5000"
-        app:surface_type="surface_view" />
+        app:surface_type="surface_view"
+        android:elevation="0dp" />
+
+    <!-- Custom SubtitleView - Must be ABOVE video but BELOW controls -->
+    <androidx.media3.ui.SubtitleView
+        android:id="@+id/android_tv_subtitles_custom"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="bottom|center_horizontal"
+        android:paddingLeft="48dp"
+        android:paddingRight="48dp"
+        android:paddingBottom="24dp"
+        android:elevation="10dp" />
 
     <!-- Top Title Overlay (fades out after 4 seconds) -->
     <LinearLayout
@@ -29,7 +41,8 @@
         android:paddingEnd="16dp"
         android:paddingTop="20dp"
         android:paddingBottom="12dp"
-        android:visibility="gone">
+        android:visibility="gone"
+        android:elevation="20dp">
 
         <TextView
             android:id="@+id/android_tv_player_title"
@@ -63,24 +76,16 @@
         android:ellipsize="end"
         android:letterSpacing="0.05"
         android:alpha="0.85"
-        android:visibility="gone" />
-
-    <!-- Custom SubtitleView -->
-    <androidx.media3.ui.SubtitleView
-        android:id="@+id/android_tv_subtitles_custom"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="bottom|center_horizontal"
-        android:paddingLeft="48dp"
-        android:paddingRight="48dp"
-        android:paddingBottom="24dp" />
+        android:visibility="gone"
+        android:elevation="20dp" />
 
     <!-- Playlist Browser Overlay (horizontal at bottom) -->
     <FrameLayout
         android:id="@+id/android_tv_playlist_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone">
+        android:visibility="gone"
+        android:elevation="200dp">
 
         <!-- Dark gradient background -->
         <View
@@ -123,7 +128,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#000000"
-        android:visibility="gone">
+        android:visibility="gone"
+        android:elevation="40dp">
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -170,5 +176,8 @@
 
     <!-- Custom Seekbar Overlay -->
     <include layout="@layout/view_custom_seekbar" />
+
+    <!-- Seek Feedback Overlay -->
+    <include layout="@layout/view_seek_feedback" />
 
 </FrameLayout>
