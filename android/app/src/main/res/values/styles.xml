@@ -38,6 +38,8 @@
         <item name="android:layout_marginEnd">6dp</item>
         <item name="android:elevation">8dp</item>
         <item name="android:stateListAnimator">@null</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:singleLine">true</item>
         <item name="android:translationZ">2dp</item>
     </style>
 

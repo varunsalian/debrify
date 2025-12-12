@@ -100,7 +100,8 @@
                 android:id="@+id/debrify_seek_button"
                 style="@style/DebrifyTvChipButton"
                 android:drawableStart="@drawable/ic_seek"
-                android:text=""
+                android:text="Seek"
+                android:singleLine="true"
                 android:layout_marginEnd="0dp" />
 
         </LinearLayout>
