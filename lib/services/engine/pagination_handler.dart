@@ -146,10 +146,17 @@ class PaginationHandler {
 
   /// Get offset-based pagination parameters
   Map<String, String> _getOffsetParams() {
+    final offsetConfig = config.offset;
     final resultsPerPage = config.resultsPerPage ?? 20;
-    final offset = (_currentPage - _startPage) * resultsPerPage;
 
-    return {'offset': offset.toString()};
+    // Use start offset from config if available, otherwise use 0
+    final startOffset = offsetConfig?.startOffset ?? 0;
+    final offset = (_currentPage - _startPage) * resultsPerPage + startOffset;
+
+    // Use param name from config if available, otherwise use 'offset'
+    final paramName = offsetConfig?.paramName ?? 'offset';
+
+    return {paramName: offset.toString()};
   }
 
   /// Update state after receiving response.

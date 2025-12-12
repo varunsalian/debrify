@@ -51,16 +51,37 @@ class EngineExecutor {
         final Map<String, String> paginationParams =
             paginationHandler.getPaginationParams();
 
-        // Build the URL
-        final String url =
-            buildUrl(config.request, params, paginationParams);
+        // Determine pagination location
+        String paginationLocation = 'query'; // Default to query
+        if (config.pagination.type == 'page' && config.pagination.page != null) {
+          paginationLocation = config.pagination.page!.location;
+        } else if (config.pagination.type == 'cursor' && config.pagination.cursor != null) {
+          paginationLocation = config.pagination.cursor!.location;
+        } else if (config.pagination.type == 'offset' && config.pagination.offset != null) {
+          paginationLocation = config.pagination.offset!.location;
+        }
+
+        // Build parameters separated by location (query vs body)
+        final Map<String, Map<String, dynamic>> separatedParams =
+            buildParameters(config.request, params, paginationParams, paginationLocation);
+
+        final Map<String, String> queryParams =
+            (separatedParams['query'] as Map<String, dynamic>).cast<String, String>();
+        final Map<String, dynamic> bodyParams =
+            separatedParams['body'] as Map<String, dynamic>;
+
+        // Build the URL with query params only
+        final String url = buildUrl(config.request, params, queryParams);
 
         debugPrint('EngineExecutor: Fetching page $pageNumber from: $url');
+        if (bodyParams.isNotEmpty) {
+          debugPrint('EngineExecutor: Body params: $bodyParams');
+        }
 
         try {
-          // Make the HTTP request
+          // Make the HTTP request with optional body params
           final http.Response response =
-              await makeRequest(url, config.request);
+              await makeRequest(url, config.request, bodyParams: bodyParams);
 
           if (response.statusCode != 200) {
             debugPrint(
@@ -174,7 +195,7 @@ class EngineExecutor {
   String buildUrl(
     RequestConfig config,
     Map<String, dynamic> params,
-    Map<String, String> paginationParams,
+    Map<String, String> queryParamsOnly,
   ) {
     // Get the base URL for this request type
     String baseUrl = getBaseUrl(config, params);
@@ -182,21 +203,15 @@ class EngineExecutor {
     // Replace path parameters
     baseUrl = replacePathParams(baseUrl, params);
 
-    // Build query parameters based on url_builder type
+    // Build URL with query parameters
     if (config.urlBuilder.type == 'query_params') {
-      final Map<String, String> queryParams =
-          buildQueryParams(config, params);
-
-      // Add pagination params
-      queryParams.addAll(paginationParams);
-
-      // Build URL with query string
-      if (queryParams.isNotEmpty) {
+      // Use provided query params (already filtered by location)
+      if (queryParamsOnly.isNotEmpty) {
         final Uri uri = Uri.parse(baseUrl);
         final Uri finalUri = uri.replace(
           queryParameters: {
             ...uri.queryParameters,
-            ...queryParams,
+            ...queryParamsOnly,
           },
         );
         return finalUri.toString();
@@ -215,13 +230,13 @@ class EngineExecutor {
         baseUrl += encodedQuery;
       }
 
-      // Add pagination as query params even for path-based URLs
-      if (paginationParams.isNotEmpty) {
+      // Add any query params for path-based URLs
+      if (queryParamsOnly.isNotEmpty) {
         final Uri uri = Uri.parse(baseUrl);
         final Uri finalUri = uri.replace(
           queryParameters: {
             ...uri.queryParameters,
-            ...paginationParams,
+            ...queryParamsOnly,
           },
         );
         return finalUri.toString();
@@ -302,6 +317,114 @@ class EngineExecutor {
   }
 
   /// Build query parameters from config and params.
+  /// Convert string value to appropriate type based on valueType hint.
+  dynamic _convertValueType(String value, String? valueType) {
+    if (valueType == null) return value;
+
+    switch (valueType.toLowerCase()) {
+      case 'int':
+      case 'integer':
+        return int.tryParse(value) ?? value;
+      case 'bool':
+      case 'boolean':
+        if (value.toLowerCase() == 'true') return true;
+        if (value.toLowerCase() == 'false') return false;
+        return value;
+      case 'string':
+      default:
+        return value;
+    }
+  }
+
+  /// Build parameters separated by location (query vs body).
+  /// Returns a map with 'query' and 'body' keys.
+  Map<String, Map<String, dynamic>> buildParameters(
+    RequestConfig config,
+    Map<String, dynamic> params,
+    Map<String, String> paginationParams,
+    String paginationLocation,
+  ) {
+    final Map<String, String> queryParams = {};
+    final Map<String, dynamic> bodyParams = {};
+
+    // Determine request type for applies_to filtering
+    final String requestType = _determineSearchType(params);
+
+    // Process each configured parameter by location
+    for (final RequestParam param in config.params) {
+      // Check if this param applies to current request type
+      if (param.appliesTo != null && param.appliesTo != requestType) {
+        continue;
+      }
+
+      String? value;
+
+      if (param.value != null) {
+        // Static value
+        value = param.value;
+      } else if (param.source != null) {
+        // Dynamic value from params
+        final dynamic sourceValue = params[param.source];
+        if (sourceValue != null) {
+          value = sourceValue.toString();
+        }
+      }
+
+      // Add to appropriate location if we have a value
+      if (value != null && value.isNotEmpty) {
+        if (param.location == 'body') {
+          // Convert type for body params
+          bodyParams[param.name] = _convertValueType(value, param.valueType);
+        } else {
+          // Query params always stay as strings
+          queryParams[param.name] = value;
+        }
+      } else if (param.required) {
+        debugPrint(
+            'EngineExecutor: Required param "${param.name}" has no value');
+      }
+    }
+
+    // Handle the main query param from url_builder
+    final String? queryParamName = config.urlBuilder.getQueryParamForType(requestType);
+    if (queryParamName != null) {
+      final String? query = params['query'] as String?;
+      final String? imdbId = params['imdbId'] as String?;
+
+      // Determine which value to use based on request type
+      String? valueToUse;
+      if (requestType == 'imdb' || requestType == 'series') {
+        valueToUse = imdbId;
+      } else {
+        valueToUse = query;
+      }
+
+      if (valueToUse != null && valueToUse.isNotEmpty) {
+        // Main query always goes to body for POST if url_builder type is query_params
+        if (config.method.toUpperCase() == 'POST' && config.urlBuilder.type == 'query_params') {
+          bodyParams[queryParamName] = valueToUse;
+        } else {
+          queryParams[queryParamName] = valueToUse;
+        }
+      }
+    }
+
+    // Add pagination params to appropriate location
+    if (paginationLocation == 'body') {
+      // Convert pagination params to int for body
+      paginationParams.forEach((key, value) {
+        bodyParams[key] = int.tryParse(value) ?? value;
+      });
+    } else {
+      queryParams.addAll(paginationParams);
+    }
+
+    return {
+      'query': queryParams,
+      'body': bodyParams,
+    };
+  }
+
   Map<String, String> buildQueryParams(
     RequestConfig config,
     Map<String, dynamic> params,
@@ -402,7 +525,11 @@ class EngineExecutor {
   }
 
   /// Make HTTP request.
-  Future<http.Response> makeRequest(String url, RequestConfig config) async {
+  Future<http.Response> makeRequest(
+    String url,
+    RequestConfig config, {
+    Map<String, dynamic>? bodyParams,
+  }) async {
     final Duration timeout = Duration(
       seconds: config.timeoutSeconds ?? 30,
     );
@@ -416,9 +543,20 @@ class EngineExecutor {
           headers: _getDefaultHeaders(),
         ).timeout(timeout);
       } else if (config.method.toUpperCase() == 'POST') {
+        final headers = _getDefaultHeaders();
+        String? body;
+
+        // Build POST body if parameters provided
+        if (bodyParams != null && bodyParams.isNotEmpty) {
+          headers['Content-Type'] = 'application/json';
+          body = json.encode(bodyParams);
+          debugPrint('EngineExecutor: POST body: $body');
+        }
+
         return await http.post(
           uri,
-          headers: _getDefaultHeaders(),
+          headers: headers,
+          body: body,
         ).timeout(timeout);
       } else {
         throw UnsupportedError('Unsupported HTTP method: ${config.method}');
