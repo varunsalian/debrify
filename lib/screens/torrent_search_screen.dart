@@ -8094,12 +8094,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         }
 
                         final torrent = _torrents[index - metadataRows];
-                        return Padding(
-                          key: ValueKey(torrent.infohash),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildTorrentCard(
-                            torrent,
-                            index - metadataRows,
+                        return RepaintBoundary(
+                          child: Padding(
+                            key: ValueKey(torrent.infohash),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: _buildTorrentCard(
+                              torrent,
+                              index - metadataRows,
+                            ),
                           ),
                         );
                       },
@@ -8216,507 +8218,950 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildTorrentCard(Torrent torrent, int index) {
-    Widget buildCardContent(bool isFocused) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1E293B), // Slate 800
-              Color(0xFF334155), // Slate 700
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: _isTelevision && isFocused
-              ? Border.all(color: const Color(0xFFE50914), width: 3)
-              : null,
-          boxShadow: _isTelevision && isFocused
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFFE50914).withValues(alpha: 0.4),
-                    blurRadius: 24,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+    // For TV mode, use the new isolated _TorrentCard widget
+    if (_isTelevision && index < _cardFocusNodes.length) {
+      return _TorrentCard(
+        torrent: torrent,
+        index: index,
+        focusNode: _cardFocusNodes[index],
+        isTelevision: _isTelevision,
+        apiKey: _apiKey,
+        torboxApiKey: _torboxApiKey,
+        torboxCacheStatus: _torboxCacheStatus,
+        realDebridIntegrationEnabled: _realDebridIntegrationEnabled,
+        torboxIntegrationEnabled: _torboxIntegrationEnabled,
+        pikpakEnabled: _pikpakEnabled,
+        torboxCacheCheckEnabled: _torboxCacheCheckEnabled,
+        isSeries: _isSeries,
+        selectedImdbTitle: _selectedImdbTitle,
+        onCardActivated: () => _handleTorrentCardActivated(torrent, index),
+        onCopyMagnet: () => _copyMagnetLink(torrent.infohash),
+        onAddToDebrid: _addToRealDebrid,
+        onAddToTorbox: _addToTorbox,
+        onAddToPikPak: _sendToPikPak,
+        onShowFileSelection: _showFileSelectionDialog,
+        buildSizeOrPackChip: _buildSizeOrPackChip,
+        buildSourceStatChip: _buildSourceStatChip,
+        torboxResultIsCached: _torboxResultIsCached,
+        searchFocusNode: _searchFocusNode,
+        episodeInputFocusNode: _episodeInputFocusNode,
+      );
+    }
+
+    // For non-TV mode, use GestureDetector with inline card content
+    return GestureDetector(
+      onTap: () {
+        // Navigate to torrent details or perform default action
+        // For now, just log or do nothing since TV has the smart action
+      },
+      child: _buildNonTVCardContent(torrent),
+    );
+  }
+
+  Widget _buildNonTVCardContent(Torrent torrent) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1E293B), // Slate 800
+            Color(0xFF334155), // Slate 700
+          ],
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title Row - Now with more space for title!
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      torrent.displayTitle,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                      maxLines: _isTelevision && isFocused ? null : 5,
-                      overflow: _isTelevision && isFocused ? null : TextOverflow.ellipsis,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title Row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    torrent.displayTitle,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
+                    maxLines: 5,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (!_isTelevision) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () => _copyMagnetLink(torrent.infohash),
-                      tooltip: 'Copy magnet link',
-                      icon: const Icon(Icons.copy_rounded, size: 18),
-                      style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFF1D2A3F),
-                        foregroundColor: const Color(0xFF60A5FA),
-                        padding: const EdgeInsets.all(10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Stats Grid - Now includes source instead of completed
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _buildSizeOrPackChip(torrent),
-                  StatChip(
-                    icon: Icons.upload_rounded,
-                    text: '${torrent.seeders}',
-                    color: const Color(0xFF22C55E), // Green 500 - Fresh green
-                  ),
-                  StatChip(
-                    icon: Icons.download_rounded,
-                    text: '${torrent.leechers}',
-                    color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
-                  ),
-                  _buildSourceStatChip(torrent.source),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // Date
-              Row(
-                children: [
-                  Icon(
-                    Icons.schedule_rounded,
-                    color: Colors.white.withValues(alpha: 0.6),
-                    size: 14,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    Formatters.formatDate(torrent.createdUnix),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Action Buttons (Hidden on TV since we use smart action on card click)
-              if (!_isTelevision)
-              LayoutBuilder(
-                builder: (context, constraints) {
-                final isCompactLayout = constraints.maxWidth < 360;
-
-                Widget buildTorboxButton() {
-                  final bool isCached = _torboxResultIsCached(torrent.infohash);
-                  final gradientColors = isCached
-                      ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
-                      : const [Color(0xFF475569), Color(0xFF1F2937)];
-                  final shadowColor = isCached
-                      ? const Color(0xFF7C3AED).withValues(alpha: 0.35)
-                      : const Color(0xFF1F2937).withValues(alpha: 0.25);
-                  final textColor = isCached ? Colors.white : Colors.white70;
-
-                  return Opacity(
-                    opacity: isCached ? 1.0 : 0.55,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        focusColor:
-                            const Color(0xFF7C3AED).withValues(alpha: 0.25),
-                        onTap: isCached
-                            ? () => _addToTorbox(torrent.infohash, torrent.name)
-                            : null,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            gradient: LinearGradient(
-                              colors: gradientColors,
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: shadowColor,
-                                spreadRadius: 0,
-                                blurRadius: 12,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.flash_on_rounded,
-                                color: textColor,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Torbox',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.2,
-                                    color: textColor,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.expand_more_rounded,
-                                color: textColor.withValues(alpha: 0.7),
-                                size: 18,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                Widget buildRealDebridButton() {
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      focusColor:
-                          const Color(0xFF6366F1).withValues(alpha: 0.25),
-                      onTap: () =>
-                          _addToRealDebrid(torrent.infohash, torrent.name, index),
-                      onLongPress: () {
-                        _showFileSelectionDialog(
-                          torrent.infohash,
-                          torrent.name,
-                          index,
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(
-                                0xFF1E40AF,
-                              ).withValues(alpha: 0.4),
-                              spreadRadius: 0,
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              Icons.cloud_download_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Real-Debrid',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                  color: Colors.white,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                            SizedBox(width: 4),
-                            Icon(
-                              Icons.expand_more_rounded,
-                              color: Colors.white70,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                Widget buildPikPakButton() {
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      focusColor:
-                          const Color(0xFF0088CC).withValues(alpha: 0.25),
-                      onTap: () =>
-                          _sendToPikPak(torrent.infohash, torrent.name),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF0088CC), Color(0xFF229ED9)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(
-                                0xFF0088CC,
-                              ).withValues(alpha: 0.4),
-                              spreadRadius: 0,
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              Icons.telegram,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'PikPak',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                  color: Colors.white,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                            SizedBox(width: 4),
-                            Icon(
-                              Icons.expand_more_rounded,
-                              color: Colors.white70,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                final Widget? torboxButton =
-                    (_torboxIntegrationEnabled &&
-                        _torboxApiKey != null &&
-                        _torboxApiKey!.isNotEmpty)
-                    ? buildTorboxButton()
-                    : null;
-                final Widget? realDebridButton =
-                    (_realDebridIntegrationEnabled &&
-                        _apiKey != null &&
-                        _apiKey!.isNotEmpty)
-                    ? buildRealDebridButton()
-                    : null;
-                final Widget? pikpakButton = _pikpakEnabled
-                    ? buildPikPakButton()
-                    : null;
-
-                if (torboxButton == null && realDebridButton == null && pikpakButton == null) {
-                  return const SizedBox.shrink();
-                }
-
-                // Count active buttons
-                final int buttonCount = [torboxButton, realDebridButton, pikpakButton]
-                    .where((button) => button != null)
-                    .length;
-
-                if (isCompactLayout) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (torboxButton != null) torboxButton,
-                      if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
-                        const SizedBox(height: 8),
-                      if (realDebridButton != null) realDebridButton,
-                      if (realDebridButton != null && pikpakButton != null)
-                        const SizedBox(height: 8),
-                      if (pikpakButton != null) pikpakButton,
-                    ],
-                  );
-                }
-
-                // For non-compact layouts, show buttons in a row
-                if (buttonCount == 3) {
-                  return Row(
-                    children: [
-                      Expanded(child: torboxButton!),
-                      const SizedBox(width: 8),
-                      Expanded(child: realDebridButton!),
-                      const SizedBox(width: 8),
-                      Expanded(child: pikpakButton!),
-                    ],
-                  );
-                } else if (buttonCount == 2) {
-                  return Row(
-                    children: [
-                      if (torboxButton != null) Expanded(child: torboxButton),
-                      if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
-                        const SizedBox(width: 8),
-                      if (realDebridButton != null) Expanded(child: realDebridButton),
-                      if (realDebridButton != null && pikpakButton != null)
-                        const SizedBox(width: 8),
-                      if (pikpakButton != null) Expanded(child: pikpakButton),
-                    ],
-                  );
-                } else {
-                  final Widget singleButton = torboxButton ?? realDebridButton ?? pikpakButton!;
-                  return SizedBox(width: double.infinity, child: singleButton);
-                }
-              },
-            ),
-            // TV hint
-            if (_isTelevision && isFocused) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Press OK to add torrent',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic,
                 ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => _copyMagnetLink(torrent.infohash),
+                  tooltip: 'Copy magnet link',
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D2A3F),
+                    foregroundColor: const Color(0xFF60A5FA),
+                    padding: const EdgeInsets.all(10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Stats Grid
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _buildSizeOrPackChip(torrent),
+                StatChip(
+                  icon: Icons.upload_rounded,
+                  text: '${torrent.seeders}',
+                  color: const Color(0xFF22C55E),
+                ),
+                StatChip(
+                  icon: Icons.download_rounded,
+                  text: '${torrent.leechers}',
+                  color: const Color(0xFFF59E0B),
+                ),
+                _buildSourceStatChip(torrent.source),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Date
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule_rounded,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  Formatters.formatDate(torrent.createdUnix),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Action Buttons - Get the index for this torrent
+            _buildNonTVActionButtons(torrent, _torrents.indexOf(torrent)),
           ],
         ),
       ),
     );
-    }
+  }
 
-    // Wrap with Focus widget for TV navigation
-    if (_isTelevision && index < _cardFocusNodes.length) {
-      return Focus(
-        focusNode: _cardFocusNodes[index],
-        onKeyEvent: (node, event) {
-          // Handle OK/Select/Enter press
-          if (event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.select ||
-                  event.logicalKey == LogicalKeyboardKey.enter ||
-                  event.logicalKey == LogicalKeyboardKey.space)) {
-            _handleTorrentCardActivated(torrent, index);
+  Widget _buildNonTVActionButtons(Torrent torrent, int index) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompactLayout = constraints.maxWidth < 360;
+
+        Widget buildTorboxButton() {
+          final bool isCached = _torboxResultIsCached(torrent.infohash);
+          final gradientColors = isCached
+              ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
+              : const [Color(0xFF475569), Color(0xFF1F2937)];
+          final shadowColor = isCached
+              ? const Color(0xFF7C3AED).withValues(alpha: 0.35)
+              : const Color(0xFF1F2937).withValues(alpha: 0.25);
+          final textColor = isCached ? Colors.white : Colors.white70;
+
+          return Opacity(
+            opacity: isCached ? 1.0 : 0.55,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                focusColor: const Color(0xFF7C3AED).withValues(alpha: 0.25),
+                onTap: isCached ? () => _addToTorbox(torrent.infohash, torrent.name) : null,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: gradientColors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: shadowColor,
+                        spreadRadius: 0,
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.flash_on_rounded, color: textColor, size: 16),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Torbox',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                            color: textColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.expand_more_rounded, color: textColor.withValues(alpha: 0.7), size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget buildRealDebridButton() {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              focusColor: const Color(0xFF6366F1).withValues(alpha: 0.25),
+              onTap: () => _addToRealDebrid(torrent.infohash, torrent.name, index),
+              onLongPress: () => _showFileSelectionDialog(torrent.infohash, torrent.name, index),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                      spreadRadius: 0,
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.cloud_download_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Real-Debrid',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.expand_more_rounded, color: Colors.white70, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget buildPikPakButton() {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              focusColor: const Color(0xFF0088CC).withValues(alpha: 0.25),
+              onTap: () => _sendToPikPak(torrent.infohash, torrent.name),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0088CC), Color(0xFF229ED9)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0088CC).withValues(alpha: 0.4),
+                      spreadRadius: 0,
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.telegram, color: Colors.white, size: 16),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'PikPak',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.expand_more_rounded, color: Colors.white70, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        final Widget? torboxButton = (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty)
+            ? buildTorboxButton()
+            : null;
+        final Widget? realDebridButton = (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty)
+            ? buildRealDebridButton()
+            : null;
+        final Widget? pikpakButton = _pikpakEnabled ? buildPikPakButton() : null;
+
+        if (torboxButton == null && realDebridButton == null && pikpakButton == null) {
+          return const SizedBox.shrink();
+        }
+
+        final int buttonCount = [torboxButton, realDebridButton, pikpakButton].where((b) => b != null).length;
+
+        if (isCompactLayout) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (torboxButton != null) torboxButton,
+              if (torboxButton != null && (realDebridButton != null || pikpakButton != null)) const SizedBox(height: 8),
+              if (realDebridButton != null) realDebridButton,
+              if (realDebridButton != null && pikpakButton != null) const SizedBox(height: 8),
+              if (pikpakButton != null) pikpakButton,
+            ],
+          );
+        }
+
+        if (buttonCount == 3) {
+          return Row(
+            children: [
+              Expanded(child: torboxButton!),
+              const SizedBox(width: 8),
+              Expanded(child: realDebridButton!),
+              const SizedBox(width: 8),
+              Expanded(child: pikpakButton!),
+            ],
+          );
+        } else if (buttonCount == 2) {
+          return Row(
+            children: [
+              if (torboxButton != null) Expanded(child: torboxButton),
+              if (torboxButton != null && (realDebridButton != null || pikpakButton != null)) const SizedBox(width: 8),
+              if (realDebridButton != null) Expanded(child: realDebridButton),
+              if (realDebridButton != null && pikpakButton != null) const SizedBox(width: 8),
+              if (pikpakButton != null) Expanded(child: pikpakButton),
+            ],
+          );
+        } else {
+          final Widget singleButton = torboxButton ?? realDebridButton ?? pikpakButton!;
+          return SizedBox(width: double.infinity, child: singleButton);
+        }
+      },
+    );
+  }
+}
+
+/// Individual torrent card widget with isolated focus state
+class _TorrentCard extends StatefulWidget {
+  const _TorrentCard({
+    required this.torrent,
+    required this.index,
+    required this.focusNode,
+    required this.isTelevision,
+    required this.apiKey,
+    required this.torboxApiKey,
+    required this.torboxCacheStatus,
+    required this.realDebridIntegrationEnabled,
+    required this.torboxIntegrationEnabled,
+    required this.pikpakEnabled,
+    required this.torboxCacheCheckEnabled,
+    required this.isSeries,
+    required this.selectedImdbTitle,
+    required this.onCardActivated,
+    required this.onCopyMagnet,
+    required this.onAddToDebrid,
+    required this.onAddToTorbox,
+    required this.onAddToPikPak,
+    required this.onShowFileSelection,
+    required this.buildSizeOrPackChip,
+    required this.buildSourceStatChip,
+    required this.torboxResultIsCached,
+    required this.searchFocusNode,
+    required this.episodeInputFocusNode,
+  });
+
+  final Torrent torrent;
+  final int index;
+  final FocusNode focusNode;
+  final bool isTelevision;
+  final String? apiKey;
+  final String? torboxApiKey;
+  final Map<String, bool>? torboxCacheStatus;
+  final bool realDebridIntegrationEnabled;
+  final bool torboxIntegrationEnabled;
+  final bool pikpakEnabled;
+  final bool torboxCacheCheckEnabled;
+  final bool isSeries;
+  final ImdbTitleResult? selectedImdbTitle;
+  final VoidCallback onCardActivated;
+  final VoidCallback onCopyMagnet;
+  final void Function(String infohash, String name, int index) onAddToDebrid;
+  final void Function(String infohash, String name) onAddToTorbox;
+  final void Function(String infohash, String name) onAddToPikPak;
+  final void Function(String infohash, String name, int index) onShowFileSelection;
+  final Widget Function(Torrent) buildSizeOrPackChip;
+  final Widget Function(String) buildSourceStatChip;
+  final bool Function(String) torboxResultIsCached;
+  final FocusNode searchFocusNode;
+  final FocusNode episodeInputFocusNode;
+
+  @override
+  State<_TorrentCard> createState() => _TorrentCardState();
+}
+
+class _TorrentCardState extends State<_TorrentCard> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!mounted) return;
+    final focused = widget.focusNode.hasFocus;
+    if (_isFocused != focused) {
+      setState(() {
+        _isFocused = focused;
+      });
+
+      // Auto-scroll on focus
+      if (focused && widget.isTelevision) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final context = widget.focusNode.context;
+          if (context != null) {
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.2,
+              duration: const Duration(milliseconds: 100),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: (node, event) {
+        // Handle OK/Select/Enter press
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          widget.onCardActivated();
+          return KeyEventResult.handled;
+        }
+        // Handle Arrow Up from first card - navigate to Episode input (if series) or Search field
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.index == 0) {
+          // If series with selected title, go to Episode input
+          if (widget.isSeries && widget.selectedImdbTitle != null) {
+            widget.episodeInputFocusNode.requestFocus();
+          } else {
+            widget.searchFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        // Handle Back/Escape to return to search field (TV shortcut)
+        if (widget.isTelevision && event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.escape ||
+                event.logicalKey == LogicalKeyboardKey.backspace)) {
+          // Only handle if this is the first card (avoid capturing all back presses)
+          if (widget.index == 0) {
+            widget.searchFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
-          // Handle Arrow Up from first card - navigate to Episode input (if series) or Search field
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.arrowUp &&
-              index == 0) {
-            // If series with selected title, go to Episode input
-            if (_isSeries && _selectedImdbTitle != null) {
-              _episodeInputFocusNode.requestFocus();
-            } else {
-              _searchFocusNode.requestFocus();
-            }
-            return KeyEventResult.handled;
-          }
-          // Handle Back/Escape to return to search field (TV shortcut)
-          if (_isTelevision && event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.escape ||
-                  event.logicalKey == LogicalKeyboardKey.backspace)) {
-            // Only handle if this is the first card (avoid capturing all back presses)
-            if (index == 0) {
-              _searchFocusNode.requestFocus();
-              return KeyEventResult.handled;
-            }
-          }
-          return KeyEventResult.ignored;
-        },
-        onFocusChange: (focused) {
-          final wasFocused = _focusedCardIndex == index;
-          if (focused && !wasFocused) {
-            setState(() {
-              _focusedCardIndex = index;
-            });
-            // Auto-scroll when focused
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              final currentContext = _cardFocusNodes[index].context;
-              if (currentContext != null && mounted) {
-                Scrollable.ensureVisible(
-                  currentContext,
-                  alignment: 0.2,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutCubic,
+        }
+        return KeyEventResult.ignored;
+      },
+      child: _buildCardContent(),
+    );
+  }
+
+  Widget _buildCardContent() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1E293B), // Slate 800
+            Color(0xFF334155), // Slate 700
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: widget.isTelevision && _isFocused
+            ? Border.all(color: const Color(0xFFE50914), width: 3)
+            : null,
+        boxShadow: widget.isTelevision && _isFocused
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFE50914).withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title Row - Now with more space for title!
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.torrent.displayTitle,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    maxLines: 5,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!widget.isTelevision) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: widget.onCopyMagnet,
+                    tooltip: 'Copy magnet link',
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFF1D2A3F),
+                      foregroundColor: const Color(0xFF60A5FA),
+                      padding: const EdgeInsets.all(10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Stats Grid - Now includes source instead of completed
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                widget.buildSizeOrPackChip(widget.torrent),
+                StatChip(
+                  icon: Icons.upload_rounded,
+                  text: '${widget.torrent.seeders}',
+                  color: const Color(0xFF22C55E), // Green 500 - Fresh green
+                ),
+                StatChip(
+                  icon: Icons.download_rounded,
+                  text: '${widget.torrent.leechers}',
+                  color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
+                ),
+                widget.buildSourceStatChip(widget.torrent.source),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Date
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule_rounded,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  Formatters.formatDate(widget.torrent.createdUnix),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Action Buttons (Hidden on TV since we use smart action on card click)
+            if (!widget.isTelevision)
+            LayoutBuilder(
+              builder: (context, constraints) {
+              final isCompactLayout = constraints.maxWidth < 360;
+
+              Widget buildTorboxButton() {
+                final bool isCached = widget.torboxResultIsCached(widget.torrent.infohash);
+                final gradientColors = isCached
+                    ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
+                    : const [Color(0xFF475569), Color(0xFF1F2937)];
+                final shadowColor = isCached
+                    ? const Color(0xFF7C3AED).withValues(alpha: 0.35)
+                    : const Color(0xFF1F2937).withValues(alpha: 0.25);
+                final textColor = isCached ? Colors.white : Colors.white70;
+
+                return Opacity(
+                  opacity: isCached ? 1.0 : 0.55,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      focusColor:
+                          const Color(0xFF7C3AED).withValues(alpha: 0.25),
+                      onTap: isCached
+                          ? () => widget.onAddToTorbox(widget.torrent.infohash, widget.torrent.name)
+                          : null,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: LinearGradient(
+                            colors: gradientColors,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: shadowColor,
+                              spreadRadius: 0,
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.flash_on_rounded,
+                              color: textColor,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Torbox',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                  color: textColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.expand_more_rounded,
+                              color: textColor.withValues(alpha: 0.7),
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 );
               }
-            });
-          } else if (!focused && wasFocused) {
-            setState(() {
-              _focusedCardIndex = -1;
-            });
-          }
-        },
-        child: buildCardContent(_focusedCardIndex == index),
-      );
-    }
 
-    // For non-TV mode, build without listening to focus state
-    return buildCardContent(false);
+              Widget buildRealDebridButton() {
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    focusColor:
+                        const Color(0xFF6366F1).withValues(alpha: 0.25),
+                    onTap: () =>
+                        widget.onAddToDebrid(widget.torrent.infohash, widget.torrent.name, widget.index),
+                    onLongPress: () {
+                      widget.onShowFileSelection(
+                        widget.torrent.infohash,
+                        widget.torrent.name,
+                        widget.index,
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF1E40AF,
+                            ).withValues(alpha: 0.4),
+                            spreadRadius: 0,
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            Icons.cloud_download_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Real-Debrid',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(
+                            Icons.expand_more_rounded,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              Widget buildPikPakButton() {
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    focusColor:
+                        const Color(0xFF0088CC).withValues(alpha: 0.25),
+                    onTap: () =>
+                        widget.onAddToPikPak(widget.torrent.infohash, widget.torrent.name),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0088CC), Color(0xFF229ED9)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF0088CC,
+                            ).withValues(alpha: 0.4),
+                            spreadRadius: 0,
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            Icons.telegram,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'PikPak',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(
+                            Icons.expand_more_rounded,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              final Widget? torboxButton =
+                  (widget.torboxIntegrationEnabled &&
+                      widget.torboxApiKey != null &&
+                      widget.torboxApiKey!.isNotEmpty)
+                  ? buildTorboxButton()
+                  : null;
+              final Widget? realDebridButton =
+                  (widget.realDebridIntegrationEnabled &&
+                      widget.apiKey != null &&
+                      widget.apiKey!.isNotEmpty)
+                  ? buildRealDebridButton()
+                  : null;
+              final Widget? pikpakButton = widget.pikpakEnabled
+                  ? buildPikPakButton()
+                  : null;
+
+              if (torboxButton == null && realDebridButton == null && pikpakButton == null) {
+                return const SizedBox.shrink();
+              }
+
+              // Count active buttons
+              final int buttonCount = [torboxButton, realDebridButton, pikpakButton]
+                  .where((button) => button != null)
+                  .length;
+
+              if (isCompactLayout) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (torboxButton != null) torboxButton,
+                    if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
+                      const SizedBox(height: 8),
+                    if (realDebridButton != null) realDebridButton,
+                    if (realDebridButton != null && pikpakButton != null)
+                      const SizedBox(height: 8),
+                    if (pikpakButton != null) pikpakButton,
+                  ],
+                );
+              }
+
+              // For non-compact layouts, show buttons in a row
+              if (buttonCount == 3) {
+                return Row(
+                  children: [
+                    Expanded(child: torboxButton!),
+                    const SizedBox(width: 8),
+                    Expanded(child: realDebridButton!),
+                    const SizedBox(width: 8),
+                    Expanded(child: pikpakButton!),
+                  ],
+                );
+              } else if (buttonCount == 2) {
+                return Row(
+                  children: [
+                    if (torboxButton != null) Expanded(child: torboxButton),
+                    if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
+                      const SizedBox(width: 8),
+                    if (realDebridButton != null) Expanded(child: realDebridButton),
+                    if (realDebridButton != null && pikpakButton != null)
+                      const SizedBox(width: 8),
+                    if (pikpakButton != null) Expanded(child: pikpakButton),
+                  ],
+                );
+              } else {
+                final Widget singleButton = torboxButton ?? realDebridButton ?? pikpakButton!;
+                return SizedBox(width: double.infinity, child: singleButton);
+              }
+            },
+          ),
+          // TV hint
+          if (widget.isTelevision && _isFocused) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Press OK to add torrent',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
   }
 }
 
