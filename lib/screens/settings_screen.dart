@@ -4,6 +4,7 @@ import '../services/account_service.dart';
 import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
+import '../services/debrify_tv_repository.dart';
 import '../widgets/shimmer.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/pikpak_settings_page.dart';
@@ -293,6 +294,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await DownloadService.instance.clearDownloadDatabase();
     await StorageService.clearAllPlaybackData();
     await StorageService.clearPlaylist();
+    await DebrifyTvRepository.instance.clearAll();
     await StorageService.setInitialSetupComplete(false);
     if (!mounted) return;
 
