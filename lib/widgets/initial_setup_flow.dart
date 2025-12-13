@@ -1891,15 +1891,35 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
           focusNode: widget.focusNode,
           enabled: widget.enabled,
           obscureText: widget.obscureText,
+          showCursor: true,
+          autofocus: false,
           autofillHints: widget.obscureText
               ? const <String>[AutofillHints.password]
               : null,
           decoration: InputDecoration(
-            labelText: widget.labelText,
+            labelText: widget.labelText.isEmpty ? null : widget.labelText,
+            labelStyle: const TextStyle(color: Colors.white70),
             hintText: widget.hintText,
+            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
             prefixIcon: widget.prefixIcon,
+            prefixIconColor: Colors.white70,
             errorText: widget.errorText,
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.08),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.white, width: 2),
+            ),
           ),
+          style: const TextStyle(color: Colors.white),
           onSubmitted: widget.onSubmitted,
         ),
       ),
