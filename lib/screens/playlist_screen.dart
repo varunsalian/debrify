@@ -2493,36 +2493,32 @@ class _TvPlaylistCardState extends State<_TvPlaylistCard> {
 
     return Focus(
       focusNode: _focusNode,
-      child: AnimatedScale(
-        scale: _focused ? 1.08 : 1.0,
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: _focused
-                ? Border.all(color: highlightColor, width: 3)
-                : null,
-            boxShadow: _focused
-                ? [
-                    BoxShadow(
-                      color: highlightColor.withValues(alpha: 0.4),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 8),
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-          ),
-          child: Material(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: _focused
+              ? Border.all(color: highlightColor, width: 3)
+              : null,
+          boxShadow: _focused
+              ? [
+                  BoxShadow(
+                    color: highlightColor.withValues(alpha: 0.4),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+        ),
+        child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: widget.onPlay,
@@ -2563,8 +2559,8 @@ class _TvPlaylistCardState extends State<_TvPlaylistCard> {
                                   fontWeight: FontWeight.w600,
                                   height: 1.2,
                                 ),
-                                maxLines: _focused ? null : 2,
-                                overflow: _focused ? null : TextOverflow.ellipsis,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             if (_focused)
@@ -2633,7 +2629,6 @@ class _TvPlaylistCardState extends State<_TvPlaylistCard> {
             ),
           ),
         ),
-      ),
     );
   }
 
