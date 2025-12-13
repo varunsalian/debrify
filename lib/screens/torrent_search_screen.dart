@@ -523,7 +523,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Use IMDB search when we have an advanced selection, otherwise keyword search
       if (selection != null && selection.imdbId.trim().isNotEmpty) {
-        debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}');
+        debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}, isMovie=${!selection.isSeries}, title=${selection.title}');
         result = await TorrentService.searchByImdb(
           selection.imdbId,
           engineStates: _engineStates,
@@ -532,6 +532,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           episode: selection.episode,
         );
       } else {
+        debugPrint('TorrentSearchScreen: Using KEYWORD search (no advanced selection) for query: $query');
         result = await TorrentService.searchAllEngines(
           query,
           engineStates: _engineStates,
@@ -1171,6 +1172,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _seriesControlsExpanded = !isSeries; // Movies don't need controls, series start collapsed
       });
 
+      debugPrint('TorrentSearchScreen: IMDB title detected - isSeries=$isSeries, title=${_selectedImdbTitle?.title}');
+
       // Search immediately for both movies and series
       // For series, this will search with default params (null season/episode means all episodes)
       // Users can refine the search later by expanding controls and setting season/episode
@@ -1226,6 +1229,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       season: season,
       episode: episode,
     );
+
+    debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}');
 
     setState(() {
       _activeAdvancedSelection = selection;
@@ -1854,12 +1859,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final List<Torrent> sortedTorrents = List<Torrent>.from(baseList);
 
+    // Determine if we should apply season pack prioritization
+    // Only apply for TV series searches, not for movies
+    final bool shouldApplyCoveragePriority =
+        _activeAdvancedSelection?.isSeries ?? false;
+
+    debugPrint('TorrentSearchScreen: Sorting torrents - shouldApplyCoveragePriority=$shouldApplyCoveragePriority, isSeries=${_activeAdvancedSelection?.isSeries}, title=${_activeAdvancedSelection?.title}');
+
     switch (_sortBy) {
       case 'name':
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type (complete series first)
-          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
-          if (coverageComp != 0) return coverageComp;
+          // Primary: coverage type (complete series first) - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
 
           // Secondary: name
           final comparison = a.displayTitle.toLowerCase().compareTo(
@@ -1870,9 +1884,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'size':
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type
-          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
-          if (coverageComp != 0) return coverageComp;
+          // Primary: coverage type - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
 
           // Secondary: size
           final comparison = a.sizeBytes.compareTo(b.sizeBytes);
@@ -1881,9 +1897,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'seeders':
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type
-          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
-          if (coverageComp != 0) return coverageComp;
+          // Primary: coverage type - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
 
           // Secondary: seeders
           final comparison = a.seeders.compareTo(b.seeders);
@@ -1892,9 +1910,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'date':
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type
-          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
-          if (coverageComp != 0) return coverageComp;
+          // Primary: coverage type - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
 
           // Secondary: date
           final comparison = a.createdUnix.compareTo(b.createdUnix);
@@ -1903,11 +1923,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'relevance':
       default:
-        // Sort by coverage type first, then maintain original order
+        // Sort by coverage type first - only for TV series, then maintain original order
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type (complete series first)
-          final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
-          if (coverageComp != 0) return coverageComp;
+          // Primary: coverage type (complete series first) - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
 
           // Secondary: seeders (best quality indicator for relevance)
           return b.seeders.compareTo(a.seeders);
@@ -1916,6 +1938,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     final filtered = _applyFiltersToList(sortedTorrents, metadataMap: metadata);
+
+    // Debug: Log top 3 results to understand sorting
+    if (sortedTorrents.isNotEmpty) {
+      debugPrint('TorrentSearchScreen: Top 3 results after sorting:');
+      for (int i = 0; i < sortedTorrents.length && i < 3; i++) {
+        final t = sortedTorrents[i];
+        debugPrint('  $i: ${t.name} - coveragePriority=${t.coveragePriority}, coverageType=${t.coverageType}, seeders=${t.seeders}');
+      }
+    }
 
     setState(() {
       _allTorrents = sortedTorrents;
