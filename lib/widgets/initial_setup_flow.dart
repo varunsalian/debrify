@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -142,6 +143,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   String? _engineError;
 
   bool _isAndroidTv = false; // Store TV detection result
+  bool _isTvDetectionComplete = false; // Track if TV detection is done
+
+  // Scroll controller for auto-scrolling on DPAD navigation
+  final ScrollController _scrollController = ScrollController();
+
+  // Map to store focus listener callbacks for proper disposal
+  final Map<FocusNode, VoidCallback> _focusListeners = {};
 
   // Focus nodes for TV/DPAD navigation
   final FocusNode _dialogFocusNode = FocusNode(
@@ -213,38 +221,140 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   void initState() {
     super.initState();
 
+    // Add focus listeners for auto-scrolling on TV
+    _addFocusListeners();
+
     // Detect Android TV and setup accordingly
+    _detectAndroidTV();
+  }
+
+  Future<void> _detectAndroidTV() async {
+    // Use addPostFrameCallback to ensure widget is fully built
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
-      // Check if this is an Android TV device
-      final isTV = await PlatformUtil.isAndroidTV();
-      if (!mounted) return;
+      try {
+        // Check if this is an Android TV device
+        final isTV = await PlatformUtil.isAndroidTV();
+        if (!mounted) return;
 
-      setState(() {
-        _isAndroidTv = isTV;
-      });
-
-      // Only request focus on TV devices for D-pad navigation
-      if (_isAndroidTv) {
-        // Force unfocus from anything else first
-        FocusManager.instance.primaryFocus?.unfocus();
-        // Then request focus on the first chip
-        _realDebridChipFocusNode.requestFocus();
-
-        // Double-check focus after a short delay (for race conditions)
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted && !_realDebridChipFocusNode.hasFocus) {
-            FocusManager.instance.primaryFocus?.unfocus();
-            _realDebridChipFocusNode.requestFocus();
-          }
+        setState(() {
+          _isAndroidTv = isTV;
+          _isTvDetectionComplete = true;
         });
+
+        // Only request focus on TV devices for D-pad navigation
+        if (_isAndroidTv) {
+          // Wait for next frame to ensure UI is ready
+          await Future.delayed(const Duration(milliseconds: 100));
+          if (!mounted) return;
+
+          // Verify dialog is still visible and topmost
+          final navigator = Navigator.maybeOf(context);
+          if (navigator == null || !navigator.canPop()) return;
+
+          // Request focus on the first chip
+          FocusManager.instance.primaryFocus?.unfocus();
+          _realDebridChipFocusNode.requestFocus();
+        }
+      } catch (e) {
+        // Failed to detect TV, default to non-TV mode
+        if (!mounted) return;
+        setState(() {
+          _isAndroidTv = false;
+          _isTvDetectionComplete = true;
+        });
+      }
+    });
+  }
+
+  void _addFocusListeners() {
+    // Add listeners to all focusable elements for auto-scrolling
+    final focusNodes = [
+      _realDebridChipFocusNode,
+      _torboxChipFocusNode,
+      _pikpakChipFocusNode,
+      _skipButtonFocusNode,
+      _continueButtonFocusNode,
+      _backButtonFocusNode,
+      _openLinkButtonFocusNode,
+      _textFieldFocusNode,
+      _pikpakEmailFieldFocusNode,
+      _pikpakPasswordFieldFocusNode,
+      _skipForNowButtonFocusNode,
+      _connectButtonFocusNode,
+      _engineSkipButtonFocusNode,
+      _engineImportButtonFocusNode,
+    ];
+
+    for (final node in focusNodes) {
+      // Create a named listener callback that we can remove later
+      void listener() {
+        if (node.hasFocus && _isAndroidTv) {
+          _scrollToFocusedWidget(node);
+        }
+      }
+
+      // Store the listener so we can remove it in dispose
+      _focusListeners[node] = listener;
+
+      // Add the listener to the node
+      node.addListener(listener);
+    }
+  }
+
+  void _removeFocusListeners() {
+    // Remove all focus listeners to prevent memory leaks
+    _focusListeners.forEach((node, listener) {
+      node.removeListener(listener);
+    });
+    _focusListeners.clear();
+  }
+
+  void _scrollToFocusedWidget(FocusNode node) {
+    if (!_scrollController.hasClients) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || node.context == null) return;
+
+      try {
+        final RenderBox? renderBox = node.context!.findRenderObject() as RenderBox?;
+        if (renderBox == null || !renderBox.hasSize) return;
+
+        final position = renderBox.localToGlobal(Offset.zero);
+        final size = renderBox.size;
+        final screenHeight = MediaQuery.of(context).size.height;
+
+        // Calculate if widget is out of view
+        final widgetTop = position.dy;
+        final widgetBottom = position.dy + size.height;
+
+        // Scroll if widget is not fully visible
+        if (widgetTop < 100 || widgetBottom > screenHeight - 100) {
+          final scrollOffset = _scrollController.offset + (widgetTop - screenHeight / 2 + size.height / 2);
+          _scrollController.animateTo(
+            scrollOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      } catch (e, stackTrace) {
+        // Log errors during scrolling calculations for debugging
+        debugPrint('Error calculating scroll position: $e');
+        if (kDebugMode) {
+          debugPrint('Stack trace: $stackTrace');
+        }
       }
     });
   }
 
   @override
   void dispose() {
+    // Remove focus listeners FIRST to prevent memory leaks
+    _removeFocusListeners();
+
+    // Dispose controllers and focus nodes
+    _scrollController.dispose();
     _realDebridController.dispose();
     _torboxController.dispose();
     _pikpakEmailController.dispose();
@@ -278,6 +388,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Responsive padding based on screen height
+    final verticalPadding = screenHeight < 800 ? 16.0 : 32.0;
+    final horizontalPadding = screenWidth < 600 ? 16.0 : 24.0;
+    final innerVerticalPadding = screenHeight < 800 ? 16.0 : 32.0;
+    final innerHorizontalPadding = screenWidth < 600 ? 16.0 : 28.0;
+
     return PopScope(
       canPop: false,
       child: FocusScope(
@@ -327,79 +446,92 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     ),
                   },
                   child: Dialog(
-                    insetPadding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 32,
+                    insetPadding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                      vertical: verticalPadding,
                     ),
                     backgroundColor: Colors.transparent,
                     child: LayoutBuilder(
-                      builder: (BuildContext context, BoxConstraints _) {
-                        return SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          clipBehavior: Clip.none,
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 560),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(28),
-                                  gradient: const LinearGradient(
-                                    colors: <Color>[
-                                      Color(0xFF0F172A),
-                                      Color(0xFF1F2937),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  boxShadow: <BoxShadow>[
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.35,
-                                      ),
-                                      blurRadius: 28,
-                                      offset: const Offset(0, 24),
-                                    ),
-                                  ],
+                      builder: (BuildContext context, BoxConstraints constraints) {
+                        final maxDialogHeight = screenHeight - (verticalPadding * 2);
+                        final maxDialogWidth = screenWidth - (horizontalPadding * 2);
+                        return ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: maxDialogHeight,
+                            maxWidth: maxDialogWidth.clamp(300.0, 560.0),
+                          ),
+                          child: SingleChildScrollView(
+                            controller: _scrollController,
+                            physics: const BouncingScrollPhysics(),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: maxDialogWidth.clamp(300.0, 560.0),
                                 ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 28,
-                                    vertical: 32,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(28),
+                                    gradient: const LinearGradient(
+                                      colors: <Color>[
+                                        Color(0xFF0F172A),
+                                        Color(0xFF1F2937),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    boxShadow: <BoxShadow>[
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.35,
+                                        ),
+                                        blurRadius: 28,
+                                        offset: const Offset(0, 24),
+                                      ),
+                                    ],
                                   ),
-                                  child: LayoutBuilder(
-                                    builder:
-                                        (
-                                          BuildContext context,
-                                          BoxConstraints innerConstraints,
-                                        ) {
-                                          return AnimatedSwitcher(
-                                            duration: const Duration(
-                                              milliseconds: 250,
-                                            ),
-                                            switchInCurve: Curves.easeOutCubic,
-                                            switchOutCurve: Curves.easeInCubic,
-                                            child: _stepIndex == 0
-                                                ? _buildWelcomeStep(
-                                                    theme,
-                                                    innerConstraints.maxWidth,
-                                                  )
-                                                : _stepIndex > _flow.length
-                                                ? _buildEngineSelectionStep(
-                                                    theme,
-                                                    innerConstraints.maxWidth,
-                                                  )
-                                                : _buildIntegrationStep(
-                                                    theme,
-                                                    _flow[_stepIndex - 1],
-                                                    innerConstraints.maxWidth,
-                                                  ),
-                                          );
-                                        },
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: innerHorizontalPadding,
+                                      vertical: innerVerticalPadding,
+                                    ),
+                                    child: LayoutBuilder(
+                                      builder:
+                                          (
+                                            BuildContext context,
+                                            BoxConstraints innerConstraints,
+                                          ) {
+                                            return AnimatedSwitcher(
+                                              duration: const Duration(
+                                                milliseconds: 250,
+                                              ),
+                                              switchInCurve: Curves.easeOutCubic,
+                                              switchOutCurve: Curves.easeInCubic,
+                                              child: _stepIndex == 0
+                                                  ? _buildWelcomeStep(
+                                                      theme,
+                                                      innerConstraints.maxWidth,
+                                                      screenHeight,
+                                                    )
+                                                  : _stepIndex > _flow.length
+                                                  ? _buildEngineSelectionStep(
+                                                      theme,
+                                                      innerConstraints.maxWidth,
+                                                      screenHeight,
+                                                    )
+                                                  : _buildIntegrationStep(
+                                                      theme,
+                                                      _flow[_stepIndex - 1],
+                                                      innerConstraints.maxWidth,
+                                                      screenHeight,
+                                                    ),
+                                            );
+                                          },
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
                         );
                       },
                     ),
@@ -413,7 +545,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     );
   }
 
-  Widget _buildWelcomeStep(ThemeData theme, double availableWidth) {
+  Widget _buildWelcomeStep(ThemeData theme, double availableWidth, double screenHeight) {
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing2 = screenHeight < 800 ? 16.0 : 24.0;
+    final spacing3 = screenHeight < 800 ? 20.0 : 32.0;
+
     return Column(
       key: const ValueKey<String>('welcome'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -426,12 +562,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             color: Colors.white,
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing1),
         Text(
           'You can add others later from Settings.',
           style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: spacing2),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double width = constraints.maxWidth.isFinite
@@ -478,7 +614,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             );
           },
         ),
-        const SizedBox(height: 32),
+        SizedBox(height: spacing3),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final bool isCompact = constraints.maxWidth < 420;
@@ -494,7 +630,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                       child: const Text("I don't have any yet"),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing1),
                   FocusTraversalOrder(
                     order: const NumericFocusOrder(4),
                     child: FilledButton.icon(
@@ -543,6 +679,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     ThemeData theme,
     _IntegrationType type,
     double availableWidth,
+    double screenHeight,
   ) {
     final _IntegrationMeta meta = _integrationMeta[type]!;
     final TextEditingController controller = type == _IntegrationType.realDebrid
@@ -553,6 +690,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     final int currentStep = _stepIndex;
     final int totalSteps = _flow.length;
     final bool isPikPak = type == _IntegrationType.pikpak;
+
+    // Responsive spacing
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing2 = screenHeight < 800 ? 12.0 : 16.0;
+    final spacing3 = screenHeight < 800 ? 16.0 : 24.0;
 
     return Column(
       key: ValueKey<_IntegrationType>(type),
@@ -579,7 +721,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing1),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -610,8 +752,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             ],
           ),
         ),
-        const SizedBox(height: 24),
-        // TEXT FIELDS MOVED TO TOP - Right after the header
+        SizedBox(height: spacing3),
         if (isPikPak) ...[
           Text(
             'Email',
@@ -620,7 +761,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: spacing1),
           FocusTraversalOrder(
             order: const NumericFocusOrder(2),
             child: _TvFriendlyTextField(
@@ -637,7 +778,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               },
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: spacing2),
           Text(
             'Password',
             style: theme.textTheme.labelLarge?.copyWith(
@@ -645,7 +786,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: spacing1),
           FocusTraversalOrder(
             order: const NumericFocusOrder(3),
             child: _TvFriendlyTextField(
@@ -663,85 +804,6 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               },
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'How to get started',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 12),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  for (int i = 0; i < meta.steps.length; i++)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        bottom: i == meta.steps.length - 1 ? 0 : 12,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: meta.gradient.first.withValues(alpha: 0.9),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${i + 1}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              meta.steps[i],
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: Colors.white70,
-                                height: 1.3,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  FocusTraversalOrder(
-                    order: const NumericFocusOrder(4),
-                    child: OutlinedButton.icon(
-                      focusNode: _openLinkButtonFocusNode,
-                      onPressed: _isProcessing ? null : () => _launch(meta.url),
-                      icon: const Icon(Icons.open_in_new_rounded),
-                      label: Text(meta.linkLabel),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ] else ...[
           Text(
             meta.inputLabel,
@@ -750,7 +812,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: spacing1),
           FocusTraversalOrder(
             order: const NumericFocusOrder(2),
             child: _TvFriendlyTextField(
@@ -767,87 +829,24 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               },
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Where to find the API key',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 12),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  for (int i = 0; i < meta.steps.length; i++)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        bottom: i == meta.steps.length - 1 ? 0 : 12,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: meta.gradient.first.withValues(alpha: 0.9),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${i + 1}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              meta.steps[i],
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: Colors.white70,
-                                height: 1.3,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  FocusTraversalOrder(
-                    order: const NumericFocusOrder(3),
-                    child: OutlinedButton.icon(
-                      focusNode: _openLinkButtonFocusNode,
-                      onPressed: _isProcessing ? null : () => _launch(meta.url),
-                      icon: const Icon(Icons.open_in_new_rounded),
-                      label: Text(meta.linkLabel),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+          SizedBox(height: spacing2),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(3),
+            child: OutlinedButton.icon(
+              focusNode: _openLinkButtonFocusNode,
+              onPressed: _isProcessing ? null : () => _launch(meta.url),
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: Text(meta.linkLabel),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.2),
+                ),
               ),
             ),
           ),
         ],
-        const SizedBox(height: 24),
+        SizedBox(height: spacing3),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double width = constraints.maxWidth.isFinite
@@ -886,7 +885,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     runSpacing: 8,
                     children: <Widget>[skipButton],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing1),
                   primaryButton,
                 ],
               );
@@ -901,7 +900,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     );
   }
 
-  Widget _buildEngineSelectionStep(ThemeData theme, double availableWidth) {
+  Widget _buildEngineSelectionStep(ThemeData theme, double availableWidth, double screenHeight) {
+    // Responsive spacing
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing3 = screenHeight < 800 ? 16.0 : 24.0;
+
+    // Responsive ListView height (30-40% of screen height)
+    final listViewMaxHeight = screenHeight < 800
+        ? screenHeight * 0.3  // 30% for small screens
+        : 280.0;  // Fixed 280 for larger screens
+
     return Column(
       key: const ValueKey<String>('engine-selection'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -914,12 +922,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             color: Colors.white,
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing1),
         Text(
           'Select the torrent search engines you want to use.',
           style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: spacing3),
         if (_isLoadingEngines)
           const Center(
             child: Padding(
@@ -984,7 +992,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           )
         else
           Container(
-            constraints: const BoxConstraints(maxHeight: 280),
+            constraints: BoxConstraints(maxHeight: listViewMaxHeight),
             child: ListView.builder(
               shrinkWrap: true,
               itemCount: _availableEngines.length,
@@ -1050,7 +1058,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               },
             ),
           ),
-        const SizedBox(height: 24),
+        SizedBox(height: spacing3),
         Row(
           children: [
             FocusTraversalOrder(
@@ -1197,7 +1205,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         if (success) {
           await StorageService.setPikPakEnabled(true);
         }
-      } catch (_) {
+      } catch (e, stackTrace) {
+        debugPrint('PikPak login failed: $e');
+        if (kDebugMode) {
+          debugPrint('Stack trace: $stackTrace');
+        }
         success = false;
       }
 
@@ -1320,6 +1332,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             builder: (ctx) => const PikPakFolderPickerDialog(),
           );
 
+          if (!mounted) return; // Check after dialog closes
+
           // Save folder restriction if selected
           if (folderResult != null) {
             final folderId = folderResult['folderId'] as String?;
@@ -1331,8 +1345,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           }
         }
 
+        if (!mounted) return; // Check before advancing
         _advanceOrFinish();
       } else {
+        if (!mounted) return; // Check before setState
         setState(() {
           _isProcessing = false;
           _errorMessage = 'Login failed. Please check your credentials.';
@@ -1365,7 +1381,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         } else {
           success = await TorboxAccountService.validateAndGetUserInfo(value);
         }
-      } catch (_) {
+      } catch (e, stackTrace) {
+        final serviceName = current == _IntegrationType.realDebrid ? 'Real Debrid' : 'Torbox';
+        debugPrint('$serviceName API validation failed: $e');
+        if (kDebugMode) {
+          debugPrint('Stack trace: $stackTrace');
+        }
         success = false;
       }
 
@@ -1450,57 +1471,90 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   Future<void> _loadAvailableEngines() async {
     try {
       final engines = await _remoteEngineManager.fetchAvailableEngines();
-      if (mounted) {
-        // Clean up old focus nodes
+      if (!mounted) return; // Early exit if widget disposed during fetch
+
+      // Clean up old focus nodes AND their listeners before creating new ones
+      for (final node in _engineItemFocusNodes.values) {
+        // Remove listener if it exists
+        final listener = _focusListeners[node];
+        if (listener != null) {
+          node.removeListener(listener);
+          _focusListeners.remove(node);
+        }
+        node.dispose();
+      }
+      _engineItemFocusNodes.clear();
+
+      // Create focus nodes for each engine AND register listeners
+      for (final engine in engines) {
+        final focusNode = FocusNode(
+          debugLabel: 'engine-${engine.id}',
+        );
+        _engineItemFocusNodes[engine.id] = focusNode;
+
+        // Create and register listener for auto-scrolling
+        void listener() {
+          if (focusNode.hasFocus && _isAndroidTv) {
+            _scrollToFocusedWidget(focusNode);
+          }
+        }
+        _focusListeners[focusNode] = listener;
+        focusNode.addListener(listener);
+      }
+
+      if (!mounted) {
+        // Widget was disposed while creating nodes - clean them up properly
         for (final node in _engineItemFocusNodes.values) {
+          final listener = _focusListeners[node];
+          if (listener != null) {
+            node.removeListener(listener);
+            _focusListeners.remove(node);
+          }
           node.dispose();
         }
         _engineItemFocusNodes.clear();
+        return;
+      }
 
-        // Create focus nodes for each engine
-        for (final engine in engines) {
-          _engineItemFocusNodes[engine.id] = FocusNode(
-            debugLabel: 'engine-${engine.id}',
-          );
+      setState(() {
+        _availableEngines = engines;
+        // Auto-select all engines by default
+        _selectedEngineIds = engines.map((e) => e.id).toSet();
+        _isLoadingEngines = false;
+      });
+
+      // Auto-focus the import button after a short delay
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _engineImportButtonFocusNode.requestFocus();
         }
-
-        setState(() {
-          _availableEngines = engines;
-          // Auto-select all engines by default
-          _selectedEngineIds = engines.map((e) => e.id).toSet();
-          _isLoadingEngines = false;
-        });
-
-        // Auto-focus the import button after a short delay
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _engineImportButtonFocusNode.requestFocus();
-          }
-        });
-      }
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoadingEngines = false;
-          _engineError = e.toString();
-        });
-        // Focus retry button on error
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _engineRetryButtonFocusNode.requestFocus();
-          }
-        });
-      }
+      if (!mounted) return; // Early exit if disposed during error
+
+      setState(() {
+        _isLoadingEngines = false;
+        _engineError = e.toString();
+      });
+
+      // Focus retry button on error
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _engineRetryButtonFocusNode.requestFocus();
+        }
+      });
     }
   }
 
   Future<void> _importSelectedEngines() async {
     if (_selectedEngineIds.isEmpty) {
       // Skip if no engines selected
+      if (!mounted) return;
       Navigator.of(context).pop(_hasConfigured);
       return;
     }
 
+    if (!mounted) return;
     setState(() {
       _isProcessing = true;
     });
@@ -1509,12 +1563,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     int successCount = 0;
 
     for (final engine in _availableEngines) {
+      if (!mounted) return; // Check during loop iterations
       if (!_selectedEngineIds.contains(engine.id)) continue;
 
       try {
         final yamlContent = await _remoteEngineManager.downloadEngineYaml(
           engine.fileName,
         );
+        if (!mounted) return; // Check after async operation
+
         if (yamlContent != null) {
           await localStorage.saveEngine(
             engineId: engine.id,
@@ -1523,6 +1580,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             displayName: engine.displayName,
             icon: engine.icon,
           );
+          if (!mounted) return; // Check after async operation
           successCount++;
         }
       } catch (e) {
@@ -1530,16 +1588,20 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       }
     }
 
+    if (!mounted) return;
+
     // Reload engine registry
     ConfigLoader().clearCache();
     await EngineRegistry.instance.reload();
 
-    if (mounted) {
-      setState(() {
-        _isProcessing = false;
-      });
-      Navigator.of(context).pop(_hasConfigured || successCount > 0);
-    }
+    if (!mounted) return;
+
+    setState(() {
+      _isProcessing = false;
+    });
+
+    if (!mounted) return;
+    Navigator.of(context).pop(_hasConfigured || successCount > 0);
   }
 
   Future<void> _launch(String url) async {
@@ -1574,12 +1636,19 @@ class _FocusableChipState extends State<_FocusableChip> {
   @override
   void initState() {
     super.initState();
+    // Safely add listener - focus node is guaranteed to exist in parent
     widget.focusNode.addListener(_handleFocusChange);
   }
 
   @override
   void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
+    // Safely remove listener before disposal
+    try {
+      widget.focusNode.removeListener(_handleFocusChange);
+    } catch (e) {
+      // Ignore if listener was already removed or node disposed
+      debugPrint('_FocusableChip: Error removing listener: $e');
+    }
     super.dispose();
   }
 
@@ -1673,12 +1742,19 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
   @override
   void initState() {
     super.initState();
+    // Safely add listener with null check
     widget.focusNode?.addListener(_handleFocusChange);
   }
 
   @override
   void dispose() {
-    widget.focusNode?.removeListener(_handleFocusChange);
+    // Safely remove listener with try-catch
+    try {
+      widget.focusNode?.removeListener(_handleFocusChange);
+    } catch (e) {
+      // Ignore if listener was already removed or node disposed
+      debugPrint('_FocusableEngineItem: Error removing listener: $e');
+    }
     super.dispose();
   }
 
@@ -1686,7 +1762,13 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
   void didUpdateWidget(_FocusableEngineItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode?.removeListener(_handleFocusChange);
+      // Safely remove old listener
+      try {
+        oldWidget.focusNode?.removeListener(_handleFocusChange);
+      } catch (e) {
+        debugPrint('_FocusableEngineItem: Error removing old listener: $e');
+      }
+      // Add new listener
       widget.focusNode?.addListener(_handleFocusChange);
     }
   }
@@ -1792,12 +1874,19 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
   @override
   void initState() {
     super.initState();
+    // Safely add listener - focus node is guaranteed to exist in parent
     widget.focusNode.addListener(_handleFocusChange);
   }
 
   @override
   void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
+    // Safely remove listener with try-catch
+    try {
+      widget.focusNode.removeListener(_handleFocusChange);
+    } catch (e) {
+      // Ignore if listener was already removed or node disposed
+      debugPrint('_TvFriendlyTextField: Error removing listener: $e');
+    }
     super.dispose();
   }
 
@@ -1811,6 +1900,9 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Safety check: widget must be mounted to access context
+    if (!mounted) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
     final text = widget.controller.text;
@@ -1833,9 +1925,14 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.browserBack) {
       final ctx = node.context;
-      if (ctx != null) {
-        FocusScope.of(ctx).previousFocus();
-        return KeyEventResult.handled;
+      if (ctx != null && mounted) {
+        try {
+          FocusScope.of(ctx).previousFocus();
+          return KeyEventResult.handled;
+        } catch (e) {
+          debugPrint('Error handling escape key: $e');
+          return KeyEventResult.ignored;
+        }
       }
     }
 
@@ -1843,10 +1940,15 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
     if (key == LogicalKeyboardKey.arrowUp) {
       if (isTextEmpty || isAtStart) {
         final ctx = node.context;
-        if (ctx != null) {
-          // Use directional focus to go to element above
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
-          return KeyEventResult.handled;
+        if (ctx != null && mounted) {
+          try {
+            // Use directional focus to go to element above
+            FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
+            return KeyEventResult.handled;
+          } catch (e) {
+            debugPrint('Error handling arrow up: $e');
+            return KeyEventResult.ignored;
+          }
         }
       }
     }
@@ -1855,10 +1957,15 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
     if (key == LogicalKeyboardKey.arrowDown) {
       if (isTextEmpty || isAtEnd) {
         final ctx = node.context;
-        if (ctx != null) {
-          // Use directional focus to go to element below
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
-          return KeyEventResult.handled;
+        if (ctx != null && mounted) {
+          try {
+            // Use directional focus to go to element below
+            FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
+            return KeyEventResult.handled;
+          } catch (e) {
+            debugPrint('Error handling arrow down: $e');
+            return KeyEventResult.ignored;
+          }
         }
       }
     }
