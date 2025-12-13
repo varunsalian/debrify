@@ -14,6 +14,7 @@ import '../utils/formatters.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../services/pikpak_api_service.dart';
+import '../services/main_page_bridge.dart';
 import 'video_player_screen.dart';
 
 class PlaylistScreen extends StatefulWidget {
@@ -46,6 +47,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         });
       });
     _detectTelevision();
+
+    // Register playlist item playback handler
+    MainPageBridge.playPlaylistItem = _playItem;
+
+    // Check if there's a pending auto-play item
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final itemToPlay = MainPageBridge.getAndClearPlaylistItemToAutoPlay();
+      if (itemToPlay != null) {
+        _playItem(itemToPlay);
+      }
+    });
   }
 
   Future<void> _detectTelevision() async {
@@ -79,6 +91,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _searchController.removeListener(_handleSearchChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
+
+    // Unregister playlist item playback handler
+    MainPageBridge.playPlaylistItem = null;
+
     super.dispose();
   }
 
@@ -113,6 +129,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           if (downloadLink.isNotEmpty) {
             if (FileUtils.isVideoMimeType(mimeType)) {
               if (!mounted) return;
+              // Hide auto-launch overlay before launching player
+              MainPageBridge.notifyPlayerLaunching();
               await VideoPlayerLauncher.push(
                 context,
                 VideoPlayerLaunchArgs(
@@ -269,6 +287,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         if (entries.first.url.isNotEmpty) initialVideoUrl = entries.first.url;
 
         if (!mounted) return;
+        // Hide auto-launch overlay before launching player
+        MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -298,6 +318,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Fallback: open single video directly without playlist (for legacy items)
     final String url = (item['url'] as String?) ?? '';
     if (!mounted) return;
+    // Hide auto-launch overlay before launching player
+    MainPageBridge.notifyPlayerLaunching();
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -356,6 +378,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             (item['title'] as String?)?.isNotEmpty == true ? item['title'] as String : fallbackTitle;
 
         if (!mounted) return;
+        // Hide auto-launch overlay before launching player
+        MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -508,6 +532,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       if (!mounted) return;
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -602,6 +628,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
 
         if (!mounted) return;
+        // Hide auto-launch overlay before launching player
+        MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -854,6 +882,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           ? (candidates[0].file['id'] as String?)
           : null;
 
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(

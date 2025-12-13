@@ -9,6 +9,7 @@ import '../screens/video_player_screen.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
+import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
@@ -142,6 +143,9 @@ class VideoPlayerLauncher {
       final sessionId = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
       AndroidTvPlayerBridge.setCurrentSessionId(sessionId);
       debugPrint('VideoPlayerLauncher: Generated session ID: $sessionId');
+
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: result.payload.toMap(),

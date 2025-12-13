@@ -28,7 +28,6 @@ import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
 import 'services/magnet_link_handler.dart';
-import 'models/torbox_torrent.dart';
 import 'widgets/auto_launch_overlay.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
@@ -561,7 +560,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return _startupChannelIdToLaunch;
   }
 
-  /// Check if startup auto-launch is enabled and navigate to Debrify TV
+  /// Check if startup auto-launch is enabled and navigate to Debrify TV or play playlist item
   Future<void> _checkStartupAutoLaunch() async {
     // Prevent duplicate launches
     if (_autoLaunchInProgress) return;
@@ -575,65 +574,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return;
       }
 
-      // Load channels
-      final channels = await DebrifyTvRepository.instance.fetchAllChannels();
-      if (channels.isEmpty) {
-        _autoLaunchInProgress = false;
-        return;
-      }
+      // Get startup mode
+      final startupMode = await StorageService.getStartupMode();
 
-      // Get selected channel ID
-      final selectedChannelId = await StorageService.getStartupChannelId() ?? 'random';
-
-      // Determine which channel to launch
-      DebrifyTvChannelRecord channelToLaunch;
-
-      if (selectedChannelId == 'random') {
-        final random = Random();
-        channelToLaunch = channels[random.nextInt(channels.length)];
+      if (startupMode == 'playlist') {
+        await _launchPlaylistItem();
       } else {
-        final foundChannel = channels.firstWhereOrNull((c) => c.channelId == selectedChannelId);
-        if (foundChannel == null) {
-          // Channel not found, fallback to random
-          final random = Random();
-          channelToLaunch = channels[random.nextInt(channels.length)];
-        } else {
-          channelToLaunch = foundChannel;
-        }
+        await _launchChannel();
       }
-
-      // Show overlay IMMEDIATELY (before any navigation)
-      if (!mounted) {
-        _autoLaunchInProgress = false;
-        return;
-      }
-
-      setState(() {
-        _showAutoLaunchOverlay = true;
-        _autoLaunchChannelName = channelToLaunch.name;
-        _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
-          ? channelToLaunch.channelNumber
-          : null;
-      });
-
-      // Set flag to indicate overlay is showing
-      _isAutoLaunchShowingOverlay = true;
-
-      // Set the startup channel for DebrifyTVScreen to pick up
-      _startupChannelIdToLaunch = channelToLaunch.channelId;
-      _startupChannelIdConsumed = false; // Reset consumption flag
-      debugPrint('MainPage: Set startup channel ID: ${channelToLaunch.channelId}');
-
-      // Navigate to Debrify TV tab (index 3) - no delay needed, overlay is showing
-      if (!mounted) {
-        _autoLaunchInProgress = false;
-        return;
-      }
-
-      _onItemTapped(3); // Debrify TV tab
-
     } catch (e) {
-      debugPrint('MainPage: Failed to auto-launch channel: $e');
+      debugPrint('MainPage: Failed to auto-launch: $e');
       // Remove overlay on error
       if (mounted) {
         setState(() {
@@ -648,6 +598,129 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _startupChannelIdConsumed = false;
     } finally {
       _autoLaunchInProgress = false;
+    }
+  }
+
+  /// Launch a channel on startup
+  Future<void> _launchChannel() async {
+    // Load channels
+    final channels = await DebrifyTvRepository.instance.fetchAllChannels();
+    if (channels.isEmpty) {
+      return;
+    }
+
+    // Get selected channel ID
+    final selectedChannelId = await StorageService.getStartupChannelId() ?? 'random';
+
+    // Determine which channel to launch
+    DebrifyTvChannelRecord channelToLaunch;
+
+    if (selectedChannelId == 'random') {
+      final random = Random();
+      channelToLaunch = channels[random.nextInt(channels.length)];
+    } else {
+      final foundChannel = channels.firstWhereOrNull((c) => c.channelId == selectedChannelId);
+      if (foundChannel == null) {
+        // Channel not found, fallback to random
+        final random = Random();
+        channelToLaunch = channels[random.nextInt(channels.length)];
+      } else {
+        channelToLaunch = foundChannel;
+      }
+    }
+
+    // Show overlay IMMEDIATELY (before any navigation)
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _showAutoLaunchOverlay = true;
+      _autoLaunchChannelName = channelToLaunch.name;
+      _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
+        ? channelToLaunch.channelNumber
+        : null;
+    });
+
+    // Set flag to indicate overlay is showing
+    _isAutoLaunchShowingOverlay = true;
+
+    // Set the startup channel for DebrifyTVScreen to pick up
+    _startupChannelIdToLaunch = channelToLaunch.channelId;
+    _startupChannelIdConsumed = false; // Reset consumption flag
+    debugPrint('MainPage: Set startup channel ID: ${channelToLaunch.channelId}');
+
+    // Navigate to Debrify TV tab (index 3) - no delay needed, overlay is showing
+    if (!mounted) {
+      return;
+    }
+
+    _onItemTapped(3); // Debrify TV tab
+  }
+
+  /// Launch a playlist item on startup
+  Future<void> _launchPlaylistItem() async {
+    // Get playlist items
+    final playlistItems = await StorageService.getPlaylistItemsRaw();
+    if (playlistItems.isEmpty) {
+      return;
+    }
+
+    // Get selected playlist item ID
+    final selectedItemId = await StorageService.getStartupPlaylistItemId();
+    if (selectedItemId == null || selectedItemId.isEmpty) {
+      return;
+    }
+
+    // Find the playlist item
+    final playlistItem = playlistItems.firstWhereOrNull(
+      (item) => StorageService.computePlaylistDedupeKey(item) == selectedItemId,
+    );
+
+    if (playlistItem == null) {
+      return;
+    }
+
+    // Show overlay
+    if (!mounted) {
+      return;
+    }
+
+    final itemTitle = (playlistItem['title'] as String?) ?? 'Playlist Item';
+    setState(() {
+      _showAutoLaunchOverlay = true;
+      _autoLaunchChannelName = itemTitle;
+      _autoLaunchChannelNumber = null;
+    });
+
+    // Set flag to indicate overlay is showing
+    _isAutoLaunchShowingOverlay = true;
+
+    // Wait a bit for the overlay to show
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) {
+      return;
+    }
+
+    // Navigate to playlist tab
+    setState(() {
+      _selectedIndex = 1; // Playlist tab (index 1, not 2)
+    });
+
+    // Wait for UI to settle and playlist screen to be built
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Wait a bit more for the screen to fully initialize
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    // Use the exact same playback logic as clicking a playlist card
+    final playHandler = MainPageBridge.playPlaylistItem;
+    if (playHandler != null) {
+      await playHandler(playlistItem);
+    } else {
+      // As a fallback, store the item to be played
+      MainPageBridge.notifyPlaylistItemToAutoPlay(playlistItem);
     }
   }
 

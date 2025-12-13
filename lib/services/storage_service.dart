@@ -59,6 +59,8 @@ class StorageService {
   static const String _startupAutoLaunchEnabledKey =
       'startup_auto_launch_enabled';
   static const String _startupChannelIdKey = 'startup_channel_id';
+  static const String _startupModeKey = 'startup_mode'; // 'channel' or 'playlist'
+  static const String _startupPlaylistItemIdKey = 'startup_playlist_item_id';
 
   // PikPak API settings
   static const String _pikpakEnabledKey = 'pikpak_enabled';
@@ -1425,6 +1427,30 @@ class StorageService {
       await prefs.remove(_startupChannelIdKey);
     } else {
       await prefs.setString(_startupChannelIdKey, channelId);
+    }
+  }
+
+  static Future<String> getStartupMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupModeKey) ?? 'channel'; // Default to channel for backward compatibility
+  }
+
+  static Future<void> setStartupMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_startupModeKey, mode);
+  }
+
+  static Future<String?> getStartupPlaylistItemId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupPlaylistItemIdKey);
+  }
+
+  static Future<void> setStartupPlaylistItemId(String? itemId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (itemId == null) {
+      await prefs.remove(_startupPlaylistItemIdKey);
+    } else {
+      await prefs.setString(_startupPlaylistItemIdKey, itemId);
     }
   }
 
