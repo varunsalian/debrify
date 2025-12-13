@@ -1406,9 +1406,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _currentViewNodes!.length,
+      cacheExtent: 200.0, // Pre-cache items for smoother scrolling
+      addRepaintBoundaries: true, // Optimize repainting
       itemBuilder: (context, index) {
         final node = _currentViewNodes![index];
-        return _buildNodeCard(node, index);
+        return RepaintBoundary(
+          child: _buildNodeCard(node, index),
+        );
       },
     );
   }
@@ -1855,6 +1859,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           controller: _torrentScrollController,
           padding: const EdgeInsets.all(16),
           itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
+          cacheExtent: 200.0, // Pre-cache items for smoother scrolling
+          addRepaintBoundaries: true, // Optimize repainting
           itemBuilder: (context, index) {
             if (index == _torrents.length) {
               // Loading more indicator
@@ -1978,6 +1984,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           controller: _downloadScrollController,
           padding: const EdgeInsets.all(16),
           itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
+          cacheExtent: 200.0, // Pre-cache items for smoother scrolling
+          addRepaintBoundaries: true, // Optimize repainting
           itemBuilder: (context, index) {
             if (index == _downloads.length) {
               // Loading more indicator

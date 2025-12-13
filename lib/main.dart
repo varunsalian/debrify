@@ -126,6 +126,22 @@ class DebrifyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Debrify',
       debugShowCheckedModeBanner: false,
+      // Performance optimizations for TV
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            // Respect accessibility font scaling but clamp to max 1.3 for TV layout
+            textScaler: TextScaler.linear(
+              min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
+            ),
+          ),
+          child: child!,
+        );
+      },
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        // Optimize scroll physics for TV
+        physics: const ClampingScrollPhysics(),
+      ),
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,

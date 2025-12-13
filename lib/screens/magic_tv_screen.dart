@@ -10553,8 +10553,12 @@ class _CommunityChannelsDialogState extends State<_CommunityChannelsDialog> {
                   child: ListView.builder(
                     controller: _channelListScrollController,
                     itemCount: _manifest!.channels.length,
+                    cacheExtent: 200.0, // Pre-cache items for smoother scrolling
+                    addRepaintBoundaries: true, // Optimize repainting
                     itemBuilder: (context, index) {
-                      return _buildChannelTile(_manifest!.channels[index]);
+                      return RepaintBoundary(
+                        child: _buildChannelTile(_manifest!.channels[index]),
+                      );
                     },
                   ),
                 ),
