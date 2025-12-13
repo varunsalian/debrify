@@ -28,6 +28,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   bool _saving = false;
   bool _checkCacheBeforeSearch = false;
   bool _integrationEnabled = true;
+  bool _hiddenFromNav = false;
   String _postTorrentAction = 'choose';
 
   @override
@@ -41,12 +42,14 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     final cachePref = await StorageService.getTorboxCacheCheckEnabled();
     final integrationEnabled =
         await StorageService.getTorboxIntegrationEnabled();
+    final hiddenFromNav = await StorageService.getTorboxHiddenFromNav();
     final postAction = await StorageService.getTorboxPostTorrentAction();
     setState(() {
       _savedApiKey = apiKey;
       _checkCacheBeforeSearch = cachePref;
       _loading = false;
       _integrationEnabled = integrationEnabled;
+      _hiddenFromNav = hiddenFromNav;
       _postTorrentAction = postAction;
     });
 
@@ -112,12 +115,15 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     debugPrint('TorboxSettingsPage: Deleting stored API key.');
     await StorageService.deleteTorboxApiKey();
     TorboxAccountService.clearUserInfo();
+    // Clear the hidden from nav flag on logout
+    await StorageService.clearTorboxHiddenFromNav();
     FocusScope.of(context).unfocus();
     setState(() {
       _savedApiKey = null;
       _isEditing = false;
+      _hiddenFromNav = false;
     });
-    _snack('Torbox API key removed');
+    _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
   }
 
@@ -146,6 +152,102 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
       await TorboxAccountService.refreshUserInfo();
       if (!mounted) return;
       setState(() {});
+    }
+  }
+
+  Future<void> _toggleHideFromNav(bool value) async {
+    if (value) {
+      // Show confirmation dialog before enabling
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Hide Torbox?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This will hide the Torbox tab from navigation.',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.amber.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'To show Torbox again, you must logout and login. This is a security measure.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Hide'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) {
+        return;
+      }
+
+      // Enable hiding
+      await StorageService.setTorboxHiddenFromNav(true);
+      setState(() {
+        _hiddenFromNav = true;
+      });
+      MainPageBridge.notifyIntegrationChanged();
+      _snack('Torbox hidden from navigation', err: false);
+    } else {
+      // Try to disable - show dialog explaining logout requirement
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Security Restriction'),
+          content: SingleChildScrollView(
+            child: Text(
+              'To show Torbox in navigation again, you must logout and login. This is a security measure to prevent unauthorized changes.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -187,6 +289,75 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Hide from Navigation Toggle
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          value: _hiddenFromNav,
+                          onChanged: _savedApiKey != null ? _toggleHideFromNav : null,
+                          title: const Text(
+                            'Hide from Navigation',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          subtitle: Text(
+                            _savedApiKey == null
+                                ? 'Login to enable this option'
+                                : _hiddenFromNav
+                                    ? 'Torbox is hidden from navigation'
+                                    : 'Show/hide Torbox tab from navigation bar',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          secondary: Icon(
+                            _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
+                            color: _hiddenFromNav ? Colors.amber : null,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 4,
+                          ),
+                        ),
+                        if (_hiddenFromNav)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 16,
+                                    color: Colors.amber.shade700,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'To show Torbox in navigation again, please logout and login',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.amber.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(
@@ -359,47 +530,16 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      _isEditing = true;
-                                      if (_savedApiKey != null &&
-                                          _savedApiKey!.isNotEmpty) {
-                                            _apiKeyController
-                                              ..text = _savedApiKey!
-                                              ..selection = TextSelection.collapsed(
-                                                offset: _savedApiKey!.length,
-                                              );
-                                      } else {
-                                        _apiKeyController.clear();
-                                      }
-                                    });
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
-                                      if (mounted) {
-                                        _apiKeyFocusNode.requestFocus();
-                                      }
-                                    });
-                                  },
-                                      icon: const Icon(Icons.edit),
-                                      label: const Text('Edit'),
-                                    ),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _deleteKey,
+                                  icon: const Icon(Icons.logout),
+                                  label: const Text('Logout'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.red,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: _deleteKey,
-                                      icon: const Icon(Icons.delete),
-                                      label: const Text('Delete'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.red,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ] else ...[
                               FilledButton.icon(

@@ -1,29 +1,33 @@
 import 'dart:ui';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/torbox_file.dart';
 import '../../models/torbox_torrent.dart';
+import '../../models/rd_file_node.dart';
 import '../../services/torbox_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/download_service.dart';
 import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/series_parser.dart';
+import '../../utils/torbox_folder_tree_builder.dart';
 import '../../widgets/stat_chip.dart';
+import '../../widgets/file_selection_dialog.dart';
 import '../video_player_screen.dart';
 
 class TorboxDownloadsScreen extends StatefulWidget {
   const TorboxDownloadsScreen({
     super.key,
-    this.initialTorrentForAction,
-    this.initialAction,
+    this.initialTorrentToOpen,
   });
 
-  final TorboxTorrent? initialTorrentForAction;
-  final TorboxQuickAction? initialAction;
+  final TorboxTorrent? initialTorrentToOpen;
 
   @override
   State<TorboxDownloadsScreen> createState() => _TorboxDownloadsScreenState();
@@ -42,8 +46,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   String _errorMessage = '';
   String? _apiKey;
   TorboxTorrent? _pendingInitialTorrent;
-  TorboxQuickAction? _pendingInitialAction;
   bool _initialActionHandled = false;
+
+  // Folder navigation state
+  TorboxTorrent? _currentTorrent; // null means we're at root (torrent list)
+  List<String> _currentPath = []; // Path within current torrent's folder tree
+  RDFileNode? _currentFolderNode; // Current folder node being viewed
+  final List<({TorboxTorrent? torrent, List<String> path, RDFileNode? node})> _navigationStack = [];
 
   static const int _limit = 50;
 
@@ -51,85 +60,79 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _pendingInitialTorrent = widget.initialTorrentForAction;
-    _pendingInitialAction = widget.initialAction;
+    _pendingInitialTorrent = widget.initialTorrentToOpen;
     _loadApiKeyAndTorrents();
   }
 
   @override
   void didUpdateWidget(TorboxDownloadsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialTorrentForAction != null &&
-        widget.initialAction != null) {
-      _pendingInitialTorrent = widget.initialTorrentForAction;
-      _pendingInitialAction = widget.initialAction;
+    if (widget.initialTorrentToOpen != null) {
+      _pendingInitialTorrent = widget.initialTorrentToOpen;
       _initialActionHandled = false;
       _maybeTriggerInitialAction();
     }
   }
 
-  Future<void> _showDownloadOptions(TorboxTorrent torrent) async {
+  /// Download files from a torrent with file selection dialog
+  Future<void> _downloadAllTorrentFiles(TorboxTorrent torrent) async {
     final key = _apiKey;
     if (key == null || key.isEmpty) {
-      _showComingSoon('Add Torbox API key');
+      _showSnackBar('Torbox API key not configured');
       return;
     }
 
-    await showModalBottomSheet<void>(
+    print('📦 Showing file selection for torrent: ${torrent.name}');
+    print('   File count: ${torrent.files.length}');
+
+    if (torrent.files.isEmpty) {
+      _showSnackBar('No files found in torrent');
+      return;
+    }
+
+    // Temporarily set _currentTorrent for the download process
+    final previousTorrent = _currentTorrent;
+    _currentTorrent = torrent;
+
+    // Format files for FileSelectionDialog
+    final formattedFiles = <Map<String, dynamic>>[];
+    for (final file in torrent.files) {
+      // Use shortName for file name, fullName for path structure
+      final fullPath = file.name; // Full path with folders
+      final relativePath = fullPath.contains('/')
+          ? fullPath.substring(fullPath.indexOf('/') + 1)
+          : fullPath;
+
+      formattedFiles.add({
+        '_fullPath': relativePath,
+        'name': file.shortName.isNotEmpty ? file.shortName : FileUtils.getFileName(file.name),
+        'size': file.size.toString(),
+        '_torboxFile': file, // Store original TorboxFile for download
+      });
+    }
+
+    // Show file selection dialog
+    if (!mounted) {
+      _currentTorrent = previousTorrent;
+      return;
+    }
+
+    await showDialog(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetContext) {
-        bool isLoadingZip = false;
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.archive_outlined),
-                      title: const Text('Download whole torrent as ZIP'),
-                      subtitle: const Text(
-                        'Create a single archive for offline use',
-                      ),
-                      trailing: isLoadingZip
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : null,
-                      enabled: !isLoadingZip,
-                      onTap: isLoadingZip
-                          ? null
-                          : () {
-                              Navigator.of(sheetContext).pop();
-                              _showComingSoon('Torbox ZIP download');
-                            },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.list_alt),
-                      title: const Text('Select files to download'),
-                      subtitle: const Text('Choose specific files to download'),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        _showTorboxFileSelectionSheet(torrent);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
-            );
+      builder: (BuildContext context) {
+        return FileSelectionDialog(
+          files: formattedFiles,
+          torrentName: torrent.name,
+          onDownload: (selectedFiles) {
+            if (selectedFiles.isEmpty) return;
+            _downloadSelectedTorboxFiles(selectedFiles, torrent.name);
           },
         );
       },
     );
+
+    // Restore previous torrent
+    _currentTorrent = previousTorrent;
   }
 
   Future<void> _handleAddToPlaylist(TorboxTorrent torrent) async {
@@ -281,51 +284,39 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       ),
     ];
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-              ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              border: Border.all(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  blurRadius: 28,
-                  offset: const Offset(0, 16),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
                 ),
-              ],
-            ),
-            child: SafeArea(
-              top: false,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 28,
+                    offset: const Offset(0, 16),
+                  ),
+                ],
+              ),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
                     for (final option in options) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -873,8 +864,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       return;
     }
     final pendingTorrent = _pendingInitialTorrent;
-    final pendingAction = _pendingInitialAction;
-    if (pendingTorrent == null || pendingAction == null) {
+    if (pendingTorrent == null) {
       return;
     }
 
@@ -892,22 +882,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     _initialActionHandled = true;
     _pendingInitialTorrent = null;
-    _pendingInitialAction = null;
 
     final selected = target;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      switch (pendingAction) {
-        case TorboxQuickAction.play:
-          _handlePlayTorrent(selected);
-          break;
-        case TorboxQuickAction.download:
-          _showDownloadOptions(selected);
-          break;
-        case TorboxQuickAction.files:
-          _showTorboxFileSelectionSheet(selected);
-          break;
-      }
+      // Navigate directly into the torrent folder instead of showing popups
+      // This matches the Real-Debrid behavior
+      _navigateIntoTorrent(selected);
     });
   }
 
@@ -1041,15 +1022,16 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
     final bool isMovieCollection = !isSeries && hasVideo;
 
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: StatefulBuilder(
-            builder: (context, setSheetState) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: StatefulBuilder(
+              builder: (context, setSheetState) {
               final selectedEntries =
                   entries
                       .where((entry) => selectedIndices.contains(entry.index))
@@ -1154,57 +1136,39 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   ? '0 B'
                   : Formatters.formatFileSize(selectedBytes);
 
-              return SafeArea(
-                top: false,
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.9,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFF0F172A).withValues(alpha: 0.98),
-                        const Color(0xFF1E293B).withValues(alpha: 0.98),
-                      ],
-                    ),
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(28),
-                    ),
-                    border: Border.all(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 30,
-                        offset: const Offset(0, -10),
-                      ),
-                      BoxShadow(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 0),
-                      ),
+              return Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.9,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      const Color(0xFF0F172A).withValues(alpha: 0.98),
+                      const Color(0xFF1E293B).withValues(alpha: 0.98),
                     ],
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[600],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 30,
+                      offset: const Offset(0, 10),
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 0),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 24),
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1404,9 +1368,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       ),
                     ],
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },
@@ -1422,7 +1386,25 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     if (key == null || key.isEmpty) {
       Navigator.of(sheetContext).pop();
       if (mounted) {
-        _showComingSoon('Add Torbox API key');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Torbox API key is required. Please add it in Settings.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
+      return true;
+    }
+
+    if (entriesToDownload.isEmpty) {
+      Navigator.of(sheetContext).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No files selected for download.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
       }
       return true;
     }
@@ -1435,15 +1417,413 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     final count = entriesToDownload.length;
     debugPrint(
-      'TorboxDownloadsScreen: download placeholder triggered for torrent ${torrent.id} ($count item(s)).',
+      'TorboxDownloadsScreen: Starting download for torrent ${torrent.id} ($count file(s)).',
     );
-    if (count == 0) {
-      _showComingSoon('No files selected');
-      return true;
+
+    // Show loading indicator
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Preparing $count file${count == 1 ? '' : 's'} for download...'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    int successCount = 0;
+    int failureCount = 0;
+    String? lastError;
+
+    try {
+      for (final entry in entriesToDownload) {
+        try {
+          final file = entry.file;
+          final fileName = file.shortName.isNotEmpty
+              ? file.shortName
+              : FileUtils.getFileName(file.name);
+
+          debugPrint(
+            'TorboxDownloadsScreen: Requesting download link for file ${file.id} in torrent ${torrent.id}',
+          );
+
+          // Request download link
+          final downloadUrl = await TorboxService.requestFileDownloadLink(
+            apiKey: key,
+            torrentId: torrent.id,
+            fileId: file.id,
+          );
+
+          if (downloadUrl.isEmpty) {
+            debugPrint(
+              'TorboxDownloadsScreen: Got empty download URL for file ${file.id}',
+            );
+            failureCount++;
+            lastError = 'Empty download URL returned';
+            continue;
+          }
+
+          debugPrint(
+            'TorboxDownloadsScreen: Got download URL for file ${file.id}, enqueueing...',
+          );
+
+          // Create meta JSON with Torbox-specific fields
+          final meta = jsonEncode({
+            'torboxTorrentId': torrent.id,
+            'torboxFileId': file.id,
+            'apiKey': key,
+            'torboxDownload': true,
+          });
+
+          // Enqueue download
+          await DownloadService.instance.enqueueDownload(
+            url: downloadUrl,
+            fileName: fileName,
+            meta: meta,
+            torrentName: torrent.name,
+          );
+
+          successCount++;
+          debugPrint(
+            'TorboxDownloadsScreen: Successfully enqueued file ${file.id} ($fileName)',
+          );
+        } catch (e, stackTrace) {
+          debugPrint('TorboxDownloadsScreen: Failed to enqueue file ${entry.file.id}: $e');
+          debugPrint('Stack trace: $stackTrace');
+          failureCount++;
+          lastError = e.toString();
+        }
+      }
+
+      if (!mounted) return true;
+
+      // Show result feedback
+      if (successCount > 0 && failureCount == 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '$successCount file${successCount == 1 ? '' : 's'} queued for download',
+            ),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+      } else if (successCount > 0 && failureCount > 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '$successCount file${successCount == 1 ? '' : 's'} queued, $failureCount failed',
+            ),
+            backgroundColor: const Color(0xFFF59E0B),
+          ),
+        );
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to queue downloads${lastError != null ? ': ${lastError.replaceFirst('Exception: ', '')}' : ''}',
+            ),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('TorboxDownloadsScreen: Error during batch download: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
     }
 
-    _showComingSoon('Torbox downloads');
     return true;
+  }
+
+  Future<void> _enqueueTorboxZipDownload({
+    required TorboxTorrent torrent,
+    required BuildContext sheetContext,
+  }) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      Navigator.of(sheetContext).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Torbox API key is required. Please add it in Settings.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
+      return;
+    }
+
+    Navigator.of(sheetContext).pop();
+
+    if (!mounted) {
+      return;
+    }
+
+    debugPrint(
+      'TorboxDownloadsScreen: Starting ZIP download for torrent ${torrent.id}',
+    );
+
+    // Show loading indicator
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Preparing ZIP download...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      // Generate ZIP permalink
+      final zipUrl = TorboxService.createZipPermalink(key, torrent.id);
+
+      if (zipUrl.isEmpty) {
+        debugPrint('TorboxDownloadsScreen: Failed to generate ZIP permalink');
+        if (mounted) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Failed to generate ZIP download link'),
+              backgroundColor: Color(0xFFEF4444),
+            ),
+          );
+        }
+        return;
+      }
+
+      debugPrint('TorboxDownloadsScreen: Generated ZIP permalink: $zipUrl');
+
+      // Create meta JSON with Torbox-specific fields for ZIP
+      final meta = jsonEncode({
+        'torboxTorrentId': torrent.id,
+        'apiKey': key,
+        'torboxDownload': true,
+        'torboxZip': true,
+      });
+
+      // Enqueue ZIP download
+      final zipFileName = '${torrent.name}.zip';
+      await DownloadService.instance.enqueueDownload(
+        url: zipUrl,
+        fileName: zipFileName,
+        meta: meta,
+        torrentName: torrent.name,
+      );
+
+      debugPrint('TorboxDownloadsScreen: Successfully enqueued ZIP download');
+
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('ZIP download queued successfully'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('TorboxDownloadsScreen: Error during ZIP download: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Show dialog with download options: select files or download as ZIP
+  void _showDownloadOptionsDialog(TorboxTorrent torrent) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 28,
+                    offset: const Offset(0, 16),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.download_rounded,
+                          color: Color(0xFF10B981),
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Download Options',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          icon: const Icon(Icons.close),
+                          color: Colors.grey.shade400,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Options
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        // Option 1: Select files to download
+                        _buildDownloadOptionCard(
+                          icon: Icons.checklist_rounded,
+                          title: 'Select files to download',
+                          description: 'Choose specific files from this torrent',
+                          color: const Color(0xFF6366F1),
+                          onTap: () {
+                            Navigator.of(dialogContext).pop();
+                            _downloadAllTorrentFiles(torrent);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        // Option 2: Download whole torrent as ZIP
+                        _buildDownloadOptionCard(
+                          icon: Icons.folder_zip_rounded,
+                          title: 'Download whole torrent as ZIP',
+                          description: 'Download all files in a single ZIP archive',
+                          color: const Color(0xFF10B981),
+                          onTap: () {
+                            _enqueueTorboxZipDownload(
+                              torrent: torrent,
+                              sheetContext: dialogContext,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build a download option card for the dialog
+  Widget _buildDownloadOptionCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                color.withValues(alpha: 0.15),
+                color.withValues(alpha: 0.05),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: color.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: color.withValues(alpha: 0.5),
+                size: 16,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildTorboxRawList({
@@ -1462,6 +1842,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             ? entry.file.name
             : entry.file.absolutePath;
         return Container(
+          key: ValueKey('torbox-file-${entry.index}'),
           margin: const EdgeInsets.only(bottom: 12),
           child: _buildTorboxFileCard(
             entry: entry,
@@ -1820,6 +2201,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   ? 'E${info.episode.toString().padLeft(2, '0')}'
                   : null;
               return Container(
+                key: ValueKey('torbox-episode-${entry.index}'),
                 margin: const EdgeInsets.only(bottom: 12),
                 child: _buildTorboxFileCard(
                   entry: entry,
@@ -2304,17 +2686,801 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     MainPageBridge.switchTab?.call(6);
   }
 
+  // ==================== FILE/FOLDER ACTION METHODS ====================
+
+  /// Play all videos in a folder
+  Future<void> _playFolderVideos(RDFileNode folderNode) async {
+    if (_currentTorrent == null) return;
+
+    final videoFiles = TorboxFolderTreeBuilder.collectVideoFiles(folderNode);
+    if (videoFiles.isEmpty) {
+      _showSnackBar('No video files found in this folder');
+      return;
+    }
+
+    // Convert RDFileNodes to TorboxFiles for playback
+    final torboxFiles = videoFiles
+        .map((node) {
+          // Find corresponding TorboxFile by linkIndex
+          if (node.linkIndex >= 0 && node.linkIndex < _currentTorrent!.files.length) {
+            return _currentTorrent!.files[node.linkIndex];
+          }
+          return null;
+        })
+        .where((f) => f != null)
+        .cast<TorboxFile>()
+        .toList();
+
+    if (torboxFiles.isEmpty) {
+      _showSnackBar('Could not load video files');
+      return;
+    }
+
+    // Use existing play logic
+    await _playTorboxFiles(torboxFiles, folderNode.name);
+  }
+
+  /// Play a single video file
+  Future<void> _playVideoFile(RDFileNode fileNode) async {
+    if (_currentTorrent == null || fileNode.isFolder) return;
+
+    // Find corresponding TorboxFile
+    if (fileNode.linkIndex < 0 || fileNode.linkIndex >= _currentTorrent!.files.length) {
+      _showSnackBar('File not found');
+      return;
+    }
+
+    final torboxFile = _currentTorrent!.files[fileNode.linkIndex];
+
+    try {
+      final key = _apiKey;
+      if (key == null || key.isEmpty) {
+        _showSnackBar('Torbox API key not configured');
+        return;
+      }
+
+      final streamUrl = await _requestTorboxStreamUrl(
+        apiKey: key,
+        torrent: _currentTorrent!,
+        file: torboxFile,
+      );
+
+      if (!mounted) return;
+
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: streamUrl,
+          title: fileNode.name,
+          subtitle: Formatters.formatFileSize(fileNode.bytes ?? 0),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed to play file: ${_formatTorboxError(e)}');
+    }
+  }
+
+  /// Download a file or folder
+  Future<void> _downloadFileOrFolder(RDFileNode node) async {
+    if (_currentTorrent == null) {
+      print('❌ Download: _currentTorrent is null');
+      return;
+    }
+
+    print('📥 Download requested: isFolder=${node.isFolder}, name=${node.name}');
+    print('   Node details: fileId=${node.fileId}, linkIndex=${node.linkIndex}, bytes=${node.bytes}');
+    print('   Current torrent: id=${_currentTorrent!.id}, filesCount=${_currentTorrent!.files.length}');
+
+    if (node.isFolder) {
+      // Show file selection dialog for folder
+      final allFiles = TorboxFolderTreeBuilder.collectAllFiles(node);
+      print('   Collected ${allFiles.length} files from folder');
+
+      final torboxFiles = allFiles
+          .map((n) {
+            print('   Mapping file: name=${n.name}, linkIndex=${n.linkIndex}, fileId=${n.fileId}');
+            if (n.linkIndex >= 0 && n.linkIndex < _currentTorrent!.files.length) {
+              final torboxFile = _currentTorrent!.files[n.linkIndex];
+              print('   ✅ Mapped to TorboxFile: id=${torboxFile.id}, name=${torboxFile.name}');
+              return torboxFile;
+            }
+            print('   ❌ linkIndex out of bounds: ${n.linkIndex} >= ${_currentTorrent!.files.length}');
+            return null;
+          })
+          .where((f) => f != null)
+          .cast<TorboxFile>()
+          .toList();
+
+      print('   Mapped to ${torboxFiles.length} TorboxFiles');
+
+      if (torboxFiles.isEmpty) {
+        _showSnackBar('No files found in folder');
+        return;
+      }
+
+      // Format files for FileSelectionDialog
+      final formattedFiles = <Map<String, dynamic>>[];
+      for (final file in torboxFiles) {
+        // Use shortName for file name, fullName for path structure
+        final fullPath = file.name; // Full path with folders
+        final relativePath = fullPath.contains('/')
+            ? fullPath.substring(fullPath.indexOf('/') + 1)
+            : fullPath;
+
+        formattedFiles.add({
+          '_fullPath': relativePath,
+          'name': file.shortName.isNotEmpty ? file.shortName : FileUtils.getFileName(file.name),
+          'size': file.size.toString(),
+          '_torboxFile': file, // Store original TorboxFile for download
+        });
+      }
+
+      // Show file selection dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return FileSelectionDialog(
+            files: formattedFiles,
+            torrentName: node.name,
+            onDownload: (selectedFiles) {
+              if (selectedFiles.isEmpty) return;
+              _downloadSelectedTorboxFiles(selectedFiles, node.name);
+            },
+          );
+        },
+      );
+    } else {
+      // Download single file
+      print('   Attempting single file download');
+      print('   Bounds check: ${node.linkIndex} >= 0 && ${node.linkIndex} < ${_currentTorrent!.files.length}');
+
+      if (node.linkIndex >= 0 && node.linkIndex < _currentTorrent!.files.length) {
+        final torboxFile = _currentTorrent!.files[node.linkIndex];
+        print('   ✅ Found TorboxFile at index ${node.linkIndex}:');
+        print('      TorboxFile.id=${torboxFile.id}, name=${torboxFile.name}');
+        print('      Node.fileId=${node.fileId}');
+        print('      IDs match: ${torboxFile.id == node.fileId}');
+        await _downloadSingleFile(torboxFile);
+      } else {
+        print('   ❌ linkIndex out of bounds! linkIndex=${node.linkIndex}, filesLength=${_currentTorrent!.files.length}');
+        _showSnackBar('Download failed: File index out of bounds');
+      }
+    }
+  }
+
+  /// Download selected Torbox files from file selection dialog
+  Future<void> _downloadSelectedTorboxFiles(
+    List<Map<String, dynamic>> selectedFiles,
+    String folderName,
+  ) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty || _currentTorrent == null) {
+      print('❌ _downloadSelectedTorboxFiles: Missing requirements');
+      return;
+    }
+
+    // CRITICAL: Capture torrent reference before async operations
+    // _currentTorrent may be set to null during async operations (race condition)
+    final torrent = _currentTorrent!;
+
+    if (!mounted) return;
+
+    print('📦 _downloadSelectedTorboxFiles called: folderName=$folderName, selectedCount=${selectedFiles.length}');
+
+    try {
+      // Show progress dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Queuing ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}...',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      int successCount = 0;
+      int failCount = 0;
+
+      // CRITICAL: Following the SAME pattern as Real-Debrid
+      // We DON'T request download URLs upfront - we queue with metadata for lazy fetching
+      // The DownloadService will request the URL when it's ready to download (lazy loading)
+      for (final fileData in selectedFiles) {
+        try {
+          // Extract TorboxFile from the formatted data
+          final file = fileData['_torboxFile'] as TorboxFile;
+          final fileName = (fileData['_fullPath'] as String?) ?? (fileData['name'] as String? ?? file.shortName);
+
+          print('   Processing file: ${file.name}');
+
+          // Pass metadata for lazy URL fetching (no API call - instant!)
+          // The download service will request the URL when ready
+          final meta = jsonEncode({
+            'torboxTorrentId': torrent.id,
+            'torboxFileId': file.id,
+            'apiKey': key,
+            'torboxDownload': true,
+          });
+
+          // Queue download instantly (download service will fetch URL when ready)
+          await DownloadService.instance.enqueueDownload(
+            url: '', // Empty URL - will be fetched by download service
+            fileName: fileName,
+            meta: meta,
+            torrentName: folderName,
+            context: mounted ? context : null,
+          );
+
+          print('     ✅ Enqueued successfully');
+          successCount++;
+        } catch (e) {
+          print('     ❌ Error: $e');
+          failCount++;
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Show result
+      if (successCount > 0 && failCount == 0) {
+        _showSnackBar(
+          'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+          isError: false,
+        );
+      } else if (successCount > 0 && failCount > 0) {
+        _showSnackBar(
+          'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+        );
+      } else {
+        _showSnackBar('Failed to queue any files for download');
+      }
+    } catch (e) {
+      // Close any open dialogs
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to queue downloads: $e');
+    }
+  }
+
+  /// Add file or folder to playlist
+  Future<void> _addFileOrFolderToPlaylist(RDFileNode node) async {
+    if (_currentTorrent == null) return;
+
+    if (node.isFolder) {
+      // Add all video files in folder
+      final videoFiles = TorboxFolderTreeBuilder.collectVideoFiles(node);
+      final torboxFiles = videoFiles
+          .map((n) {
+            if (n.linkIndex >= 0 && n.linkIndex < _currentTorrent!.files.length) {
+              return _currentTorrent!.files[n.linkIndex];
+            }
+            return null;
+          })
+          .where((f) => f != null)
+          .cast<TorboxFile>()
+          .toList();
+
+      if (torboxFiles.isEmpty) {
+        _showSnackBar('No video files found in folder');
+        return;
+      }
+
+      // Add as collection
+      final ids = torboxFiles.map((f) => f.id).toList();
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'torbox',
+        'title': node.name,
+        'kind': 'collection',
+        'torboxTorrentId': _currentTorrent!.id,
+        'torboxFileIds': ids,
+        'torrent_hash': _currentTorrent!.hash,
+        'count': torboxFiles.length,
+      });
+
+      _showSnackBar(
+        added ? 'Added ${torboxFiles.length} videos to playlist' : 'Already in playlist',
+        isError: !added,
+      );
+    } else {
+      // Add single file
+      if (node.linkIndex >= 0 && node.linkIndex < _currentTorrent!.files.length) {
+        final torboxFile = _currentTorrent!.files[node.linkIndex];
+        final added = await StorageService.addPlaylistItemRaw({
+          'provider': 'torbox',
+          'title': node.name,
+          'kind': 'single',
+          'torboxTorrentId': _currentTorrent!.id,
+          'torboxFileId': torboxFile.id,
+          'torrent_hash': _currentTorrent!.hash,
+          'sizeBytes': torboxFile.size,
+        });
+
+        _showSnackBar(
+          added ? 'Added to playlist' : 'Already in playlist',
+          isError: !added,
+        );
+      }
+    }
+  }
+
+  /// Copy file download link
+  Future<void> _copyFileLink(RDFileNode node) async {
+    if (_currentTorrent == null || node.isFolder) return;
+
+    if (node.linkIndex >= 0 && node.linkIndex < _currentTorrent!.files.length) {
+      final torboxFile = _currentTorrent!.files[node.linkIndex];
+      await _copyTorboxFileLink(_currentTorrent!, torboxFile);
+    }
+  }
+
+  /// Open file with external player
+  Future<void> _openWithExternalPlayer(RDFileNode node) async {
+    if (_currentTorrent == null || node.isFolder) return;
+
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      _showSnackBar('Torbox API key not configured');
+      return;
+    }
+
+    if (node.linkIndex >= 0 && node.linkIndex < _currentTorrent!.files.length) {
+      final torboxFile = _currentTorrent!.files[node.linkIndex];
+
+      try {
+        // Show loading
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+
+        final downloadUrl = await TorboxService.requestFileDownloadLink(
+          apiKey: key,
+          torrentId: _currentTorrent!.id,
+          fileId: torboxFile.id,
+        );
+
+        if (!mounted) return;
+        Navigator.of(context).pop(); // Close loading
+
+        final Uri uri = Uri.parse(downloadUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          _showSnackBar('Opening with external player...', isError: false);
+        } else {
+          _showSnackBar('Could not open external player');
+        }
+      } catch (e) {
+        if (!mounted) return;
+        Navigator.of(context).pop(); // Close loading if still open
+        _showSnackBar('Failed to open: ${_formatTorboxError(e)}');
+      }
+    }
+  }
+
+  /// Helper: Download a single file
+  Future<void> _downloadSingleFile(TorboxFile file) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty || _currentTorrent == null) {
+      print('❌ _downloadSingleFile: Missing requirements - key=${key != null}, torrent=${_currentTorrent != null}');
+      return;
+    }
+
+    print('🔽 _downloadSingleFile called:');
+    print('   File: id=${file.id}, name=${file.name}, shortName=${file.shortName}');
+    print('   Torrent: id=${_currentTorrent!.id}, name=${_currentTorrent!.name}');
+    print('   API Key: ${key.substring(0, 8)}...');
+
+    try {
+      final fileName = file.shortName.isNotEmpty
+          ? file.shortName
+          : FileUtils.getFileName(file.name);
+
+      print('   Using fileName: $fileName');
+
+      // Pass metadata for lazy URL fetching (download service will fetch URL when ready)
+      final meta = jsonEncode({
+        'torboxTorrentId': _currentTorrent!.id,
+        'torboxFileId': file.id,
+        'apiKey': key,
+        'torboxDownload': true,
+      });
+
+      print('   📥 Enqueueing download with DownloadService (lazy URL fetching)...');
+      await DownloadService.instance.enqueueDownload(
+        url: '', // Empty URL - will be fetched by download service
+        fileName: fileName,
+        meta: meta,
+        context: mounted ? context : null,
+      );
+
+      print('   ✅ Download queued successfully!');
+      _showSnackBar('Download queued: $fileName', isError: false);
+    } catch (e, stackTrace) {
+      print('   ❌ Error in _downloadSingleFile:');
+      print('   Error: $e');
+      print('   StackTrace: $stackTrace');
+      _showSnackBar('Failed to queue download: ${_formatTorboxError(e)}');
+    }
+  }
+
+  /// Helper: Download multiple files
+  Future<void> _downloadMultipleFiles(List<TorboxFile> files, String folderName) async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty || _currentTorrent == null) {
+      print('❌ _downloadMultipleFiles: Missing requirements');
+      return;
+    }
+
+    print('📦 _downloadMultipleFiles called: folderName=$folderName, fileCount=${files.length}');
+
+    if (files.isEmpty) {
+      print('   ❌ No files to download (empty list)');
+      _showSnackBar('No files to download');
+      return;
+    }
+
+    // Show confirmation
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Download Files'),
+        content: Text('Download ${files.length} file${files.length == 1 ? '' : 's'} from "$folderName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Download'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) {
+      print('   User cancelled or context not mounted');
+      return;
+    }
+
+    print('   User confirmed download, processing ${files.length} files...');
+
+    int successCount = 0;
+    int failCount = 0;
+
+    // CRITICAL: Following the SAME pattern as Real-Debrid
+    // We DON'T request download URLs upfront - we queue with metadata for lazy fetching
+    // The DownloadService will request the URL when it's ready to download (lazy loading)
+    for (final file in files) {
+      print('   Processing file ${successCount + failCount + 1}/${files.length}: ${file.name}');
+      try {
+        final fileName = file.shortName.isNotEmpty
+            ? file.shortName
+            : FileUtils.getFileName(file.name);
+
+        // Pass metadata for lazy URL fetching (no API call - instant!)
+        // The download service will request the URL when ready
+        final meta = jsonEncode({
+          'torboxTorrentId': _currentTorrent!.id,
+          'torboxFileId': file.id,
+          'apiKey': key,
+          'torboxDownload': true,
+        });
+
+        // Queue download instantly (download service will fetch URL when ready)
+        await DownloadService.instance.enqueueDownload(
+          url: '', // Empty URL - will be fetched by download service
+          fileName: fileName,
+          meta: meta,
+          torrentName: folderName,
+          context: mounted ? context : null,
+        );
+
+        print('     ✅ Enqueued successfully');
+        successCount++;
+      } catch (e) {
+        print('     ❌ Error: $e');
+        failCount++;
+      }
+    }
+
+    // Show result
+    if (successCount > 0 && failCount == 0) {
+      _showSnackBar(
+        'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+        isError: false,
+      );
+    } else if (successCount > 0 && failCount > 0) {
+      _showSnackBar(
+        'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+      );
+    } else {
+      _showSnackBar('Failed to queue any files for download');
+    }
+  }
+
+  /// Helper: Play torbox files (reuse existing logic)
+  Future<void> _playTorboxFiles(List<TorboxFile> files, String collectionName) async {
+    // This will reuse the existing _handlePlayTorrent logic
+    // but with just the files subset
+    final key = _apiKey;
+    if (key == null || key.isEmpty || _currentTorrent == null) return;
+
+    final videoFiles = files.where((file) {
+      if (file.zipped) return false;
+      return _torboxFileLooksLikeVideo(file);
+    }).toList();
+
+    if (videoFiles.isEmpty) {
+      _showSnackBar('No playable video files found');
+      return;
+    }
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      try {
+        final streamUrl = await _requestTorboxStreamUrl(
+          apiKey: key,
+          torrent: _currentTorrent!,
+          file: file,
+        );
+        if (!mounted) return;
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: streamUrl,
+            title: collectionName,
+            subtitle: Formatters.formatFileSize(file.size),
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        _showSnackBar('Failed to play file: ${_formatTorboxError(e)}');
+      }
+      return;
+    }
+
+    // Multiple videos - build playlist (reuse existing logic from _handlePlayTorrent)
+    final candidates = videoFiles.map((file) {
+      final displayName = _torboxDisplayName(file);
+      final info = SeriesParser.parseFilename(displayName);
+      return _TorboxEpisodeCandidate(
+        file: file,
+        displayName: displayName,
+        info: info,
+      );
+    }).toList();
+
+    final filenames = candidates.map((entry) => entry.displayName).toList();
+    final bool isSeriesCollection =
+        candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+    final sortedCandidates = [...candidates];
+    sortedCandidates.sort((a, b) {
+      final aInfo = a.info;
+      final bInfo = b.info;
+
+      final aIsSeries =
+          aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
+      final bIsSeries =
+          bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
+
+      if (aIsSeries && bIsSeries) {
+        final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+        if (seasonCompare != 0) return seasonCompare;
+
+        final episodeCompare = (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+        if (episodeCompare != 0) return episodeCompare;
+      } else if (aIsSeries != bIsSeries) {
+        return aIsSeries ? -1 : 1;
+      }
+
+      final aName = a.displayName.toLowerCase();
+      final bName = b.displayName.toLowerCase();
+      return aName.compareTo(bName);
+    });
+
+    int startIndex = 0;
+    if (isSeriesCollection) {
+      startIndex = sortedCandidates.indexWhere(
+        (candidate) =>
+            candidate.info.isSeries &&
+            candidate.info.season != null &&
+            candidate.info.episode != null,
+      );
+      if (startIndex == -1) {
+        startIndex = 0;
+      }
+    }
+
+    String initialUrl = '';
+    try {
+      initialUrl = await _requestTorboxStreamUrl(
+        apiKey: key,
+        torrent: _currentTorrent!,
+        file: sortedCandidates[startIndex].file,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed to prepare stream: ${_formatTorboxError(e)}');
+      return;
+    }
+
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sortedCandidates.length; i++) {
+      final candidate = sortedCandidates[i];
+      final info = candidate.info;
+      final displayName = candidate.displayName;
+      final episodeLabel = _formatTorboxPlaylistTitle(
+        info: info,
+        fallback: displayName,
+        isSeriesCollection: isSeriesCollection,
+      );
+      final combinedTitle = _composeTorboxEntryTitle(
+        seriesTitle: info.title,
+        episodeLabel: episodeLabel,
+        isSeriesCollection: isSeriesCollection,
+        fallback: displayName,
+      );
+      playlistEntries.add(
+        PlaylistEntry(
+          url: i == startIndex ? initialUrl : '',
+          title: combinedTitle,
+          provider: 'torbox',
+          torboxTorrentId: _currentTorrent!.id,
+          torboxFileId: candidate.file.id,
+          sizeBytes: candidate.file.size,
+          torrentHash: _currentTorrent!.hash.isNotEmpty ? _currentTorrent!.hash : null,
+        ),
+      );
+    }
+
+    final totalBytes = sortedCandidates.fold<int>(
+      0,
+      (sum, entry) => sum + entry.file.size,
+    );
+    final subtitle =
+        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+    if (!mounted) return;
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialUrl,
+        title: collectionName,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
+      ),
+    );
+  }
+
+  /// Helper: Show snackbar
+  void _showSnackBar(String message, {bool isError = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? const Color(0xFFEF4444) : null,
+      ),
+    );
+  }
+
+  // ==================== FOLDER NAVIGATION METHODS ====================
+
+  /// Navigate into a torrent (show its folder structure)
+  void _navigateIntoTorrent(TorboxTorrent torrent) {
+    print('🔍 Navigating into torrent: id=${torrent.id}, name=${torrent.name}');
+    print('   Files count: ${torrent.files.length}');
+    print('   Sample files:');
+    for (int i = 0; i < (torrent.files.length < 5 ? torrent.files.length : 5); i++) {
+      print('     [$i] id=${torrent.files[i].id}, name=${torrent.files[i].name}');
+    }
+
+    setState(() {
+      // Push current state to navigation stack
+      _navigationStack.add((
+        torrent: _currentTorrent,
+        path: List.from(_currentPath),
+        node: _currentFolderNode,
+      ));
+
+      // Build folder tree for this torrent
+      print('   Building folder tree...');
+      final tree = TorboxFolderTreeBuilder.buildTree(torrent.files);
+      print('   Tree built: root has ${tree.children.length} children');
+
+      // Navigate to torrent root
+      _currentTorrent = torrent;
+      _currentPath = [];
+      _currentFolderNode = tree;
+    });
+  }
+
+  /// Navigate into a subfolder within current torrent
+  void _navigateIntoFolder(RDFileNode folderNode) {
+    if (!folderNode.isFolder) return;
+
+    setState(() {
+      // Push current state to navigation stack
+      _navigationStack.add((
+        torrent: _currentTorrent,
+        path: List.from(_currentPath),
+        node: _currentFolderNode,
+      ));
+
+      // Navigate into folder
+      _currentPath.add(folderNode.name);
+      _currentFolderNode = folderNode;
+    });
+  }
+
+  /// Navigate up one level (back button)
+  void _navigateUp() {
+    if (_navigationStack.isEmpty) return;
+
+    setState(() {
+      final previous = _navigationStack.removeLast();
+      _currentTorrent = previous.torrent;
+      _currentPath = previous.path;
+      _currentFolderNode = previous.node;
+    });
+  }
+
+  /// Check if we're at root level (torrent list)
+  bool get _isAtRoot => _currentTorrent == null;
+
+  /// Get current folder/torrent name for display
+  String get _currentFolderName {
+    if (_isAtRoot) return 'Torbox Files';
+    if (_currentPath.isEmpty) return _currentTorrent?.name ?? 'Torrent';
+    return _currentPath.last;
+  }
+
+  /// Get items to display (torrents or files/folders)
+  List<dynamic> get _currentItems {
+    if (_isAtRoot) {
+      // At root: show torrents as folders
+      return _torrents;
+    } else {
+      // Inside torrent: show current folder's children
+      return _currentFolderNode?.children ?? [];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: _isAtRoot ? null : AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _navigateUp,
+          tooltip: 'Back',
+        ),
+        title: Text(_currentFolderName),
+      ),
       body: Column(
         children: [
           const SizedBox(height: 8),
-          _buildToolbar(),
+          if (_isAtRoot) _buildToolbar(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
-              child: _buildTorrentList(),
+              child: _buildFilesFoldersList(),
             ),
           ),
         ],
@@ -2322,8 +3488,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
-  Widget _buildTorrentList() {
-    if (_isLoading && _torrents.isEmpty) {
+  Widget _buildFilesFoldersList() {
+    // Loading state
+    if (_isLoading && _currentItems.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -2336,7 +3503,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       );
     }
 
-    if (_errorMessage.isNotEmpty && _torrents.isEmpty && !_initialLoad) {
+    // Error state
+    if (_errorMessage.isNotEmpty && _currentItems.isEmpty && !_initialLoad) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(24),
@@ -2358,44 +3526,367 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       );
     }
 
-    if (_torrents.isEmpty && !_isLoading) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        children: [
-          Icon(
-            Icons.inbox_outlined,
-            size: 48,
-            color: Theme.of(context).colorScheme.primary,
+    // Empty state
+    if (_currentItems.isEmpty && !_isLoading) {
+      final isRoot = _isAtRoot;
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isRoot ? Icons.inbox_outlined : Icons.folder_open,
+                size: 64,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                isRoot ? 'No Torrents Yet' : 'Folder is Empty',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                isRoot
+                    ? 'Add torrents via Torbox to see them here.'
+                    : 'This folder doesn\'t contain any files or subfolders.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            'No cached torrents yet. Add torrents via Torbox to see them here.',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ],
+        ),
       );
     }
 
+    // List of items (torrents or files/folders)
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      itemCount: _torrents.length + (_isLoadingMore ? 1 : 0),
+      padding: const EdgeInsets.all(16),
+      itemCount: _currentItems.length + (_isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index >= _torrents.length) {
+        if (index >= _currentItems.length) {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
             child: Center(child: CircularProgressIndicator()),
           );
         }
-        final torrent = _torrents[index];
-        return _TorboxTorrentCard(
-          torrent: torrent,
-          onPlay: () => _handlePlayTorrent(torrent),
-          onDownload: () => _showDownloadOptions(torrent),
-          onMoreOptions: () => _showTorboxTorrentMoreOptions(torrent),
-        );
+
+        final item = _currentItems[index];
+
+        if (_isAtRoot) {
+          // Show torrent as a folder
+          return _buildTorrentFolderCard(item as TorboxTorrent, index);
+        } else {
+          // Show file or folder node
+          return _buildFileOrFolderCard(item as RDFileNode, index);
+        }
       },
+    );
+  }
+
+  /// Build a card for a torrent (displayed as a folder at root level)
+  Widget _buildTorrentFolderCard(TorboxTorrent torrent, int index) {
+    final videoCount = torrent.files.where(_torboxFileLooksLikeVideo).length;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.folder, color: Colors.amber, size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        torrent.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            Formatters.formatFileSize(torrent.size),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('•', style: TextStyle(color: Colors.grey.shade600)),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${torrent.files.length} files',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _navigateIntoTorrent(torrent),
+                    icon: const Icon(Icons.folder_open, size: 18),
+                    label: const Text('Open'),
+                  ),
+                ),
+                if (videoCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _handlePlayTorrent(torrent),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 8),
+                // 3-dot menu
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  tooltip: 'More options',
+                  onSelected: (value) {
+                    if (value == 'open') {
+                      _navigateIntoTorrent(torrent);
+                    } else if (value == 'download') {
+                      _showDownloadOptionsDialog(torrent);
+                    } else if (value == 'add_to_playlist') {
+                      _handleAddToPlaylist(torrent);
+                    } else if (value == 'delete') {
+                      _confirmDeleteTorrent(torrent);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'open',
+                      child: Row(
+                        children: [
+                          Icon(Icons.folder_open, size: 18, color: Colors.blue),
+                          SizedBox(width: 12),
+                          Text('Open'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'download',
+                      child: Row(
+                        children: [
+                          Icon(Icons.download, size: 18, color: Colors.green),
+                          SizedBox(width: 12),
+                          Text('Download to device'),
+                        ],
+                      ),
+                    ),
+                    if (videoCount > 0)
+                      const PopupMenuItem(
+                        value: 'add_to_playlist',
+                        child: Row(
+                          children: [
+                            Icon(Icons.playlist_add, size: 18, color: Colors.blue),
+                            SizedBox(width: 12),
+                            Text('Add to Playlist'),
+                          ],
+                        ),
+                      ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                          SizedBox(width: 12),
+                          Text('Delete'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build a card for a file or folder node (inside a torrent)
+  Widget _buildFileOrFolderCard(RDFileNode node, int index) {
+    final isFolder = node.isFolder;
+    final isVideo = !isFolder && FileUtils.isVideoFile(node.name);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isFolder
+                      ? Icons.folder
+                      : isVideo
+                          ? Icons.play_circle_outline
+                          : Icons.insert_drive_file,
+                  color: isFolder
+                      ? Colors.amber
+                      : isVideo
+                          ? Colors.blue
+                          : Colors.grey,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        node.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isFolder
+                            ? '${node.fileCount} items • ${Formatters.formatFileSize(node.totalBytes)}'
+                            : Formatters.formatFileSize(node.bytes ?? 0),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (isFolder) ...[
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _navigateIntoFolder(node),
+                      icon: const Icon(Icons.folder_open, size: 18),
+                      label: const Text('Open'),
+                    ),
+                  ),
+                  if (TorboxFolderTreeBuilder.hasVideoFiles(node)) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _playFolderVideos(node),
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Play'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ] else if (isVideo) ...[
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _playVideoFile(node),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play'),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 8),
+                // 3-dot menu
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  tooltip: 'More options',
+                  onSelected: (value) {
+                    if (value == 'download') {
+                      _downloadFileOrFolder(node);
+                    } else if (value == 'add_to_playlist') {
+                      _addFileOrFolderToPlaylist(node);
+                    } else if (value == 'copy_link') {
+                      _copyFileLink(node);
+                    } else if (value == 'open_external') {
+                      _openWithExternalPlayer(node);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'download',
+                      child: Row(
+                        children: [
+                          Icon(Icons.download, size: 18, color: Colors.green),
+                          SizedBox(width: 12),
+                          Text('Download'),
+                        ],
+                      ),
+                    ),
+                    if (isVideo || (isFolder && TorboxFolderTreeBuilder.hasVideoFiles(node)))
+                      const PopupMenuItem(
+                        value: 'add_to_playlist',
+                        child: Row(
+                          children: [
+                            Icon(Icons.playlist_add, size: 18, color: Colors.blue),
+                            SizedBox(width: 12),
+                            Text('Add to Playlist'),
+                          ],
+                        ),
+                      ),
+                    if (!isFolder)
+                      const PopupMenuItem(
+                        value: 'copy_link',
+                        child: Row(
+                          children: [
+                            Icon(Icons.link, size: 18, color: Colors.orange),
+                            SizedBox(width: 12),
+                            Text('Copy Link'),
+                          ],
+                        ),
+                      ),
+                    if (isVideo)
+                      const PopupMenuItem(
+                        value: 'open_external',
+                        child: Row(
+                          children: [
+                            Icon(Icons.open_in_new, size: 18, color: Colors.purple),
+                            SizedBox(width: 12),
+                            Text('Open with External Player'),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2471,6 +3962,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
 class _TorboxTorrentCard extends StatelessWidget {
   const _TorboxTorrentCard({
+    super.key,
     required this.torrent,
     required this.onPlay,
     required this.onDownload,

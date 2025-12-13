@@ -217,6 +217,7 @@ class DynamicEngine extends SearchEngine {
           config: config,
           params: {
             'imdbId': imdbId,
+            'isSeries': true,
             'season': seasonNum,
             // Use provided episode or default to first episode
             'episode': episode ?? defaultEpisode,
@@ -307,6 +308,7 @@ class DynamicEngine extends SearchEngine {
   Future<List<Torrent>> executeSearch({
     String? query,
     String? imdbId,
+    bool? isSeries,
     int? season,
     int? episode,
     int? maxResults,
@@ -322,9 +324,10 @@ class DynamicEngine extends SearchEngine {
     }
 
     // Check if this is a series search that needs season probing
-    // Conditions: has IMDB, no season specified, supports series, has series_config
+    // Conditions: has IMDB, no season specified, IS a series, supports series, has series_config
     if (normalizedImdbId != null &&
         season == null &&
+        isSeries == true &&
         supportsSeriesSearch &&
         config.request.seriesConfig != null) {
       debugPrint('DynamicEngine[$name]: Using season probing for series search');
@@ -343,6 +346,9 @@ class DynamicEngine extends SearchEngine {
     }
     if (normalizedImdbId != null) {
       params['imdbId'] = normalizedImdbId;
+    }
+    if (isSeries != null) {
+      params['isSeries'] = isSeries;
     }
     if (season != null) {
       params['season'] = season;

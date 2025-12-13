@@ -370,18 +370,32 @@ class ConfigLoader {
 
     // Build nested cursor config if cursor-based pagination
     if (paginationType == 'cursor') {
+      final cursorConfig = paginationYaml['cursor'] as Map<String, dynamic>?;
       transformedPagination['cursor'] = {
-        'response_field': paginationYaml['cursor_field'] ?? paginationYaml['response_field'] ?? '',
-        'param_name': paginationYaml['cursor_param'] ?? paginationYaml['param_name'] ?? 'cursor',
+        'response_field': cursorConfig?['response_field'] ?? paginationYaml['cursor_field'] ?? paginationYaml['response_field'] ?? '',
+        'param_name': cursorConfig?['param_name'] ?? paginationYaml['cursor_param'] ?? paginationYaml['param_name'] ?? 'cursor',
+        'location': cursorConfig?['location'] ?? 'query',
       };
     }
 
     // Build nested page config if page-based pagination
     if (paginationType == 'page') {
+      final pageConfig = paginationYaml['page'] as Map<String, dynamic>?;
       transformedPagination['page'] = {
-        'param_name': paginationYaml['page_param'] ?? paginationYaml['param_name'] ?? 'page',
-        'start_page': paginationYaml['start_page'] ?? 1,
-        'has_more_field': paginationYaml['has_more_field'],
+        'param_name': pageConfig?['param_name'] ?? paginationYaml['page_param'] ?? paginationYaml['param_name'] ?? 'page',
+        'start_page': pageConfig?['start_page'] ?? paginationYaml['start_page'] ?? 1,
+        'has_more_field': pageConfig?['has_more_field'] ?? paginationYaml['has_more_field'],
+        'location': pageConfig?['location'] ?? 'query',
+      };
+    }
+
+    // Build nested offset config if offset-based pagination
+    if (paginationType == 'offset') {
+      final offsetConfig = paginationYaml['offset'] as Map<String, dynamic>?;
+      transformedPagination['offset'] = {
+        'param_name': offsetConfig?['param_name'] ?? paginationYaml['offset_param'] ?? paginationYaml['param_name'] ?? 'offset',
+        'start_offset': offsetConfig?['start_offset'] ?? paginationYaml['start_offset'] ?? 0,
+        'location': offsetConfig?['location'] ?? 'query',
       };
     }
 

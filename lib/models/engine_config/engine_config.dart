@@ -249,6 +249,8 @@ class RequestParam {
   final String? source;
   final bool required;
   final String? appliesTo;
+  final String location; // 'query', 'body', or 'header'
+  final String? valueType; // 'string', 'int', 'bool' - for type conversion in body
 
   const RequestParam({
     required this.name,
@@ -256,6 +258,8 @@ class RequestParam {
     this.source,
     required this.required,
     this.appliesTo,
+    this.location = 'query', // Default to query for backward compatibility
+    this.valueType, // Optional type hint
   });
 
   factory RequestParam.fromMap(Map<String, dynamic> map) {
@@ -265,6 +269,8 @@ class RequestParam {
       source: map['source'] as String?,
       required: map['required'] as bool? ?? false,
       appliesTo: map['applies_to'] as String?,
+      location: map['location'] as String? ?? 'query', // Default to query
+      valueType: map['value_type'] as String?, // Optional type hint
     );
   }
 
@@ -275,6 +281,8 @@ class RequestParam {
       if (source != null) 'source': source,
       'required': required,
       if (appliesTo != null) 'applies_to': appliesTo,
+      'location': location,
+      if (valueType != null) 'value_type': valueType,
     };
   }
 }
@@ -310,6 +318,7 @@ class PaginationConfig {
   final int? fixedResults;
   final CursorConfig? cursor;
   final PageConfig? page;
+  final OffsetConfig? offset;
 
   const PaginationConfig({
     required this.type,
@@ -318,6 +327,7 @@ class PaginationConfig {
     this.fixedResults,
     this.cursor,
     this.page,
+    this.offset,
   });
 
   factory PaginationConfig.fromMap(Map<String, dynamic> map) {
@@ -332,6 +342,9 @@ class PaginationConfig {
       page: map['page'] != null
           ? PageConfig.fromMap(map['page'] as Map<String, dynamic>)
           : null,
+      offset: map['offset'] != null
+          ? OffsetConfig.fromMap(map['offset'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -343,6 +356,7 @@ class PaginationConfig {
       if (fixedResults != null) 'fixed_results': fixedResults,
       if (cursor != null) 'cursor': cursor!.toMap(),
       if (page != null) 'page': page!.toMap(),
+      if (offset != null) 'offset': offset!.toMap(),
     };
   }
 }
@@ -350,16 +364,19 @@ class PaginationConfig {
 class CursorConfig {
   final String responseField;
   final String paramName;
+  final String location; // 'query' or 'body'
 
   const CursorConfig({
     required this.responseField,
     required this.paramName,
+    this.location = 'query', // Default to query for backward compatibility
   });
 
   factory CursorConfig.fromMap(Map<String, dynamic> map) {
     return CursorConfig(
       responseField: map['response_field'] as String? ?? '',
       paramName: map['param_name'] as String? ?? '',
+      location: map['location'] as String? ?? 'query', // Default to query
     );
   }
 
@@ -367,6 +384,7 @@ class CursorConfig {
     return {
       'response_field': responseField,
       'param_name': paramName,
+      'location': location,
     };
   }
 }
@@ -375,11 +393,13 @@ class PageConfig {
   final String paramName;
   final int startPage;
   final String? hasMoreField;
+  final String location; // 'query' or 'body'
 
   const PageConfig({
     required this.paramName,
     required this.startPage,
     this.hasMoreField,
+    this.location = 'query', // Default to query for backward compatibility
   });
 
   factory PageConfig.fromMap(Map<String, dynamic> map) {
@@ -387,6 +407,7 @@ class PageConfig {
       paramName: map['param_name'] as String? ?? 'page',
       startPage: map['start_page'] as int? ?? 1,
       hasMoreField: map['has_more_field'] as String?,
+      location: map['location'] as String? ?? 'query', // Default to query
     );
   }
 
@@ -395,6 +416,35 @@ class PageConfig {
       'param_name': paramName,
       'start_page': startPage,
       if (hasMoreField != null) 'has_more_field': hasMoreField,
+      'location': location,
+    };
+  }
+}
+
+class OffsetConfig {
+  final String paramName;
+  final int startOffset;
+  final String location; // 'query' or 'body'
+
+  const OffsetConfig({
+    this.paramName = 'offset',
+    this.startOffset = 0,
+    this.location = 'query', // Default to query for backward compatibility
+  });
+
+  factory OffsetConfig.fromMap(Map<String, dynamic> map) {
+    return OffsetConfig(
+      paramName: map['param_name'] as String? ?? 'offset',
+      startOffset: map['start_offset'] as int? ?? 0,
+      location: map['location'] as String? ?? 'query', // Default to query
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'param_name': paramName,
+      'start_offset': startOffset,
+      'location': location,
     };
   }
 }

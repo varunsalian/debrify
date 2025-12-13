@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -5,10 +6,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/account_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/torbox_account_service.dart';
+import '../services/pikpak_api_service.dart';
+import '../services/storage_service.dart';
 import '../services/engine/remote_engine_manager.dart';
 import '../services/engine/local_engine_storage.dart';
 import '../services/engine/config_loader.dart';
 import '../services/engine/engine_registry.dart';
+import '../utils/platform_util.dart';
+import 'pikpak_folder_picker_dialog.dart';
 
 class InitialSetupFlow extends StatefulWidget {
   const InitialSetupFlow({super.key});
@@ -42,10 +47,7 @@ class InitialSetupFlow extends StatefulWidget {
   State<InitialSetupFlow> createState() => _InitialSetupFlowState();
 }
 
-enum _IntegrationType {
-  realDebrid,
-  torbox,
-}
+enum _IntegrationType { realDebrid, torbox, pikpak }
 
 class _IntegrationMeta {
   const _IntegrationMeta({
@@ -94,7 +96,7 @@ const Map<_IntegrationType, _IntegrationMeta> _integrationMeta = {
     linkLabel: 'Open torbox.app settings',
     steps: <String>[
       'Visit the Torbox account settings page.',
-      'Log in and scroll to the bottom “API Key” section.',
+      'Log in and scroll to the bottom "API Key" section.',
       'Copy the key displayed under your API details.',
     ],
     inputLabel: 'Torbox API Key',
@@ -102,13 +104,32 @@ const Map<_IntegrationType, _IntegrationMeta> _integrationMeta = {
     gradient: <Color>[Color(0xFF7C3AED), Color(0xFFEC4899)],
     icon: Icons.flash_on_rounded,
   ),
+  _IntegrationType.pikpak: _IntegrationMeta(
+    type: _IntegrationType.pikpak,
+    title: 'PikPak',
+    url: 'https://mypikpak.com/drive/login',
+    linkLabel: 'Open PikPak login page',
+    steps: <String>[
+      'Create a PikPak account if you don\'t have one.',
+      'Remember your email and password.',
+      'Enter your credentials below to connect.',
+    ],
+    inputLabel: 'Email',
+    hint: 'your@email.com',
+    gradient: <Color>[Color(0xFF10B981), Color(0xFF059669)],
+    icon: Icons.cloud_queue_rounded,
+  ),
 };
 
 class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final Set<_IntegrationType> _selection = <_IntegrationType>{};
   final TextEditingController _realDebridController = TextEditingController();
   final TextEditingController _torboxController = TextEditingController();
-  int _stepIndex = 0; // 0 => welcome, >0 => selected integrations, -1 => engine selection
+  final TextEditingController _pikpakEmailController = TextEditingController();
+  final TextEditingController _pikpakPasswordController =
+      TextEditingController();
+  int _stepIndex =
+      0; // 0 => welcome, >0 => selected integrations, -1 => engine selection
   List<_IntegrationType> _flow = const <_IntegrationType>[];
   bool _isProcessing = false;
   String? _errorMessage;
@@ -121,30 +142,76 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   bool _isLoadingEngines = false;
   String? _engineError;
 
+  bool _isAndroidTv = false; // Store TV detection result
+  bool _isTvDetectionComplete = false; // Track if TV detection is done
+
+  // Scroll controller for auto-scrolling on DPAD navigation
+  final ScrollController _scrollController = ScrollController();
+
+  // Map to store focus listener callbacks for proper disposal
+  final Map<FocusNode, VoidCallback> _focusListeners = {};
+
   // Focus nodes for TV/DPAD navigation
-  final FocusNode _dialogFocusNode = FocusNode(debugLabel: 'initial-setup-dialog');
+  final FocusNode _dialogFocusNode = FocusNode(
+    debugLabel: 'initial-setup-dialog',
+  );
   final FocusNode _realDebridChipFocusNode = FocusNode(debugLabel: 'rd-chip');
   final FocusNode _torboxChipFocusNode = FocusNode(debugLabel: 'torbox-chip');
+  final FocusNode _pikpakChipFocusNode = FocusNode(debugLabel: 'pikpak-chip');
   final FocusNode _skipButtonFocusNode = FocusNode(debugLabel: 'skip-button');
-  final FocusNode _continueButtonFocusNode = FocusNode(debugLabel: 'continue-button');
+  final FocusNode _continueButtonFocusNode = FocusNode(
+    debugLabel: 'continue-button',
+  );
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'back-button');
-  final FocusNode _openLinkButtonFocusNode = FocusNode(debugLabel: 'open-link-button');
+  final FocusNode _openLinkButtonFocusNode = FocusNode(
+    debugLabel: 'open-link-button',
+  );
   final FocusNode _textFieldFocusNode = FocusNode(debugLabel: 'api-key-field');
-  final FocusNode _skipForNowButtonFocusNode = FocusNode(debugLabel: 'skip-for-now');
-  final FocusNode _connectButtonFocusNode = FocusNode(debugLabel: 'connect-button');
+  final FocusNode _pikpakEmailFieldFocusNode = FocusNode(
+    debugLabel: 'pikpak-email-field',
+  );
+  final FocusNode _pikpakPasswordFieldFocusNode = FocusNode(
+    debugLabel: 'pikpak-password-field',
+  );
+  final FocusNode _skipForNowButtonFocusNode = FocusNode(
+    debugLabel: 'skip-for-now',
+  );
+  final FocusNode _connectButtonFocusNode = FocusNode(
+    debugLabel: 'connect-button',
+  );
+  final FocusNode _folderRestrictionSkipButtonFocusNode = FocusNode(
+    debugLabel: 'folder-restriction-skip',
+  );
+  final FocusNode _folderRestrictionSelectButtonFocusNode = FocusNode(
+    debugLabel: 'folder-restriction-select',
+  );
 
   // Engine selection focus nodes
-  final FocusNode _engineSkipButtonFocusNode = FocusNode(debugLabel: 'engine-skip-button');
-  final FocusNode _engineImportButtonFocusNode = FocusNode(debugLabel: 'engine-import-button');
-  final FocusNode _engineRetryButtonFocusNode = FocusNode(debugLabel: 'engine-retry-button');
+  final FocusNode _engineSkipButtonFocusNode = FocusNode(
+    debugLabel: 'engine-skip-button',
+  );
+  final FocusNode _engineImportButtonFocusNode = FocusNode(
+    debugLabel: 'engine-import-button',
+  );
+  final FocusNode _engineRetryButtonFocusNode = FocusNode(
+    debugLabel: 'engine-retry-button',
+  );
   final Map<String, FocusNode> _engineItemFocusNodes = {};
 
   // DPAD shortcuts for arrow key navigation
   static const Map<ShortcutActivator, Intent> _dpadShortcuts = {
-    SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(TraversalDirection.down),
-    SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(TraversalDirection.up),
-    SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(TraversalDirection.right),
-    SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(TraversalDirection.left),
+    SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
+      TraversalDirection.down,
+    ),
+    SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
+      TraversalDirection.up,
+    ),
+    SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(
+      TraversalDirection.right,
+    ),
+    SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(
+      TraversalDirection.left,
+    ),
     SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
     SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
     SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
@@ -153,39 +220,160 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   @override
   void initState() {
     super.initState();
-    // Request focus IMMEDIATELY, not waiting for postFrameCallback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        // Force unfocus from anything else first
-        FocusManager.instance.primaryFocus?.unfocus();
-        // Then request focus on the first chip
-        _realDebridChipFocusNode.requestFocus();
 
-        // Double-check focus after a short delay (for race conditions)
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted && !_realDebridChipFocusNode.hasFocus) {
-            FocusManager.instance.primaryFocus?.unfocus();
-            _realDebridChipFocusNode.requestFocus();
-          }
+    // Add focus listeners for auto-scrolling on TV
+    _addFocusListeners();
+
+    // Detect Android TV and setup accordingly
+    _detectAndroidTV();
+  }
+
+  Future<void> _detectAndroidTV() async {
+    // Use addPostFrameCallback to ensure widget is fully built
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      try {
+        // Check if this is an Android TV device
+        final isTV = await PlatformUtil.isAndroidTV();
+        if (!mounted) return;
+
+        setState(() {
+          _isAndroidTv = isTV;
+          _isTvDetectionComplete = true;
         });
+
+        // Only request focus on TV devices for D-pad navigation
+        if (_isAndroidTv) {
+          // Wait for next frame to ensure UI is ready
+          await Future.delayed(const Duration(milliseconds: 100));
+          if (!mounted) return;
+
+          // Verify dialog is still visible and topmost
+          final navigator = Navigator.maybeOf(context);
+          if (navigator == null || !navigator.canPop()) return;
+
+          // Request focus on the first chip
+          FocusManager.instance.primaryFocus?.unfocus();
+          _realDebridChipFocusNode.requestFocus();
+        }
+      } catch (e) {
+        // Failed to detect TV, default to non-TV mode
+        if (!mounted) return;
+        setState(() {
+          _isAndroidTv = false;
+          _isTvDetectionComplete = true;
+        });
+      }
+    });
+  }
+
+  void _addFocusListeners() {
+    // Add listeners to all focusable elements for auto-scrolling
+    final focusNodes = [
+      _realDebridChipFocusNode,
+      _torboxChipFocusNode,
+      _pikpakChipFocusNode,
+      _skipButtonFocusNode,
+      _continueButtonFocusNode,
+      _backButtonFocusNode,
+      _openLinkButtonFocusNode,
+      _textFieldFocusNode,
+      _pikpakEmailFieldFocusNode,
+      _pikpakPasswordFieldFocusNode,
+      _skipForNowButtonFocusNode,
+      _connectButtonFocusNode,
+      _engineSkipButtonFocusNode,
+      _engineImportButtonFocusNode,
+    ];
+
+    for (final node in focusNodes) {
+      // Create a named listener callback that we can remove later
+      void listener() {
+        if (node.hasFocus && _isAndroidTv) {
+          _scrollToFocusedWidget(node);
+        }
+      }
+
+      // Store the listener so we can remove it in dispose
+      _focusListeners[node] = listener;
+
+      // Add the listener to the node
+      node.addListener(listener);
+    }
+  }
+
+  void _removeFocusListeners() {
+    // Remove all focus listeners to prevent memory leaks
+    _focusListeners.forEach((node, listener) {
+      node.removeListener(listener);
+    });
+    _focusListeners.clear();
+  }
+
+  void _scrollToFocusedWidget(FocusNode node) {
+    if (!_scrollController.hasClients) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || node.context == null) return;
+
+      try {
+        final RenderBox? renderBox = node.context!.findRenderObject() as RenderBox?;
+        if (renderBox == null || !renderBox.hasSize) return;
+
+        final position = renderBox.localToGlobal(Offset.zero);
+        final size = renderBox.size;
+        final screenHeight = MediaQuery.of(context).size.height;
+
+        // Calculate if widget is out of view
+        final widgetTop = position.dy;
+        final widgetBottom = position.dy + size.height;
+
+        // Scroll if widget is not fully visible
+        if (widgetTop < 100 || widgetBottom > screenHeight - 100) {
+          final scrollOffset = _scrollController.offset + (widgetTop - screenHeight / 2 + size.height / 2);
+          _scrollController.animateTo(
+            scrollOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      } catch (e, stackTrace) {
+        // Log errors during scrolling calculations for debugging
+        debugPrint('Error calculating scroll position: $e');
+        if (kDebugMode) {
+          debugPrint('Stack trace: $stackTrace');
+        }
       }
     });
   }
 
   @override
   void dispose() {
+    // Remove focus listeners FIRST to prevent memory leaks
+    _removeFocusListeners();
+
+    // Dispose controllers and focus nodes
+    _scrollController.dispose();
     _realDebridController.dispose();
     _torboxController.dispose();
+    _pikpakEmailController.dispose();
+    _pikpakPasswordController.dispose();
     _dialogFocusNode.dispose();
     _realDebridChipFocusNode.dispose();
     _torboxChipFocusNode.dispose();
+    _pikpakChipFocusNode.dispose();
     _skipButtonFocusNode.dispose();
     _continueButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
     _openLinkButtonFocusNode.dispose();
     _textFieldFocusNode.dispose();
+    _pikpakEmailFieldFocusNode.dispose();
+    _pikpakPasswordFieldFocusNode.dispose();
     _skipForNowButtonFocusNode.dispose();
     _connectButtonFocusNode.dispose();
+    _folderRestrictionSkipButtonFocusNode.dispose();
+    _folderRestrictionSelectButtonFocusNode.dispose();
     _engineSkipButtonFocusNode.dispose();
     _engineImportButtonFocusNode.dispose();
     _engineRetryButtonFocusNode.dispose();
@@ -200,8 +388,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final mediaQuery = MediaQuery.of(context);
-    final double keyboardInset = mediaQuery.viewInsets.bottom;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Responsive padding based on screen height
+    final verticalPadding = screenHeight < 800 ? 16.0 : 32.0;
+    final horizontalPadding = screenWidth < 600 ? 16.0 : 24.0;
+    final innerVerticalPadding = screenHeight < 800 ? 16.0 : 32.0;
+    final innerHorizontalPadding = screenWidth < 600 ? 16.0 : 28.0;
+
     return PopScope(
       canPop: false,
       child: FocusScope(
@@ -220,21 +415,30 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 shortcuts: _dpadShortcuts,
                 child: Actions(
                   actions: <Type, Action<Intent>>{
-                    DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(
-                      onInvoke: (intent) {
-                        FocusScope.of(innerContext).focusInDirection(intent.direction);
-                        return null;
-                      },
-                    ),
+                    DirectionalFocusIntent:
+                        CallbackAction<DirectionalFocusIntent>(
+                          onInvoke: (intent) {
+                            FocusScope.of(
+                              innerContext,
+                            ).focusInDirection(intent.direction);
+                            return null;
+                          },
+                        ),
                     ActivateIntent: CallbackAction<ActivateIntent>(
                       onInvoke: (_) {
                         // Find the focused widget and activate it
-                        final focusedChild = FocusScope.of(innerContext).focusedChild;
+                        final focusedChild = FocusScope.of(
+                          innerContext,
+                        ).focusedChild;
                         if (focusedChild != null) {
-                          final primaryFocus = FocusManager.instance.primaryFocus;
+                          final primaryFocus =
+                              FocusManager.instance.primaryFocus;
                           if (primaryFocus != null) {
                             // Trigger activation via Actions
-                            Actions.maybeInvoke(primaryFocus.context!, const ActivateIntent());
+                            Actions.maybeInvoke(
+                              primaryFocus.context!,
+                              const ActivateIntent(),
+                            );
                           }
                         }
                         return null;
@@ -242,61 +446,92 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     ),
                   },
                   child: Dialog(
-                    insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                    insetPadding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                      vertical: verticalPadding,
+                    ),
                     backgroundColor: Colors.transparent,
                     child: LayoutBuilder(
-                      builder: (BuildContext context, BoxConstraints _) {
-                        return SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          clipBehavior: Clip.none,
-                          padding: EdgeInsets.only(bottom: keyboardInset > 0 ? keyboardInset : 0),
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                maxWidth: 560,
-                              ),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(28),
-                                  gradient: const LinearGradient(
-                                    colors: <Color>[Color(0xFF0F172A), Color(0xFF1F2937)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  boxShadow: <BoxShadow>[
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.35),
-                                      blurRadius: 28,
-                                      offset: const Offset(0, 24),
-                                    ),
-                                  ],
+                      builder: (BuildContext context, BoxConstraints constraints) {
+                        final maxDialogHeight = screenHeight - (verticalPadding * 2);
+                        final maxDialogWidth = screenWidth - (horizontalPadding * 2);
+                        return ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: maxDialogHeight,
+                            maxWidth: maxDialogWidth.clamp(300.0, 560.0),
+                          ),
+                          child: SingleChildScrollView(
+                            controller: _scrollController,
+                            physics: const BouncingScrollPhysics(),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: maxDialogWidth.clamp(300.0, 560.0),
                                 ),
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-                                  child: LayoutBuilder(
-                                    builder:
-                                        (BuildContext context, BoxConstraints innerConstraints) {
-                                      return AnimatedSwitcher(
-                                        duration: const Duration(milliseconds: 250),
-                                        switchInCurve: Curves.easeOutCubic,
-                                        switchOutCurve: Curves.easeInCubic,
-                                        child: _stepIndex == 0
-                                            ? _buildWelcomeStep(theme, innerConstraints.maxWidth)
-                                            : _stepIndex > _flow.length
-                                                ? _buildEngineSelectionStep(theme, innerConstraints.maxWidth)
-                                                : _buildIntegrationStep(
-                                                    theme,
-                                                    _flow[_stepIndex - 1],
-                                                    innerConstraints.maxWidth,
-                                                  ),
-                                      );
-                                    },
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(28),
+                                    gradient: const LinearGradient(
+                                      colors: <Color>[
+                                        Color(0xFF0F172A),
+                                        Color(0xFF1F2937),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    boxShadow: <BoxShadow>[
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.35,
+                                        ),
+                                        blurRadius: 28,
+                                        offset: const Offset(0, 24),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: innerHorizontalPadding,
+                                      vertical: innerVerticalPadding,
+                                    ),
+                                    child: LayoutBuilder(
+                                      builder:
+                                          (
+                                            BuildContext context,
+                                            BoxConstraints innerConstraints,
+                                          ) {
+                                            return AnimatedSwitcher(
+                                              duration: const Duration(
+                                                milliseconds: 250,
+                                              ),
+                                              switchInCurve: Curves.easeOutCubic,
+                                              switchOutCurve: Curves.easeInCubic,
+                                              child: _stepIndex == 0
+                                                  ? _buildWelcomeStep(
+                                                      theme,
+                                                      innerConstraints.maxWidth,
+                                                      screenHeight,
+                                                    )
+                                                  : _stepIndex > _flow.length
+                                                  ? _buildEngineSelectionStep(
+                                                      theme,
+                                                      innerConstraints.maxWidth,
+                                                      screenHeight,
+                                                    )
+                                                  : _buildIntegrationStep(
+                                                      theme,
+                                                      _flow[_stepIndex - 1],
+                                                      innerConstraints.maxWidth,
+                                                      screenHeight,
+                                                    ),
+                                            );
+                                          },
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
                         );
                       },
                     ),
@@ -310,7 +545,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     );
   }
 
-  Widget _buildWelcomeStep(ThemeData theme, double availableWidth) {
+  Widget _buildWelcomeStep(ThemeData theme, double availableWidth, double screenHeight) {
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing2 = screenHeight < 800 ? 16.0 : 24.0;
+    final spacing3 = screenHeight < 800 ? 20.0 : 32.0;
+
     return Column(
       key: const ValueKey<String>('welcome'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,12 +562,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             color: Colors.white,
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing1),
         Text(
           'You can add others later from Settings.',
           style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: spacing2),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double width = constraints.maxWidth.isFinite
@@ -341,8 +580,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               children: _integrationMeta.values.map((meta) {
                 final focusNode = meta.type == _IntegrationType.realDebrid
                     ? _realDebridChipFocusNode
-                    : _torboxChipFocusNode;
-                final order = meta.type == _IntegrationType.realDebrid ? 1.0 : 2.0;
+                    : meta.type == _IntegrationType.torbox
+                    ? _torboxChipFocusNode
+                    : _pikpakChipFocusNode;
+                final order = meta.type == _IntegrationType.realDebrid
+                    ? 1.0
+                    : meta.type == _IntegrationType.torbox
+                    ? 2.0
+                    : 3.0;
                 return SizedBox(
                   width: isNarrow ? width : (width - 16) / 2,
                   child: FocusTraversalOrder(
@@ -356,7 +601,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                         children: <Widget>[
                           Icon(meta.icon, size: 18, color: Colors.white),
                           const SizedBox(width: 8),
-                          Text(meta.title, style: const TextStyle(color: Colors.white)),
+                          Text(
+                            meta.title,
+                            style: const TextStyle(color: Colors.white),
+                          ),
                         ],
                       ),
                     ),
@@ -366,7 +614,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             );
           },
         ),
-        const SizedBox(height: 32),
+        SizedBox(height: spacing3),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final bool isCompact = constraints.maxWidth < 420;
@@ -378,12 +626,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     order: const NumericFocusOrder(3),
                     child: TextButton(
                       focusNode: _skipButtonFocusNode,
-                      onPressed:
-                          _isProcessing ? null : () => Navigator.of(context).pop(false),
+                      onPressed: _isProcessing ? null : _goToEngineSelection,
                       child: const Text("I don't have any yet"),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing1),
                   FocusTraversalOrder(
                     order: const NumericFocusOrder(4),
                     child: FilledButton.icon(
@@ -404,8 +651,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   order: const NumericFocusOrder(3),
                   child: TextButton(
                     focusNode: _skipButtonFocusNode,
-                    onPressed:
-                        _isProcessing ? null : () => Navigator.of(context).pop(false),
+                    onPressed: _isProcessing ? null : _goToEngineSelection,
                     child: const Text("I don't have any yet"),
                   ),
                 ),
@@ -414,8 +660,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   order: const NumericFocusOrder(4),
                   child: FilledButton.icon(
                     focusNode: _continueButtonFocusNode,
-                    onPressed:
-                        _selection.isEmpty || _isProcessing ? null : _startIntegrationFlow,
+                    onPressed: _selection.isEmpty || _isProcessing
+                        ? null
+                        : _startIntegrationFlow,
                     icon: const Icon(Icons.arrow_forward_rounded),
                     label: const Text('Continue'),
                   ),
@@ -432,12 +679,22 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     ThemeData theme,
     _IntegrationType type,
     double availableWidth,
+    double screenHeight,
   ) {
     final _IntegrationMeta meta = _integrationMeta[type]!;
-    final TextEditingController controller =
-        type == _IntegrationType.realDebrid ? _realDebridController : _torboxController;
+    final TextEditingController controller = type == _IntegrationType.realDebrid
+        ? _realDebridController
+        : type == _IntegrationType.torbox
+        ? _torboxController
+        : _pikpakEmailController;
     final int currentStep = _stepIndex;
     final int totalSteps = _flow.length;
+    final bool isPikPak = type == _IntegrationType.pikpak;
+
+    // Responsive spacing
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing2 = screenHeight < 800 ? 12.0 : 16.0;
+    final spacing3 = screenHeight < 800 ? 16.0 : 24.0;
 
     return Column(
       key: ValueKey<_IntegrationType>(type),
@@ -458,11 +715,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             const SizedBox(width: 8),
             Text(
               'Step $currentStep of $totalSteps',
-              style: theme.textTheme.labelLarge?.copyWith(color: Colors.white60),
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: Colors.white60,
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing1),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -481,125 +740,113 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               Icon(meta.icon, color: Colors.white, size: 32),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      meta.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Paste your API key below to connect.',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  meta.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 24),
-        Text(
-          'Where to find the API key',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 12),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                for (int i = 0; i < meta.steps.length; i++)
-                  Padding(
-                    padding: EdgeInsets.only(bottom: i == meta.steps.length - 1 ? 0 : 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: meta.gradient.first.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${i + 1}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            meta.steps[i],
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.white70,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 16),
-                FocusTraversalOrder(
-                  order: const NumericFocusOrder(2),
-                  child: OutlinedButton.icon(
-                    focusNode: _openLinkButtonFocusNode,
-                    onPressed: _isProcessing ? null : () => _launch(meta.url),
-                    icon: const Icon(Icons.open_in_new_rounded),
-                    label: Text(meta.linkLabel),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                    ),
-                  ),
-                ),
-              ],
+        SizedBox(height: spacing3),
+        if (isPikPak) ...[
+          Text(
+            'Email',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
             ),
           ),
-        ),
-        const SizedBox(height: 24),
-        FocusTraversalOrder(
-          order: const NumericFocusOrder(3),
-          child: _TvFriendlyTextField(
-            controller: controller,
-            focusNode: _textFieldFocusNode,
-            enabled: !_isProcessing,
-            labelText: meta.inputLabel,
-            hintText: meta.hint,
-            prefixIcon: Icon(meta.icon),
-            errorText: _errorMessage,
-            onSubmitted: (_) {
-              if (_isProcessing) return;
-              _submitCurrent();
-            },
+          SizedBox(height: spacing1),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(2),
+            child: _TvFriendlyTextField(
+              controller: _pikpakEmailController,
+              focusNode: _pikpakEmailFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: '',
+              hintText: 'your@email.com',
+              prefixIcon: const Icon(Icons.email_outlined),
+              errorText: _errorMessage,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _pikpakPasswordFieldFocusNode.requestFocus();
+              },
+            ),
           ),
-        ),
-        const SizedBox(height: 24),
+          SizedBox(height: spacing2),
+          Text(
+            'Password',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(height: spacing1),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(3),
+            child: _TvFriendlyTextField(
+              controller: _pikpakPasswordController,
+              focusNode: _pikpakPasswordFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: '',
+              hintText: 'Enter your password',
+              prefixIcon: const Icon(Icons.lock_outline),
+              obscureText: true,
+              errorText: null,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _submitCurrent();
+              },
+            ),
+          ),
+        ] else ...[
+          Text(
+            meta.inputLabel,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(height: spacing1),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(2),
+            child: _TvFriendlyTextField(
+              controller: controller,
+              focusNode: _textFieldFocusNode,
+              enabled: !_isProcessing,
+              labelText: '',
+              hintText: meta.hint,
+              prefixIcon: Icon(meta.icon),
+              errorText: _errorMessage,
+              onSubmitted: (_) {
+                if (_isProcessing) return;
+                _submitCurrent();
+              },
+            ),
+          ),
+          SizedBox(height: spacing2),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(3),
+            child: OutlinedButton.icon(
+              focusNode: _openLinkButtonFocusNode,
+              onPressed: _isProcessing ? null : () => _launch(meta.url),
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: Text(meta.linkLabel),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.2),
+                ),
+              ),
+            ),
+          ),
+        ],
+        SizedBox(height: spacing3),
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double width = constraints.maxWidth.isFinite
@@ -607,7 +854,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 : availableWidth;
             final bool isCompact = width < 420;
             final Widget primaryButton = FocusTraversalOrder(
-              order: const NumericFocusOrder(6),
+              order: const NumericFocusOrder(5),
               child: FilledButton(
                 focusNode: _connectButtonFocusNode,
                 onPressed: _isProcessing ? null : _submitCurrent,
@@ -621,7 +868,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               ),
             );
             final Widget skipButton = FocusTraversalOrder(
-              order: const NumericFocusOrder(5),
+              order: const NumericFocusOrder(4),
               child: TextButton(
                 focusNode: _skipForNowButtonFocusNode,
                 onPressed: _isProcessing ? null : _skipCurrent,
@@ -638,18 +885,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     runSpacing: 8,
                     children: <Widget>[skipButton],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing1),
                   primaryButton,
                 ],
               );
             }
 
             return Row(
-              children: <Widget>[
-                skipButton,
-                const Spacer(),
-                primaryButton,
-              ],
+              children: <Widget>[skipButton, const Spacer(), primaryButton],
             );
           },
         ),
@@ -657,7 +900,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     );
   }
 
-  Widget _buildEngineSelectionStep(ThemeData theme, double availableWidth) {
+  Widget _buildEngineSelectionStep(ThemeData theme, double availableWidth, double screenHeight) {
+    // Responsive spacing
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing3 = screenHeight < 800 ? 16.0 : 24.0;
+
+    // Responsive ListView height (30-40% of screen height)
+    final listViewMaxHeight = screenHeight < 800
+        ? screenHeight * 0.3  // 30% for small screens
+        : 280.0;  // Fixed 280 for larger screens
+
     return Column(
       key: const ValueKey<String>('engine-selection'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -670,12 +922,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             color: Colors.white,
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing1),
         Text(
           'Select the torrent search engines you want to use.',
           style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: spacing3),
         if (_isLoadingEngines)
           const Center(
             child: Padding(
@@ -702,7 +954,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   const SizedBox(height: 16),
                   Text(
                     'Failed to load engines',
-                    style: theme.textTheme.titleMedium?.copyWith(color: Colors.white),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -723,7 +977,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                         _loadAvailableEngines();
                       },
                       icon: const Icon(Icons.refresh, color: Colors.white),
-                      label: const Text('Retry', style: TextStyle(color: Colors.white)),
+                      label: const Text(
+                        'Retry',
+                        style: TextStyle(color: Colors.white),
+                      ),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.white30),
                       ),
@@ -735,7 +992,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           )
         else
           Container(
-            constraints: const BoxConstraints(maxHeight: 280),
+            constraints: BoxConstraints(maxHeight: listViewMaxHeight),
             child: ListView.builder(
               shrinkWrap: true,
               itemCount: _availableEngines.length,
@@ -765,7 +1022,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                             child: Checkbox(
                               value: isSelected,
                               onChanged: null,
-                              fillColor: WidgetStateProperty.resolveWith((states) {
+                              fillColor: WidgetStateProperty.resolveWith((
+                                states,
+                              ) {
                                 if (states.contains(WidgetState.selected)) {
                                   return Colors.white;
                                 }
@@ -799,7 +1058,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               },
             ),
           ),
-        const SizedBox(height: 24),
+        SizedBox(height: spacing3),
         Row(
           children: [
             FocusTraversalOrder(
@@ -871,6 +1130,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       if (_selection.contains(_IntegrationType.realDebrid))
         _IntegrationType.realDebrid,
       if (_selection.contains(_IntegrationType.torbox)) _IntegrationType.torbox,
+      if (_selection.contains(_IntegrationType.pikpak)) _IntegrationType.pikpak,
     ];
 
     if (ordered.isEmpty) return;
@@ -880,6 +1140,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _stepIndex = 1;
       _errorMessage = null;
     });
+
+    // On Android TV, auto-focus the first focusable element after step change
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
   }
 
   void _goBack() {
@@ -894,6 +1162,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         _errorMessage = null;
       });
     }
+
+    // On Android TV, auto-focus the first focusable element after step change
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
   }
 
   void _skipCurrent() {
@@ -905,48 +1181,232 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
   Future<void> _submitCurrent() async {
     final _IntegrationType current = _flow[_stepIndex - 1];
-    final TextEditingController controller =
-        current == _IntegrationType.realDebrid ? _realDebridController : _torboxController;
-    final String value = controller.text.trim();
 
-    if (value.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please paste your API key to continue.';
-      });
-      return;
-    }
+    // Handle PikPak differently (email/password) vs API key services
+    if (current == _IntegrationType.pikpak) {
+      final String email = _pikpakEmailController.text.trim();
+      final String password = _pikpakPasswordController.text.trim();
 
-    setState(() {
-      _isProcessing = true;
-      _errorMessage = null;
-    });
-
-    bool success = false;
-    try {
-      if (current == _IntegrationType.realDebrid) {
-        success = await AccountService.validateAndGetUserInfo(value);
-      } else {
-        success = await TorboxAccountService.validateAndGetUserInfo(value);
+      if (email.isEmpty || password.isEmpty) {
+        setState(() {
+          _errorMessage = 'Please enter both email and password.';
+        });
+        return;
       }
-    } catch (_) {
-      success = false;
-    }
 
-    if (!mounted) return;
-
-    if (success) {
       setState(() {
-        _isProcessing = false;
-        _hasConfigured = true;
+        _isProcessing = true;
         _errorMessage = null;
       });
-      MainPageBridge.notifyIntegrationChanged();
-      _advanceOrFinish();
+
+      bool success = false;
+      try {
+        success = await PikPakApiService.instance.login(email, password);
+        if (success) {
+          await StorageService.setPikPakEnabled(true);
+        }
+      } catch (e, stackTrace) {
+        debugPrint('PikPak login failed: $e');
+        if (kDebugMode) {
+          debugPrint('Stack trace: $stackTrace');
+        }
+        success = false;
+      }
+
+      if (!mounted) return;
+
+      if (success) {
+        setState(() {
+          _isProcessing = false;
+          _hasConfigured = true;
+          _errorMessage = null;
+        });
+        MainPageBridge.notifyIntegrationChanged();
+
+        // Ask if user wants to set up folder restriction
+        final shouldSetupRestriction = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            // Auto-focus the first button when dialog opens for TV navigation
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _folderRestrictionSkipButtonFocusNode.requestFocus();
+            });
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.folder_special, color: Colors.amber),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Folder Restriction (Optional)')),
+                ],
+              ),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'For enhanced security, you can restrict PikPak access to a specific folder.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '• Full Access: Browse all files in your account',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '• Restricted: Only access files in one folder',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Note: You must logout and login again to change this later.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                Shortcuts(
+                  shortcuts: const <ShortcutActivator, Intent>{
+                    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+                  },
+                  child: Actions(
+                    actions: <Type, Action<Intent>>{
+                      ActivateIntent: CallbackAction<ActivateIntent>(
+                        onInvoke: (_) {
+                          Navigator.pop(dialogContext, false);
+                          return null;
+                        },
+                      ),
+                    },
+                    child: Focus(
+                      focusNode: _folderRestrictionSkipButtonFocusNode,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const Text('Skip (Full Access)'),
+                      ),
+                    ),
+                  ),
+                ),
+                Shortcuts(
+                  shortcuts: const <ShortcutActivator, Intent>{
+                    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+                  },
+                  child: Actions(
+                    actions: <Type, Action<Intent>>{
+                      ActivateIntent: CallbackAction<ActivateIntent>(
+                        onInvoke: (_) {
+                          Navigator.pop(dialogContext, true);
+                          return null;
+                        },
+                      ),
+                    },
+                    child: Focus(
+                      focusNode: _folderRestrictionSelectButtonFocusNode,
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        icon: const Icon(Icons.folder_open, size: 18),
+                        label: const Text('Select Folder'),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+
+        // If user wants to set restriction, show folder picker
+        if (shouldSetupRestriction == true && mounted) {
+          final folderResult = await showDialog<Map<String, dynamic>>(
+            context: context,
+            builder: (ctx) => const PikPakFolderPickerDialog(),
+          );
+
+          if (!mounted) return; // Check after dialog closes
+
+          // Save folder restriction if selected
+          if (folderResult != null) {
+            final folderId = folderResult['folderId'] as String?;
+            final folderName = folderResult['folderName'] as String?;
+            await StorageService.setPikPakRestrictedFolder(
+              folderId,
+              folderName,
+            );
+          }
+        }
+
+        if (!mounted) return; // Check before advancing
+        _advanceOrFinish();
+      } else {
+        if (!mounted) return; // Check before setState
+        setState(() {
+          _isProcessing = false;
+          _errorMessage = 'Login failed. Please check your credentials.';
+        });
+      }
     } else {
+      // Handle Real Debrid and Torbox (API key services)
+      final TextEditingController controller =
+          current == _IntegrationType.realDebrid
+          ? _realDebridController
+          : _torboxController;
+      final String value = controller.text.trim();
+
+      if (value.isEmpty) {
+        setState(() {
+          _errorMessage = 'Please paste your API key to continue.';
+        });
+        return;
+      }
+
       setState(() {
-        _isProcessing = false;
-        _errorMessage = 'That key did not work. Double-check it and try again.';
+        _isProcessing = true;
+        _errorMessage = null;
       });
+
+      bool success = false;
+      try {
+        if (current == _IntegrationType.realDebrid) {
+          success = await AccountService.validateAndGetUserInfo(value);
+        } else {
+          success = await TorboxAccountService.validateAndGetUserInfo(value);
+        }
+      } catch (e, stackTrace) {
+        final serviceName = current == _IntegrationType.realDebrid ? 'Real Debrid' : 'Torbox';
+        debugPrint('$serviceName API validation failed: $e');
+        if (kDebugMode) {
+          debugPrint('Stack trace: $stackTrace');
+        }
+        success = false;
+      }
+
+      if (!mounted) return;
+
+      if (success) {
+        setState(() {
+          _isProcessing = false;
+          _hasConfigured = true;
+          _errorMessage = null;
+        });
+        MainPageBridge.notifyIntegrationChanged();
+        _advanceOrFinish();
+      } else {
+        setState(() {
+          _isProcessing = false;
+          _errorMessage =
+              'That key did not work. Double-check it and try again.';
+        });
+      }
     }
   }
 
@@ -961,6 +1421,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _stepIndex += 1;
       _errorMessage = null;
     });
+
+    // On Android TV, auto-focus the first focusable element after step change
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
   }
 
   void _goToEngineSelection() {
@@ -972,58 +1440,121 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _loadAvailableEngines();
   }
 
+  /// Request focus on the appropriate widget for the current step (Android TV)
+  void _requestFocusForCurrentStep() {
+    if (_stepIndex == 0) {
+      // Welcome screen - focus first chip
+      _realDebridChipFocusNode.requestFocus();
+    } else if (_stepIndex > 0 && _stepIndex <= _flow.length) {
+      // Integration step - focus the text field
+      final currentType = _flow[_stepIndex - 1];
+      if (currentType == _IntegrationType.pikpak) {
+        // PikPak has email field first
+        _pikpakEmailFieldFocusNode.requestFocus();
+      } else if (currentType == _IntegrationType.realDebrid) {
+        // Real Debrid uses the shared text field focus node
+        _textFieldFocusNode.requestFocus();
+      } else if (currentType == _IntegrationType.torbox) {
+        // TorBox uses the shared text field focus node
+        _textFieldFocusNode.requestFocus();
+      }
+    } else if (_stepIndex > _flow.length) {
+      // Engine selection step
+      if (_engineError != null) {
+        _engineRetryButtonFocusNode.requestFocus();
+      } else if (!_isLoadingEngines && _availableEngines.isNotEmpty) {
+        _engineImportButtonFocusNode.requestFocus();
+      }
+    }
+  }
+
   Future<void> _loadAvailableEngines() async {
     try {
       final engines = await _remoteEngineManager.fetchAvailableEngines();
-      if (mounted) {
-        // Clean up old focus nodes
+      if (!mounted) return; // Early exit if widget disposed during fetch
+
+      // Clean up old focus nodes AND their listeners before creating new ones
+      for (final node in _engineItemFocusNodes.values) {
+        // Remove listener if it exists
+        final listener = _focusListeners[node];
+        if (listener != null) {
+          node.removeListener(listener);
+          _focusListeners.remove(node);
+        }
+        node.dispose();
+      }
+      _engineItemFocusNodes.clear();
+
+      // Create focus nodes for each engine AND register listeners
+      for (final engine in engines) {
+        final focusNode = FocusNode(
+          debugLabel: 'engine-${engine.id}',
+        );
+        _engineItemFocusNodes[engine.id] = focusNode;
+
+        // Create and register listener for auto-scrolling
+        void listener() {
+          if (focusNode.hasFocus && _isAndroidTv) {
+            _scrollToFocusedWidget(focusNode);
+          }
+        }
+        _focusListeners[focusNode] = listener;
+        focusNode.addListener(listener);
+      }
+
+      if (!mounted) {
+        // Widget was disposed while creating nodes - clean them up properly
         for (final node in _engineItemFocusNodes.values) {
+          final listener = _focusListeners[node];
+          if (listener != null) {
+            node.removeListener(listener);
+            _focusListeners.remove(node);
+          }
           node.dispose();
         }
         _engineItemFocusNodes.clear();
+        return;
+      }
 
-        // Create focus nodes for each engine
-        for (final engine in engines) {
-          _engineItemFocusNodes[engine.id] = FocusNode(debugLabel: 'engine-${engine.id}');
+      setState(() {
+        _availableEngines = engines;
+        // Auto-select all engines by default
+        _selectedEngineIds = engines.map((e) => e.id).toSet();
+        _isLoadingEngines = false;
+      });
+
+      // Auto-focus the import button after a short delay
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _engineImportButtonFocusNode.requestFocus();
         }
-
-        setState(() {
-          _availableEngines = engines;
-          // Auto-select all engines by default
-          _selectedEngineIds = engines.map((e) => e.id).toSet();
-          _isLoadingEngines = false;
-        });
-
-        // Auto-focus the import button after a short delay
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _engineImportButtonFocusNode.requestFocus();
-          }
-        });
-      }
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoadingEngines = false;
-          _engineError = e.toString();
-        });
-        // Focus retry button on error
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _engineRetryButtonFocusNode.requestFocus();
-          }
-        });
-      }
+      if (!mounted) return; // Early exit if disposed during error
+
+      setState(() {
+        _isLoadingEngines = false;
+        _engineError = e.toString();
+      });
+
+      // Focus retry button on error
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _engineRetryButtonFocusNode.requestFocus();
+        }
+      });
     }
   }
 
   Future<void> _importSelectedEngines() async {
     if (_selectedEngineIds.isEmpty) {
       // Skip if no engines selected
+      if (!mounted) return;
       Navigator.of(context).pop(_hasConfigured);
       return;
     }
 
+    if (!mounted) return;
     setState(() {
       _isProcessing = true;
     });
@@ -1032,10 +1563,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     int successCount = 0;
 
     for (final engine in _availableEngines) {
+      if (!mounted) return; // Check during loop iterations
       if (!_selectedEngineIds.contains(engine.id)) continue;
 
       try {
-        final yamlContent = await _remoteEngineManager.downloadEngineYaml(engine.fileName);
+        final yamlContent = await _remoteEngineManager.downloadEngineYaml(
+          engine.fileName,
+        );
+        if (!mounted) return; // Check after async operation
+
         if (yamlContent != null) {
           await localStorage.saveEngine(
             engineId: engine.id,
@@ -1044,6 +1580,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             displayName: engine.displayName,
             icon: engine.icon,
           );
+          if (!mounted) return; // Check after async operation
           successCount++;
         }
       } catch (e) {
@@ -1051,16 +1588,20 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       }
     }
 
+    if (!mounted) return;
+
     // Reload engine registry
     ConfigLoader().clearCache();
     await EngineRegistry.instance.reload();
 
-    if (mounted) {
-      setState(() {
-        _isProcessing = false;
-      });
-      Navigator.of(context).pop(_hasConfigured || successCount > 0);
-    }
+    if (!mounted) return;
+
+    setState(() {
+      _isProcessing = false;
+    });
+
+    if (!mounted) return;
+    Navigator.of(context).pop(_hasConfigured || successCount > 0);
   }
 
   Future<void> _launch(String url) async {
@@ -1095,12 +1636,19 @@ class _FocusableChipState extends State<_FocusableChip> {
   @override
   void initState() {
     super.initState();
+    // Safely add listener - focus node is guaranteed to exist in parent
     widget.focusNode.addListener(_handleFocusChange);
   }
 
   @override
   void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
+    // Safely remove listener before disposal
+    try {
+      widget.focusNode.removeListener(_handleFocusChange);
+    } catch (e) {
+      // Ignore if listener was already removed or node disposed
+      debugPrint('_FocusableChip: Error removing listener: $e');
+    }
     super.dispose();
   }
 
@@ -1147,8 +1695,8 @@ class _FocusableChipState extends State<_FocusableChip> {
                   color: _isFocused
                       ? Colors.white
                       : widget.selected
-                          ? Colors.white.withValues(alpha: 0.45)
-                          : Colors.white.withValues(alpha: 0.15),
+                      ? Colors.white.withValues(alpha: 0.45)
+                      : Colors.white.withValues(alpha: 0.15),
                   width: _isFocused ? 2 : 1,
                 ),
                 boxShadow: _isFocused
@@ -1194,12 +1742,19 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
   @override
   void initState() {
     super.initState();
+    // Safely add listener with null check
     widget.focusNode?.addListener(_handleFocusChange);
   }
 
   @override
   void dispose() {
-    widget.focusNode?.removeListener(_handleFocusChange);
+    // Safely remove listener with try-catch
+    try {
+      widget.focusNode?.removeListener(_handleFocusChange);
+    } catch (e) {
+      // Ignore if listener was already removed or node disposed
+      debugPrint('_FocusableEngineItem: Error removing listener: $e');
+    }
     super.dispose();
   }
 
@@ -1207,7 +1762,13 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
   void didUpdateWidget(_FocusableEngineItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode?.removeListener(_handleFocusChange);
+      // Safely remove old listener
+      try {
+        oldWidget.focusNode?.removeListener(_handleFocusChange);
+      } catch (e) {
+        debugPrint('_FocusableEngineItem: Error removing old listener: $e');
+      }
+      // Add new listener
       widget.focusNode?.addListener(_handleFocusChange);
     }
   }
@@ -1255,8 +1816,8 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
                   color: _isFocused
                       ? Colors.white
                       : widget.isSelected
-                          ? Colors.white.withValues(alpha: 0.4)
-                          : Colors.white.withValues(alpha: 0.1),
+                      ? Colors.white.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.1),
                   width: _isFocused ? 2 : 1,
                 ),
                 boxShadow: _isFocused
@@ -1281,6 +1842,7 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
 /// A TV-friendly TextField that allows escaping with DPAD
 class _TvFriendlyTextField extends StatefulWidget {
   const _TvFriendlyTextField({
+    super.key,
     required this.controller,
     required this.focusNode,
     required this.enabled,
@@ -1289,6 +1851,7 @@ class _TvFriendlyTextField extends StatefulWidget {
     required this.prefixIcon,
     this.errorText,
     this.onSubmitted,
+    this.obscureText = false,
   });
 
   final TextEditingController controller;
@@ -1299,6 +1862,7 @@ class _TvFriendlyTextField extends StatefulWidget {
   final Widget prefixIcon;
   final String? errorText;
   final ValueChanged<String>? onSubmitted;
+  final bool obscureText;
 
   @override
   State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
@@ -1310,12 +1874,19 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
   @override
   void initState() {
     super.initState();
+    // Safely add listener - focus node is guaranteed to exist in parent
     widget.focusNode.addListener(_handleFocusChange);
   }
 
   @override
   void dispose() {
-    widget.focusNode.removeListener(_handleFocusChange);
+    // Safely remove listener with try-catch
+    try {
+      widget.focusNode.removeListener(_handleFocusChange);
+    } catch (e) {
+      // Ignore if listener was already removed or node disposed
+      debugPrint('_TvFriendlyTextField: Error removing listener: $e');
+    }
     super.dispose();
   }
 
@@ -1330,6 +1901,9 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
+    // Safety check: widget must be mounted to access context
+    if (!mounted) return KeyEventResult.ignored;
+
     final key = event.logicalKey;
     final text = widget.controller.text;
     final selection = widget.controller.selection;
@@ -1338,17 +1912,27 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
     // Check if selection is valid
     final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart = !isSelectionValid || (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd = !isSelectionValid || (selection.baseOffset == textLength && selection.extentOffset == textLength);
+    final isAtStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == textLength &&
+            selection.extentOffset == textLength);
 
     // Allow escape from TextField with back button (escape key)
     if (key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.browserBack) {
       final ctx = node.context;
-      if (ctx != null) {
-        FocusScope.of(ctx).previousFocus();
-        return KeyEventResult.handled;
+      if (ctx != null && mounted) {
+        try {
+          FocusScope.of(ctx).previousFocus();
+          return KeyEventResult.handled;
+        } catch (e) {
+          debugPrint('Error handling escape key: $e');
+          return KeyEventResult.ignored;
+        }
       }
     }
 
@@ -1356,10 +1940,15 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
     if (key == LogicalKeyboardKey.arrowUp) {
       if (isTextEmpty || isAtStart) {
         final ctx = node.context;
-        if (ctx != null) {
-          // Use directional focus to go to element above
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
-          return KeyEventResult.handled;
+        if (ctx != null && mounted) {
+          try {
+            // Use directional focus to go to element above
+            FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
+            return KeyEventResult.handled;
+          } catch (e) {
+            debugPrint('Error handling arrow up: $e');
+            return KeyEventResult.ignored;
+          }
         }
       }
     }
@@ -1368,10 +1957,15 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
     if (key == LogicalKeyboardKey.arrowDown) {
       if (isTextEmpty || isAtEnd) {
         final ctx = node.context;
-        if (ctx != null) {
-          // Use directional focus to go to element below
-          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
-          return KeyEventResult.handled;
+        if (ctx != null && mounted) {
+          try {
+            // Use directional focus to go to element below
+            FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
+            return KeyEventResult.handled;
+          } catch (e) {
+            debugPrint('Error handling arrow down: $e');
+            return KeyEventResult.ignored;
+          }
         }
       }
     }
@@ -1388,9 +1982,7 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: _isFocused
-              ? Border.all(color: Colors.white, width: 2)
-              : null,
+          border: _isFocused ? Border.all(color: Colors.white, width: 2) : null,
           boxShadow: _isFocused
               ? <BoxShadow>[
                   BoxShadow(
@@ -1405,14 +1997,36 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
           controller: widget.controller,
           focusNode: widget.focusNode,
           enabled: widget.enabled,
-          obscureText: false,
-          autofillHints: const <String>[AutofillHints.password],
+          obscureText: widget.obscureText,
+          showCursor: true,
+          autofocus: false,
+          autofillHints: widget.obscureText
+              ? const <String>[AutofillHints.password]
+              : null,
           decoration: InputDecoration(
-            labelText: widget.labelText,
+            labelText: widget.labelText.isEmpty ? null : widget.labelText,
+            labelStyle: const TextStyle(color: Colors.white70),
             hintText: widget.hintText,
+            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
             prefixIcon: widget.prefixIcon,
+            prefixIconColor: Colors.white70,
             errorText: widget.errorText,
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.08),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.white, width: 2),
+            ),
           ),
+          style: const TextStyle(color: Colors.white),
           onSubmitted: widget.onSubmitted,
         ),
       ),

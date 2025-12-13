@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../models/engine_config/engine_config.dart';
 import '../../models/torrent.dart';
+import '../../utils/torrent_coverage_detector.dart';
 
 /// Maps parsed API response data to Torrent objects
 class FieldMapper {
@@ -10,8 +11,9 @@ class FieldMapper {
   Torrent mapToTorrent(
     Map<String, dynamic> data,
     ResponseConfig config,
-    String engineId,
-  ) {
+    String engineId, {
+    String searchType = 'keyword',
+  }) {
     final int nowUnix = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
     // Extract infohash first as it's required for rowid generation
@@ -74,6 +76,21 @@ class FieldMapper {
       config,
     );
 
+    // Detect coverage type and generate transformed title
+    // Only run coverage detection for IMDB/series searches (not keyword searches)
+    CoverageInfo? coverage;
+    if (searchType == 'imdb' || searchType == 'series') {
+      try {
+        coverage = TorrentCoverageDetector.detectCoverage(
+          title: name,
+          infohash: infohash,
+        );
+      } catch (e) {
+        debugPrint('FieldMapper: Coverage detection failed: $e');
+        // Continue without coverage info
+      }
+    }
+
     return Torrent(
       rowid: rowid,
       infohash: infohash,
@@ -86,6 +103,12 @@ class FieldMapper {
       scrapedDate: nowUnix,
       category: category,
       source: engineId,
+      coverageType: coverage?.coverageType.name,
+      startSeason: coverage?.startSeason,
+      endSeason: coverage?.endSeason,
+      seasonNumber: coverage?.seasonNumber,
+      transformedTitle: coverage?.transformedTitle,
+      episodeIdentifier: coverage?.episodeIdentifier,
     );
   }
 
@@ -455,6 +478,10 @@ class FieldMapper {
         case 'double':
           return double.tryParse(captured) ?? config.defaultValue ?? 0.0;
 
+        case 'datetime_iso':
+        case 'datetime':
+          return parseDateTimeToUnix(captured) ?? config.defaultValue ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
         default:
           return captured;
       }
@@ -557,5 +584,18 @@ class FieldMapper {
     final String unitPart = match.group(2) ?? 'B';
 
     return parseSizeWithUnit(numberPart, unitPart);
+  }
+
+  /// Parse a datetime string to Unix timestamp
+  /// Supports ISO 8601 and common datetime formats
+  int? parseDateTimeToUnix(String dateTimeStr) {
+    try {
+      // Try parsing as ISO 8601 or standard datetime format
+      final DateTime dateTime = DateTime.parse(dateTimeStr);
+      return dateTime.millisecondsSinceEpoch ~/ 1000;
+    } catch (e) {
+      debugPrint('FieldMapper: Could not parse datetime string: $dateTimeStr');
+      return null;
+    }
   }
 }

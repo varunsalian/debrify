@@ -7,4 +7,43 @@
     <color name="tv_button_selected">#FF6366F1</color>
     <color name="tv_button_idle">#40FFFFFF</color>
     <color name="debrify_red">#FFE50914</color>
+
+    <!-- Netflix/HBO Max Style Solid Dark Gradient Colors -->
+    <!-- Background Colors - Solid Dark Gradients - 100% OPAQUE -->
+    <color name="netflix_dark_charcoal">#FF1A1A1D</color>
+    <color name="netflix_deep_black">#FF0D0D0F</color>
+    <color name="netflix_border_highlight">#FF2A2A2F</color>
+
+    <!-- Button Colors - Solid - 100% OPAQUE -->
+    <color name="netflix_button_idle">#FF26262C</color>
+    <color name="netflix_button_border">#FF3D3D45</color>
+    <color name="netflix_button_focused">#FF2F2F35</color>
+    <color name="netflix_button_focused_border">#FFFFFFFF</color>
+
+    <!-- Netflix Red - Primary/Important Actions - 100% OPAQUE -->
+    <color name="netflix_red">#FFE50914</color>
+    <color name="netflix_red_dark">#FFBB070D</color>
+
+    <!-- Seekbar Colors - Solid - 100% OPAQUE -->
+    <color name="netflix_seekbar_active">#FFE50914</color>
+    <color name="netflix_seekbar_background">#FF3D3D45</color>
+    <color name="netflix_seekbar_thumb">#FFFFFFFF</color>
+
+    <!-- Text Colors - 100% OPAQUE -->
+    <color name="netflix_text_primary">#FFFFFFFF</color>
+    <color name="netflix_text_secondary">#FFCCCCCC</color>
+
+    <!-- Shadow Color -->
+    <color name="netflix_shadow">#FF000000</color>
+
+    <!-- Legacy Apple TV Style Premium Colors (kept for backward compatibility) -->
+    <color name="tv_premium_glass">#1A000000</color>
+    <color name="tv_premium_glass_border">#1AFFFFFF</color>
+    <color name="tv_premium_button_idle">#0DFFFFFF</color>
+    <color name="tv_premium_button_hover">#1AFFFFFF</color>
+    <color name="tv_premium_button_focused">#26FFFFFF</color>
+    <color name="tv_premium_glow">#CCFFFFFF</color>
+    <color name="tv_premium_text">#F2FFFFFF</color>
+    <color name="tv_premium_text_secondary">#B3FFFFFF</color>
+    <color name="tv_premium_shadow">#66000000</color>
 </resources> 

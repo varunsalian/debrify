@@ -3,17 +3,111 @@ import 'package:http/http.dart' as http;
 import '../models/debrid_download.dart';
 import '../models/rd_torrent.dart';
 import '../models/rd_user.dart';
+import '../models/rd_file_node.dart';
 import '../services/storage_service.dart';
 import '../utils/file_utils.dart';
+import '../utils/rd_folder_tree_builder.dart';
 
 class DebridService {
-  static const String _baseUrl = 'https://api.real-debrid.com/rest/1.0';
+  static const String _primaryEndpoint = 'https://api.real-debrid.com/rest/1.0';
+  static const String _backupEndpoint = 'https://api-2.real-debrid.com/rest/1.0';
+
+  // Get the saved endpoint preference (defaults to primary)
+  static Future<String> _getBaseUrl() async {
+    return await StorageService.getRdEndpoint();
+  }
+
+  // Validate API key with automatic fallback to backup endpoint
+  // Returns map with: {success: bool, user: RDUser?, endpoint: String?}
+  static Future<Map<String, dynamic>> validateApiKeyWithFallback(String apiKey) async {
+    // Try primary endpoint first
+    try {
+      final response = await http.get(
+        Uri.parse('$_primaryEndpoint/user'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        // Primary endpoint works - save it
+        await StorageService.saveRdEndpoint(_primaryEndpoint);
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'user': RDUser.fromJson(data),
+          'endpoint': _primaryEndpoint,
+        };
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        // Invalid API key - don't try backup
+        return {
+          'success': false,
+          'error': response.statusCode == 401 ? 'Invalid API key' : 'Account locked',
+        };
+      } else if (response.statusCode >= 500 || response.statusCode == 429) {
+        // Server errors or rate limiting - trigger backup attempt
+        throw Exception('Server error: ${response.statusCode}');
+      } else {
+        // Other client errors (400, 404, etc.) - don't try backup
+        return {
+          'success': false,
+          'error': 'Request failed: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      // Primary endpoint failed (timeout or network error) - try backup
+      try {
+        final response = await http.get(
+          Uri.parse('$_backupEndpoint/user'),
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+            'Content-Type': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200) {
+          // Backup endpoint works - save it
+          await StorageService.saveRdEndpoint(_backupEndpoint);
+          final data = json.decode(response.body);
+          return {
+            'success': true,
+            'user': RDUser.fromJson(data),
+            'endpoint': _backupEndpoint,
+          };
+        } else if (response.statusCode == 401 || response.statusCode == 403) {
+          return {
+            'success': false,
+            'error': response.statusCode == 401 ? 'Invalid API key' : 'Account locked',
+          };
+        } else {
+          // Other errors - backup also failed
+          return {
+            'success': false,
+            'error': 'Failed to validate API key: ${response.statusCode}',
+          };
+        }
+      } catch (backupError) {
+        // Both endpoints failed
+        return {
+          'success': false,
+          'error': 'Could not connect to Real-Debrid. Please check your internet connection.',
+        };
+      }
+    }
+
+    return {
+      'success': false,
+      'error': 'Failed to validate API key',
+    };
+  }
 
   // Get user information
   static Future<RDUser> getUserInfo(String apiKey) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.get(
-        Uri.parse('$_baseUrl/user'),
+        Uri.parse('$baseUrl/user'),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',
@@ -51,12 +145,13 @@ class DebridService {
     int limit = 100,
   }) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final queryParams = <String, String>{
         'page': page.toString(),
         'limit': limit.toString(),
       };
 
-      final uri = Uri.parse('$_baseUrl/downloads').replace(queryParameters: queryParams);
+      final uri = Uri.parse('$baseUrl/downloads').replace(queryParameters: queryParams);
       
       final response = await http.get(
         uri,
@@ -106,16 +201,17 @@ class DebridService {
     String? filter,
   }) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final queryParams = <String, String>{
         'page': page.toString(),
         'limit': limit.toString(),
       };
-      
+
       if (filter != null) {
         queryParams['filter'] = filter;
       }
 
-      final uri = Uri.parse('$_baseUrl/torrents').replace(queryParameters: queryParams);
+      final uri = Uri.parse('$baseUrl/torrents').replace(queryParameters: queryParams);
       
 
       final response = await http.get(
@@ -163,8 +259,9 @@ class DebridService {
   // Add magnet to Real Debrid
   static Future<Map<String, dynamic>> addMagnet(String apiKey, String magnetLink) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.post(
-        Uri.parse('$_baseUrl/torrents/addMagnet'),
+        Uri.parse('$baseUrl/torrents/addMagnet'),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -189,8 +286,9 @@ class DebridService {
   // Get torrent info
   static Future<Map<String, dynamic>> getTorrentInfo(String apiKey, String torrentId) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.get(
-        Uri.parse('$_baseUrl/torrents/info/$torrentId'),
+        Uri.parse('$baseUrl/torrents/info/$torrentId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
         },
@@ -211,15 +309,16 @@ class DebridService {
   // Select files (select the largest file or all files)
   static Future<void> selectFiles(String apiKey, String torrentId, List<int> fileIds) async {
     try {
+      final baseUrl = await _getBaseUrl();
       String fileIdsString;
       if (fileIds.isEmpty) {
         fileIdsString = 'all';
       } else {
         fileIdsString = fileIds.join(',');
       }
-      
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/torrents/selectFiles/$torrentId'),
+        Uri.parse('$baseUrl/torrents/selectFiles/$torrentId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -244,8 +343,9 @@ class DebridService {
   // Unrestrict link
   static Future<Map<String, dynamic>> unrestrictLink(String apiKey, String link) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.post(
-        Uri.parse('$_baseUrl/unrestrict/link'),
+        Uri.parse('$baseUrl/unrestrict/link'),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -299,10 +399,9 @@ class DebridService {
   // Delete torrent
   static Future<void> deleteTorrent(String apiKey, String torrentId) async {
     try {
-      // ignore: avoid_print
-      print('Debrid: Deleting torrent $torrentId');
+      final baseUrl = await _getBaseUrl();
       final response = await http.delete(
-        Uri.parse('$_baseUrl/torrents/delete/$torrentId'),
+        Uri.parse('$baseUrl/torrents/delete/$torrentId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
         },
@@ -312,13 +411,8 @@ class DebridService {
         if (response.statusCode == 401) {
           throw Exception('Invalid API key');
         } else {
-          // ignore: avoid_print
-          print('Debrid: Failed to delete torrent $torrentId. Status ${response.statusCode}');
           throw Exception('Failed to delete torrent: ${response.statusCode}');
         }
-      } else {
-        // ignore: avoid_print
-        print('Debrid: Deleted torrent $torrentId');
       }
     } catch (e) {
       throw Exception('Network error: $e');
@@ -328,8 +422,9 @@ class DebridService {
   // Delete download
   static Future<void> deleteDownload(String apiKey, String downloadId) async {
     try {
+      final baseUrl = await _getBaseUrl();
       final response = await http.delete(
-        Uri.parse('$_baseUrl/downloads/delete/$downloadId'),
+        Uri.parse('$baseUrl/downloads/delete/$downloadId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
         },
@@ -357,18 +452,6 @@ class DebridService {
       // Step 2: Get torrent info
       final torrentInfo = await getTorrentInfo(apiKey, torrentId);
       final files = (torrentInfo['files'] as List<dynamic>? ?? const []);
-      // Log raw file info for debugging
-      // ignore: avoid_print
-      print('Debrid: Torrent info received. filesCount=${files.length}');
-      for (final f in files) {
-        try {
-          final name = (f is Map && f['name'] != null) ? f['name'] : '<no-name>';
-          final bytes = (f is Map && f['bytes'] != null) ? f['bytes'] : '<no-bytes>';
-          final id = (f is Map && f['id'] != null) ? f['id'] : '<no-id>';
-          // ignore: avoid_print
-          print('Debrid: file id=$id name=$name bytes=$bytes');
-        } catch (_) {}
-      }
 
       if (files.isEmpty) {
         await deleteTorrent(apiKey, torrentId);
@@ -545,22 +628,15 @@ class DebridService {
   // Enhanced workflow for Magic TV: Prefer video files (all), fallback to largest video file
   static Future<Map<String, dynamic>> addTorrentToDebridPreferVideos(String apiKey, String magnetLink) async {
     try {
-      // Log start
-      // ignore: avoid_print
-      print('Debrid: addTorrentToDebridPreferVideos: Adding magnet...');
       // Step 1: Add magnet
       final addResponse = await addMagnet(apiKey, magnetLink);
       final torrentId = addResponse['id'];
-      // ignore: avoid_print
-      print('Debrid: Magnet added. torrentId=$torrentId');
 
       // Step 2: Get torrent info
       final torrentInfo = await getTorrentInfo(apiKey, torrentId);
       final files = torrentInfo['files'] as List<dynamic>;
 
       if (files.isEmpty) {
-        // ignore: avoid_print
-        print('Debrid: No files in torrent. Deleting.');
         await deleteTorrent(apiKey, torrentId);
         throw Exception('No files found in torrent');
       }
@@ -581,21 +657,15 @@ class DebridService {
       final videoFiles = normalizedFiles.where((file) {
         final fileName = (file is Map) ? file['name'] as String? : null;
         final isVideo = fileName != null && FileUtils.isVideoFile(fileName);
-        // ignore: avoid_print
-        print('Debrid: classify name="${fileName ?? '<null>'}" isVideo=$isVideo');
         return isVideo;
       }).toList();
 
       if (videoFiles.isNotEmpty) {
-        // ignore: avoid_print
-        print('Debrid: Selecting all video files. count=${videoFiles.length}');
         final allVideoIds = videoFiles.map((file) => file['id'] as int).toList();
         try {
           await selectFiles(apiKey, torrentId, allVideoIds);
         } catch (e) {
           // Selection failed (e.g., 202 or other). Clean up and surface error.
-          // ignore: avoid_print
-          print('Debrid: selectFiles(all videos) failed for $torrentId: $e. Deleting.');
           await deleteTorrent(apiKey, torrentId);
           throw Exception('Failed to select files for Real Debrid torrent: $e');
         }
@@ -604,13 +674,9 @@ class DebridService {
         await Future.delayed(const Duration(seconds: 2));
         final updatedInfo = await getTorrentInfo(apiKey, torrentId);
         List<dynamic> links = (updatedInfo['links'] as List<dynamic>? ?? const []);
-        // ignore: avoid_print
-        print('Debrid: Links after selecting all videos: count=${links.length}');
 
         // If no links yet, fallback to largest single video file
         if (links.isEmpty) {
-          // ignore: avoid_print
-          print('Debrid: Links empty after selecting all videos. Falling back to largest video.');
           // Find largest video file
           int? largestVideoId;
           int largestVideoSize = -1;
@@ -623,25 +689,17 @@ class DebridService {
           }
 
           if (largestVideoId != null) {
-            // ignore: avoid_print
-            print('Debrid: Selecting largest video id=$largestVideoId size=$largestVideoSize');
             try {
               await selectFiles(apiKey, torrentId, [largestVideoId]);
             } catch (e) {
-              // ignore: avoid_print
-              print('Debrid: selectFiles(largest video) failed for $torrentId: $e. Deleting.');
               await deleteTorrent(apiKey, torrentId);
               throw Exception('Failed to select files for Real Debrid torrent: $e');
             }
             await Future.delayed(const Duration(seconds: 2));
             final updatedInfo2 = await getTorrentInfo(apiKey, torrentId);
             links = (updatedInfo2['links'] as List<dynamic>? ?? const []);
-            // ignore: avoid_print
-            print('Debrid: Links after selecting largest video: count=${links.length}');
 
             if (links.isEmpty) {
-              // ignore: avoid_print
-              print('Debrid: Still no links after selecting largest video. Deleting torrent.');
               await deleteTorrent(apiKey, torrentId);
               throw Exception('File is not readily available in Real Debrid');
             }
@@ -649,14 +707,10 @@ class DebridService {
             final unrestrictResponse = await unrestrictLink(apiKey, links[0]);
             final downloadLink = unrestrictResponse['download'] as String?;
             if (downloadLink == null) {
-              // ignore: avoid_print
-              print('Debrid: Unrestrict failed after largest video selection. Deleting.');
               await deleteTorrent(apiKey, torrentId);
               throw Exception('Failed to get download link from Real Debrid');
             }
 
-            // ignore: avoid_print
-            print('Debrid: Success with largest video. Returning download link.');
             return {
               'downloadLink': downloadLink,
               'torrentId': torrentId,
@@ -666,27 +720,19 @@ class DebridService {
               'updatedInfo': updatedInfo2,
             };
           } else {
-            // ignore: avoid_print
-            print('Debrid: No video files found to select as largest. Deleting torrent.');
             await deleteTorrent(apiKey, torrentId);
             throw Exception('No video files found in torrent');
           }
         }
 
         // Unrestrict first link when all videos selection succeeded
-        // ignore: avoid_print
-        print('Debrid: Unrestricting first link after selecting all videos...');
         final unrestrictResponse = await unrestrictLink(apiKey, links[0]);
         final downloadLink = unrestrictResponse['download'] as String?;
         if (downloadLink == null) {
-          // ignore: avoid_print
-          print('Debrid: Unrestrict failed after selecting all videos. Deleting.');
           await deleteTorrent(apiKey, torrentId);
           throw Exception('Failed to get download link from Real Debrid');
         }
 
-        // ignore: avoid_print
-        print('Debrid: Success with all videos selection. Returning download link.');
         return {
           'downloadLink': downloadLink,
           'torrentId': torrentId,
@@ -698,14 +744,127 @@ class DebridService {
       }
 
       // If no video files found at all, fail early
-      // ignore: avoid_print
-      print('Debrid: No video files found in torrent. Deleting.');
       await deleteTorrent(apiKey, torrentId);
       throw Exception('No video files found in torrent');
     } catch (e) {
-      // ignore: avoid_print
-      print('Debrid: addTorrentToDebridPreferVideos failed: $e');
       throw Exception('Failed to add torrent (prefer videos): $e');
+    }
+  }
+
+  // === New helper methods for folder navigation ===
+
+  /// Get file nodes at root level of torrent
+  static Future<List<RDFileNode>> getTorrentRootNodes(String apiKey, String torrentId) async {
+    try {
+      final info = await getTorrentInfo(apiKey, torrentId);
+      final files = (info['files'] as List<dynamic>?) ?? [];
+
+      if (files.isEmpty) {
+        return [];
+      }
+
+      // Convert to proper Map format
+      final filesMaps = files.map((f) => f as Map<String, dynamic>).toList();
+
+      // Build the folder tree
+      final tree = RDFolderTreeBuilder.buildTree(filesMaps);
+
+      // Return root level items (handles both folders and files at root)
+      return RDFolderTreeBuilder.getRootLevelNodes(tree);
+    } catch (e) {
+      throw Exception('Failed to get torrent file structure: $e');
+    }
+  }
+
+  /// Build complete folder tree for a torrent
+  static Future<RDFileNode> getTorrentFolderTree(String apiKey, String torrentId) async {
+    try {
+      final info = await getTorrentInfo(apiKey, torrentId);
+      final files = (info['files'] as List<dynamic>?) ?? [];
+
+      if (files.isEmpty) {
+        return RDFileNode.folder(name: 'Empty', children: []);
+      }
+
+      // Convert to proper Map format
+      final filesMaps = files.map((f) => f as Map<String, dynamic>).toList();
+
+      // Build and return the complete folder tree
+      final tree = RDFolderTreeBuilder.buildTree(filesMaps);
+
+      return tree;
+    } catch (e) {
+      throw Exception('Failed to build torrent folder tree: $e');
+    }
+  }
+
+  /// Unrestrict and get download URL for a specific file in a torrent
+  static Future<String> getFileDownloadUrl(String apiKey, String torrentId, int linkIndex) async {
+    try {
+      // Get torrent info to get the links
+      final info = await getTorrentInfo(apiKey, torrentId);
+      final links = (info['links'] as List<dynamic>?) ?? [];
+
+      if (linkIndex < 0 || linkIndex >= links.length) {
+        throw Exception('Invalid link index: $linkIndex (torrent has ${links.length} links)');
+      }
+
+      final link = links[linkIndex] as String;
+
+      // Unrestrict the link to get the download URL
+      final unrestrictedData = await unrestrictLink(apiKey, link);
+      final downloadUrl = unrestrictedData['download'] as String?;
+
+      if (downloadUrl == null) {
+        throw Exception('Failed to get download URL from Real-Debrid');
+      }
+
+      return downloadUrl;
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('Failed to get file download URL: $e');
+    }
+  }
+
+  /// Get multiple download URLs for a list of files (with linkIndex)
+  static Future<List<String>> getMultipleFileDownloadUrls(
+    String apiKey,
+    String torrentId,
+    List<int> linkIndices,
+  ) async {
+    try {
+      // Get torrent info once to get all links
+      final info = await getTorrentInfo(apiKey, torrentId);
+      final links = (info['links'] as List<dynamic>?) ?? [];
+
+      // Validate all indices first
+      for (final index in linkIndices) {
+        if (index < 0 || index >= links.length) {
+          throw Exception('Invalid link index: $index (torrent has ${links.length} links)');
+        }
+      }
+
+      // Unrestrict all links in parallel
+      final futures = linkIndices.map((index) async {
+        final link = links[index] as String;
+        final unrestrictedData = await unrestrictLink(apiKey, link);
+        final downloadUrl = unrestrictedData['download'] as String?;
+
+        if (downloadUrl == null) {
+          throw Exception('Failed to get download URL for link index $index');
+        }
+
+        return downloadUrl;
+      });
+
+      return await Future.wait(futures);
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      throw Exception('Failed to get multiple file download URLs: $e');
     }
   }
 } 

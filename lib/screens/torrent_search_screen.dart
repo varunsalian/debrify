@@ -16,7 +16,9 @@ import '../services/android_native_downloader.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
+import '../utils/rd_folder_tree_builder.dart';
 import '../widgets/stat_chip.dart';
+import '../widgets/file_selection_dialog.dart';
 import 'video_player_screen.dart';
 import '../models/rd_torrent.dart';
 import '../services/main_page_bridge.dart';
@@ -27,6 +29,11 @@ import '../screens/torbox/torbox_downloads_screen.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/advanced_search_sheet.dart';
 import '../widgets/torrent_filters_sheet.dart';
+import '../services/imdb_lookup_service.dart';
+import 'dart:async';
+
+// Search mode for torrent search
+enum SearchMode { keyword, imdb }
 
 class TorrentSearchScreen extends StatefulWidget {
   const TorrentSearchScreen({super.key});
@@ -44,12 +51,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _sortDirectionFocusNode = FocusNode();
   final FocusNode _filterButtonFocusNode = FocusNode();
   final FocusNode _clearFiltersButtonFocusNode = FocusNode();
+
+  // IMDB Smart Search Mode focus nodes
+  final FocusNode _modeSelectorFocusNode = FocusNode();
+  final FocusNode _selectionChipFocusNode = FocusNode();
+  final FocusNode _expandControlsFocusNode = FocusNode();
+  final FocusNode _seasonInputFocusNode = FocusNode();
+  final FocusNode _episodeInputFocusNode = FocusNode();
+  List<FocusNode> _autocompleteFocusNodes = [];
+
+  // Focus states stored as regular bools for efficiency
   bool _searchFocused = false;
   bool _providerAccordionFocused = false;
   bool _advancedButtonFocused = false;
   bool _sortDirectionFocused = false;
   bool _filterButtonFocused = false;
   bool _clearFiltersButtonFocused = false;
+  bool _modeSelectorFocused = false;
+  bool _selectionChipFocused = false;
+  bool _expandControlsFocused = false;
+  bool _seasonInputFocused = false;
+  bool _episodeInputFocused = false;
+
   List<Torrent> _torrents = [];
   List<Torrent> _allTorrents = [];
   Map<String, int> _engineCounts = {};
@@ -69,8 +92,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _pikpakEnabled = false;
   bool _showingTorboxCachedOnly = false;
   bool _isTelevision = false;
+  bool _isBulkAdding = false;
   final List<FocusNode> _cardFocusNodes = [];
-  final List<bool> _cardFocusStates = [];
+  int _focusedCardIndex = -1; // -1 means no card is focused
 
   // Search engine toggles - dynamic engine states
   Map<String, bool> _engineStates = {};
@@ -78,9 +102,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final SettingsManager _settingsManager = SettingsManager();
   // Dynamic focus nodes for engine toggles
   final Map<String, FocusNode> _engineTileFocusNodes = {};
-  final Map<String, bool> _engineTileFocusStates = {};
+  final Map<String, bool> _engineTileFocusStates = {}; // Track focus as simple bools
   bool _showProvidersPanel = false;
   AdvancedSearchSelection? _activeAdvancedSelection;
+
+  // IMDB Smart Search Mode state
+  SearchMode _searchMode = SearchMode.keyword;
+  List<ImdbTitleResult> _imdbAutocompleteResults = [];
+  bool _isImdbSearching = false;
+  String? _imdbSearchError;
+  ImdbTitleResult? _selectedImdbTitle;
+  bool _isSeries = false;
+  bool _imdbControlsCollapsed = false;
+  bool _seriesControlsExpanded = false; // Whether to show Movie/Series chips and S/E inputs
+  Timer? _imdbSearchDebouncer;
+  final TextEditingController _seasonController = TextEditingController();
+  final TextEditingController _episodeController = TextEditingController();
 
   // Sorting options
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
@@ -126,47 +163,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
     );
 
-    _searchFocusNode.addListener(() {
-      if (!mounted) return;
-      setState(() {
-        _searchFocused = _searchFocusNode.hasFocus;
-      });
-    });
-
-    _providerAccordionFocusNode.addListener(() {
-      if (!mounted) return;
-      setState(() {
-        _providerAccordionFocused = _providerAccordionFocusNode.hasFocus;
-      });
-    });
-
-    _advancedButtonFocusNode.addListener(() {
-      if (!mounted) return;
-      setState(() {
-        _advancedButtonFocused = _advancedButtonFocusNode.hasFocus;
-      });
-    });
-
-    _sortDirectionFocusNode.addListener(() {
-      if (!mounted) return;
-      setState(() {
-        _sortDirectionFocused = _sortDirectionFocusNode.hasFocus;
-      });
-    });
-
-    _filterButtonFocusNode.addListener(() {
-      if (!mounted) return;
-      setState(() {
-        _filterButtonFocused = _filterButtonFocusNode.hasFocus;
-      });
-    });
-
-    _clearFiltersButtonFocusNode.addListener(() {
-      if (!mounted) return;
-      setState(() {
-        _clearFiltersButtonFocused = _clearFiltersButtonFocusNode.hasFocus;
-      });
-    });
+    // Focus listeners removed - now using onFocusChange callbacks directly in widgets
 
     _listAnimationController.forward();
     _loadDefaultSettings();
@@ -194,28 +191,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Dispose old focus nodes if list shrunk
     while (_cardFocusNodes.length > _torrents.length) {
       _cardFocusNodes.removeLast().dispose();
-      _cardFocusStates.removeLast();
     }
 
     // Add new focus nodes if list grew
     while (_cardFocusNodes.length < _torrents.length) {
       final index = _cardFocusNodes.length;
       final node = FocusNode(debugLabel: 'torrent-card-$index');
-      node.addListener(() {
-        if (!mounted) return;
-        setState(() {
-          _cardFocusStates[index] = node.hasFocus;
-        });
-        if (node.hasFocus) {
-          // Auto-scroll to focused card
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            // Will be handled by Scrollable.ensureVisible in the widget
-          });
-        }
-      });
       _cardFocusNodes.add(node);
-      _cardFocusStates.add(false);
     }
   }
 
@@ -334,16 +316,60 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Future<void> _loadDefaultSettings() async {
-    // Load available engines dynamically from TorrentService
-    final engines = await TorrentService.getKeywordSearchEngines();
+    // Load available engines based on current search mode
+    List<DynamicEngine> engines;
+
+    if (_searchMode == SearchMode.imdb) {
+      // For IMDB mode, get engines that specifically support IMDB search
+      engines = await TorrentService.getImdbSearchEngines();
+      debugPrint('TorrentSearchScreen: Loading IMDB engines: ${engines.map((e) => e.name).toList()}');
+    } else {
+      // For keyword mode, get all keyword search capable engines
+      engines = await TorrentService.getKeywordSearchEngines();
+      debugPrint('TorrentSearchScreen: Loading keyword engines: ${engines.map((e) => e.name).toList()}');
+    }
+
+    // If no engines available for this mode, try to get any available engines as fallback
+    if (engines.isEmpty) {
+      debugPrint('TorrentSearchScreen: No engines available for $_searchMode mode');
+      engines = await TorrentService.getAvailableEngines();
+
+      // Filter based on mode even from all engines
+      if (_searchMode == SearchMode.imdb) {
+        engines = engines.where((e) => e.supportsImdbSearch).toList();
+      } else {
+        engines = engines.where((e) => e.supportsKeywordSearch).toList();
+      }
+
+      if (engines.isEmpty) {
+        debugPrint('TorrentSearchScreen: Still no engines after fallback filter');
+      }
+    }
+
     final Map<String, bool> states = {};
+
+    // Preserve previous enabled states where possible, but only for available engines
+    final previousStates = Map<String, bool>.from(_engineStates);
 
     // Load enabled state for each engine from SettingsManager
     for (final engine in engines) {
       final engineId = engine.name;
-      final defaultEnabled = engine.settingsConfig.enabled?.defaultBool ?? true;
-      final isEnabled = await _settingsManager.getEnabled(engineId, defaultEnabled);
-      states[engineId] = isEnabled;
+
+      // If we had a previous state for this engine, preserve it
+      // Otherwise, load from settings
+      if (previousStates.containsKey(engineId)) {
+        states[engineId] = previousStates[engineId]!;
+      } else {
+        final defaultEnabled = engine.settingsConfig.enabled?.defaultBool ?? true;
+        final isEnabled = await _settingsManager.getEnabled(engineId, defaultEnabled);
+        states[engineId] = isEnabled;
+      }
+    }
+
+    // If no engines are enabled after switching mode, enable the first available engine
+    if (states.isNotEmpty && !states.values.any((enabled) => enabled)) {
+      final firstEngineId = engines.first.name;
+      states[firstEngineId] = true;
     }
 
     if (!mounted) return;
@@ -380,12 +406,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final engineId = engine.name;
       if (!_engineTileFocusNodes.containsKey(engineId)) {
         final node = FocusNode(debugLabel: 'engine-tile-$engineId');
-        node.addListener(() {
-          if (!mounted) return;
-          setState(() {
-            _engineTileFocusStates[engineId] = node.hasFocus;
-          });
-        });
         _engineTileFocusNodes[engineId] = node;
         _engineTileFocusStates[engineId] = false;
       }
@@ -421,14 +441,34 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _sortDirectionFocusNode.dispose();
     _filterButtonFocusNode.dispose();
     _clearFiltersButtonFocusNode.dispose();
+
+    // Focus states are now regular bools - no disposal needed
+
+    // Dispose IMDB Smart Search Mode resources
+    _modeSelectorFocusNode.dispose();
+    _selectionChipFocusNode.dispose();
+    _expandControlsFocusNode.dispose();
+    _seasonInputFocusNode.dispose();
+    _episodeInputFocusNode.dispose();
+    _seasonController.dispose();
+    _episodeController.dispose();
+    _imdbSearchDebouncer?.cancel();
+    for (final node in _autocompleteFocusNodes) {
+      node.dispose();
+    }
+    _autocompleteFocusNodes.clear();
+
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
+    // Card focus states now use index tracking - no disposal needed
+
     // Dispose dynamic engine focus nodes
     for (final node in _engineTileFocusNodes.values) {
       node.dispose();
     }
     _engineTileFocusNodes.clear();
+    _engineTileFocusStates.clear();
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.handleRealDebridResult = null;
     MainPageBridge.handleTorboxResult = null;
@@ -483,7 +523,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Use IMDB search when we have an advanced selection, otherwise keyword search
       if (selection != null && selection.imdbId.trim().isNotEmpty) {
-        debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}');
+        debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}, isMovie=${!selection.isSeries}, title=${selection.title}');
         result = await TorrentService.searchByImdb(
           selection.imdbId,
           engineStates: _engineStates,
@@ -492,6 +532,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           episode: selection.episode,
         );
       } else {
+        debugPrint('TorrentSearchScreen: Using KEYWORD search (no advanced selection) for query: $query');
         result = await TorrentService.searchAllEngines(
           query,
           engineStates: _engineStates,
@@ -639,6 +680,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'ST';
       case 'torrentio':
         return 'TIO';
+      case 'knaben':
+        return 'KNB';
       default:
         return null;
     }
@@ -692,6 +735,51 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  // Build source chip for stats row - compact version matching StatChip style
+  Widget _buildSourceStatChip(String rawSource) {
+    final label = _sourceTagLabel(rawSource);
+    if (label == null) {
+      // Return a default source chip if no label
+      return StatChip(
+        icon: Icons.source_rounded,
+        text: 'Unknown',
+        color: const Color(0xFF6B7280), // Gray 500
+      );
+    }
+
+    // Determine color based on source
+    Color sourceColor;
+    switch (rawSource.trim().toLowerCase()) {
+      case 'yts':
+        sourceColor = const Color(0xFF10B981); // Emerald 500
+        break;
+      case 'pirate_bay':
+        sourceColor = const Color(0xFFF59E0B); // Amber 500 (keeping original yellow tone)
+        break;
+      case 'torrents_csv':
+        sourceColor = const Color(0xFF3B82F6); // Blue 500
+        break;
+      case 'solid_torrents':
+        sourceColor = const Color(0xFFEF4444); // Red 500
+        break;
+      case 'torrentio':
+        sourceColor = const Color(0xFF8B5CF6); // Violet 500
+        break;
+      case 'knaben':
+        sourceColor = const Color(0xFFEC4899); // Pink 500
+        break;
+      default:
+        sourceColor = const Color(0xFF6B7280); // Gray 500
+        break;
+    }
+
+    return StatChip(
+      icon: Icons.source_rounded,
+      text: label,
+      color: sourceColor,
+    );
+  }
+
   void _setEngineEnabled(String engineId, bool value) {
     if (_engineStates[engineId] == value) return;
     setState(() {
@@ -705,6 +793,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _handleSearchFieldChanged(String value) {
+    // In IMDB mode, trigger autocomplete search
+    if (_searchMode == SearchMode.imdb) {
+      // On TV: Don't trigger autocomplete as user types (only on Enter/Submit)
+      // On non-TV: Trigger autocomplete as they type (current behavior)
+      if (!_isTelevision) {
+        _onImdbSearchTextChanged(value);
+      }
+      // If user manually edits, clear the active selection
+      final trimmed = value.trim();
+      if (_activeAdvancedSelection != null &&
+          trimmed != _activeAdvancedSelection!.displayQuery) {
+        setState(() {
+          _selectedImdbTitle = null;
+          _activeAdvancedSelection = null;
+        });
+      }
+      return;
+    }
+
+    // Keyword mode: clear advanced selection if user manually edits
     final trimmed = value.trim();
     if (_activeAdvancedSelection != null &&
         trimmed != _activeAdvancedSelection!.displayQuery) {
@@ -739,6 +847,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final label = selection == null ? 'Adv' : 'Adv*';
     return Focus(
       focusNode: _advancedButtonFocusNode,
+      onFocusChange: (focused) {
+        if (_advancedButtonFocused != focused) {
+          setState(() {
+            _advancedButtonFocused = focused;
+          });
+        }
+      },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
@@ -784,21 +899,671 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  // Mode selector dropdown for Smart Search Mode
+  Widget _buildModeSelector() {
+    return Focus(
+      focusNode: _modeSelectorFocusNode,
+      onFocusChange: (focused) {
+        if (_modeSelectorFocused != focused) {
+          setState(() {
+            _modeSelectorFocused = focused;
+          });
+        }
+      },
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter)) {
+          // Toggle between modes on select/enter
+          _toggleSearchMode();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: _modeSelectorFocused
+              ? Border.all(color: Colors.white, width: 2)
+              : null,
+        ),
+        child: PopupMenuButton<SearchMode>(
+          onSelected: (mode) {
+            setState(() {
+              _searchMode = mode;
+              // Clear autocomplete when switching modes
+              _imdbAutocompleteResults.clear();
+              _selectedImdbTitle = null;
+              _imdbSearchError = null;
+              _seriesControlsExpanded = false; // Reset expansion state
+              if (mode == SearchMode.keyword) {
+                // Clear IMDB-specific state when returning to keyword mode
+                _activeAdvancedSelection = null;
+                _isSeries = false;
+                _seasonController.clear();
+                _episodeController.clear();
+              }
+            });
+            // Reload engines for the new search mode
+            _loadDefaultSettings();
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: SearchMode.keyword,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: _searchMode == SearchMode.keyword
+                        ? const Color(0xFF7C3AED)
+                        : Colors.white70,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Keyword',
+                    style: TextStyle(
+                      color: _searchMode == SearchMode.keyword
+                          ? const Color(0xFF7C3AED)
+                          : Colors.white,
+                      fontWeight: _searchMode == SearchMode.keyword
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: SearchMode.imdb,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.auto_awesome_outlined,
+                    size: 18,
+                    color: _searchMode == SearchMode.imdb
+                        ? const Color(0xFF7C3AED)
+                        : Colors.white70,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'IMDB',
+                    style: TextStyle(
+                      color: _searchMode == SearchMode.imdb
+                          ? const Color(0xFF7C3AED)
+                          : Colors.white,
+                      fontWeight: _searchMode == SearchMode.imdb
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: _searchMode == SearchMode.imdb
+                  ? const Color(0xFF7C3AED)
+                  : const Color(0xFF1E3A8A),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _searchMode == SearchMode.imdb
+                      ? Icons.auto_awesome_outlined
+                      : Icons.search_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _searchMode == SearchMode.imdb ? 'IMDB' : 'Keyword',
+                  style: const TextStyle(fontSize: 12, color: Colors.white),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-  Widget _buildProviderSummaryText(BuildContext context) {
-    final enabledCount = _engineStates.values.where((enabled) => enabled).length;
-    if (enabledCount == 0) {
-      return Text(
-        'No providers selected',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Theme.of(context).colorScheme.error,
+  void _toggleSearchMode() {
+    setState(() {
+      _searchMode =
+          _searchMode == SearchMode.keyword ? SearchMode.imdb : SearchMode.keyword;
+      _imdbAutocompleteResults.clear();
+      _selectedImdbTitle = null;
+      _imdbSearchError = null;
+      _seriesControlsExpanded = false; // Reset expansion state
+      if (_searchMode == SearchMode.keyword) {
+        _activeAdvancedSelection = null;
+        _isSeries = false;
+        _seasonController.clear();
+        _episodeController.clear();
+      }
+    });
+    // Reload engines for the new search mode
+    _loadDefaultSettings();
+  }
+
+  // IMDB autocomplete search with debouncing
+  void _onImdbSearchTextChanged(String query) {
+    // Cancel previous timer
+    _imdbSearchDebouncer?.cancel();
+
+    if (query.trim().isEmpty) {
+      setState(() {
+        _imdbAutocompleteResults.clear();
+        _imdbSearchError = null;
+        _isImdbSearching = false;
+      });
+      return;
+    }
+
+    if (query.trim().length < 2) {
+      setState(() {
+        _imdbAutocompleteResults.clear();
+        _imdbSearchError = 'Enter at least 2 characters';
+        _isImdbSearching = false;
+      });
+      return;
+    }
+
+    // Show loading state
+    setState(() {
+      _isImdbSearching = true;
+      _imdbSearchError = null;
+    });
+
+    // Debounce: wait 300ms after user stops typing
+    _imdbSearchDebouncer = Timer(const Duration(milliseconds: 300), () {
+      _performImdbAutocompleteSearch(query.trim());
+    });
+  }
+
+  Future<void> _performImdbAutocompleteSearch(String query) async {
+    try {
+      final results = await ImdbLookupService.searchTitles(query);
+
+      if (!mounted) return;
+
+      // Dispose old focus nodes and create new ones
+      for (final node in _autocompleteFocusNodes) {
+        node.dispose();
+      }
+      _autocompleteFocusNodes = List.generate(
+        results.take(10).length,
+        (index) => FocusNode(debugLabel: 'imdb_autocomplete_$index'),
+      );
+
+      setState(() {
+        _imdbAutocompleteResults = results.take(10).toList();
+        _isImdbSearching = false;
+        _imdbSearchError = results.isEmpty ? 'No IMDb matches found' : null;
+      });
+
+      // On TV: Auto-focus first result after results appear
+      if (_isTelevision && _autocompleteFocusNodes.isNotEmpty && results.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Future.delayed(const Duration(milliseconds: 150), () {
+            if (_autocompleteFocusNodes.isNotEmpty && mounted) {
+              _autocompleteFocusNodes[0].requestFocus();
+            }
+          });
+        });
+      }
+    } catch (e) {
+      debugPrint('IMDB autocomplete error: $e');
+      if (!mounted) return;
+      setState(() {
+        _imdbAutocompleteResults.clear();
+        _isImdbSearching = false;
+        _imdbSearchError = e.toString().replaceAll('Exception: ', '');
+      });
+    }
+  }
+
+  // Handle IMDB result selection
+  void _onImdbResultSelected(ImdbTitleResult result) async {
+
+    // Clear autocomplete immediately
+    setState(() {
+      _selectedImdbTitle = result;
+      _imdbAutocompleteResults.clear();
+      _imdbSearchError = null;
+      _isImdbSearching = true; // Show loading indicator while fetching details
+      _imdbControlsCollapsed = false; // Expand controls for new selection
+    });
+
+    try {
+      // Fetch title details to determine if it's a movie or series
+      final details = await ImdbLookupService.getTitleDetails(result.imdbId);
+
+      if (!mounted) return;
+
+      // Parse the response to determine type
+      bool isSeries = false;
+      if (details['short'] != null && details['short'] is Map) {
+        final shortData = details['short'] as Map<String, dynamic>;
+        final type = shortData['@type']?.toString() ?? '';
+        isSeries = type == 'TVSeries';
+      } else {
+        // Fallback if structure is different
+        isSeries = false;
+      }
+
+      setState(() {
+        _isSeries = isSeries;
+        _seasonController.clear();
+        _episodeController.clear();
+        _isImdbSearching = false;
+        // For series, hide controls initially - user can expand to customize
+        _seriesControlsExpanded = !isSeries; // Movies don't need controls, series start collapsed
+      });
+
+      debugPrint('TorrentSearchScreen: IMDB title detected - isSeries=$isSeries, title=${_selectedImdbTitle?.title}');
+
+      // Search immediately for both movies and series
+      // For series, this will search with default params (null season/episode means all episodes)
+      // Users can refine the search later by expanding controls and setting season/episode
+      _createAdvancedSelectionAndSearch();
+    } catch (e) {
+      debugPrint('IMDB Smart Search: Error fetching title details: $e');
+
+      if (!mounted) return;
+
+      // On error, show type selector so user can manually choose
+      setState(() {
+        _isImdbSearching = false;
+        _imdbSearchError = 'Could not determine title type. Please select manually.';
+        // Default to movie on error
+        _isSeries = false;
+        _seasonController.clear();
+        _episodeController.clear();
+        _seriesControlsExpanded = true; // Show controls on error so user can manually choose
+      });
+
+      // Still allow search for movies by default
+      _createAdvancedSelectionAndSearch();
+    }
+  }
+
+  void _createAdvancedSelectionAndSearch() {
+    if (_selectedImdbTitle == null) return;
+
+    int? season;
+    int? episode;
+
+    if (_isSeries) {
+      final seasonText = _seasonController.text.trim();
+      final episodeText = _episodeController.text.trim();
+
+      if (seasonText.isNotEmpty) {
+        season = int.tryParse(seasonText);
+      }
+
+      if (episodeText.isNotEmpty) {
+        episode = int.tryParse(episodeText);
+      } else if (season != null) {
+        // Default to episode 1 if season is specified
+        episode = 1;
+      }
+    }
+
+    final selection = AdvancedSearchSelection(
+      imdbId: _selectedImdbTitle!.imdbId,
+      isSeries: _isSeries,
+      title: _selectedImdbTitle!.title,
+      year: _selectedImdbTitle!.year,
+      season: season,
+      episode: episode,
+    );
+
+    debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}');
+
+    setState(() {
+      _activeAdvancedSelection = selection;
+      _searchController.text = selection.displayQuery;
+      // Auto-collapse controls after search
+      _imdbControlsCollapsed = true;
+    });
+
+    // Trigger torrent search
+    _searchTorrents(selection.displayQuery);
+  }
+
+  // Clear IMDB selection
+  void _clearImdbSelection() {
+    setState(() {
+      _selectedImdbTitle = null;
+      _activeAdvancedSelection = null;
+      _isSeries = false;
+      _seasonController.clear();
+      _episodeController.clear();
+      _searchController.clear();
+      _imdbSearchError = null; // Clear any errors when clearing selection
+      _isImdbSearching = false; // Reset loading state
+      _imdbControlsCollapsed = false; // Expand controls when clearing
+      _seriesControlsExpanded = false; // Reset expansion state
+    });
+  }
+
+  // Build IMDB autocomplete dropdown
+  Widget _buildImdbAutocompleteDropdown() {
+    if (_imdbAutocompleteResults.isEmpty && !_isImdbSearching && _imdbSearchError == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.5,
+      ),
+      child: _isImdbSearching
+          ? const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
+          : _imdbSearchError != null
+              ? Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    _imdbSearchError!,
+                    style: const TextStyle(color: Color(0xFFF87171)),
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    overflow: TextOverflow.visible,
+                  ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _imdbAutocompleteResults.length,
+                  itemBuilder: (context, index) {
+                    final result = _imdbAutocompleteResults[index];
+                    final focusNode = _autocompleteFocusNodes[index];
+                    return _ImdbAutocompleteItem(
+                      result: result,
+                      focusNode: focusNode,
+                      onSelected: () => _onImdbResultSelected(result),
+                      onKeyEvent: (event) => _handleAutocompleteKeyEvent(index, event),
+                    );
+                  },
+                ),
+    );
+  }
+
+  // Handle keyboard events for autocomplete items
+  KeyEventResult _handleAutocompleteKeyEvent(int index, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (index > 0) {
+        _autocompleteFocusNodes[index - 1].requestFocus();
+      } else {
+        _searchFocusNode.requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (index < _autocompleteFocusNodes.length - 1) {
+        _autocompleteFocusNodes[index + 1].requestFocus();
+      } else {
+        // Last autocomplete item - navigate to Season box if series is selected
+        if (_isSeries && _selectedImdbTitle != null) {
+          _seasonInputFocusNode.requestFocus();
+        }
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      _onImdbResultSelected(_imdbAutocompleteResults[index]);
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      setState(() {
+        _imdbAutocompleteResults.clear();
+      });
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleSeasonInputKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Arrow Right or Arrow Down -> Episode field
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _episodeInputFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    // Arrow Up or Escape/Back -> Search field
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+        event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleEpisodeInputKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Arrow Left or Arrow Up -> Season field
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _seasonInputFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    // Arrow Down -> Navigate to first torrent result if available
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_cardFocusNodes.isNotEmpty) {
+        _cardFocusNodes[0].requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Escape/Back -> Search field
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  // Build active IMDB selection chip
+  Widget _buildImdbSelectionChip() {
+    // Removed - chip takes up too much space
+    return const SizedBox.shrink();
+  }
+
+  // Build movie/series type selector and S/E inputs
+  Widget _buildImdbTypeAndEpisodeControls() {
+    if (_selectedImdbTitle == null) {
+      return const SizedBox.shrink();
+    }
+
+    // For movies: hide when collapsed
+    // For series: never hide (we show either the expandable button or full controls)
+    if (_imdbControlsCollapsed && !_isSeries) {
+      return const SizedBox.shrink();
+    }
+
+    // Show loading indicator while fetching title details
+    if (_isImdbSearching) {
+      return Container(
+        margin: const EdgeInsets.only(top: 8, bottom: 8),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  const Color(0xFF7C3AED),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Detecting title type...',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       );
     }
-    return Text(
-      '$enabledCount enabled',
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
+
+    // Show error message if present
+    if (_imdbSearchError != null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 8, bottom: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.red.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 16,
+              color: Colors.red,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _imdbSearchError!,
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 5,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // For movies, don't show controls at all
+    if (!_isSeries) {
+      return const SizedBox.shrink();
+    }
+
+    // For series, show S/E inputs directly (type is auto-detected)
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      child: Row(
+        children: [
+          // Season input
+          SizedBox(
+            width: 70,
+            child: Focus(
+              onKeyEvent: (node, event) => _handleSeasonInputKeyEvent(event),
+              child: TextField(
+                focusNode: _seasonInputFocusNode,
+                controller: _seasonController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Season',
+                  labelStyle: const TextStyle(fontSize: 12),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                onChanged: (_) {
+                  _createAdvancedSelectionAndSearch();
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Episode input
+          SizedBox(
+            width: 70,
+            child: Focus(
+              onKeyEvent: (node, event) => _handleEpisodeInputKeyEvent(event),
+              child: TextField(
+                focusNode: _episodeInputFocusNode,
+                controller: _episodeController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Episode',
+                  labelStyle: const TextStyle(fontSize: 12),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                ),
+                onChanged: (_) {
+                  _createAdvancedSelectionAndSearch();
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -819,6 +1584,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         children: [
           FocusableActionDetector(
             focusNode: _providerAccordionFocusNode,
+            onShowFocusHighlight: (focused) {
+              if (_providerAccordionFocused != focused) {
+                setState(() {
+                  _providerAccordionFocused = focused;
+                });
+              }
+            },
             shortcuts: _activateShortcuts,
             actions: <Type, Action<Intent>>{
               ActivateIntent: CallbackAction<ActivateIntent>(
@@ -850,14 +1622,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      'Search Providers',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        'Search Providers (${_engineStates.values.where((enabled) => enabled).length})',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                     ),
-                    const Spacer(),
-                    _buildProviderSummaryText(context),
                   ],
                 ),
               ),
@@ -876,8 +1650,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     children: _availableEngines.map((engine) {
                       final engineId = engine.name;
                       final focusNode = _engineTileFocusNodes[engineId];
-                      final isFocused = _engineTileFocusStates[engineId] ?? false;
                       final isEnabled = _engineStates[engineId] ?? false;
+                      final isFocused = _engineTileFocusStates[engineId] ?? false;
+
                       return _buildProviderSwitch(
                         context,
                         label: engine.displayName,
@@ -887,7 +1662,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         tileFocused: isFocused,
                         onFocusChange: (visible) {
                           if (_engineTileFocusStates[engineId] != visible) {
-                            setState(() => _engineTileFocusStates[engineId] = visible);
+                            setState(() {
+                              _engineTileFocusStates[engineId] = visible;
+                            });
                           }
                         },
                       );
@@ -909,6 +1686,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildAdvancedProviderHint(BuildContext context) {
+    // Show different hints based on search mode
+    final String hintText;
+    final IconData hintIcon;
+    final Color hintColor;
+
+    if (_searchMode == SearchMode.imdb) {
+      hintText = 'IMDB mode shows only engines that support IMDB search (like Torrentio). Switch to Keyword mode to see all engines.';
+      hintIcon = Icons.info_outline_rounded;
+      hintColor = const Color(0xFF7C3AED);
+    } else {
+      hintText = 'Need IMDb-accurate results? Switch to IMDB mode to search with IMDB IDs, seasons, and episodes.';
+      hintIcon = Icons.auto_awesome_rounded;
+      hintColor = const Color(0xFFFACC15);
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -916,20 +1708,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         color: const Color(0xFF1F2937),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFFFACC15).withValues(alpha: 0.3),
+          color: hintColor.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.auto_awesome_rounded,
-            color: Color(0xFFFACC15),
+          Icon(
+            hintIcon,
+            color: hintColor,
             size: 18,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Need IMDb-accurate results? Use Advanced search to pull Torrentio streams via IMDb ID, seasons, and episodes.',
+              hintText,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.white.withValues(alpha: 0.8),
               ),
@@ -995,13 +1787,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: value
-                        ? Theme.of(context).colorScheme.onPrimaryContainer
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: value ? FontWeight.w600 : FontWeight.normal,
+                Flexible(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: value
+                          ? Theme.of(context).colorScheme.onPrimaryContainer
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: value ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
               ],
@@ -1063,40 +1859,94 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final List<Torrent> sortedTorrents = List<Torrent>.from(baseList);
 
+    // Determine if we should apply season pack prioritization
+    // Only apply for TV series searches, not for movies
+    final bool shouldApplyCoveragePriority =
+        _activeAdvancedSelection?.isSeries ?? false;
+
+    debugPrint('TorrentSearchScreen: Sorting torrents - shouldApplyCoveragePriority=$shouldApplyCoveragePriority, isSeries=${_activeAdvancedSelection?.isSeries}, title=${_activeAdvancedSelection?.title}');
+
     switch (_sortBy) {
       case 'name':
         sortedTorrents.sort((a, b) {
-          final comparison = a.name.toLowerCase().compareTo(
-            b.name.toLowerCase(),
+          // Primary: coverage type (complete series first) - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
+
+          // Secondary: name
+          final comparison = a.displayTitle.toLowerCase().compareTo(
+            b.displayTitle.toLowerCase(),
           );
           return _sortAscending ? comparison : -comparison;
         });
         break;
       case 'size':
         sortedTorrents.sort((a, b) {
+          // Primary: coverage type - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
+
+          // Secondary: size
           final comparison = a.sizeBytes.compareTo(b.sizeBytes);
           return _sortAscending ? comparison : -comparison;
         });
         break;
       case 'seeders':
         sortedTorrents.sort((a, b) {
+          // Primary: coverage type - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
+
+          // Secondary: seeders
           final comparison = a.seeders.compareTo(b.seeders);
           return _sortAscending ? comparison : -comparison;
         });
         break;
       case 'date':
         sortedTorrents.sort((a, b) {
+          // Primary: coverage type - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
+
+          // Secondary: date
           final comparison = a.createdUnix.compareTo(b.createdUnix);
           return _sortAscending ? comparison : -comparison;
         });
         break;
       case 'relevance':
       default:
-        // Keep original order (relevance maintained by search engines)
+        // Sort by coverage type first - only for TV series, then maintain original order
+        sortedTorrents.sort((a, b) {
+          // Primary: coverage type (complete series first) - only for TV series
+          if (shouldApplyCoveragePriority) {
+            final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          }
+
+          // Secondary: seeders (best quality indicator for relevance)
+          return b.seeders.compareTo(a.seeders);
+        });
         break;
     }
 
     final filtered = _applyFiltersToList(sortedTorrents, metadataMap: metadata);
+
+    // Debug: Log top 3 results to understand sorting
+    if (sortedTorrents.isNotEmpty) {
+      debugPrint('TorrentSearchScreen: Top 3 results after sorting:');
+      for (int i = 0; i < sortedTorrents.length && i < 3; i++) {
+        final t = sortedTorrents[i];
+        debugPrint('  $i: ${t.name} - coveragePriority=${t.coveragePriority}, coverageType=${t.coverageType}, seeders=${t.seeders}');
+      }
+    }
 
     setState(() {
       _allTorrents = sortedTorrents;
@@ -1244,11 +2094,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _openFiltersSheet() async {
     if (_allTorrents.isEmpty && !_hasActiveFilters) return;
 
-    final result = await showModalBottomSheet<TorrentFilterState>(
+    final result = await showDialog<TorrentFilterState>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => TorrentFiltersSheet(initialState: _filters),
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: TorrentFiltersSheet(initialState: _filters),
+      ),
     );
 
     if (result == null || result == _filters) return;
@@ -1328,8 +2179,35 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       bool showingTimeoutOptions = false;
       final startTime = DateTime.now();
 
+      // Get parent folder ID (restricted folder or root)
+      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+
+      // Find or create "debrify-torrents" subfolder
+      String? subFolderId;
+      try {
+        subFolderId = await pikpak.findOrCreateSubfolder(
+          folderName: 'debrify-torrents',
+          parentFolderId: parentFolderId,
+          getCachedId: StorageService.getPikPakTorrentsFolderId,
+          setCachedId: StorageService.setPikPakTorrentsFolderId,
+        );
+        print('PikPak: Using subfolder ID: $subFolderId');
+      } catch (e) {
+        // Check if this is the restricted folder deleted error
+        if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
+          print('PikPak: Detected restricted folder was deleted');
+          await _handlePikPakRestrictedFolderDeleted();
+          return;
+        }
+        print('PikPak: Failed to create subfolder, using parent folder: $e');
+        subFolderId = parentFolderId;
+      }
+
       // Add to PikPak first
-      final addResult = await pikpak.addOfflineDownload(magnet);
+      final addResult = await pikpak.addOfflineDownload(
+        magnet,
+        parentFolderId: subFolderId,
+      );
       print('PikPak: addOfflineDownload response: $addResult');
 
       // Extract file ID and task ID
@@ -1415,7 +2293,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   children: [
                     Text(
                       torrentName,
-                      maxLines: 2,
+                      maxLines: 5,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.7),
@@ -1503,7 +2381,453 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     } catch (e) {
       print('Error sending to PikPak: $e');
       if (!mounted) return;
+
+      // Check if the error is because the restricted folder was deleted
+      final folderExists =
+          await PikPakApiService.instance.verifyRestrictedFolderExists();
+      if (!folderExists) {
+        // Restricted folder was deleted - auto logout
+        await _handlePikPakRestrictedFolderDeleted();
+        return;
+      }
+
       _showPikPakSnack('Failed: ${e.toString()}', isError: true);
+    }
+  }
+
+  /// Handle the case when PikPak restricted folder has been deleted externally
+  Future<void> _handlePikPakRestrictedFolderDeleted() async {
+    print(
+      'PikPak: Restricted folder was deleted externally, logging out user...',
+    );
+
+    // Logout from PikPak
+    await PikPakApiService.instance.logout();
+
+    if (!mounted) return;
+
+    // Show error message
+    _showPikPakSnack(
+      'Restricted folder was deleted. You have been logged out.',
+      isError: true,
+    );
+  }
+
+  /// Show bulk add provider selection dialog
+  Future<void> _showBulkAddDialog() async {
+    final List<Widget> options = [];
+
+    // Add Torbox option (greyed out/disabled)
+    options.add(
+      ListTile(
+        leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
+        title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+        subtitle: const Text('Coming soon', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        enabled: false,
+        onTap: null,
+      ),
+    );
+
+    // Add Real-Debrid option (greyed out/disabled)
+    options.add(
+      ListTile(
+        leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
+        title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+        subtitle: const Text('Coming soon', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        enabled: false,
+        onTap: null,
+      ),
+    );
+
+    // Add PikPak option (enabled if configured)
+    if (_pikpakEnabled) {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.folder_rounded, color: Color(0xFF0088CC)),
+          title: const Text('PikPak', style: TextStyle(color: Colors.white)),
+          onTap: () => Navigator.of(context).pop('pikpak'),
+        ),
+      );
+    } else {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.folder_rounded, color: Color(0xFF0088CC)),
+          title: const Text('PikPak', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Not configured', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          enabled: false,
+          onTap: null,
+        ),
+      );
+    }
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.playlist_add, color: Color(0xFF6366F1), size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Bulk Add Torrents',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add all ${_torrents.length} torrents to:',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...options,
+          ],
+        ),
+      ),
+    );
+
+    if (result == 'pikpak') {
+      _bulkAddToPikPak();
+    }
+  }
+
+  /// Bulk add all torrents to PikPak with batching and progress tracking
+  Future<void> _bulkAddToPikPak() async {
+    if (_torrents.isEmpty) return;
+
+    setState(() {
+      _isBulkAdding = true;
+    });
+
+    final pikpak = PikPakApiService.instance;
+    final totalTorrents = _torrents.length;
+    int successCount = 0;
+    int failureCount = 0;
+    int currentIndex = 0;
+    bool cancelled = false;
+
+    // Track status of each torrent
+    final Map<String, String> torrentStatus = {};
+    for (final torrent in _torrents) {
+      torrentStatus[torrent.infohash] = 'pending';
+    }
+
+    try {
+      // Get or create the debrify-torrents subfolder once
+      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+      String? subFolderId;
+
+      try {
+        subFolderId = await pikpak.findOrCreateSubfolder(
+          folderName: 'debrify-torrents',
+          parentFolderId: parentFolderId,
+          getCachedId: StorageService.getPikPakTorrentsFolderId,
+          setCachedId: StorageService.setPikPakTorrentsFolderId,
+        );
+        print('PikPak Bulk: Using subfolder ID: $subFolderId');
+      } catch (e) {
+        if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
+          await _handlePikPakRestrictedFolderDeleted();
+          setState(() {
+            _isBulkAdding = false;
+          });
+          return;
+        }
+        print('PikPak Bulk: Failed to create subfolder, using parent folder: $e');
+        subFolderId = parentFolderId;
+      }
+
+      if (!mounted) return;
+
+      // Capture the dialog state setter for use in async operations
+      StateSetter? dialogSetState;
+
+      // Show progress dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              // Capture the setDialogState for async operations
+              dialogSetState = setDialogState;
+
+              return AlertDialog(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFAA00).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.cloud_upload, color: Color(0xFFFFAA00), size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Adding to PikPak',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(
+                        value: totalTorrents > 0 ? currentIndex / totalTorrents : 0,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFAA00)),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Progress: $currentIndex of $totalTorrents',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Success: $successCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.error, color: Color(0xFFEF4444), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Failed: $failureCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFFEF4444),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: _torrents.length,
+                          itemBuilder: (context, index) {
+                            final torrent = _torrents[index];
+                            final status = torrentStatus[torrent.infohash] ?? 'pending';
+
+                            IconData icon;
+                            Color iconColor;
+
+                            if (status == 'success') {
+                              icon = Icons.check_circle;
+                              iconColor = const Color(0xFF10B981);
+                            } else if (status == 'error') {
+                              icon = Icons.error;
+                              iconColor = const Color(0xFFEF4444);
+                            } else if (status == 'processing') {
+                              icon = Icons.hourglass_empty;
+                              iconColor = const Color(0xFFFFAA00);
+                            } else {
+                              icon = Icons.circle_outlined;
+                              iconColor = Colors.white54;
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(icon, color: iconColor, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      torrent.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.7),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      cancelled = true;
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      // Process torrents in batches of 3 concurrent requests
+      const batchSize = 3;
+
+      for (int i = 0; i < _torrents.length && !cancelled; i += batchSize) {
+        final batchEnd = (i + batchSize).clamp(0, _torrents.length);
+        final batch = _torrents.sublist(i, batchEnd);
+
+        // Process batch concurrently
+        await Future.wait(
+          batch.map((torrent) async {
+            if (cancelled) return;
+
+            try {
+              // Update status to processing
+              if (mounted) {
+                dialogSetState?.call(() {
+                  torrentStatus[torrent.infohash] = 'processing';
+                  currentIndex++;
+                });
+              }
+
+              final magnet = 'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+
+              await pikpak.addOfflineDownload(
+                magnet,
+                parentFolderId: subFolderId,
+              );
+
+              // Update status to success
+              if (mounted) {
+                dialogSetState?.call(() {
+                  torrentStatus[torrent.infohash] = 'success';
+                  successCount++;
+                });
+              }
+
+              print('PikPak Bulk: Successfully added ${torrent.name}');
+            } catch (e) {
+              // Update status to error
+              if (mounted) {
+                dialogSetState?.call(() {
+                  torrentStatus[torrent.infohash] = 'error';
+                  failureCount++;
+                });
+              }
+
+              print('PikPak Bulk: Failed to add ${torrent.name}: $e');
+            }
+          }),
+        );
+
+        // Small delay between batches to avoid overwhelming the API
+        if (i + batchSize < _torrents.length && !cancelled) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show summary
+      if (!cancelled && mounted) {
+        if (successCount > 0 && failureCount == 0) {
+          _showPikPakSnack('Successfully added $successCount/${totalTorrents} torrents to PikPak');
+        } else if (successCount > 0 && failureCount > 0) {
+          _showPikPakSnack(
+            'Added $successCount/${totalTorrents} torrents. $failureCount failed.',
+            isError: true,
+          );
+        } else {
+          _showPikPakSnack('Failed to add torrents to PikPak', isError: true);
+        }
+      }
+    } catch (e) {
+      print('Error in bulk add to PikPak: $e');
+
+      if (mounted) {
+        Navigator.of(context).pop();
+
+        // Check if the error is because the restricted folder was deleted
+        final folderExists = await PikPakApiService.instance.verifyRestrictedFolderExists();
+        if (!folderExists) {
+          await _handlePikPakRestrictedFolderDeleted();
+          return;
+        }
+
+        _showPikPakSnack('Bulk add failed: ${e.toString()}', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBulkAdding = false;
+        });
+      }
     }
   }
 
@@ -1687,6 +3011,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final hasVideo = videoFiles.isNotEmpty;
     final postAction = await StorageService.getPikPakPostTorrentAction();
+    final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
 
     // Handle automatic actions
     switch (postAction) {
@@ -1747,7 +3072,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             children: [
                               Text(
                                 torrentName,
-                                maxLines: 2,
+                                maxLines: 5,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   color: Colors.white,
@@ -1777,6 +3102,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                   const Divider(height: 1, color: Color(0xFF1E293B)),
                   _DebridActionTile(
+                    icon: Icons.open_in_new,
+                    color: const Color(0xFFF59E0B),
+                    title: 'Open in PikPak',
+                    subtitle: pikpakHidden
+                        ? 'Enable PikPak navigation in settings to use this'
+                        : 'View folder in PikPak files tab',
+                    enabled: !pikpakHidden,
+                    autofocus: !pikpakHidden,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      // Navigate to the specific PikPak folder
+                      MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
+                    },
+                  ),
+                  _DebridActionTile(
                     icon: Icons.play_circle_fill_rounded,
                     color: const Color(0xFF60A5FA),
                     title: 'Play now',
@@ -1784,10 +3124,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ? 'Stream instantly from PikPak.'
                         : 'No video files found.',
                     enabled: hasVideo,
-                    autofocus: true,
+                    autofocus: pikpakHidden && hasVideo,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _playPikPakVideos(videoFiles, torrentName);
+                    },
+                  ),
+                  _DebridActionTile(
+                    icon: Icons.download_rounded,
+                    color: const Color(0xFF4ADE80),
+                    title: 'Download to device',
+                    subtitle: 'Grab files from PikPak instantly.',
+                    enabled: true,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _downloadPikPakFiles(fileId, torrentName);
                     },
                   ),
                   _DebridActionTile(
@@ -2010,17 +3361,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'title': file['name'] ?? torrentName,
         'kind': 'single',
         'pikpakFileId': file['id'],
+        // Store full metadata for instant playback
+        'pikpakFile': {
+          'id': file['id'],
+          'name': file['name'],
+          'size': file['size'],
+          'mime_type': file['mime_type'],
+        },
         'sizeBytes': int.tryParse(file['size']?.toString() ?? '0'),
       });
       _showPikPakSnack(added ? 'Added to playlist' : 'Already in playlist', isError: !added);
     } else {
-      // Save as collection (like Torbox)
+      // Save as collection with full metadata for instant playback
       final fileIds = videoFiles.map((f) => f['id'] as String).toList();
+      final filesMetadata = videoFiles.map((f) => {
+        'id': f['id'],
+        'name': f['name'],
+        'size': f['size'],
+        'mime_type': f['mime_type'],
+      }).toList();
+
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'pikpak',
         'title': torrentName,
         'kind': 'collection',
-        'pikpakFileIds': fileIds,
+        'pikpakFiles': filesMetadata,  // NEW: Full metadata for instant playback
+        'pikpakFileIds': fileIds,       // KEEP: For backward compatibility and deduplication
         'count': videoFiles.length,
       });
       _showPikPakSnack(
@@ -2028,6 +3394,215 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         isError: !added,
       );
     }
+  }
+
+  Future<void> _downloadPikPakFiles(String fileId, String torrentName) async {
+    // Show selection dialog for downloading files
+    if (!mounted) return;
+
+    final pikpak = PikPakApiService.instance;
+
+    // Show loading dialog while we fetch the file structure
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Scanning files...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Get all files from the folder (recursively)
+      final fileData = await pikpak.getFileDetails(fileId);
+      final kind = fileData['kind'];
+      List<Map<String, dynamic>> allFiles = [];
+
+      if (kind == 'drive#folder') {
+        // Extract all files recursively
+        allFiles = await _extractAllPikPakFiles(pikpak, fileId);
+      } else {
+        // Single file
+        allFiles = [fileData];
+      }
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (allFiles.isEmpty) {
+        _showPikPakSnack('No files found to download', isError: true);
+        return;
+      }
+
+      // Show file selection dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return FileSelectionDialog(
+            files: allFiles,
+            torrentName: torrentName,
+            onDownload: (selectedFiles) {
+              if (selectedFiles.isEmpty) return;
+              _downloadSelectedPikPakFiles(selectedFiles, torrentName);
+            },
+          );
+        },
+      );
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showPikPakSnack('Failed to fetch files: $e', isError: true);
+    }
+  }
+
+  /// Downloads selected files from PikPak with folder grouping (similar to Real-Debrid)
+  Future<void> _downloadSelectedPikPakFiles(List<Map<String, dynamic>> files, String torrentName) async {
+    if (files.isEmpty) return;
+
+    int successCount = 0;
+    int failCount = 0;
+    final pikpak = PikPakApiService.instance;
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Preparing ${files.length} file${files.length > 1 ? 's' : ''}...',
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    for (final file in files) {
+      try {
+        final fileId = file['id'] as String?;
+        if (fileId == null) continue;
+
+        // Get fresh file details with download URL
+        final freshFileData = await pikpak.getFileDetails(fileId);
+        final downloadUrl = freshFileData['web_content_link'] as String?;
+
+        if (downloadUrl == null || downloadUrl.isEmpty) {
+          failCount++;
+          continue;
+        }
+
+        // Extract file path and name - use the full path if available (from folder navigation)
+        final fullPath = file['_fullPath'] as String? ?? file['name'] as String? ?? 'download';
+        final displayName = file['_displayName'] as String? ?? file['name'] as String? ?? 'download';
+
+        // Create metadata with folder structure info (similar to Real-Debrid pattern)
+        final meta = jsonEncode({
+          'pikpakDownload': true,
+          'pikpakFileId': fileId,
+          'pikpakFileName': fullPath,  // Store full path for folder structure
+          'pikpakDisplayName': displayName,  // Display name for UI
+        });
+
+        // Enqueue download with torrentName for grouping (like Real-Debrid does)
+        // This groups all files under the same torrent name in the downloads screen
+        await DownloadService.instance.enqueueDownload(
+          url: downloadUrl,
+          fileName: displayName,  // Use display name (just the filename, not the full path)
+          meta: meta,
+          torrentName: torrentName,  // KEY: This groups downloads under the torrent folder
+          context: mounted ? context : null,
+        );
+        successCount++;
+      } catch (e) {
+        print('Error queueing file for download: $e');
+        failCount++;
+      }
+    }
+
+    // Close loading dialog
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    if (successCount > 0) {
+      _showPikPakSnack('Queued $successCount file${successCount > 1 ? 's' : ''} for download');
+    }
+    if (failCount > 0) {
+      _showPikPakSnack('Failed to queue $failCount file${failCount > 1 ? 's' : ''}', isError: true);
+    }
+  }
+
+  /// Recursively extract all files (not just videos) from a PikPak folder
+  /// Preserves folder structure by prefixing file names with their relative path
+  Future<List<Map<String, dynamic>>> _extractAllPikPakFiles(
+    PikPakApiService pikpak,
+    String folderId, {
+    int maxDepth = 5,
+    int currentDepth = 0,
+    String currentPath = '',  // Track the current folder path
+  }) async {
+    if (currentDepth >= maxDepth) {
+      return [];
+    }
+
+    final List<Map<String, dynamic>> files = [];
+
+    try {
+      final result = await pikpak.listFiles(parentId: folderId);
+      final items = result.files;
+
+      for (final item in items) {
+        final kind = item['kind'] ?? '';
+        final itemName = item['name'] ?? 'unknown';
+
+        if (kind == 'drive#folder') {
+          // Build the path for this subfolder
+          final subPath = currentPath.isEmpty ? itemName : '$currentPath/$itemName';
+
+          // Recursively scan subfolder with updated path
+          final subFiles = await _extractAllPikPakFiles(
+            pikpak,
+            item['id'],
+            maxDepth: maxDepth,
+            currentDepth: currentDepth + 1,
+            currentPath: subPath,
+          );
+          files.addAll(subFiles);
+        } else {
+          // It's a file - add folder path to the file name
+          final fileWithPath = Map<String, dynamic>.from(item);
+          if (currentPath.isNotEmpty) {
+            // Prefix the file name with its folder path
+            fileWithPath['name'] = '$currentPath/$itemName';
+          }
+          files.add(fileWithPath);
+        }
+      }
+    } catch (e) {
+      print('Error extracting PikPak files: $e');
+    }
+
+    return files;
   }
 
   void _showPikPakSnack(String message, {bool isError = false}) {
@@ -2064,11 +3639,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Recursively extract all video files from a PikPak folder and its subfolders
+  /// Preserves folder structure by prefixing file names with their relative path
   Future<List<Map<String, dynamic>>> _extractAllPikPakVideos(
     PikPakApiService pikpak,
     String folderId, {
     int maxDepth = 5,
     int currentDepth = 0,
+    String currentPath = '',  // Track the current folder path
   }) async {
     if (currentDepth >= maxDepth) {
       print('PikPak: Max depth reached at $currentDepth');
@@ -2086,25 +3663,34 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       for (final file in files) {
         final kind = file['kind'] ?? '';
         final mimeType = file['mime_type'] ?? '';
-        final name = file['name'] ?? 'unknown';
+        final itemName = file['name'] ?? 'unknown';
 
-        print('PikPak: Item: $name, kind: $kind, mime: $mimeType');
+        print('PikPak: Item: $itemName, kind: $kind, mime: $mimeType');
 
         if (kind == 'drive#folder') {
-          // Recursively scan subfolder
-          print('PikPak: Entering subfolder: $name');
+          // Build the path for this subfolder
+          final subPath = currentPath.isEmpty ? itemName : '$currentPath/$itemName';
+
+          // Recursively scan subfolder with updated path
+          print('PikPak: Entering subfolder: $itemName');
           final subVideos = await _extractAllPikPakVideos(
             pikpak,
             file['id'],
             maxDepth: maxDepth,
             currentDepth: currentDepth + 1,
+            currentPath: subPath,
           );
-          print('PikPak: Found ${subVideos.length} videos in subfolder: $name');
+          print('PikPak: Found ${subVideos.length} videos in subfolder: $itemName');
           videos.addAll(subVideos);
         } else if (mimeType.startsWith('video/')) {
-          // It's a video file
-          print('PikPak: Found video: $name');
-          videos.add(file);
+          // It's a video file - add folder path to the file name
+          print('PikPak: Found video: $itemName');
+          final videoWithPath = Map<String, dynamic>.from(file);
+          if (currentPath.isNotEmpty) {
+            // Prefix the file name with its folder path
+            videoWithPath['name'] = '$currentPath/$itemName';
+          }
+          videos.add(videoWithPath);
         }
       }
     } catch (e) {
@@ -2218,7 +3804,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       textAlign: TextAlign.center,
-                      maxLines: 2,
+                      maxLines: 5,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 20),
@@ -2414,7 +4000,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
-                          maxLines: 2,
+                          maxLines: 5,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -2612,7 +4198,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     color: Colors.white.withValues(alpha: 0.7),
                   ),
                   textAlign: TextAlign.center,
-                  maxLines: 2,
+                  maxLines: 5,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 20),
@@ -2851,7 +4437,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     color: Colors.white.withValues(alpha: 0.7),
                   ),
                   textAlign: TextAlign.center,
-                  maxLines: 2,
+                  maxLines: 5,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 20),
@@ -2880,6 +4466,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Get the post-torrent action preference
     final postAction = await StorageService.getTorboxPostTorrentAction();
+    final torboxHidden = await StorageService.getTorboxHiddenFromNav();
 
     // Check if torrent is video-only for auto-download handling
     final isVideoOnly = torrent.files.isNotEmpty &&
@@ -2960,7 +4547,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             children: [
                               Text(
                                 torrent.name,
-                                maxLines: 2,
+                                maxLines: 5,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   color: Colors.white,
@@ -2993,6 +4580,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                   const Divider(height: 1, color: Color(0xFF1E293B)),
                   _DebridActionTile(
+                    icon: Icons.open_in_new,
+                    color: const Color(0xFFF59E0B),
+                    title: 'Open in Torbox',
+                    subtitle: torboxHidden
+                        ? 'Enable Torbox navigation in settings to use this'
+                        : 'View this torrent in Torbox tab',
+                    enabled: !torboxHidden,
+                    autofocus: !torboxHidden,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      // Open the torrent in Torbox tab
+                      MainPageBridge.openTorboxFolder?.call(torrent);
+                    },
+                  ),
+                  _DebridActionTile(
                     icon: Icons.play_circle_fill_rounded,
                     color: const Color(0xFF60A5FA),
                     title: 'Play now',
@@ -3000,7 +4602,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ? 'Open instantly in the Torbox player experience.'
                         : 'Available for torrents with video files.',
                     enabled: hasVideo,
-                    autofocus: true,
+                    autofocus: torboxHidden && hasVideo,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _playTorboxTorrent(torrent);
@@ -3114,6 +4716,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ListTile(
+                      leading: const Icon(Icons.checklist_outlined),
+                      title: const Text('Select files to download'),
+                      subtitle: const Text(
+                        'Choose specific files from this torrent',
+                      ),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        _showTorboxFileSelection(
+                          torrent: torrent,
+                          apiKey: apiKey,
+                        );
+                      },
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
                       leading: const Icon(Icons.archive_outlined),
                       title: const Text('Download whole torrent as ZIP'),
                       subtitle: const Text(
@@ -3136,15 +4753,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               );
                             },
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.list_alt),
-                      title: const Text('Select files to download'),
-                      subtitle: const Text('Open Torbox file browser'),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        _openTorboxFiles(torrent);
-                      },
-                    ),
                     const SizedBox(height: 12),
                   ],
                 ),
@@ -3154,6 +4762,185 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
       },
     );
+  }
+
+  /// Show file selection dialog for Torbox torrents
+  Future<void> _showTorboxFileSelection({
+    required TorboxTorrent torrent,
+    required String apiKey,
+  }) async {
+    if (torrent.files.isEmpty) {
+      _showTorboxSnack('No files found in torrent', isError: true);
+      return;
+    }
+
+    // Format files for FileSelectionDialog
+    // Map Torbox file structure to the format expected by FileSelectionDialog
+    final formattedFiles = <Map<String, dynamic>>[];
+    for (final file in torrent.files) {
+      // Use the file's name for _fullPath (which includes path separators)
+      formattedFiles.add({
+        '_fullPath': file.name,  // Use name field for full path
+        'name': file.name,
+        'size': file.size.toString(),
+        '_torboxFileId': file.id,  // Store the file ID for later use
+      });
+    }
+
+    // Show file selection dialog
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return FileSelectionDialog(
+          files: formattedFiles,
+          torrentName: torrent.name,
+          onDownload: (selectedFiles) {
+            if (selectedFiles.isEmpty) return;
+            _downloadSelectedTorboxFiles(
+              selectedFiles: selectedFiles,
+              torrent: torrent,
+              apiKey: apiKey,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Download selected files from Torbox
+  /// Follows the pattern from torbox_downloads_screen.dart _downloadMultipleFiles
+  Future<void> _downloadSelectedTorboxFiles({
+    required List<Map<String, dynamic>> selectedFiles,
+    required TorboxTorrent torrent,
+    required String apiKey,
+  }) async {
+    if (selectedFiles.isEmpty) return;
+
+    // Show confirmation dialog
+    final totalSize = selectedFiles.fold<int>(
+      0,
+      (sum, file) => sum + (int.tryParse(file['size']?.toString() ?? '0') ?? 0),
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Download Files'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Download ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}?'),
+            const SizedBox(height: 16),
+            Text(
+              'Total size: ${Formatters.formatFileSize(totalSize)}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.download),
+            label: const Text('Download'),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirmed || !mounted) return;
+
+    // Show progress
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Queueing downloads...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Queue downloads for each file
+    // CRITICAL: Following the SAME pattern as Real-Debrid
+    // We DON'T request download URLs upfront - we queue with metadata for lazy fetching
+    // The DownloadService will request the URL when it's ready to download (lazy loading)
+    int successCount = 0;
+    int failCount = 0;
+
+    for (final selectedFile in selectedFiles) {
+      try {
+        final fileId = selectedFile['_torboxFileId'] as int;
+        final fileName = (selectedFile['_fullPath'] as String?) ?? 'Unknown';
+
+        // Find the corresponding TorboxFile object
+        final torboxFile = torrent.files.firstWhere(
+          (f) => f.id == fileId,
+          orElse: () => throw Exception('File not found in torrent'),
+        );
+
+        // Use shortName if available, otherwise extract from name
+        final displayName = torboxFile.shortName.isNotEmpty
+            ? torboxFile.shortName
+            : FileUtils.getFileName(fileName);
+
+        // Pass metadata for lazy URL fetching (no API call - instant!)
+        // The download service will request the URL when ready
+        final meta = jsonEncode({
+          'torboxTorrentId': torrent.id,
+          'torboxFileId': fileId,
+          'apiKey': apiKey,
+          'torboxDownload': true,
+        });
+
+        // Queue download instantly (download service will fetch URL when ready)
+        await DownloadService.instance.enqueueDownload(
+          url: '', // Empty URL - will be fetched by download service
+          fileName: displayName,
+          meta: meta,
+          torrentName: torrent.name,
+          context: mounted ? context : null,
+        );
+
+        successCount++;
+      } catch (e) {
+        failCount++;
+      }
+    }
+
+    // Close progress dialog
+    if (mounted) Navigator.of(context).pop();
+
+    // Show result
+    if (successCount > 0 && failCount == 0) {
+      _showTorboxSnack(
+        'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+        isError: false,
+      );
+    } else if (successCount > 0 && failCount > 0) {
+      _showTorboxSnack(
+        'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+        isError: true,
+      );
+    } else {
+      _showTorboxSnack(
+        'Failed to queue any files for download',
+        isError: true,
+      );
+    }
   }
 
   Future<String> _requestTorboxStreamUrl({
@@ -3416,14 +5203,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _openTorboxFiles(TorboxTorrent torrent) {
-    if (MainPageBridge.openTorboxAction != null) {
-      MainPageBridge.openTorboxAction!(torrent, TorboxQuickAction.files);
+    if (MainPageBridge.openTorboxFolder != null) {
+      MainPageBridge.openTorboxFolder!(torrent);
     } else {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => TorboxDownloadsScreen(
-            initialTorrentForAction: torrent,
-            initialAction: TorboxQuickAction.files,
+            initialTorrentToOpen: torrent,
           ),
         ),
       );
@@ -3707,11 +5493,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     int index,
   ) async {
     final postAction = await StorageService.getPostTorrentAction();
+    final rdHidden = await StorageService.getRealDebridHiddenFromNav();
     final downloadLink = result['downloadLink'] as String;
     final fileSelection = result['fileSelection'] as String;
     final links = result['links'] as List<dynamic>;
     final files = result['files'] as List<dynamic>?;
     final updatedInfo = result['updatedInfo'] as Map<String, dynamic>?;
+
+    // Check if this is a RAR archive (multiple files but only 1 link)
+    final isRarArchive = (files != null && files.isNotEmpty)
+        ? RDFolderTreeBuilder.isRarArchive(
+            files.map((f) => f as Map<String, dynamic>).toList(),
+            links,
+          )
+        : false;
 
     // Special case: if user prefers auto-download and torrent is media-only, download all immediately
     final hasAnyVideo = (files ?? []).any((f) {
@@ -3798,7 +5593,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 children: [
                                   Text(
                                     torrentName,
-                                    maxLines: 2,
+                                    maxLines: 5,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       color: Colors.white,
@@ -3833,6 +5628,35 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ),
                       const Divider(height: 1, color: Color(0xFF1E293B)),
                       _DebridActionTile(
+                        icon: Icons.open_in_new,
+                        color: const Color(0xFFF59E0B),
+                        title: 'Open in Real-Debrid',
+                        subtitle: rdHidden
+                            ? 'Enable Real-Debrid navigation in settings to use this'
+                            : isRarArchive
+                                ? 'Not available for RAR archives (not extracted by Real-Debrid)'
+                                : 'View this torrent in Real-Debrid tab',
+                        enabled: !rdHidden && !isRarArchive,
+                        autofocus: !rdHidden && !isRarArchive,
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          // Create RDTorrent object and open it in Real-Debrid tab
+                          final rdTorrent = RDTorrent(
+                            id: result['torrentId'].toString(),
+                            filename: torrentName,
+                            hash: '',
+                            bytes: 0,
+                            host: '',
+                            split: 0,
+                            progress: 0,
+                            status: '',
+                            added: DateTime.now().toIso8601String(),
+                            links: links.map((e) => e.toString()).toList(),
+                          );
+                          MainPageBridge.openDebridOptions?.call(rdTorrent);
+                        },
+                      ),
+                      _DebridActionTile(
                         icon: Icons.play_circle_rounded,
                         color: const Color(0xFF60A5FA),
                         title: 'Play now',
@@ -3840,7 +5664,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ? 'Unrestrict and open instantly in the built-in player.'
                             : 'Available for video torrents only.',
                         enabled: hasAnyVideo,
-                        autofocus: true,
+                        autofocus: rdHidden && hasAnyVideo,
                         onTap: () async {
                           Navigator.of(ctx).pop();
                           await _playFromResult(
@@ -3857,27 +5681,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         icon: Icons.download_rounded,
                         color: const Color(0xFF4ADE80),
                         title: 'Download to device',
-                        subtitle: 'Downloads the files to your device',
+                        subtitle: isRarArchive
+                            ? 'Downloads the RAR archive to your device'
+                            : 'Downloads the files to your device',
                         enabled: true,
-                        onTap: () {
+                        onTap: () async {
                           Navigator.of(ctx).pop();
-                          if (hasAnyVideo) {
+                          // RAR archives: always download the single link directly
+                          if (isRarArchive) {
+                            _downloadFile(downloadLink, torrentName);
+                          } else if (hasAnyVideo) {
                             if (links.length == 1) {
                               _downloadFile(downloadLink, torrentName);
                             } else {
-                              final rdTorrent = RDTorrent(
-                                id: result['torrentId'].toString(),
-                                filename: torrentName,
-                                hash: '',
-                                bytes: 0,
-                                host: '',
-                                split: 0,
-                                progress: 0,
-                                status: '',
-                                added: DateTime.now().toIso8601String(),
-                                links: links.map((e) => e.toString()).toList(),
+                              // Show file selection dialog for multiple video files
+                              await _showRealDebridFileSelection(
+                                result: result,
+                                torrentName: torrentName,
+                                apiKey: apiKey,
                               );
-                              MainPageBridge.openDebridOptions?.call(rdTorrent);
                             }
                           } else {
                             if (links.length > 1) {
@@ -4027,20 +5849,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           if (links.length == 1) {
             await _downloadFile(downloadLink, torrentName);
           } else {
-            // Multiple video files - show file selection
-            final rdTorrent = RDTorrent(
-              id: result['torrentId'].toString(),
-              filename: torrentName,
-              hash: '',
-              bytes: 0,
-              host: '',
-              split: 0,
-              progress: 0,
-              status: '',
-              added: DateTime.now().toIso8601String(),
-              links: links.map((e) => e.toString()).toList(),
+            // Show file selection dialog for multiple video files
+            await _showRealDebridFileSelection(
+              result: result,
+              torrentName: torrentName,
+              apiKey: apiKey,
             );
-            MainPageBridge.openDebridOptions?.call(rdTorrent);
           }
         } else {
           if (links.length > 1) {
@@ -4750,6 +6564,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         final file = fileList[index];
                         final fileName = file['filename'] as String;
                         return ListTile(
+                          key: ValueKey('${file['id'] ?? index}'),
                           leading: const Icon(
                             Icons.video_file,
                             color: Colors.grey,
@@ -4757,7 +6572,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           title: Text(
                             fileName,
                             style: const TextStyle(color: Colors.white),
-                            maxLines: 2,
+                            maxLines: 5,
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
@@ -4886,6 +6701,259 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Show file selection dialog for Real-Debrid torrents
+  Future<void> _showRealDebridFileSelection({
+    required Map<String, dynamic> result,
+    required String torrentName,
+    required String apiKey,
+  }) async {
+    final torrentId = result['torrentId']?.toString();
+    if (torrentId == null || torrentId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Torrent ID not available'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Loading torrent files...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Get torrent info to get file list
+      final torrentInfo = await DebridService.getTorrentInfo(apiKey, torrentId);
+      final allFiles = (torrentInfo['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final links = (torrentInfo['links'] as List?)?.cast<String>() ?? [];
+
+      // Filter to only selected files (files that were selected when adding to RD)
+      // Only selected files have corresponding links and can be downloaded
+      final files = allFiles.where((file) => file['selected'] == 1).toList();
+
+      if (mounted) Navigator.of(context).pop();
+
+      if (files.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No files found in torrent'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+        return;
+      }
+
+      // Format files for FileSelectionDialog
+      // Map RD file structure to the format expected by FileSelectionDialog
+      final formattedFiles = <Map<String, dynamic>>[];
+      for (int i = 0; i < files.length; i++) {
+        final file = files[i];
+        final path = (file['path'] as String?) ?? '';
+        final bytes = file['bytes'] as int? ?? 0;
+
+        formattedFiles.add({
+          '_fullPath': path,  // Use path field for full path
+          'name': path,
+          'size': bytes.toString(),
+          '_linkIndex': i,  // Store the link index for later use
+        });
+      }
+
+      // Show file selection dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return FileSelectionDialog(
+            files: formattedFiles,
+            torrentName: torrentName,
+            onDownload: (selectedFiles) {
+              if (selectedFiles.isEmpty) return;
+              _downloadSelectedRealDebridFiles(
+                selectedFiles: selectedFiles,
+                torrentId: torrentId,
+                torrentName: torrentName,
+                apiKey: apiKey,
+                links: links,
+                torrentHash: torrentInfo['hash']?.toString() ?? '',
+              );
+            },
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load torrent files: ${e.toString()}'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+    }
+  }
+
+  /// Download selected files from Real-Debrid
+  /// Follows the SAME pattern as folder downloads in debrid_downloads_screen.dart
+  Future<void> _downloadSelectedRealDebridFiles({
+    required List<Map<String, dynamic>> selectedFiles,
+    required String torrentId,
+    required String torrentName,
+    required String apiKey,
+    required List<String> links,
+    required String torrentHash,
+  }) async {
+    if (selectedFiles.isEmpty) return;
+
+    // Show confirmation dialog
+    final totalSize = selectedFiles.fold<int>(
+      0,
+      (sum, file) => sum + (int.tryParse(file['size']?.toString() ?? '0') ?? 0),
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Download Files'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Download ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}?'),
+            const SizedBox(height: 16),
+            Text(
+              'Total size: ${Formatters.formatFileSize(totalSize)}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.download),
+            label: const Text('Download'),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirmed || !mounted) return;
+
+    // Show progress
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Queueing downloads...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Queue downloads for each file
+    // CRITICAL: Following the SAME pattern as debrid_downloads_screen.dart
+    // We DON'T unrestrict everything upfront - we queue with metadata for lazy unrestriction
+    int successCount = 0;
+    int failCount = 0;
+
+    for (final file in selectedFiles) {
+      try {
+        final linkIndex = file['_linkIndex'] as int? ?? -1;
+
+        // Validate linkIndex
+        if (linkIndex < 0 || linkIndex >= links.length) {
+          failCount++;
+          continue;
+        }
+
+        // Get restricted link (no API call - instant!)
+        final restrictedLink = links[linkIndex];
+        final fileName = (file['_fullPath'] as String?) ?? 'Unknown';
+
+        // Pass metadata for lazy unrestriction
+        // The download service will unrestrict when ready
+        final meta = jsonEncode({
+          'restrictedLink': restrictedLink,
+          'apiKey': apiKey,
+          'torrentHash': torrentHash,
+          'fileIndex': linkIndex,
+        });
+
+        // Queue download instantly (download service will unrestrict when ready)
+        await DownloadService.instance.enqueueDownload(
+          url: restrictedLink, // Pass restricted link (will be replaced by download service)
+          fileName: fileName.split('/').last,
+          meta: meta,
+          torrentName: torrentName,
+          context: mounted ? context : null,
+        );
+
+        successCount++;
+      } catch (e) {
+        // Silently handle individual file failures during batch operations
+        failCount++;
+      }
+    }
+
+    // Close progress dialog
+    if (mounted) Navigator.of(context).pop();
+
+    // Show result
+    if (successCount > 0 && failCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+          ),
+          backgroundColor: const Color(0xFF10B981),
+        ),
+      );
+    } else if (successCount > 0 && failCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+          ),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to queue any files for download'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+    }
+  }
+
   Future<void> _downloadFile(
     String downloadLink,
     String fileName, {
@@ -4985,6 +7053,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       {'key': 'yts', 'short': 'YTS', 'name': 'YTS'},
       {'key': 'solid_torrents', 'short': 'ST', 'name': 'SolidTorrents'},
       {'key': 'torrentio', 'short': 'TIO', 'name': 'Torrentio'},
+      {'key': 'knaben', 'short': 'KNB', 'name': 'Knaben'},
     ];
 
     for (final engine in engines) {
@@ -5087,24 +7156,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF0F172A), // Slate 900 - Deep blue-black
-            const Color(0xFF1E293B), // Slate 800 - Rich blue-grey
-            const Color(0xFF1E3A8A), // Blue 900 - Deep premium blue
-          ],
-        ),
-      ),
-      child: SafeArea(
-        child: FocusTraversalGroup(
-          policy: OrderedTraversalPolicy(),
-          child: Column(
-            children: [
-              // Search Box
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF0F172A), // Slate 900 - Deep blue-black
+                const Color(0xFF1E293B), // Slate 800 - Rich blue-grey
+                const Color(0xFF1E3A8A), // Blue 900 - Deep premium blue
+              ],
+            ),
+          ),
+          child: SafeArea(
+            child: FocusTraversalGroup(
+              policy: OrderedTraversalPolicy(),
+              child: Column(
+                children: [
+                  // Search Box
               Container(
                 margin: const EdgeInsets.all(8),
                 padding: const EdgeInsets.all(12),
@@ -5175,6 +7246,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   NextFocusIntent:
                                       CallbackAction<NextFocusIntent>(
                                         onInvoke: (intent) {
+                                          // Custom logic: Check if should navigate to autocomplete or Season box
+                                          if (_imdbAutocompleteResults.isNotEmpty && _autocompleteFocusNodes.isNotEmpty) {
+                                            _autocompleteFocusNodes[0].requestFocus();
+                                            return null;
+                                          }
+                                          if (_isSeries && _selectedImdbTitle != null) {
+                                            _seasonInputFocusNode.requestFocus();
+                                            return null;
+                                          }
+                                          // Default: Let FocusTraversalPolicy handle it
                                           FocusScope.of(context).nextFocus();
                                           return null;
                                         },
@@ -5189,22 +7270,49 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         },
                                       ),
                                 },
-                                child: TextField(
-                                  controller: _searchController,
+                                child: Focus(
                                   focusNode: _searchFocusNode,
-                                  onSubmitted: (query) =>
-                                      _searchTorrents(query),
+                                  onFocusChange: (focused) {
+                                    if (_searchFocused != focused) {
+                                      setState(() {
+                                        _searchFocused = focused;
+                                      });
+                                    }
+                                  },
+                                  child: TextField(
+                                    controller: _searchController,
+                                    onSubmitted: (query) {
+                                    // In IMDB mode, don't trigger search on submit
+                                    // unless a selection has been made
+                                    if (_searchMode == SearchMode.keyword) {
+                                      _searchTorrents(query);
+                                    } else if (_searchMode == SearchMode.imdb) {
+                                      // On TV: Trigger autocomplete when Enter is pressed
+                                      if (_isTelevision && _selectedImdbTitle == null) {
+                                        _onImdbSearchTextChanged(query);
+                                      } else if (_selectedImdbTitle != null) {
+                                        // Already has selection, can re-search
+                                        _createAdvancedSelectionAndSearch();
+                                      }
+                                    }
+                                  },
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
-                                    hintText: 'Search all engines...',
+                                    hintText: _searchMode == SearchMode.imdb
+                                        ? 'Search IMDB titles...'
+                                        : 'Search all engines...',
                                     hintStyle: TextStyle(
                                       color: Colors.white.withValues(
                                         alpha: 0.5,
                                       ),
                                     ),
-                                    prefixIcon: const Icon(
-                                      Icons.search_rounded,
-                                      color: Color(0xFF6366F1),
+                                    prefixIcon: Icon(
+                                      _searchMode == SearchMode.imdb
+                                          ? Icons.auto_awesome_outlined
+                                          : Icons.search_rounded,
+                                      color: _searchMode == SearchMode.imdb
+                                          ? const Color(0xFF7C3AED)
+                                          : const Color(0xFF6366F1),
                                     ),
                                     suffixIcon:
                                         _searchController.text.isNotEmpty
@@ -5234,15 +7342,61 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     ),
                                   ),
                                   onChanged: _handleSearchFieldChanged,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
-                        _buildAdvancedButton(),
+                        _buildModeSelector(),
                       ],
                     ),
+
+                    // Helper text for IMDB mode on TV
+                    if (_searchMode == SearchMode.imdb && _isTelevision && _selectedImdbTitle == null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: Color(0xFF7C3AED),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Type a title and press Enter to search IMDB',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // IMDB Smart Search Mode UI components
+                    if (_searchMode == SearchMode.imdb) ...[
+                      // Autocomplete dropdown
+                      _buildImdbAutocompleteDropdown(),
+                      // Active selection chip
+                      _buildImdbSelectionChip(),
+                      // Type selector and S/E inputs
+                      _buildImdbTypeAndEpisodeControls(),
+                    ],
+
                     // Search Engine Toggles
                     const SizedBox(height: 16),
                     _buildProvidersAccordion(context),
@@ -5265,6 +7419,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         itemCount: 6,
                         itemBuilder: (context, i) {
                           return Container(
+                            key: ValueKey('shimmer-$i'),
                             margin: const EdgeInsets.only(bottom: 12),
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -5348,6 +7503,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     fontSize: 12,
                                   ),
                                   textAlign: TextAlign.center,
+                                  softWrap: true,
+                                  overflow: TextOverflow.visible,
                                 ),
                                 const SizedBox(height: 12),
                                 ElevatedButton.icon(
@@ -5737,6 +7894,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     const SizedBox(width: 8),
                                     Focus(
                                       focusNode: _sortDirectionFocusNode,
+                                      onFocusChange: (focused) {
+                                        if (_sortDirectionFocused != focused) {
+                                          setState(() {
+                                            _sortDirectionFocused = focused;
+                                          });
+                                        }
+                                      },
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent &&
                                             (event.logicalKey == LogicalKeyboardKey.select ||
@@ -5782,6 +7946,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     ),
                                     Focus(
                                       focusNode: _filterButtonFocusNode,
+                                      onFocusChange: (focused) {
+                                        if (_filterButtonFocused != focused) {
+                                          setState(() {
+                                            _filterButtonFocused = focused;
+                                          });
+                                        }
+                                      },
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent &&
                                             (event.logicalKey == LogicalKeyboardKey.select ||
@@ -5878,6 +8049,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             .toList(),
                                         Focus(
                                           focusNode: _clearFiltersButtonFocusNode,
+                                          onFocusChange: (focused) {
+                                            if (_clearFiltersButtonFocused != focused) {
+                                              setState(() {
+                                                _clearFiltersButtonFocused = focused;
+                                              });
+                                            }
+                                          },
                                           onKeyEvent: (node, event) {
                                             if (event is KeyDownEvent &&
                                                 (event.logicalKey == LogicalKeyboardKey.select ||
@@ -5916,11 +8094,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         }
 
                         final torrent = _torrents[index - metadataRows];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildTorrentCard(
-                            torrent,
-                            index - metadataRows,
+                        return RepaintBoundary(
+                          child: Padding(
+                            key: ValueKey(torrent.infohash),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: _buildTorrentCard(
+                              torrent,
+                              index - metadataRows,
+                            ),
                           ),
                         );
                       },
@@ -5932,6 +8113,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         ),
       ),
+        ),
+        // Bulk Add Floating Action Button
+        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              onPressed: _showBulkAddDialog,
+              backgroundColor: const Color(0xFF6366F1),
+              elevation: 8,
+              icon: const Icon(Icons.playlist_add, color: Colors.white),
+              label: const Text(
+                'Bulk Add',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -5969,11 +8172,94 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  Widget _buildTorrentCard(Torrent torrent, int index) {
-    final sourceTag = _buildSourceTag(torrent.source);
-    final isFocused = index < _cardFocusStates.length && _cardFocusStates[index];
+  /// Build size chip or pack type chip based on coverage type
+  Widget _buildSizeOrPackChip(Torrent torrent) {
+    // For single episodes or unknown coverage: show actual size
+    if (torrent.coverageType == null ||
+        torrent.coverageType == 'singleEpisode') {
+      return StatChip(
+        icon: Icons.storage_rounded,
+        text: Formatters.formatFileSize(torrent.sizeBytes),
+        color: const Color(0xFF0EA5E9), // Sky 500 - Premium blue
+      );
+    }
 
-    Widget cardContent = Container(
+    // For packs: show pack type label instead of misleading individual file size
+    switch (torrent.coverageType) {
+      case 'completeSeries':
+        return StatChip(
+          icon: Icons.video_library_rounded,
+          text: 'Complete Series',
+          color: const Color(0xFF8B5CF6), // Violet 500 - Rich purple
+        );
+
+      case 'multiSeasonPack':
+        return StatChip(
+          icon: Icons.video_collection_rounded,
+          text: 'Multi-Season',
+          color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
+        );
+
+      case 'seasonPack':
+        return StatChip(
+          icon: Icons.folder_rounded,
+          text: 'Season Pack',
+          color: const Color(0xFF22C55E), // Green 500 - Fresh green
+        );
+
+      default:
+        // Fallback for unknown pack types
+        return StatChip(
+          icon: Icons.folder_rounded,
+          text: 'Multi-file',
+          color: const Color(0xFF6B7280), // Gray 500
+        );
+    }
+  }
+
+  Widget _buildTorrentCard(Torrent torrent, int index) {
+    // For TV mode, use the new isolated _TorrentCard widget
+    if (_isTelevision && index < _cardFocusNodes.length) {
+      return _TorrentCard(
+        torrent: torrent,
+        index: index,
+        focusNode: _cardFocusNodes[index],
+        isTelevision: _isTelevision,
+        apiKey: _apiKey,
+        torboxApiKey: _torboxApiKey,
+        torboxCacheStatus: _torboxCacheStatus,
+        realDebridIntegrationEnabled: _realDebridIntegrationEnabled,
+        torboxIntegrationEnabled: _torboxIntegrationEnabled,
+        pikpakEnabled: _pikpakEnabled,
+        torboxCacheCheckEnabled: _torboxCacheCheckEnabled,
+        isSeries: _isSeries,
+        selectedImdbTitle: _selectedImdbTitle,
+        onCardActivated: () => _handleTorrentCardActivated(torrent, index),
+        onCopyMagnet: () => _copyMagnetLink(torrent.infohash),
+        onAddToDebrid: _addToRealDebrid,
+        onAddToTorbox: _addToTorbox,
+        onAddToPikPak: _sendToPikPak,
+        onShowFileSelection: _showFileSelectionDialog,
+        buildSizeOrPackChip: _buildSizeOrPackChip,
+        buildSourceStatChip: _buildSourceStatChip,
+        torboxResultIsCached: _torboxResultIsCached,
+        searchFocusNode: _searchFocusNode,
+        episodeInputFocusNode: _episodeInputFocusNode,
+      );
+    }
+
+    // For non-TV mode, use GestureDetector with inline card content
+    return GestureDetector(
+      onTap: () {
+        // Navigate to torrent details or perform default action
+        // For now, just log or do nothing since TV has the smart action
+      },
+      child: _buildNonTVCardContent(torrent),
+    );
+  }
+
+  Widget _buildNonTVCardContent(Torrent torrent) {
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -5985,25 +8271,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: _isTelevision && isFocused
-            ? Border.all(color: const Color(0xFFE50914), width: 3)
-            : null,
-        boxShadow: _isTelevision && isFocused
-            ? [
-                BoxShadow(
-                  color: const Color(0xFFE50914).withValues(alpha: 0.4),
-                  blurRadius: 24,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-              ]
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-              ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -6016,36 +8283,33 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               children: [
                 Expanded(
                   child: Text(
-                    torrent.name,
+                    torrent.displayTitle,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
-                    maxLines: _isTelevision && isFocused ? null : 2,
-                    overflow: _isTelevision && isFocused ? null : TextOverflow.ellipsis,
+                    maxLines: 5,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (sourceTag != null) ...[const SizedBox(width: 8), sourceTag],
-                if (!_isTelevision) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () => _copyMagnetLink(torrent.infohash),
-                    tooltip: 'Copy magnet link',
-                    icon: const Icon(Icons.copy_rounded, size: 18),
-                    style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D2A3F),
-                      foregroundColor: const Color(0xFF60A5FA),
-                      padding: const EdgeInsets.all(10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
-                        ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => _copyMagnetLink(torrent.infohash),
+                  tooltip: 'Copy magnet link',
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D2A3F),
+                    foregroundColor: const Color(0xFF60A5FA),
+                    padding: const EdgeInsets.all(10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
                       ),
                     ),
                   ),
-                ],
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -6055,26 +8319,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               spacing: 6,
               runSpacing: 6,
               children: [
-                StatChip(
-                  icon: Icons.storage_rounded,
-                  text: Formatters.formatFileSize(torrent.sizeBytes),
-                  color: const Color(0xFF0EA5E9), // Sky 500 - Premium blue
-                ),
+                _buildSizeOrPackChip(torrent),
                 StatChip(
                   icon: Icons.upload_rounded,
                   text: '${torrent.seeders}',
-                  color: const Color(0xFF22C55E), // Green 500 - Fresh green
+                  color: const Color(0xFF22C55E),
                 ),
                 StatChip(
                   icon: Icons.download_rounded,
                   text: '${torrent.leechers}',
-                  color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
+                  color: const Color(0xFFF59E0B),
                 ),
-                StatChip(
-                  icon: Icons.check_circle_rounded,
-                  text: '${torrent.completed}',
-                  color: const Color(0xFF8B5CF6), // Violet 500 - Rich purple
-                ),
+                _buildSourceStatChip(torrent.source),
               ],
             ),
             const SizedBox(height: 10),
@@ -6099,356 +8355,813 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             const SizedBox(height: 12),
 
-            // Action Buttons (Hidden on TV since we use smart action on card click)
-            if (!_isTelevision)
-              LayoutBuilder(
-                builder: (context, constraints) {
-                final isCompactLayout = constraints.maxWidth < 360;
-
-                Widget buildTorboxButton() {
-                  final bool isCached = _torboxResultIsCached(torrent.infohash);
-                  final gradientColors = isCached
-                      ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
-                      : const [Color(0xFF475569), Color(0xFF1F2937)];
-                  final shadowColor = isCached
-                      ? const Color(0xFF7C3AED).withValues(alpha: 0.35)
-                      : const Color(0xFF1F2937).withValues(alpha: 0.25);
-                  final textColor = isCached ? Colors.white : Colors.white70;
-
-                  return Opacity(
-                    opacity: isCached ? 1.0 : 0.55,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        focusColor:
-                            const Color(0xFF7C3AED).withValues(alpha: 0.25),
-                        onTap: isCached
-                            ? () => _addToTorbox(torrent.infohash, torrent.name)
-                            : null,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            gradient: LinearGradient(
-                              colors: gradientColors,
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: shadowColor,
-                                spreadRadius: 0,
-                                blurRadius: 12,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.flash_on_rounded,
-                                color: textColor,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Torbox',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.2,
-                                    color: textColor,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.expand_more_rounded,
-                                color: textColor.withValues(alpha: 0.7),
-                                size: 18,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                Widget buildRealDebridButton() {
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      focusColor:
-                          const Color(0xFF6366F1).withValues(alpha: 0.25),
-                      onTap: () =>
-                          _addToRealDebrid(torrent.infohash, torrent.name, index),
-                      onLongPress: () {
-                        _showFileSelectionDialog(
-                          torrent.infohash,
-                          torrent.name,
-                          index,
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(
-                                0xFF1E40AF,
-                              ).withValues(alpha: 0.4),
-                              spreadRadius: 0,
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              Icons.cloud_download_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Real-Debrid',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                  color: Colors.white,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                            SizedBox(width: 4),
-                            Icon(
-                              Icons.expand_more_rounded,
-                              color: Colors.white70,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                Widget buildPikPakButton() {
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      focusColor:
-                          const Color(0xFF0088CC).withValues(alpha: 0.25),
-                      onTap: () =>
-                          _sendToPikPak(torrent.infohash, torrent.name),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF0088CC), Color(0xFF229ED9)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(
-                                0xFF0088CC,
-                              ).withValues(alpha: 0.4),
-                              spreadRadius: 0,
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              Icons.telegram,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'PikPak',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                  color: Colors.white,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                            SizedBox(width: 4),
-                            Icon(
-                              Icons.expand_more_rounded,
-                              color: Colors.white70,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                final Widget? torboxButton =
-                    (_torboxIntegrationEnabled &&
-                        _torboxApiKey != null &&
-                        _torboxApiKey!.isNotEmpty)
-                    ? buildTorboxButton()
-                    : null;
-                final Widget? realDebridButton =
-                    (_realDebridIntegrationEnabled &&
-                        _apiKey != null &&
-                        _apiKey!.isNotEmpty)
-                    ? buildRealDebridButton()
-                    : null;
-                final Widget? pikpakButton = _pikpakEnabled
-                    ? buildPikPakButton()
-                    : null;
-
-                if (torboxButton == null && realDebridButton == null && pikpakButton == null) {
-                  return const SizedBox.shrink();
-                }
-
-                // Count active buttons
-                final int buttonCount = [torboxButton, realDebridButton, pikpakButton]
-                    .where((button) => button != null)
-                    .length;
-
-                if (isCompactLayout) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (torboxButton != null) torboxButton,
-                      if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
-                        const SizedBox(height: 8),
-                      if (realDebridButton != null) realDebridButton,
-                      if (realDebridButton != null && pikpakButton != null)
-                        const SizedBox(height: 8),
-                      if (pikpakButton != null) pikpakButton,
-                    ],
-                  );
-                }
-
-                // For non-compact layouts, show buttons in a row
-                if (buttonCount == 3) {
-                  return Row(
-                    children: [
-                      Expanded(child: torboxButton!),
-                      const SizedBox(width: 8),
-                      Expanded(child: realDebridButton!),
-                      const SizedBox(width: 8),
-                      Expanded(child: pikpakButton!),
-                    ],
-                  );
-                } else if (buttonCount == 2) {
-                  return Row(
-                    children: [
-                      if (torboxButton != null) Expanded(child: torboxButton),
-                      if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
-                        const SizedBox(width: 8),
-                      if (realDebridButton != null) Expanded(child: realDebridButton),
-                      if (realDebridButton != null && pikpakButton != null)
-                        const SizedBox(width: 8),
-                      if (pikpakButton != null) Expanded(child: pikpakButton),
-                    ],
-                  );
-                } else {
-                  final Widget singleButton = torboxButton ?? realDebridButton ?? pikpakButton!;
-                  return SizedBox(width: double.infinity, child: singleButton);
-                }
-              },
-            ),
-            // TV hint
-            if (_isTelevision && isFocused) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Press OK to add torrent',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+            // Action Buttons - Get the index for this torrent
+            _buildNonTVActionButtons(torrent, _torrents.indexOf(torrent)),
           ],
         ),
       ),
     );
+  }
 
-    // Wrap with Focus widget for TV navigation
-    if (_isTelevision && index < _cardFocusNodes.length) {
-      return Focus(
-        focusNode: _cardFocusNodes[index],
-        onKeyEvent: (node, event) {
-          // Handle OK/Select/Enter press
-          if (event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.select ||
-                  event.logicalKey == LogicalKeyboardKey.enter ||
-                  event.logicalKey == LogicalKeyboardKey.space)) {
-            _handleTorrentCardActivated(torrent, index);
+  Widget _buildNonTVActionButtons(Torrent torrent, int index) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompactLayout = constraints.maxWidth < 360;
+
+        Widget buildTorboxButton() {
+          final bool isCached = _torboxResultIsCached(torrent.infohash);
+          final gradientColors = isCached
+              ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
+              : const [Color(0xFF475569), Color(0xFF1F2937)];
+          final shadowColor = isCached
+              ? const Color(0xFF7C3AED).withValues(alpha: 0.35)
+              : const Color(0xFF1F2937).withValues(alpha: 0.25);
+          final textColor = isCached ? Colors.white : Colors.white70;
+
+          return Opacity(
+            opacity: isCached ? 1.0 : 0.55,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                focusColor: const Color(0xFF7C3AED).withValues(alpha: 0.25),
+                onTap: isCached ? () => _addToTorbox(torrent.infohash, torrent.name) : null,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: gradientColors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: shadowColor,
+                        spreadRadius: 0,
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.flash_on_rounded, color: textColor, size: 16),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Torbox',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                            color: textColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.expand_more_rounded, color: textColor.withValues(alpha: 0.7), size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget buildRealDebridButton() {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              focusColor: const Color(0xFF6366F1).withValues(alpha: 0.25),
+              onTap: () => _addToRealDebrid(torrent.infohash, torrent.name, index),
+              onLongPress: () => _showFileSelectionDialog(torrent.infohash, torrent.name, index),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
+                      spreadRadius: 0,
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.cloud_download_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Real-Debrid',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.expand_more_rounded, color: Colors.white70, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget buildPikPakButton() {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              focusColor: const Color(0xFF0088CC).withValues(alpha: 0.25),
+              onTap: () => _sendToPikPak(torrent.infohash, torrent.name),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0088CC), Color(0xFF229ED9)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0088CC).withValues(alpha: 0.4),
+                      spreadRadius: 0,
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.telegram, color: Colors.white, size: 16),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'PikPak',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.expand_more_rounded, color: Colors.white70, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        final Widget? torboxButton = (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty)
+            ? buildTorboxButton()
+            : null;
+        final Widget? realDebridButton = (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty)
+            ? buildRealDebridButton()
+            : null;
+        final Widget? pikpakButton = _pikpakEnabled ? buildPikPakButton() : null;
+
+        if (torboxButton == null && realDebridButton == null && pikpakButton == null) {
+          return const SizedBox.shrink();
+        }
+
+        final int buttonCount = [torboxButton, realDebridButton, pikpakButton].where((b) => b != null).length;
+
+        if (isCompactLayout) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (torboxButton != null) torboxButton,
+              if (torboxButton != null && (realDebridButton != null || pikpakButton != null)) const SizedBox(height: 8),
+              if (realDebridButton != null) realDebridButton,
+              if (realDebridButton != null && pikpakButton != null) const SizedBox(height: 8),
+              if (pikpakButton != null) pikpakButton,
+            ],
+          );
+        }
+
+        if (buttonCount == 3) {
+          return Row(
+            children: [
+              Expanded(child: torboxButton!),
+              const SizedBox(width: 8),
+              Expanded(child: realDebridButton!),
+              const SizedBox(width: 8),
+              Expanded(child: pikpakButton!),
+            ],
+          );
+        } else if (buttonCount == 2) {
+          return Row(
+            children: [
+              if (torboxButton != null) Expanded(child: torboxButton),
+              if (torboxButton != null && (realDebridButton != null || pikpakButton != null)) const SizedBox(width: 8),
+              if (realDebridButton != null) Expanded(child: realDebridButton),
+              if (realDebridButton != null && pikpakButton != null) const SizedBox(width: 8),
+              if (pikpakButton != null) Expanded(child: pikpakButton),
+            ],
+          );
+        } else {
+          final Widget singleButton = torboxButton ?? realDebridButton ?? pikpakButton!;
+          return SizedBox(width: double.infinity, child: singleButton);
+        }
+      },
+    );
+  }
+}
+
+/// Individual torrent card widget with isolated focus state
+class _TorrentCard extends StatefulWidget {
+  const _TorrentCard({
+    required this.torrent,
+    required this.index,
+    required this.focusNode,
+    required this.isTelevision,
+    required this.apiKey,
+    required this.torboxApiKey,
+    required this.torboxCacheStatus,
+    required this.realDebridIntegrationEnabled,
+    required this.torboxIntegrationEnabled,
+    required this.pikpakEnabled,
+    required this.torboxCacheCheckEnabled,
+    required this.isSeries,
+    required this.selectedImdbTitle,
+    required this.onCardActivated,
+    required this.onCopyMagnet,
+    required this.onAddToDebrid,
+    required this.onAddToTorbox,
+    required this.onAddToPikPak,
+    required this.onShowFileSelection,
+    required this.buildSizeOrPackChip,
+    required this.buildSourceStatChip,
+    required this.torboxResultIsCached,
+    required this.searchFocusNode,
+    required this.episodeInputFocusNode,
+  });
+
+  final Torrent torrent;
+  final int index;
+  final FocusNode focusNode;
+  final bool isTelevision;
+  final String? apiKey;
+  final String? torboxApiKey;
+  final Map<String, bool>? torboxCacheStatus;
+  final bool realDebridIntegrationEnabled;
+  final bool torboxIntegrationEnabled;
+  final bool pikpakEnabled;
+  final bool torboxCacheCheckEnabled;
+  final bool isSeries;
+  final ImdbTitleResult? selectedImdbTitle;
+  final VoidCallback onCardActivated;
+  final VoidCallback onCopyMagnet;
+  final void Function(String infohash, String name, int index) onAddToDebrid;
+  final void Function(String infohash, String name) onAddToTorbox;
+  final void Function(String infohash, String name) onAddToPikPak;
+  final void Function(String infohash, String name, int index) onShowFileSelection;
+  final Widget Function(Torrent) buildSizeOrPackChip;
+  final Widget Function(String) buildSourceStatChip;
+  final bool Function(String) torboxResultIsCached;
+  final FocusNode searchFocusNode;
+  final FocusNode episodeInputFocusNode;
+
+  @override
+  State<_TorrentCard> createState() => _TorrentCardState();
+}
+
+class _TorrentCardState extends State<_TorrentCard> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!mounted) return;
+    final focused = widget.focusNode.hasFocus;
+    if (_isFocused != focused) {
+      setState(() {
+        _isFocused = focused;
+      });
+
+      // Auto-scroll on focus
+      if (focused && widget.isTelevision) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final context = widget.focusNode.context;
+          if (context != null) {
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.2,
+              duration: const Duration(milliseconds: 100),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: (node, event) {
+        // Handle OK/Select/Enter press
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          widget.onCardActivated();
+          return KeyEventResult.handled;
+        }
+        // Handle Arrow Up from first card - navigate to Episode input (if series) or Search field
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.index == 0) {
+          // If series with selected title, go to Episode input
+          if (widget.isSeries && widget.selectedImdbTitle != null) {
+            widget.episodeInputFocusNode.requestFocus();
+          } else {
+            widget.searchFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        // Handle Back/Escape to return to search field (TV shortcut)
+        if (widget.isTelevision && event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.escape ||
+                event.logicalKey == LogicalKeyboardKey.backspace)) {
+          // Only handle if this is the first card (avoid capturing all back presses)
+          if (widget.index == 0) {
+            widget.searchFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
-          return KeyEventResult.ignored;
-        },
-        child: Builder(
-          builder: (context) {
-            if (isFocused) {
-              // Auto-scroll when focused
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                Scrollable.ensureVisible(
-                  context,
-                  alignment: 0.2,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutCubic,
-                );
-              });
-            }
-            return cardContent;
-          },
-        ),
-      );
-    }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: _buildCardContent(),
+    );
+  }
 
-    return cardContent;
+  Widget _buildCardContent() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1E293B), // Slate 800
+            Color(0xFF334155), // Slate 700
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: widget.isTelevision && _isFocused
+            ? Border.all(color: const Color(0xFFE50914), width: 3)
+            : null,
+        boxShadow: widget.isTelevision && _isFocused
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFE50914).withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title Row - Now with more space for title!
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.torrent.displayTitle,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    maxLines: 5,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!widget.isTelevision) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: widget.onCopyMagnet,
+                    tooltip: 'Copy magnet link',
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFF1D2A3F),
+                      foregroundColor: const Color(0xFF60A5FA),
+                      padding: const EdgeInsets.all(10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Stats Grid - Now includes source instead of completed
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                widget.buildSizeOrPackChip(widget.torrent),
+                StatChip(
+                  icon: Icons.upload_rounded,
+                  text: '${widget.torrent.seeders}',
+                  color: const Color(0xFF22C55E), // Green 500 - Fresh green
+                ),
+                StatChip(
+                  icon: Icons.download_rounded,
+                  text: '${widget.torrent.leechers}',
+                  color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
+                ),
+                widget.buildSourceStatChip(widget.torrent.source),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Date
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule_rounded,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  Formatters.formatDate(widget.torrent.createdUnix),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Action Buttons (Hidden on TV since we use smart action on card click)
+            if (!widget.isTelevision)
+            LayoutBuilder(
+              builder: (context, constraints) {
+              final isCompactLayout = constraints.maxWidth < 360;
+
+              Widget buildTorboxButton() {
+                final bool isCached = widget.torboxResultIsCached(widget.torrent.infohash);
+                final gradientColors = isCached
+                    ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
+                    : const [Color(0xFF475569), Color(0xFF1F2937)];
+                final shadowColor = isCached
+                    ? const Color(0xFF7C3AED).withValues(alpha: 0.35)
+                    : const Color(0xFF1F2937).withValues(alpha: 0.25);
+                final textColor = isCached ? Colors.white : Colors.white70;
+
+                return Opacity(
+                  opacity: isCached ? 1.0 : 0.55,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      focusColor:
+                          const Color(0xFF7C3AED).withValues(alpha: 0.25),
+                      onTap: isCached
+                          ? () => widget.onAddToTorbox(widget.torrent.infohash, widget.torrent.name)
+                          : null,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: LinearGradient(
+                            colors: gradientColors,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: shadowColor,
+                              spreadRadius: 0,
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.flash_on_rounded,
+                              color: textColor,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Torbox',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                  color: textColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.expand_more_rounded,
+                              color: textColor.withValues(alpha: 0.7),
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              Widget buildRealDebridButton() {
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    focusColor:
+                        const Color(0xFF6366F1).withValues(alpha: 0.25),
+                    onTap: () =>
+                        widget.onAddToDebrid(widget.torrent.infohash, widget.torrent.name, widget.index),
+                    onLongPress: () {
+                      widget.onShowFileSelection(
+                        widget.torrent.infohash,
+                        widget.torrent.name,
+                        widget.index,
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF1E40AF,
+                            ).withValues(alpha: 0.4),
+                            spreadRadius: 0,
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            Icons.cloud_download_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Real-Debrid',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(
+                            Icons.expand_more_rounded,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              Widget buildPikPakButton() {
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    focusColor:
+                        const Color(0xFF0088CC).withValues(alpha: 0.25),
+                    onTap: () =>
+                        widget.onAddToPikPak(widget.torrent.infohash, widget.torrent.name),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0088CC), Color(0xFF229ED9)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF0088CC,
+                            ).withValues(alpha: 0.4),
+                            spreadRadius: 0,
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(
+                            Icons.telegram,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'PikPak',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(
+                            Icons.expand_more_rounded,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              final Widget? torboxButton =
+                  (widget.torboxIntegrationEnabled &&
+                      widget.torboxApiKey != null &&
+                      widget.torboxApiKey!.isNotEmpty)
+                  ? buildTorboxButton()
+                  : null;
+              final Widget? realDebridButton =
+                  (widget.realDebridIntegrationEnabled &&
+                      widget.apiKey != null &&
+                      widget.apiKey!.isNotEmpty)
+                  ? buildRealDebridButton()
+                  : null;
+              final Widget? pikpakButton = widget.pikpakEnabled
+                  ? buildPikPakButton()
+                  : null;
+
+              if (torboxButton == null && realDebridButton == null && pikpakButton == null) {
+                return const SizedBox.shrink();
+              }
+
+              // Count active buttons
+              final int buttonCount = [torboxButton, realDebridButton, pikpakButton]
+                  .where((button) => button != null)
+                  .length;
+
+              if (isCompactLayout) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (torboxButton != null) torboxButton,
+                    if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
+                      const SizedBox(height: 8),
+                    if (realDebridButton != null) realDebridButton,
+                    if (realDebridButton != null && pikpakButton != null)
+                      const SizedBox(height: 8),
+                    if (pikpakButton != null) pikpakButton,
+                  ],
+                );
+              }
+
+              // For non-compact layouts, show buttons in a row
+              if (buttonCount == 3) {
+                return Row(
+                  children: [
+                    Expanded(child: torboxButton!),
+                    const SizedBox(width: 8),
+                    Expanded(child: realDebridButton!),
+                    const SizedBox(width: 8),
+                    Expanded(child: pikpakButton!),
+                  ],
+                );
+              } else if (buttonCount == 2) {
+                return Row(
+                  children: [
+                    if (torboxButton != null) Expanded(child: torboxButton),
+                    if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
+                      const SizedBox(width: 8),
+                    if (realDebridButton != null) Expanded(child: realDebridButton),
+                    if (realDebridButton != null && pikpakButton != null)
+                      const SizedBox(width: 8),
+                    if (pikpakButton != null) Expanded(child: pikpakButton),
+                  ],
+                );
+              } else {
+                final Widget singleButton = torboxButton ?? realDebridButton ?? pikpakButton!;
+                return SizedBox(width: double.infinity, child: singleButton);
+              }
+            },
+          ),
+          // TV hint
+          if (widget.isTelevision && _isFocused) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Press OK to add torrent',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
   }
 }
 
@@ -6610,6 +9323,125 @@ class _DebridActionTileState extends State<_DebridActionTile> {
           ),
         ),
       ),
+      ),
+    );
+  }
+}
+
+// IMDB autocomplete item widget with DPAD support
+class _ImdbAutocompleteItem extends StatefulWidget {
+  final ImdbTitleResult result;
+  final FocusNode focusNode;
+  final VoidCallback onSelected;
+  final KeyEventResult Function(KeyEvent) onKeyEvent;
+
+  const _ImdbAutocompleteItem({
+    required this.result,
+    required this.focusNode,
+    required this.onSelected,
+    required this.onKeyEvent,
+  });
+
+  @override
+  State<_ImdbAutocompleteItem> createState() => _ImdbAutocompleteItemState();
+}
+
+class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (focused) {
+        setState(() {
+          _isFocused = focused;
+        });
+        if (focused) {
+          // Ensure focused item is visible
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+          );
+        }
+      },
+      onKeyEvent: (node, event) => widget.onKeyEvent(event),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        decoration: BoxDecoration(
+          color: _isFocused
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _isFocused
+                ? Colors.white.withValues(alpha: 0.8)
+                : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: ListTile(
+          onTap: widget.onSelected,
+          leading: widget.result.posterUrl != null
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.network(
+                    widget.result.posterUrl!,
+                    width: 40,
+                    height: 60,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 40,
+                        height: 60,
+                        color: Colors.white.withValues(alpha: 0.1),
+                        child: const Icon(
+                          Icons.movie_outlined,
+                          color: Colors.white54,
+                        ),
+                      );
+                    },
+                  ),
+                )
+              : Container(
+                  width: 40,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    Icons.movie_outlined,
+                    color: Colors.white54,
+                  ),
+                ),
+          title: Text(
+            widget.result.title,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: _isFocused ? FontWeight.w600 : FontWeight.normal,
+              fontSize: 14,
+            ),
+          ),
+          subtitle: widget.result.year != null
+              ? Text(
+                  widget.result.year!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 12,
+                  ),
+                )
+              : null,
+          trailing: _isFocused
+              ? Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Colors.white.withValues(alpha: 0.6),
+                )
+              : null,
+        ),
       ),
     );
   }

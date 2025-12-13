@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../utils/file_utils.dart';
 import 'pikpak_api_service.dart';
+import 'storage_service.dart';
 
 /// Service for preparing PikPak torrents for Debrify TV playback.
 ///
@@ -58,9 +59,36 @@ class PikPakTvService {
     String? taskId;
 
     try {
+      // Get parent folder ID (restricted folder or root)
+      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+
+      // Find or create "debrify-tv" subfolder
+      String? subFolderId;
+      try {
+        subFolderId = await _api.findOrCreateSubfolder(
+          folderName: 'debrify-tv',
+          parentFolderId: parentFolderId,
+          getCachedId: StorageService.getPikPakTvFolderId,
+          setCachedId: StorageService.setPikPakTvFolderId,
+        );
+        log('Using debrify-tv subfolder ID: $subFolderId');
+      } catch (e) {
+        // Check if this is the restricted folder deleted error
+        if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
+          log('Detected restricted folder was deleted - logging out');
+          await _api.logout();
+          return null;
+        }
+        log('Failed to create subfolder, using parent folder: $e');
+        subFolderId = parentFolderId;
+      }
+
       // Step 1: Add offline download
       log('Adding magnet to PikPak...');
-      final addResponse = await _api.addOfflineDownload(magnetLink);
+      final addResponse = await _api.addOfflineDownload(
+        magnetLink,
+        parentFolderId: subFolderId,
+      );
 
       // Extract task ID and file ID from response
       // Priority: task.id > task.file_id > file.id > id
@@ -248,6 +276,17 @@ class PikPakTvService {
 
     } catch (e) {
       log('Error preparing torrent: $e');
+
+      // Check if the error is because the restricted folder was deleted
+      final folderExists = await _api.verifyRestrictedFolderExists();
+      if (!folderExists) {
+        log(
+          'Restricted folder was deleted externally - logging out user',
+        );
+        await _api.logout();
+        // Note: The UI will be updated when the user navigates or refreshes
+      }
+
       if (fileId != null && fileId.isNotEmpty) {
         await _cleanupFile(fileId, log);
       }

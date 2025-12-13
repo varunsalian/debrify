@@ -6,17 +6,26 @@ import 'debrid_service.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
+  static const String _rdEndpointKey = 'real_debrid_endpoint';
   static const String _fileSelectionKey = 'real_debrid_file_selection';
   static const String _torboxApiKey = 'torbox_api_key';
   static const String _torboxCacheCheckPref =
       'torbox_check_cache_before_search';
   static const String _realDebridIntegrationEnabledKey =
       'real_debrid_integration_enabled';
+  static const String _realDebridHiddenFromNavKey =
+      'real_debrid_hidden_from_nav';
   static const String _torboxIntegrationEnabledKey =
       'torbox_integration_enabled';
+  static const String _torboxHiddenFromNavKey =
+      'torbox_hidden_from_nav';
+  static const String _pikpakHiddenFromNavKey =
+      'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
-  static const String _torboxPostTorrentActionKey = 'torbox_post_torrent_action';
-  static const String _pikpakPostTorrentActionKey = 'pikpak_post_torrent_action';
+  static const String _torboxPostTorrentActionKey =
+      'torbox_post_torrent_action';
+  static const String _pikpakPostTorrentActionKey =
+      'pikpak_post_torrent_action';
   static const String _batteryOptStatusKey =
       'battery_opt_status_v1'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
@@ -29,7 +38,8 @@ class StorageService {
   static const String _defaultSolidTorrentsEnabledKey =
       'default_solid_torrents_enabled';
   static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
-  static const String _maxSolidTorrentsResultsKey = 'max_solid_torrents_results';
+  static const String _maxSolidTorrentsResultsKey =
+      'max_solid_torrents_results';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
   static const String _debrifyTvShowChannelNameKey =
@@ -46,8 +56,11 @@ class StorageService {
   static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
 
   // Startup settings
-  static const String _startupAutoLaunchEnabledKey = 'startup_auto_launch_enabled';
+  static const String _startupAutoLaunchEnabledKey =
+      'startup_auto_launch_enabled';
   static const String _startupChannelIdKey = 'startup_channel_id';
+  static const String _startupModeKey = 'startup_mode'; // 'channel' or 'playlist'
+  static const String _startupPlaylistItemIdKey = 'startup_playlist_item_id';
 
   // PikPak API settings
   static const String _pikpakEnabledKey = 'pikpak_enabled';
@@ -59,34 +72,57 @@ class StorageService {
   static const String _pikpakCaptchaTokenKey = 'pikpak_captcha_token';
   static const String _pikpakUserIdKey = 'pikpak_user_id';
   static const String _pikpakShowVideosOnlyKey = 'pikpak_show_videos_only';
-  static const String _pikpakIgnoreSmallVideosKey = 'pikpak_ignore_small_videos';
+  static const String _pikpakIgnoreSmallVideosKey =
+      'pikpak_ignore_small_videos';
+  static const String _pikpakRestrictedFolderIdKey =
+      'pikpak_restricted_folder_id';
+  static const String _pikpakRestrictedFolderNameKey =
+      'pikpak_restricted_folder_name';
+  static const String _pikpakTorrentsFolderIdKey =
+      'pikpak_torrents_folder_id';
+  static const String _pikpakTvFolderIdKey = 'pikpak_tv_folder_id';
 
   // Debrify TV search engine settings
-  static const String _debrifyTvUseTorrentsCsvKey = 'debrify_tv_use_torrents_csv';
+  static const String _debrifyTvUseTorrentsCsvKey =
+      'debrify_tv_use_torrents_csv';
   static const String _debrifyTvUsePirateBayKey = 'debrify_tv_use_pirate_bay';
   static const String _debrifyTvUseYtsKey = 'debrify_tv_use_yts';
-  static const String _debrifyTvUseSolidTorrentsKey = 'debrify_tv_use_solid_torrents';
+  static const String _debrifyTvUseSolidTorrentsKey =
+      'debrify_tv_use_solid_torrents';
 
   // Channel limits - Small (< threshold keywords)
-  static const String _debrifyTvChannelSmallTorrentsCsvMaxKey = 'debrify_tv_channel_small_torrents_csv_max';
-  static const String _debrifyTvChannelSmallSolidTorrentsMaxKey = 'debrify_tv_channel_small_solid_torrents_max';
-  static const String _debrifyTvChannelSmallYtsMaxKey = 'debrify_tv_channel_small_yts_max';
+  static const String _debrifyTvChannelSmallTorrentsCsvMaxKey =
+      'debrify_tv_channel_small_torrents_csv_max';
+  static const String _debrifyTvChannelSmallSolidTorrentsMaxKey =
+      'debrify_tv_channel_small_solid_torrents_max';
+  static const String _debrifyTvChannelSmallYtsMaxKey =
+      'debrify_tv_channel_small_yts_max';
 
   // Channel limits - Large (>= threshold keywords)
-  static const String _debrifyTvChannelLargeTorrentsCsvMaxKey = 'debrify_tv_channel_large_torrents_csv_max';
-  static const String _debrifyTvChannelLargeSolidTorrentsMaxKey = 'debrify_tv_channel_large_solid_torrents_max';
-  static const String _debrifyTvChannelLargeYtsMaxKey = 'debrify_tv_channel_large_yts_max';
+  static const String _debrifyTvChannelLargeTorrentsCsvMaxKey =
+      'debrify_tv_channel_large_torrents_csv_max';
+  static const String _debrifyTvChannelLargeSolidTorrentsMaxKey =
+      'debrify_tv_channel_large_solid_torrents_max';
+  static const String _debrifyTvChannelLargeYtsMaxKey =
+      'debrify_tv_channel_large_yts_max';
 
   // Quick Play limits
-  static const String _debrifyTvQuickPlayTorrentsCsvMaxKey = 'debrify_tv_quick_play_torrents_csv_max';
-  static const String _debrifyTvQuickPlaySolidTorrentsMaxKey = 'debrify_tv_quick_play_solid_torrents_max';
-  static const String _debrifyTvQuickPlayYtsMaxKey = 'debrify_tv_quick_play_yts_max';
-  static const String _debrifyTvQuickPlayMaxKeywordsKey = 'debrify_tv_quick_play_max_keywords';
+  static const String _debrifyTvQuickPlayTorrentsCsvMaxKey =
+      'debrify_tv_quick_play_torrents_csv_max';
+  static const String _debrifyTvQuickPlaySolidTorrentsMaxKey =
+      'debrify_tv_quick_play_solid_torrents_max';
+  static const String _debrifyTvQuickPlayYtsMaxKey =
+      'debrify_tv_quick_play_yts_max';
+  static const String _debrifyTvQuickPlayMaxKeywordsKey =
+      'debrify_tv_quick_play_max_keywords';
 
   // General settings
-  static const String _debrifyTvChannelBatchSizeKey = 'debrify_tv_channel_batch_size';
-  static const String _debrifyTvKeywordThresholdKey = 'debrify_tv_keyword_threshold';
-  static const String _debrifyTvMinTorrentsPerKeywordKey = 'debrify_tv_min_torrents_per_keyword';
+  static const String _debrifyTvChannelBatchSizeKey =
+      'debrify_tv_channel_batch_size';
+  static const String _debrifyTvKeywordThresholdKey =
+      'debrify_tv_keyword_threshold';
+  static const String _debrifyTvMinTorrentsPerKeywordKey =
+      'debrify_tv_min_torrents_per_keyword';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
@@ -109,6 +145,23 @@ class StorageService {
   static Future<void> deleteApiKey() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_apiKeyKey);
+  }
+
+  // Real-Debrid endpoint preference (for fallback to backup endpoint)
+  static Future<String> getRdEndpoint() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Default to primary endpoint
+    return prefs.getString(_rdEndpointKey) ?? 'https://api.real-debrid.com/rest/1.0';
+  }
+
+  static Future<void> saveRdEndpoint(String endpoint) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_rdEndpointKey, endpoint);
+  }
+
+  static Future<void> deleteRdEndpoint() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_rdEndpointKey);
   }
 
   // Torbox API key helpers
@@ -147,6 +200,21 @@ class StorageService {
     await prefs.setBool(_realDebridIntegrationEnabledKey, enabled);
   }
 
+  static Future<bool> getRealDebridHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_realDebridHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setRealDebridHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_realDebridHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearRealDebridHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_realDebridHiddenFromNavKey);
+  }
+
   static Future<bool> getTorboxIntegrationEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_torboxIntegrationEnabledKey) ?? true;
@@ -155,6 +223,21 @@ class StorageService {
   static Future<void> setTorboxIntegrationEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_torboxIntegrationEnabledKey, enabled);
+  }
+
+  static Future<bool> getTorboxHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_torboxHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setTorboxHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_torboxHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearTorboxHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_torboxHiddenFromNavKey);
   }
 
   static Future<bool> isInitialSetupComplete() async {
@@ -1078,15 +1161,45 @@ class StorageService {
   }
 
   /// Update an existing playlist item with poster URL
-  /// Uses rdTorrentId to find and update the item
+  /// Supports both RealDebrid (rdTorrentId) and PikPak (pikpakCollectionId)
   static Future<bool> updatePlaylistItemPoster(
-    String rdTorrentId,
-    String posterUrl,
-  ) async {
+    String posterUrl, {
+    String? rdTorrentId,
+    String? pikpakCollectionId,
+  }) async {
     final items = await getPlaylistItemsRaw();
-    final itemIndex = items.indexWhere(
-      (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
-    );
+    int itemIndex = -1;
+
+    // Search by rdTorrentId if provided (RealDebrid)
+    if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
+      );
+    }
+
+    // Search by pikpakCollectionId if provided and not found yet (PikPak)
+    if (itemIndex == -1 &&
+        pikpakCollectionId != null &&
+        pikpakCollectionId.isNotEmpty) {
+      itemIndex = items.indexWhere((item) {
+        // Check single PikPak files
+        final pikpakFileId = item['pikpakFileId'] as String?;
+        if (pikpakFileId == pikpakCollectionId) {
+          return true;
+        }
+
+        // Check PikPak collections (first file ID in array)
+        final pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
+        if (pikpakFileIds != null && pikpakFileIds.isNotEmpty) {
+          final firstId = pikpakFileIds[0].toString();
+          if (firstId == pikpakCollectionId) {
+            return true;
+          }
+        }
+
+        return false;
+      });
+    }
 
     if (itemIndex == -1) return false;
 
@@ -1144,7 +1257,10 @@ class StorageService {
 
   static Future<void> setDebrifyTvChannelSmallTorrentsCsvMax(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelSmallTorrentsCsvMaxKey, value.clamp(25, 500));
+    await prefs.setInt(
+      _debrifyTvChannelSmallTorrentsCsvMaxKey,
+      value.clamp(25, 500),
+    );
   }
 
   static Future<int> getDebrifyTvChannelSmallSolidTorrentsMax() async {
@@ -1152,9 +1268,14 @@ class StorageService {
     return prefs.getInt(_debrifyTvChannelSmallSolidTorrentsMaxKey) ?? 100;
   }
 
-  static Future<void> setDebrifyTvChannelSmallSolidTorrentsMax(int value) async {
+  static Future<void> setDebrifyTvChannelSmallSolidTorrentsMax(
+    int value,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelSmallSolidTorrentsMaxKey, value.clamp(100, 500));
+    await prefs.setInt(
+      _debrifyTvChannelSmallSolidTorrentsMaxKey,
+      value.clamp(100, 500),
+    );
   }
 
   static Future<int> getDebrifyTvChannelSmallYtsMax() async {
@@ -1175,7 +1296,10 @@ class StorageService {
 
   static Future<void> setDebrifyTvChannelLargeTorrentsCsvMax(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelLargeTorrentsCsvMaxKey, value.clamp(25, 100));
+    await prefs.setInt(
+      _debrifyTvChannelLargeTorrentsCsvMaxKey,
+      value.clamp(25, 100),
+    );
   }
 
   static Future<int> getDebrifyTvChannelLargeSolidTorrentsMax() async {
@@ -1183,9 +1307,14 @@ class StorageService {
     return prefs.getInt(_debrifyTvChannelLargeSolidTorrentsMaxKey) ?? 100;
   }
 
-  static Future<void> setDebrifyTvChannelLargeSolidTorrentsMax(int value) async {
+  static Future<void> setDebrifyTvChannelLargeSolidTorrentsMax(
+    int value,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelLargeSolidTorrentsMaxKey, value.clamp(100, 200));
+    await prefs.setInt(
+      _debrifyTvChannelLargeSolidTorrentsMaxKey,
+      value.clamp(100, 200),
+    );
   }
 
   static Future<int> getDebrifyTvChannelLargeYtsMax() async {
@@ -1206,7 +1335,10 @@ class StorageService {
 
   static Future<void> setDebrifyTvQuickPlayTorrentsCsvMax(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvQuickPlayTorrentsCsvMaxKey, value.clamp(100, 500));
+    await prefs.setInt(
+      _debrifyTvQuickPlayTorrentsCsvMaxKey,
+      value.clamp(100, 500),
+    );
   }
 
   static Future<int> getDebrifyTvQuickPlaySolidTorrentsMax() async {
@@ -1216,7 +1348,10 @@ class StorageService {
 
   static Future<void> setDebrifyTvQuickPlaySolidTorrentsMax(int value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvQuickPlaySolidTorrentsMaxKey, value.clamp(100, 500));
+    await prefs.setInt(
+      _debrifyTvQuickPlaySolidTorrentsMaxKey,
+      value.clamp(100, 500),
+    );
   }
 
   static Future<int> getDebrifyTvQuickPlayYtsMax() async {
@@ -1295,6 +1430,30 @@ class StorageService {
     }
   }
 
+  static Future<String> getStartupMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupModeKey) ?? 'channel'; // Default to channel for backward compatibility
+  }
+
+  static Future<void> setStartupMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_startupModeKey, mode);
+  }
+
+  static Future<String?> getStartupPlaylistItemId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupPlaylistItemIdKey);
+  }
+
+  static Future<void> setStartupPlaylistItemId(String? itemId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (itemId == null) {
+      await prefs.remove(_startupPlaylistItemIdKey);
+    } else {
+      await prefs.setString(_startupPlaylistItemIdKey, itemId);
+    }
+  }
+
   // PikPak API Settings
   static Future<bool> getPikPakEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -1356,6 +1515,11 @@ class StorageService {
     await prefs.remove(_pikpakCaptchaTokenKey);
     await prefs.remove(_pikpakUserIdKey);
     await prefs.setBool(_pikpakEnabledKey, false);
+
+    // Also clear restricted folder settings and cached subfolder IDs
+    await clearPikPakRestrictedFolder();
+    await clearPikPakSubfolderCaches();
+    await clearPikPakHiddenFromNav();
   }
 
   // PikPak Device ID and Captcha Token
@@ -1408,13 +1572,15 @@ class StorageService {
   // PikPak Ignore Small Videos (under 100MB)
   static Future<bool> getPikPakIgnoreSmallVideos() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_pikpakIgnoreSmallVideosKey) ?? true; // Default to true
+    return prefs.getBool(_pikpakIgnoreSmallVideosKey) ??
+        true; // Default to true
   }
 
   static Future<void> setPikPakIgnoreSmallVideos(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_pikpakIgnoreSmallVideosKey, value);
   }
+
 
   // Last played file per playlist
   static Future<Map<String, dynamic>?> getLastPlayedFile(String playlistId) async {
@@ -1473,6 +1639,82 @@ class StorageService {
   static Future<void> clearGlobalLastPlayed() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_globalLastPlayedKey);
+  }
+
+  // PikPak Restricted Folder
+  static Future<String?> getPikPakRestrictedFolderId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakRestrictedFolderIdKey);
+  }
+
+  static Future<String?> getPikPakRestrictedFolderName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakRestrictedFolderNameKey);
+  }
+
+  static Future<void> setPikPakRestrictedFolder(
+    String? folderId,
+    String? folderName,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (folderId == null) {
+      await prefs.remove(_pikpakRestrictedFolderIdKey);
+      await prefs.remove(_pikpakRestrictedFolderNameKey);
+    } else {
+      await prefs.setString(_pikpakRestrictedFolderIdKey, folderId);
+      if (folderName != null) {
+        await prefs.setString(_pikpakRestrictedFolderNameKey, folderName);
+      }
+    }
+  }
+
+  static Future<void> clearPikPakRestrictedFolder() async {
+    await setPikPakRestrictedFolder(null, null);
+    // Also clear subfolder caches when restriction changes
+    await clearPikPakSubfolderCaches();
+  }
+
+  // PikPak Subfolder ID caching (for debrify-torrents and debrify-tv folders)
+  static Future<String?> getPikPakTorrentsFolderId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakTorrentsFolderIdKey);
+  }
+
+  static Future<void> setPikPakTorrentsFolderId(String folderId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakTorrentsFolderIdKey, folderId);
+  }
+
+  static Future<String?> getPikPakTvFolderId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pikpakTvFolderIdKey);
+  }
+
+  static Future<void> setPikPakTvFolderId(String folderId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pikpakTvFolderIdKey, folderId);
+  }
+
+  static Future<void> clearPikPakSubfolderCaches() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pikpakTorrentsFolderIdKey);
+    await prefs.remove(_pikpakTvFolderIdKey);
+  }
+
+  // PikPak Hidden from Navigation
+  static Future<bool> getPikPakHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_pikpakHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setPikPakHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pikpakHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearPikPakHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pikpakHiddenFromNavKey);
   }
 }
 

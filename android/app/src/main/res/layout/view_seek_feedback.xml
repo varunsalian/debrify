@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/seek_feedback_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clickable="false"
+    android:focusable="false"
+    android:elevation="100dp">
+
+    <!-- Left side seek indicator -->
+    <FrameLayout
+        android:id="@+id/seek_feedback_left"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="start|center_vertical"
+        android:layout_marginStart="48dp"
+        android:visibility="gone"
+        android:alpha="0">
+
+        <!-- Semi-transparent circular background -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/seek_feedback_circle_bg" />
+
+        <!-- Rewind icon and text -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <!-- Double arrow icon -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="◀◀"
+                android:textColor="#FFFFFF"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:shadowColor="#88000000"
+                android:shadowDx="0"
+                android:shadowDy="2"
+                android:shadowRadius="4" />
+
+            <!-- Seek amount text -->
+            <TextView
+                android:id="@+id/seek_feedback_left_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="-10s"
+                android:textColor="#E6FFFFFF"
+                android:textSize="14sp"
+                android:fontFamily="sans-serif-medium"
+                android:shadowColor="#88000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3" />
+
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Right side seek indicator -->
+    <FrameLayout
+        android:id="@+id/seek_feedback_right"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="48dp"
+        android:visibility="gone"
+        android:alpha="0">
+
+        <!-- Semi-transparent circular background -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/seek_feedback_circle_bg" />
+
+        <!-- Forward icon and text -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <!-- Double arrow icon -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="▶▶"
+                android:textColor="#FFFFFF"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:shadowColor="#88000000"
+                android:shadowDx="0"
+                android:shadowDy="2"
+                android:shadowRadius="4" />
+
+            <!-- Seek amount text -->
+            <TextView
+                android:id="@+id/seek_feedback_right_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="+10s"
+                android:textColor="#E6FFFFFF"
+                android:textSize="14sp"
+                android:fontFamily="sans-serif-medium"
+                android:shadowColor="#88000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3" />
+
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Optional: Center ripple effect overlay (for double-tap style) -->
+    <FrameLayout
+        android:id="@+id/seek_feedback_ripple_left"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:layout_gravity="start|center_vertical"
+        android:layout_marginStart="60dp"
+        android:visibility="gone"
+        android:alpha="0">
+
+        <View
+            android:id="@+id/seek_ripple_left_1"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/seek_ripple_effect"
+            android:alpha="0" />
+
+        <View
+            android:id="@+id/seek_ripple_left_2"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/seek_ripple_effect"
+            android:alpha="0" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/seek_feedback_ripple_right"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="60dp"
+        android:visibility="gone"
+        android:alpha="0">
+
+        <View
+            android:id="@+id/seek_ripple_right_1"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/seek_ripple_effect"
+            android:alpha="0" />
+
+        <View
+            android:id="@+id/seek_ripple_right_2"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/seek_ripple_effect"
+            android:alpha="0" />
+    </FrameLayout>
+
+</FrameLayout>

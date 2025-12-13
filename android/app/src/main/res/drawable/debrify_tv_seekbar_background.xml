@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!-- Netflix style solid seekbar background -->
+    <corners android:radius="2.5dp" />
+
+    <!-- Solid grey background - no transparency -->
+    <solid android:color="@color/netflix_seekbar_background" />
+
+</shape>

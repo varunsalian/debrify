@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude all SharedPreferences to prevent API keys and passwords from being backed up to Google Drive -->
+    <!-- This applies to Android 11 and below -->
+    <exclude domain="sharedpref" path="."/>
+</full-backup-content>

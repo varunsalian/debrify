@@ -1,21 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Focused state with premium glow effect -->
     <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/tv_button_selected" />
-            <corners android:radius="12dp" />
-        </shape>
+        <layer-list>
+            <!-- Outer glow shadow -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="100dp" />
+                    <solid android:color="#1AFFFFFF" />
+                    <padding
+                        android:left="2dp"
+                        android:top="2dp"
+                        android:right="2dp"
+                        android:bottom="2dp" />
+                </shape>
+            </item>
+
+            <!-- Mid glow -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="100dp" />
+                    <solid android:color="#26FFFFFF" />
+                    <padding
+                        android:left="1dp"
+                        android:top="1dp"
+                        android:right="1dp"
+                        android:bottom="1dp" />
+                </shape>
+            </item>
+
+            <!-- Main button with white glow -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="100dp" />
+                    <solid android:color="#33FFFFFF" />
+                    <stroke
+                        android:width="1dp"
+                        android:color="#4DFFFFFF" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
+
+    <!-- Pressed state -->
     <item android:state_pressed="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/tv_button_selected" />
-            <corners android:radius="12dp" />
-        </shape>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="100dp" />
+                    <solid android:color="#40FFFFFF" />
+                    <stroke
+                        android:width="1dp"
+                        android:color="#66FFFFFF" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
+
+    <!-- Default idle state - subtle and elegant -->
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/tv_button_idle" />
-            <corners android:radius="12dp" />
+            <corners android:radius="100dp" />
+            <solid android:color="#0DFFFFFF" />
+            <stroke
+                android:width="0.5dp"
+                android:color="#1AFFFFFF" />
         </shape>
     </item>
+
 </selector>

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'debrid_service.dart';
+import 'torbox_service.dart';
+import 'pikpak_api_service.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -389,6 +391,28 @@ class DownloadService {
         // Expecting JSON meta with fields like restrictedLink or (torrentHash,fileIndex)
         final m = jsonDecode(meta);
         if (m is Map) {
+          // PikPak pattern: pp:${fileId} (check BEFORE Torbox)
+          final isPikPak = m['pikpakDownload'] == true;
+          if (isPikPak) {
+            final fileId = (m['pikpakFileId'] ?? '').toString();
+            if (fileId.isNotEmpty) {
+              return 'pp:$fileId';
+            }
+          }
+          // Torbox pattern: tb:${torrentId}:${fileId} or tb-zip:${torrentId}
+          final isTorbox = m['torboxDownload'] == true;
+          if (isTorbox) {
+            final torrentId = (m['torboxTorrentId'] ?? '').toString();
+            final isZip = m['torboxZip'] == true;
+            if (isZip && torrentId.isNotEmpty) {
+              return 'tb-zip:$torrentId';
+            }
+            final fileId = (m['torboxFileId'] ?? '').toString();
+            if (torrentId.isNotEmpty && fileId.isNotEmpty) {
+              return 'tb:$torrentId:$fileId';
+            }
+          }
+          // RealDebrid patterns (keep existing logic)
           final hash = (m['torrentHash'] ?? '').toString();
           final idx = (m['fileIndex'] ?? '').toString();
           if (hash.isNotEmpty && idx.isNotEmpty) return 'th:$hash:$idx';
@@ -1594,36 +1618,93 @@ class DownloadService {
         
         if (p.meta != null && p.meta!.isNotEmpty) {
           try {
-            final meta = jsonDecode(p.meta!);
-            final restrictedLink = (meta['restrictedLink'] ?? '') as String;
-            final apiKey = (meta['apiKey'] ?? '') as String;
-            
-            debugPrint('DL META: restrictedLink=$restrictedLink, apiKey=${apiKey.isNotEmpty ? "present" : "missing"}');
-            debugPrint('DL COMPARE: p.url=${p.url} == restrictedLink=$restrictedLink ? ${p.url == restrictedLink}');
-            
-            // If we have meta with restricted link info, always unrestrict
-            // This handles the case where we pass restricted links directly as URLs
-            if (restrictedLink.isNotEmpty && apiKey.isNotEmpty) {
-              debugPrint('DL UNRESTRICT: Starting unrestriction for: $finalFileName');
-              final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
-              final unrestrictedUrl = (unrestrictResult['download'] ?? '').toString();
-              final rdFileName = (unrestrictResult['filename'] ?? '').toString();
-              
-              debugPrint('DL UNRESTRICT RESULT: url=$unrestrictedUrl, filename=$rdFileName');
-              
-              if (unrestrictedUrl.isNotEmpty) {
-                finalUrl = unrestrictedUrl;
-                if (rdFileName.isNotEmpty) {
-                  finalFileName = rdFileName;
+            final meta = jsonDecode(p.meta!) as Map<String, dynamic>;
+
+            // CHECK PIKPAK FIRST (before Torbox)
+            final isPikPak = meta['pikpakDownload'] == true;
+            if (isPikPak) {
+              // PikPak: URL already pre-signed, use directly
+              finalUrl = p.url;
+              finalFileName = (meta['pikpakFileName'] as String?) ?? p.providedFileName ?? 'download';
+              debugPrint('DL PIKPAK: Using pre-signed URL');
+            } else {
+              // EXISTING TORBOX/REALDEBRID LOGIC
+              final isTorbox = meta['torboxDownload'] == true;
+
+              if (isTorbox) {
+                // Torbox download path
+              final apiKey = meta['apiKey'] as String?;
+              final torrentId = meta['torboxTorrentId'] as int?;
+              final fileId = meta['torboxFileId'] as int?;
+              final isZip = meta['torboxZip'] == true;
+
+              debugPrint('DL TORBOX: torrentId=$torrentId, fileId=$fileId, isZip=$isZip, apiKey=${apiKey?.isNotEmpty ?? false ? "present" : "missing"}');
+
+              if (apiKey == null || apiKey.isEmpty) {
+                debugPrint('DL ERROR: Torbox download missing API key');
+                throw Exception('Torbox download missing API key');
+              }
+
+              if (isZip) {
+                // ZIP download - use permalink
+                if (torrentId == null) {
+                  debugPrint('DL ERROR: Torbox ZIP download missing torrentId');
+                  throw Exception('Torbox ZIP download missing torrentId');
                 }
-                debugPrint('DL SUCCESS: Unrestricted to $finalUrl with filename $finalFileName');
+                finalUrl = TorboxService.createZipPermalink(apiKey, torrentId);
+                debugPrint('DL TORBOX ZIP: Generated permalink: $finalUrl');
               } else {
-                debugPrint('DL ERROR: Unrestriction returned empty URL');
-                throw Exception('Failed to unrestrict link - empty URL returned');
+                // Regular file download
+                if (torrentId == null || fileId == null) {
+                  debugPrint('DL ERROR: Torbox download missing torrentId or fileId');
+                  throw Exception('Torbox download missing torrentId or fileId');
+                }
+                debugPrint('DL TORBOX: Requesting download link for file $fileId in torrent $torrentId');
+                finalUrl = await TorboxService.requestFileDownloadLink(
+                  apiKey: apiKey,
+                  torrentId: torrentId,
+                  fileId: fileId,
+                );
+                debugPrint('DL TORBOX SUCCESS: Got download URL: ${finalUrl.substring(0, finalUrl.length > 50 ? 50 : finalUrl.length)}...');
+              }
+
+              if (finalUrl.isEmpty) {
+                debugPrint('DL ERROR: Torbox returned empty download URL');
+                throw Exception('Torbox returned empty download URL');
               }
             } else {
-              debugPrint('DL SKIP: Not unrestricting - restrictedLink empty: ${restrictedLink.isEmpty}, apiKey empty: ${apiKey.isEmpty}');
+              // RealDebrid download path (existing logic)
+              final restrictedLink = (meta['restrictedLink'] ?? '') as String;
+              final apiKey = (meta['apiKey'] ?? '') as String;
+
+              debugPrint('DL META: restrictedLink=$restrictedLink, apiKey=${apiKey.isNotEmpty ? "present" : "missing"}');
+              debugPrint('DL COMPARE: p.url=${p.url} == restrictedLink=$restrictedLink ? ${p.url == restrictedLink}');
+
+              // If we have meta with restricted link info, always unrestrict
+              // This handles the case where we pass restricted links directly as URLs
+              if (restrictedLink.isNotEmpty && apiKey.isNotEmpty) {
+                debugPrint('DL UNRESTRICT: Starting unrestriction for: $finalFileName');
+                final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
+                final unrestrictedUrl = (unrestrictResult['download'] ?? '').toString();
+                final rdFileName = (unrestrictResult['filename'] ?? '').toString();
+
+                debugPrint('DL UNRESTRICT RESULT: url=$unrestrictedUrl, filename=$rdFileName');
+
+                if (unrestrictedUrl.isNotEmpty) {
+                  finalUrl = unrestrictedUrl;
+                  if (rdFileName.isNotEmpty) {
+                    finalFileName = rdFileName;
+                  }
+                  debugPrint('DL SUCCESS: Unrestricted to $finalUrl with filename $finalFileName');
+                } else {
+                  debugPrint('DL ERROR: Unrestriction returned empty URL');
+                  throw Exception('Failed to unrestrict link - empty URL returned');
+                }
+              } else {
+                debugPrint('DL SKIP: Not unrestricting - restrictedLink empty: ${restrictedLink.isEmpty}, apiKey empty: ${apiKey.isEmpty}');
+              }
             }
+          }
           } catch (e) {
             debugPrint('DL ERROR: On-demand unrestriction failed: $e');
             throw Exception('Failed to unrestrict link: $e');
@@ -1719,37 +1800,132 @@ class DownloadService {
         }
         runningCount += 1;
       } catch (e) {
-        // Attempt fresh-link refresh once if we have restricted link meta
+        // Attempt fresh-link refresh once if we have meta
         bool retried = false;
         try {
           if (p.meta != null && p.meta!.isNotEmpty) {
             final meta = jsonDecode(p.meta!);
-            final restricted = (meta['restrictedLink'] ?? '') as String;
-            final apiKey = (meta['apiKey'] ?? '') as String;
-            if (restricted.isNotEmpty && apiKey.isNotEmpty) {
-              final fresh = await DebridService.unrestrictLink(apiKey, restricted);
-              final freshUrl = (fresh['download'] ?? '').toString();
-              final rdName = (fresh['filename'] ?? '').toString();
-              if (freshUrl.isNotEmpty) {
-                final refreshed = _PendingRequest(
-                  queuedId: p.queuedId,
-                  url: freshUrl,
-                  providedFileName: (rdName.isNotEmpty ? rdName : p.providedFileName),
-                  headers: p.headers,
-                  wifiOnly: p.wifiOnly,
-                  retries: p.retries,
-                  meta: p.meta,
-                  context: p.context,
-                  torrentName: p.torrentName,
-                  contentKey: p.contentKey,
-                );
-                _pending.insert(0, refreshed);
-                _pendingById[refreshed.queuedId] = refreshed;
-                await _persistPending();
-                retried = true;
-                continue; // try scheduling the refreshed entry immediately
+
+            // CHECK PIKPAK FIRST (before Torbox)
+            final isPikPak = meta['pikpakDownload'] == true;
+            if (isPikPak) {
+              final fileId = meta['pikpakFileId'] as String?;
+              if (fileId != null && fileId.isNotEmpty) {
+                try {
+                  debugPrint('DL RETRY PIKPAK: Refreshing URL for file $fileId');
+
+                  // Get fresh file details
+                  final freshData = await PikPakApiService.instance.getFileDetails(fileId);
+                  final freshUrl = PikPakApiService.instance.getStreamingUrl(freshData);
+
+                  if (freshUrl != null && freshUrl.isNotEmpty) {
+                    // Create new pending request with fresh URL
+                    final refreshed = _PendingRequest(
+                      queuedId: p.queuedId,
+                      url: freshUrl,
+                      providedFileName: p.providedFileName,
+                      headers: p.headers,
+                      wifiOnly: p.wifiOnly,
+                      retries: p.retries,
+                      meta: p.meta,
+                      context: p.context,
+                      torrentName: p.torrentName,
+                      contentKey: p.contentKey,
+                      destPath: p.destPath,
+                    );
+                    _pending.insert(0, refreshed);
+                    _pendingById[refreshed.queuedId] = refreshed;
+                    await _persistPending();
+                    retried = true;
+                    debugPrint('DL RETRY PIKPAK: Re-queued with fresh URL');
+                    continue; // try scheduling the refreshed entry immediately
+                  } else {
+                    debugPrint('DL RETRY PIKPAK: Failed to get fresh URL');
+                  }
+                } catch (e) {
+                  debugPrint('DL RETRY PIKPAK: Error refreshing URL: $e');
+                }
+              }
+            } else {
+              // EXISTING TORBOX/REALDEBRID RETRY LOGIC (keep exactly as is)
+              final isTorbox = meta['torboxDownload'] == true;
+
+              if (isTorbox) {
+              // Torbox retry path
+              final apiKey = meta['apiKey'] as String?;
+              final torrentId = meta['torboxTorrentId'] as int?;
+              final fileId = meta['torboxFileId'] as int?;
+              final isZip = meta['torboxZip'] == true;
+
+              if (apiKey != null && apiKey.isNotEmpty) {
+                String freshUrl = '';
+
+                if (isZip && torrentId != null) {
+                  // Regenerate ZIP permalink
+                  freshUrl = TorboxService.createZipPermalink(apiKey, torrentId);
+                  debugPrint('DL RETRY TORBOX ZIP: Regenerated permalink');
+                } else if (torrentId != null && fileId != null) {
+                  // Re-request file download link
+                  freshUrl = await TorboxService.requestFileDownloadLink(
+                    apiKey: apiKey,
+                    torrentId: torrentId,
+                    fileId: fileId,
+                  );
+                  debugPrint('DL RETRY TORBOX: Got fresh download URL');
+                }
+
+                if (freshUrl.isNotEmpty) {
+                  final refreshed = _PendingRequest(
+                    queuedId: p.queuedId,
+                    url: freshUrl,
+                    providedFileName: p.providedFileName,
+                    headers: p.headers,
+                    wifiOnly: p.wifiOnly,
+                    retries: p.retries,
+                    meta: p.meta,
+                    context: p.context,
+                    torrentName: p.torrentName,
+                    contentKey: p.contentKey,
+                    destPath: p.destPath,
+                  );
+                  _pending.insert(0, refreshed);
+                  _pendingById[refreshed.queuedId] = refreshed;
+                  await _persistPending();
+                  retried = true;
+                  debugPrint('DL RETRY TORBOX: Re-queued with fresh URL');
+                  continue; // try scheduling the refreshed entry immediately
+                }
+              }
+            } else {
+              // RealDebrid retry path (existing logic)
+              final restricted = (meta['restrictedLink'] ?? '') as String;
+              final apiKey = (meta['apiKey'] ?? '') as String;
+              if (restricted.isNotEmpty && apiKey.isNotEmpty) {
+                final fresh = await DebridService.unrestrictLink(apiKey, restricted);
+                final freshUrl = (fresh['download'] ?? '').toString();
+                final rdName = (fresh['filename'] ?? '').toString();
+                if (freshUrl.isNotEmpty) {
+                  final refreshed = _PendingRequest(
+                    queuedId: p.queuedId,
+                    url: freshUrl,
+                    providedFileName: (rdName.isNotEmpty ? rdName : p.providedFileName),
+                    headers: p.headers,
+                    wifiOnly: p.wifiOnly,
+                    retries: p.retries,
+                    meta: p.meta,
+                    context: p.context,
+                    torrentName: p.torrentName,
+                    contentKey: p.contentKey,
+                  );
+                  _pending.insert(0, refreshed);
+                  _pendingById[refreshed.queuedId] = refreshed;
+                  await _persistPending();
+                  retried = true;
+                  continue; // try scheduling the refreshed entry immediately
+                }
               }
             }
+          }
           }
         } catch (_) {}
 

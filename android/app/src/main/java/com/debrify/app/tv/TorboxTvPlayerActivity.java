@@ -117,7 +117,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private TextView channelNameView;
     private Runnable channelBadgeFadeOutRunnable;
     private View controlsOverlay;
-    private View timeContainer;
+    private TextView debrifyTimeDisplay;
+    private View debrifyProgressLine;
     private View buttonsRow;
     private AppCompatButton pauseButton;
     private AppCompatButton audioButton;
@@ -165,6 +166,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             hideControlsMenu();
         }
     };
+    private final Runnable updateProgressBarRunnable = new Runnable() {
+        @Override
+        public void run() {
+            updateControlsMenuProgressBar();
+            if (controlsMenuVisible) {
+                controlsMenuHandler.postDelayed(this, 100); // Update every 100ms
+            }
+        }
+    };
     private boolean reopenControlsMenuAfterSeek = false;
     private boolean resumePlaybackOnSeekbarClose = false;
     private View channelJumpOverlay;
@@ -191,6 +201,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean searchOverlayVisible = false;
     private android.animation.ValueAnimator staticAnimator;
     private Handler staticHandler = new Handler(Looper.getMainLooper());
+
+    // Seek feedback manager
+    private SeekFeedbackManager seekFeedbackManager;
     private final Handler keyPressHandler = new Handler(Looper.getMainLooper());
 
     // Double-back to exit
@@ -374,6 +387,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         setupBackPressHandler();
 
+        // Initialize seek feedback manager
+        seekFeedbackManager = new SeekFeedbackManager(findViewById(android.R.id.content));
+
         initialisePlayer();
         applyUiPreferences(initialTitle);
         setupControllerUi();
@@ -514,7 +530,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private void setupControllerUi() {
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root);
-        timeContainer = playerView.findViewById(R.id.debrify_time_group);
+        debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display);
+        debrifyProgressLine = playerView.findViewById(R.id.debrify_progress_line);
         buttonsRow = playerView.findViewById(R.id.debrify_controls_buttons);
         pauseButton = playerView.findViewById(R.id.debrify_pause_button);
         seekButton = playerView.findViewById(R.id.debrify_seek_button);
@@ -536,11 +553,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             buttonsRow.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
         }
 
-        if (timeContainer != null) {
+        if (debrifyTimeDisplay != null) {
             if (hideSeekbar) {
-                timeContainer.setVisibility(View.GONE);
+                debrifyTimeDisplay.setVisibility(View.GONE);
             } else if (hideOptions) {
-                timeContainer.setVisibility(View.VISIBLE);
+                debrifyTimeDisplay.setVisibility(View.VISIBLE);
             }
         }
 
@@ -654,6 +671,46 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         aspectButton.setText(resizeModeLabels[resizeModeIndex]);
     }
 
+    private void updateControlsMenuProgressBar() {
+        if (debrifyTimeDisplay == null || player == null) {
+            return;
+        }
+
+        long currentPosition = player.getCurrentPosition();
+        long duration = player.getDuration();
+
+        if (duration <= 0) {
+            return;
+        }
+
+        // Update time display in format "MM:SS / MM:SS"
+        debrifyTimeDisplay.setText(formatTime(currentPosition) + " / " + formatTime(duration));
+
+        // Update progress line width
+        if (debrifyProgressLine != null) {
+            float progressPercentage = (float) currentPosition / (float) duration;
+            View parent = (View) debrifyProgressLine.getParent();
+            if (parent != null) {
+                int parentWidth = parent.getWidth();
+                if (parentWidth > 0) {
+                    int progressWidth = (int) (parentWidth * progressPercentage);
+                    ViewGroup.LayoutParams layoutParams = debrifyProgressLine.getLayoutParams();
+                    layoutParams.width = progressWidth;
+                    debrifyProgressLine.setLayoutParams(layoutParams);
+                }
+            }
+        }
+    }
+
+    private void startProgressBarUpdates() {
+        stopProgressBarUpdates(); // Stop any existing updates
+        controlsMenuHandler.post(updateProgressBarRunnable);
+    }
+
+    private void stopProgressBarUpdates() {
+        controlsMenuHandler.removeCallbacks(updateProgressBarRunnable);
+    }
+
     private void handleControlAction(String action) {
         switch (action) {
             case "seek":
@@ -686,6 +743,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         cancelScheduledHideControlsMenu();
+
+        // Hide subtitles when controls menu is shown
+        if (subtitleOverlay != null) {
+            subtitleOverlay.setVisibility(View.GONE);
+        }
 
         // Cancel any ongoing animations to prevent race conditions
         controlsOverlay.animate().cancel();
@@ -735,6 +797,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 && !titleBadgeText.getText().toString().isEmpty()) {
             showTitleBadgeWithAnimation();
         }
+
+        // Start updating the progress bar
+        startProgressBarUpdates();
     }
 
     private void hideControlsMenu() {
@@ -756,6 +821,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         cancelScheduledHideControlsMenu();
         controlsMenuVisible = false;
+
+        // Stop updating the progress bar
+        stopProgressBarUpdates();
+
         controlsOverlay.animate()
                 .alpha(0f)
                 .setDuration(140L)
@@ -764,6 +833,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         controlsOverlay.setVisibility(View.GONE);
                         controlsOverlay.setAlpha(0f);
                         setControlsMenuChildrenVisible(false);
+                        // Show subtitles when controls menu is hidden
+                        if (subtitleOverlay != null) {
+                            subtitleOverlay.setVisibility(View.VISIBLE);
+                        }
                     }
                 })
                 .start();
@@ -799,8 +872,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (buttonsRow != null) {
             buttonsRow.setVisibility(target);
         }
-        if (!hideSeekbar && timeContainer != null) {
-            timeContainer.setVisibility(target);
+        if (!hideSeekbar && debrifyTimeDisplay != null) {
+            debrifyTimeDisplay.setVisibility(target);
         }
         if (pauseButton != null) {
             pauseButton.setVisibility(target);
@@ -1191,6 +1264,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         seekbarPosition = Math.min(seekbarPosition + SEEK_STEP_MS, videoDuration);
         player.seekTo(seekbarPosition);
         updateSeekbarUI();
+
+        // NO visual feedback here - this is only called during long-press seekbar mode
+        // Visual feedback should only appear for quick single presses (handled in seekBy method)
     }
 
     private void seekBackward() {
@@ -1200,6 +1276,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         seekbarPosition = Math.max(seekbarPosition - SEEK_STEP_MS, 0);
         player.seekTo(seekbarPosition);
         updateSeekbarUI();
+
+        // NO visual feedback here - this is only called during long-press seekbar mode
+        // Visual feedback should only appear for quick single presses (handled in seekBy method)
     }
 
     private String formatTime(long timeMs) {
@@ -3006,6 +3085,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         android.util.Log.d("TorboxTvPlayer", "Seeking from " + position + "ms to " + target + "ms (offset=" + offsetMs + "ms)");
         player.seekTo(target);
+
+        // Show visual feedback for quick seek
+        String seekSeconds = String.valueOf(Math.abs(offsetMs) / 1000) + "s";
+        if (offsetMs > 0) {
+            seekFeedbackManager.showSeekForward(seekSeconds);
+        } else {
+            seekFeedbackManager.showSeekBackward(seekSeconds);
+        }
+
         if (playerView != null) {
             playerView.hideController();
         }
@@ -3200,6 +3288,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        // Clean up seek feedback manager
+        if (seekFeedbackManager != null) {
+            seekFeedbackManager.destroy();
+        }
+
         // Cancel PikPak retry operations
         cancelPikPakRetry();
 
@@ -3213,6 +3306,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (pikPakRetryHandler != null) {
             pikPakRetryHandler.removeCallbacksAndMessages(null);
         }
+
+        // Stop progress bar updates
+        stopProgressBarUpdates();
 
         // Clean up loading bar animation
         if (loadingBarAnimator != null && loadingBarAnimator.isRunning()) {

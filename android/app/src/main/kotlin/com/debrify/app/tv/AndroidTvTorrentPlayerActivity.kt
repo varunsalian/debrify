@@ -78,10 +78,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var speedButton: AppCompatButton? = null
     private var seekButton: AppCompatButton? = null
 
+    // Time Display in Controls
+    private var debrifyTimeDisplay: TextView? = null
+    private var debrifyProgressLine: View? = null
+
     // Player
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var subtitleListener: Player.Listener? = null
+
+    // Seek feedback manager
+    private lateinit var seekFeedbackManager: SeekFeedbackManager
 
     // State
     private var payload: PlaybackPayload? = null
@@ -122,6 +129,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val progressHandler = Handler(Looper.getMainLooper())
     private val titleHandler = Handler(Looper.getMainLooper())
     private val controlsHandler = Handler(Looper.getMainLooper())
+    private val seekbarHandler = Handler(Looper.getMainLooper())
 
     // PikPak cold storage retry state
     private var isPikPakRetrying: Boolean = false
@@ -147,6 +155,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             hideControlsMenu()
         } else {
             scheduleHideControlsMenu()
+        }
+    }
+
+    private val seekbarProgressRunnable = object : Runnable {
+        override fun run() {
+            updateSeekbarProgress()
+            seekbarHandler.postDelayed(this, 100) // Update every 100ms for smooth progress
         }
     }
 
@@ -211,6 +226,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setupSeekbar()
         setupPlaylist()
         setupControls()
+
+        // Initialize seek feedback manager
+        seekFeedbackManager = SeekFeedbackManager(findViewById(android.R.id.content))
         setupBackPressHandler()
         setupMetadataReceiver()
 
@@ -991,12 +1009,59 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleButton = playerView.findViewById(R.id.debrify_subtitle_button)
         aspectButton = playerView.findViewById(R.id.debrify_aspect_button)
         speedButton = playerView.findViewById(R.id.debrify_speed_button)
-        val guideButton: AppCompatButton? = playerView.findViewById(R.id.debrify_guide_button)
+        val playlistButton: AppCompatButton? = playerView.findViewById(R.id.debrify_playlist_button)
         val nextButton: AppCompatButton? = playerView.findViewById(R.id.debrify_next_button)
         val randomButton: AppCompatButton? = playerView.findViewById(R.id.debrify_random_button)
 
+        // Time display view
+        debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display)
+        debrifyProgressLine = playerView.findViewById(R.id.debrify_progress_line)
+
         controlsOverlay?.visibility = View.GONE
         controlsOverlay?.alpha = 0f
+
+        // Start updating time display
+        startSeekbarProgressUpdates()
+
+        // Apple TV-style focus animation with scale effect
+        val applyAppleTvAnimation = { view: View? ->
+            view?.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+                if (hasFocus) {
+                    // Scale up with premium smooth animation when focused
+                    v.animate()
+                        .scaleX(1.12f)
+                        .scaleY(1.12f)
+                        .translationZ(8f)
+                        .setDuration(200)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator())
+                        .start()
+                    // Extend timer when focused
+                    if (controlsMenuVisible) {
+                        scheduleHideControlsMenu()
+                    }
+                } else {
+                    // Scale back to normal smoothly
+                    v.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .translationZ(2f)
+                        .setDuration(200)
+                        .setInterpolator(android.view.animation.AccelerateInterpolator())
+                        .start()
+                }
+            }
+        }
+
+        // Apply Apple TV animations to all control buttons
+        applyAppleTvAnimation(pauseButton)
+        applyAppleTvAnimation(seekButton)
+        applyAppleTvAnimation(audioButton)
+        applyAppleTvAnimation(subtitleButton)
+        applyAppleTvAnimation(aspectButton)
+        applyAppleTvAnimation(speedButton)
+        applyAppleTvAnimation(playlistButton)
+        applyAppleTvAnimation(nextButton)
+        applyAppleTvAnimation(randomButton)
 
         val extendTimerOnFocus = View.OnFocusChangeListener { _, hasFocus ->
             if (hasFocus && controlsMenuVisible) {
@@ -1045,12 +1110,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         speedButton?.onFocusChangeListener = extendTimerOnFocus
 
-        guideButton?.setOnClickListener {
+        playlistButton?.setOnClickListener {
             hideControlsMenu()
             showPlaylist()
         }
-        guideButton?.onFocusChangeListener = extendTimerOnFocus
-        guideButton?.text = "Playlist"
+        playlistButton?.onFocusChangeListener = extendTimerOnFocus
 
         nextButton?.setOnClickListener {
             hideControlsMenu()
@@ -1455,12 +1519,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 when (keyCode) {
                     KeyEvent.KEYCODE_DPAD_LEFT -> {
                         val step = getAcceleratedSeekStep(event.repeatCount)
-                        seekBackward(step)
+                        seekBackward(step, isContinuous = event.repeatCount > 0)
                         return true
                     }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> {
                         val step = getAcceleratedSeekStep(event.repeatCount)
-                        seekForward(step)
+                        seekForward(step, isContinuous = event.repeatCount > 0)
                         return true
                     }
                     KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
@@ -1600,17 +1664,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val overlay = controlsOverlay ?: return
         cancelScheduledHideControlsMenu()
 
+        // Hide subtitles when controls menu is shown
+        subtitleOverlay.visibility = View.GONE
+
         overlay.animate().cancel()
 
         if (!controlsMenuVisible) {
             controlsMenuVisible = true
             overlay.visibility = View.VISIBLE
             overlay.alpha = 0f
+            overlay.translationY = 30f  // Start slightly below for Apple TV effect
             overlay.animate()
                 .alpha(1f)
-                .setDuration(180)
+                .translationY(0f)
+                .setDuration(300)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.5f))
                 .withEndAction {
                     overlay.alpha = 1f
+                    overlay.translationY = 0f
                 }
                 .start()
             pauseButton?.post {
@@ -1618,6 +1689,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         } else {
             overlay.alpha = 1f
+            overlay.translationY = 0f
             overlay.visibility = View.VISIBLE
             pauseButton?.post {
                 pauseButton?.requestFocus()
@@ -1634,6 +1706,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!controlsMenuVisible) {
             overlay.visibility = View.GONE
             overlay.alpha = 0f
+            overlay.translationY = 0f
             cancelScheduledHideControlsMenu()
             return
         }
@@ -1642,11 +1715,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         controlsMenuVisible = false
         overlay.animate()
             .alpha(0f)
-            .setDuration(140)
+            .translationY(20f)  // Slide down slightly for premium effect
+            .setDuration(250)
+            .setInterpolator(android.view.animation.AccelerateInterpolator(1.2f))
             .withEndAction {
                 if (!controlsMenuVisible) {
                     overlay.visibility = View.GONE
                     overlay.alpha = 0f
+                    overlay.translationY = 0f
+                    // Show subtitles when controls menu is hidden
+                    subtitleOverlay.visibility = View.VISIBLE
                 }
             }
             .start()
@@ -1674,6 +1752,41 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun updateAspectButtonLabel() {
         aspectButton?.text = resizeModeLabels[resizeModeIndex]
+    }
+
+    // Premium Seekbar Progress Updates
+    private fun startSeekbarProgressUpdates() {
+        seekbarHandler.removeCallbacks(seekbarProgressRunnable)
+        seekbarHandler.post(seekbarProgressRunnable)
+    }
+
+    private fun stopSeekbarProgressUpdates() {
+        seekbarHandler.removeCallbacks(seekbarProgressRunnable)
+    }
+
+    private fun updateSeekbarProgress() {
+        val player = player ?: return
+        val timeDisplay = debrifyTimeDisplay ?: return
+
+        val currentPosition = player.currentPosition
+        val duration = player.duration
+
+        if (duration > 0) {
+            // Update time display in format "MM:SS / MM:SS"
+            timeDisplay.text = "${formatTime(currentPosition)} / ${formatTime(duration)}"
+
+            // Update progress line width
+            debrifyProgressLine?.let { progressLine ->
+                val progressPercentage = (currentPosition.toFloat() / duration.toFloat())
+                val parentWidth = (progressLine.parent as? View)?.width ?: 0
+                if (parentWidth > 0) {
+                    val progressWidth = (parentWidth * progressPercentage).toInt()
+                    val layoutParams = progressLine.layoutParams
+                    layoutParams.width = progressWidth
+                    progressLine.layoutParams = layoutParams
+                }
+            }
+        }
     }
 
     // Seekbar
@@ -1739,16 +1852,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return calculatedStep.coerceAtMost(maxStep)
     }
 
-    private fun seekBackward(stepMs: Long = 10_000L) {
+    private fun seekBackward(stepMs: Long = 10_000L, isContinuous: Boolean = false) {
         seekbarPosition = (seekbarPosition - stepMs).coerceAtLeast(0)
         updateSeekSpeed(stepMs)
         updateSeekbarUI()
+
+        // NO visual feedback - this is only called when seekbar is visible (long-press mode)
+        // Visual feedback should only appear for quick single presses (handled in seekBy method)
     }
 
-    private fun seekForward(stepMs: Long = 10_000L) {
+    private fun seekForward(stepMs: Long = 10_000L, isContinuous: Boolean = false) {
         seekbarPosition = (seekbarPosition + stepMs).coerceAtMost(videoDuration)
         updateSeekSpeed(stepMs)
         updateSeekbarUI()
+
+        // NO visual feedback - this is only called when seekbar is visible (long-press mode)
+        // Visual feedback should only appear for quick single presses (handled in seekBy method)
     }
 
     private fun updateSeekSpeed(stepMs: Long) {
@@ -1812,6 +1931,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             target = target.coerceAtLeast(0L)
         }
         p.seekTo(target)
+
+        // Show visual feedback for quick seek
+        val seekSeconds = kotlin.math.abs(offsetMs / 1000).toString() + "s"
+        if (offsetMs > 0) {
+            seekFeedbackManager.showSeekForward(seekSeconds)
+        } else {
+            seekFeedbackManager.showSeekBackward(seekSeconds)
+        }
     }
 
     // Playlist
@@ -2313,6 +2440,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Clean up seek feedback manager
+        if (::seekFeedbackManager.isInitialized) {
+            seekFeedbackManager.destroy()
+        }
+
         // Cancel PikPak retry operations
         cancelPikPakRetry()
         pikPakRetryHandler.removeCallbacksAndMessages(null)
@@ -2331,6 +2463,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         progressHandler.removeCallbacksAndMessages(null)
         titleHandler.removeCallbacksAndMessages(null)
         controlsHandler.removeCallbacksAndMessages(null)
+        seekbarHandler.removeCallbacksAndMessages(null)
 
         // Clear player and listeners
         player?.let {

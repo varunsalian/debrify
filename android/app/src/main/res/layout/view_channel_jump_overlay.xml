@@ -6,7 +6,8 @@
     android:background="#CC000000"
     android:visibility="gone"
     android:clickable="true"
-    android:focusable="true">
+    android:focusable="true"
+    android:elevation="200dp">
 
     <LinearLayout
         android:layout_width="wrap_content"

@@ -28,7 +28,6 @@ import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
 import 'services/magnet_link_handler.dart';
-import 'models/torbox_torrent.dart';
 import 'widgets/auto_launch_overlay.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
@@ -127,6 +126,22 @@ class DebrifyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Debrify',
       debugShowCheckedModeBanner: false,
+      // Performance optimizations for TV
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            // Respect accessibility font scaling but clamp to max 1.3 for TV layout
+            textScaler: TextScaler.linear(
+              min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
+            ),
+          ),
+          child: child!,
+        );
+      },
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        // Optimize scroll physics for TV
+        physics: const ClampingScrollPhysics(),
+      ),
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
@@ -317,7 +332,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _hasTorboxKey = false;
   bool _rdIntegrationEnabled = true;
   bool _tbIntegrationEnabled = true;
+  bool _rdHiddenFromNav = false;
+  bool _tbHiddenFromNav = false;
   bool _pikpakEnabled = false;
+  bool _pikpakHiddenFromNav = false;
   bool _isAndroidTv = false;
 
   // Auto-launch overlay state
@@ -325,6 +343,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   String? _autoLaunchChannelName;
   int? _autoLaunchChannelNumber;
   bool _autoLaunchInProgress = false;
+
+  // Back button press tracking for Android TV exit
+  DateTime? _lastBackPressTime;
+  static const _backPressDuration = Duration(seconds: 2);
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
@@ -397,7 +419,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         }
       });
     };
-    MainPageBridge.openTorboxAction = (torboxTorrent, action) {
+    MainPageBridge.openTorboxFolder = (torboxTorrent) {
       if (!mounted) return;
       if (!_hasTorboxKey) {
         _showMissingApiKeySnack('Torbox');
@@ -405,8 +427,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       }
       setState(() {
         _pages[5] = TorboxDownloadsScreen(
-          initialTorrentForAction: torboxTorrent,
-          initialAction: action,
+          initialTorrentToOpen: torboxTorrent,
         );
       });
       _onItemTapped(5);
@@ -414,6 +435,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         if (mounted) {
           setState(() {
             _pages[5] = const TorboxDownloadsScreen();
+          });
+        }
+      });
+    };
+    MainPageBridge.openPikPakFolder = (fileId, folderName) {
+      if (!mounted) return;
+      if (!_pikpakEnabled) {
+        _showMissingApiKeySnack('PikPak');
+        return;
+      }
+      setState(() {
+        _pages[6] = PikPakFilesScreen(
+          initialFolderId: fileId,
+          initialFolderName: folderName,
+        );
+      });
+      _onItemTapped(6);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _pages[6] = const PikPakFilesScreen();
           });
         }
       });
@@ -458,7 +500,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.switchTab = null;
     MainPageBridge.openDebridOptions = null;
-    MainPageBridge.openTorboxAction = null;
+    MainPageBridge.openTorboxFolder = null;
+    MainPageBridge.openPikPakFolder = null;
     MainPageBridge.hideAutoLaunchOverlay = null;
     _animationController.dispose();
     DeepLinkService().dispose();
@@ -533,7 +576,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return _startupChannelIdToLaunch;
   }
 
-  /// Check if startup auto-launch is enabled and navigate to Debrify TV
+  /// Check if startup auto-launch is enabled and navigate to Debrify TV or play playlist item
   Future<void> _checkStartupAutoLaunch() async {
     // Prevent duplicate launches
     if (_autoLaunchInProgress) return;
@@ -547,65 +590,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return;
       }
 
-      // Load channels
-      final channels = await DebrifyTvRepository.instance.fetchAllChannels();
-      if (channels.isEmpty) {
-        _autoLaunchInProgress = false;
-        return;
-      }
+      // Get startup mode
+      final startupMode = await StorageService.getStartupMode();
 
-      // Get selected channel ID
-      final selectedChannelId = await StorageService.getStartupChannelId() ?? 'random';
-
-      // Determine which channel to launch
-      DebrifyTvChannelRecord channelToLaunch;
-
-      if (selectedChannelId == 'random') {
-        final random = Random();
-        channelToLaunch = channels[random.nextInt(channels.length)];
+      if (startupMode == 'playlist') {
+        await _launchPlaylistItem();
       } else {
-        final foundChannel = channels.firstWhereOrNull((c) => c.channelId == selectedChannelId);
-        if (foundChannel == null) {
-          // Channel not found, fallback to random
-          final random = Random();
-          channelToLaunch = channels[random.nextInt(channels.length)];
-        } else {
-          channelToLaunch = foundChannel;
-        }
+        await _launchChannel();
       }
-
-      // Show overlay IMMEDIATELY (before any navigation)
-      if (!mounted) {
-        _autoLaunchInProgress = false;
-        return;
-      }
-
-      setState(() {
-        _showAutoLaunchOverlay = true;
-        _autoLaunchChannelName = channelToLaunch.name;
-        _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
-          ? channelToLaunch.channelNumber
-          : null;
-      });
-
-      // Set flag to indicate overlay is showing
-      _isAutoLaunchShowingOverlay = true;
-
-      // Set the startup channel for DebrifyTVScreen to pick up
-      _startupChannelIdToLaunch = channelToLaunch.channelId;
-      _startupChannelIdConsumed = false; // Reset consumption flag
-      debugPrint('MainPage: Set startup channel ID: ${channelToLaunch.channelId}');
-
-      // Navigate to Debrify TV tab (index 3) - no delay needed, overlay is showing
-      if (!mounted) {
-        _autoLaunchInProgress = false;
-        return;
-      }
-
-      _onItemTapped(3); // Debrify TV tab
-
     } catch (e) {
-      debugPrint('MainPage: Failed to auto-launch channel: $e');
+      debugPrint('MainPage: Failed to auto-launch: $e');
       // Remove overlay on error
       if (mounted) {
         setState(() {
@@ -620,6 +614,129 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _startupChannelIdConsumed = false;
     } finally {
       _autoLaunchInProgress = false;
+    }
+  }
+
+  /// Launch a channel on startup
+  Future<void> _launchChannel() async {
+    // Load channels
+    final channels = await DebrifyTvRepository.instance.fetchAllChannels();
+    if (channels.isEmpty) {
+      return;
+    }
+
+    // Get selected channel ID
+    final selectedChannelId = await StorageService.getStartupChannelId() ?? 'random';
+
+    // Determine which channel to launch
+    DebrifyTvChannelRecord channelToLaunch;
+
+    if (selectedChannelId == 'random') {
+      final random = Random();
+      channelToLaunch = channels[random.nextInt(channels.length)];
+    } else {
+      final foundChannel = channels.firstWhereOrNull((c) => c.channelId == selectedChannelId);
+      if (foundChannel == null) {
+        // Channel not found, fallback to random
+        final random = Random();
+        channelToLaunch = channels[random.nextInt(channels.length)];
+      } else {
+        channelToLaunch = foundChannel;
+      }
+    }
+
+    // Show overlay IMMEDIATELY (before any navigation)
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _showAutoLaunchOverlay = true;
+      _autoLaunchChannelName = channelToLaunch.name;
+      _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
+        ? channelToLaunch.channelNumber
+        : null;
+    });
+
+    // Set flag to indicate overlay is showing
+    _isAutoLaunchShowingOverlay = true;
+
+    // Set the startup channel for DebrifyTVScreen to pick up
+    _startupChannelIdToLaunch = channelToLaunch.channelId;
+    _startupChannelIdConsumed = false; // Reset consumption flag
+    debugPrint('MainPage: Set startup channel ID: ${channelToLaunch.channelId}');
+
+    // Navigate to Debrify TV tab (index 3) - no delay needed, overlay is showing
+    if (!mounted) {
+      return;
+    }
+
+    _onItemTapped(3); // Debrify TV tab
+  }
+
+  /// Launch a playlist item on startup
+  Future<void> _launchPlaylistItem() async {
+    // Get playlist items
+    final playlistItems = await StorageService.getPlaylistItemsRaw();
+    if (playlistItems.isEmpty) {
+      return;
+    }
+
+    // Get selected playlist item ID
+    final selectedItemId = await StorageService.getStartupPlaylistItemId();
+    if (selectedItemId == null || selectedItemId.isEmpty) {
+      return;
+    }
+
+    // Find the playlist item
+    final playlistItem = playlistItems.firstWhereOrNull(
+      (item) => StorageService.computePlaylistDedupeKey(item) == selectedItemId,
+    );
+
+    if (playlistItem == null) {
+      return;
+    }
+
+    // Show overlay
+    if (!mounted) {
+      return;
+    }
+
+    final itemTitle = (playlistItem['title'] as String?) ?? 'Playlist Item';
+    setState(() {
+      _showAutoLaunchOverlay = true;
+      _autoLaunchChannelName = itemTitle;
+      _autoLaunchChannelNumber = null;
+    });
+
+    // Set flag to indicate overlay is showing
+    _isAutoLaunchShowingOverlay = true;
+
+    // Wait a bit for the overlay to show
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) {
+      return;
+    }
+
+    // Navigate to playlist tab
+    setState(() {
+      _selectedIndex = 1; // Playlist tab (index 1, not 2)
+    });
+
+    // Wait for UI to settle and playlist screen to be built
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Wait a bit more for the screen to fully initialize
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    // Use the exact same playback logic as clicking a playlist card
+    final playHandler = MainPageBridge.playPlaylistItem;
+    if (playHandler != null) {
+      await playHandler(playlistItem);
+    } else {
+      // As a fallback, store the item to be played
+      MainPageBridge.notifyPlaylistItemToAutoPlay(playlistItem);
     }
   }
 
@@ -645,7 +762,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final torboxKey = await StorageService.getTorboxApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
+    final rdHidden = await StorageService.getRealDebridHiddenFromNav();
+    final tbHidden = await StorageService.getTorboxHiddenFromNav();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
+    final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
 
     if (!mounted) return;
 
@@ -657,7 +777,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       hasTorbox: hasTorbox,
       realDebridEnabled: rdEnabled,
       torboxEnabled: torboxEnabled,
+      realDebridHidden: rdHidden,
+      torboxHidden: tbHidden,
       pikpakEnabled: pikpakEnabled,
+      pikpakHidden: pikpakHidden,
     );
   }
 
@@ -666,12 +789,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool hasTorbox,
     required bool realDebridEnabled,
     required bool torboxEnabled,
+    required bool realDebridHidden,
+    required bool torboxHidden,
     required bool pikpakEnabled,
+    required bool pikpakHidden,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
       hasTorbox: hasTorbox,
+      realDebridHidden: realDebridHidden,
+      torboxHidden: torboxHidden,
       pikpakEnabled: pikpakEnabled,
+      pikpakHidden: pikpakHidden,
     );
 
     int nextIndex = _selectedIndex;
@@ -683,7 +812,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _hasTorboxKey == hasTorbox &&
         _rdIntegrationEnabled == realDebridEnabled &&
         _tbIntegrationEnabled == torboxEnabled &&
+        _rdHiddenFromNav == realDebridHidden &&
+        _tbHiddenFromNav == torboxHidden &&
         _pikpakEnabled == pikpakEnabled &&
+        _pikpakHiddenFromNav == pikpakHidden &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -693,7 +825,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _hasTorboxKey = hasTorbox;
       _rdIntegrationEnabled = realDebridEnabled;
       _tbIntegrationEnabled = torboxEnabled;
+      _rdHiddenFromNav = realDebridHidden;
+      _tbHiddenFromNav = torboxHidden;
       _pikpakEnabled = pikpakEnabled;
+      _pikpakHiddenFromNav = pikpakHidden;
       _selectedIndex = nextIndex;
     });
   }
@@ -701,20 +836,26 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   List<int> _computeVisibleNavIndices({
     bool? hasRealDebrid,
     bool? hasTorbox,
+    bool? realDebridHidden,
+    bool? torboxHidden,
     bool? pikpakEnabled,
+    bool? pikpakHidden,
   }) {
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
+      final rdHidden = realDebridHidden ?? _rdHiddenFromNav;
       final tb = hasTorbox ?? _hasTorboxKey;
+      final tbHidden = torboxHidden ?? _tbHiddenFromNav;
       final pikpak = pikpakEnabled ?? _pikpakEnabled;
+      final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
       final indices = <int>[0, 1, 3]; // Torrent, Playlist, Debrify TV
-      if (rd) {
+      if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
-      if (tb) {
+      if (tb && !tbHidden) {
         indices.add(5); // Torbox downloads
       }
-      if (pikpak) {
+      if (pikpak && !ppHidden) {
         indices.add(6); // PikPak
       }
       indices.add(7); // Settings
@@ -722,16 +863,19 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
 
     final rd = hasRealDebrid ?? _hasRealDebridKey;
+    final rdHidden = realDebridHidden ?? _rdHiddenFromNav;
     final tb = hasTorbox ?? _hasTorboxKey;
+    final tbHidden = torboxHidden ?? _tbHiddenFromNav;
     final pikpak = pikpakEnabled ?? _pikpakEnabled;
+    final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
     if (!rd && !tb && !pikpak) {
       return [0, 7];
     }
 
     final indices = <int>[0, 1, 2, 3];
-    if (rd) indices.add(4);
-    if (tb) indices.add(5);
-    if (pikpak) indices.add(6);
+    if (rd && !rdHidden) indices.add(4);
+    if (tb && !tbHidden) indices.add(5);
+    if (pikpak && !ppHidden) indices.add(6);
     indices.add(7);
     return indices;
   }
@@ -771,45 +915,98 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return Stack(
       children: [
         // Main app content
-        AnimatedPremiumBackground(
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              title: PremiumTopNav(
-                currentIndex: currentNavIndex,
-                items: navItems,
-                onTap: (relativeIndex) {
-                  final actualIndex = visibleIndices[relativeIndex];
-                  _onItemTapped(actualIndex);
-                },
-                badges: navBadges,
-                haptics: true,
+        PopScope(
+          canPop: false,
+          onPopInvoked: (bool didPop) async {
+            if (didPop) return;
+
+            // Allow navigation within app for all platforms
+            if (Navigator.canPop(context)) {
+              Navigator.of(context).pop();
+              return;
+            }
+
+            // At root level - platform-specific exit behavior
+
+            // Desktop platforms: Don't exit on back button
+            // Users close windows using OS controls (X button, Cmd+Q, etc.)
+            if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+              return; // Do nothing
+            }
+
+            // iOS: Don't force exit - iOS apps don't have back buttons
+            // Users exit by swiping up or using home button
+            if (Platform.isIOS) {
+              return; // Do nothing
+            }
+
+            // Android Mobile: Exit immediately on back press
+            if (Platform.isAndroid && !_isAndroidTv) {
+              SystemNavigator.pop();
+              return;
+            }
+
+            // Android TV: Double back press to exit
+            if (Platform.isAndroid && _isAndroidTv) {
+              final currentTime = DateTime.now();
+              final backButtonPressedTwice = _lastBackPressTime != null &&
+                  currentTime.difference(_lastBackPressTime!) < _backPressDuration;
+
+              if (backButtonPressedTwice) {
+                SystemNavigator.pop();
+                return;
+              }
+
+              // First press - show message
+              _lastBackPressTime = currentTime;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Press back again to exit'),
+                  duration: _backPressDuration,
+                ),
+              );
+            }
+          },
+          child: AnimatedPremiumBackground(
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              appBar: AppBar(
+                title: PremiumTopNav(
+                  currentIndex: currentNavIndex,
+                  items: navItems,
+                  onTap: (relativeIndex) {
+                    final actualIndex = visibleIndices[relativeIndex];
+                    _onItemTapped(actualIndex);
+                  },
+                  badges: navBadges,
+                  haptics: true,
+                ),
+                automaticallyImplyLeading: false,
               ),
-              automaticallyImplyLeading: false,
-            ),
-            body: FadeTransition(
-              opacity: _fadeAnimation,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 350),
-                transitionBuilder: (child, animation) {
-                  final offsetAnimation =
-                      Tween<Offset>(
-                        begin: const Offset(0.02, 0.02),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      );
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(position: offsetAnimation, child: child),
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey<int>(_selectedIndex),
-                  child: _pages[_selectedIndex],
+              body: FadeTransition(
+                opacity: _fadeAnimation,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, animation) {
+                    final offsetAnimation =
+                        Tween<Offset>(
+                          begin: const Offset(0.02, 0.02),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        );
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(position: offsetAnimation, child: child),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_selectedIndex),
+                    child: _pages[_selectedIndex],
+                  ),
                 ),
               ),
             ),

@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/rd_torrent.dart';
+import '../models/rd_file_node.dart';
 import '../models/debrid_download.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
-import '../widgets/stat_chip.dart';
+import '../utils/rd_folder_tree_builder.dart';
 import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
+import '../services/android_native_downloader.dart';
 import 'dart:ui'; // Added for ImageFilter
+import '../widgets/file_selection_dialog.dart';
 
 class DebridDownloadsScreen extends StatefulWidget {
   const DebridDownloadsScreen({super.key, this.initialTorrentForOptions});
@@ -65,8 +69,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   String? _apiKey;
   static const int _limit = 50;
 
-  // File browser navigation state
-  int? _currentSeason;
+  // Folder navigation state
+  String? _currentTorrentId;
+  RDTorrent? _currentTorrent;
+  List<String> _folderPath = []; // e.g., ["Season 1", "Episodes"]
+  RDFileNode? _currentFolderTree;
+  List<RDFileNode>? _currentViewNodes; // Current folder contents
+  bool _isLoadingFolder = false;
 
   // Magnet input
   final TextEditingController _magnetController = TextEditingController();
@@ -76,9 +85,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final TextEditingController _linkController = TextEditingController();
   bool _isAddingLink = false;
 
+  // TV/DPAD navigation
+  bool _isTelevision = false;
+  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'rd-back');
+  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
+
   @override
   void initState() {
     super.initState();
+    _checkIfTelevision();
     _loadApiKeyAndData();
     _torrentScrollController.addListener(_onTorrentScroll);
     _downloadScrollController.addListener(_onDownloadScroll);
@@ -92,15 +107,24 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           await Future.delayed(const Duration(milliseconds: 150));
           attempts++;
         }
+
         if (mounted && _apiKey != null) {
-          _showMultipleLinksDialog(
-            widget.initialTorrentForOptions!,
-            showPlayButtons: false,
-          );
+          // Navigate into the torrent folder instead of showing dialog
+          await _navigateIntoTorrent(widget.initialTorrentForOptions!);
         }
       }
     });
   }
+
+  Future<void> _checkIfTelevision() async {
+    final isTv = await AndroidNativeDownloader.isTelevision();
+    if (mounted) {
+      setState(() {
+        _isTelevision = isTv;
+      });
+    }
+  }
+
 
   void _showDownloadMoreOptions(DebridDownload download) {
     final canStream = download.streamable == 1;
@@ -135,6 +159,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _downloadScrollController.dispose();
     _magnetController.dispose();
     _linkController.dispose();
+
+    // Dispose focus nodes
+    _backButtonFocusNode.dispose();
+    _refreshButtonFocusNode.dispose();
+
     super.dispose();
   }
 
@@ -223,6 +252,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           _torrentPage++;
           _isLoadingTorrents = false;
         });
+
       }
     } catch (e) {
       if (mounted) {
@@ -384,9 +414,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         }
       }
     } else {
-      // Multiple links - show popup with all files
+      // Multiple links - navigate into torrent folder view
       if (mounted) {
-        _showMultipleLinksDialog(torrent, showPlayButtons: false);
+        await _navigateIntoTorrent(torrent);
       }
     }
   }
@@ -427,9 +457,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         }
       }
     } else {
-      // Multiple files - show popup with play options
+      // Multiple files - navigate into torrent folder view
       if (mounted) {
-        _showMultipleLinksDialog(torrent, showPlayButtons: false);
+        await _navigateIntoTorrent(torrent);
       }
     }
   }
@@ -484,16 +514,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         meta: meta,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Added to downloads')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Added to downloads')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to start download: $e'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to start download: $e')));
     }
   }
 
@@ -999,969 +1027,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
-  Future<void> _showMultipleLinksDialog(
-    RDTorrent torrent, {
-    bool showPlayButtons = false,
-  }) async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF0F172A).withValues(alpha: 0.98),
-                  const Color(0xFF1E293B).withValues(alpha: 0.98),
-                ],
-              ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              border: Border.all(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  blurRadius: 30,
-                  offset: const Offset(0, -10),
-                ),
-                BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 0),
-                ),
-              ],
-            ),
-            child: FutureBuilder<Map<String, dynamic>>(
-              future: DebridService.getTorrentInfo(_apiKey!, torrent.id),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Container(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Drag handle
-                        Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[600],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFF6366F1,
-                                ).withValues(alpha: 0.3),
-                                blurRadius: 15,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                            strokeWidth: 3,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Loading Files',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Getting file information...',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return Container(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Drag handle
-                        Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[600],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFFEF4444,
-                                ).withValues(alpha: 0.3),
-                                blurRadius: 15,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.error_outline_rounded,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Failed to Load File Info',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          snapshot.error.toString(),
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[400],
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF6366F1),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text(
-                              'Close',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                final torrentInfo = snapshot.data!;
-                final allFiles = torrentInfo['files'] as List<dynamic>? ?? [];
-
-                // Get selected files from the torrent info
-                final selectedFilesFromTorrent = allFiles
-                    .where((file) => file['selected'] == 1)
-                    .toList();
-
-                // Only show files that are selected (selected: 1)
-                final files = selectedFilesFromTorrent;
-
-                // Detect if this is a series and group files by season
-                final filenames = files.map((file) {
-                  String fileName = file['path']?.toString() ?? 'Unknown file';
-                  if (fileName.startsWith('/')) {
-                    fileName = fileName.split('/').last;
-                  }
-                  return fileName;
-                }).toList();
-
-                final isSeries = SeriesParser.isSeriesPlaylist(filenames);
-                final seriesInfos = SeriesParser.parsePlaylist(filenames);
-
-                // If no files are selected, show empty state
-                if (files.isEmpty) {
-                  return Container(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.9,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Header
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-                          child: Column(
-                            children: [
-                              // Drag handle
-                              Container(
-                                width: 40,
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[600],
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              // Title
-                              Text(
-                                '${torrent.filename} (0 files)',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Empty state message
-                        Expanded(
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFFF59E0B),
-                                        Color(0xFFD97706),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(
-                                          0xFFF59E0B,
-                                        ).withValues(alpha: 0.3),
-                                        blurRadius: 15,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Icon(
-                                    Icons.folder_off_rounded,
-                                    color: Colors.white,
-                                    size: 32,
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                const Text(
-                                  'No Files Available',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'No files are currently selected for download.\nPlease select files in Real Debrid first.',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[400],
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        // Close button
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              style: TextButton.styleFrom(
-                                backgroundColor: const Color(0xFF475569),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              child: const Text(
-                                'Close',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                // NOTE: Real-Debrid returns links[] in the same order as the selected files list
-                // We therefore use the index within the filtered `files` list directly to index links[]
-
-                bool downloadingAll = false;
-                int addCount = 0;
-                final Set<int> added = {};
-                final Set<int> selectedFiles = {}; // Track selected files
-                final Map<int, bool> unrestrictingFiles =
-                    {}; // Track which files are being unrestricted
-                return StatefulBuilder(
-                  builder: (context, setLocal) {
-                    return Container(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.9,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Minimal header with just drag handle and title
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-                            child: Column(
-                              children: [
-                                // Drag handle
-                                Container(
-                                  width: 40,
-                                  height: 4,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[600],
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                // Simple title
-                                Text(
-                                  '${torrent.filename} (${files.length} files)',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          if (downloadingAll) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 12,
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.download_rounded,
-                                        color: Color(0xFF10B981),
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Downloading files...',
-                                        style: TextStyle(
-                                          color: Colors.grey[300],
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      Text(
-                                        '$addCount/${files.length}',
-                                        style: TextStyle(
-                                          color: Colors.grey[400],
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: LinearProgressIndicator(
-                                      minHeight: 8,
-                                      value: files.isEmpty
-                                          ? null
-                                          : (addCount / files.length).clamp(
-                                              0.0,
-                                              1.0,
-                                            ),
-                                      backgroundColor: Colors.grey[800],
-                                      valueColor:
-                                          const AlwaysStoppedAnimation<Color>(
-                                            Color(0xFF10B981),
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-
-                          // File List - conditional rendering for series vs regular files
-                          Flexible(
-                            child: isSeries
-                                ? _buildSeriesFileBrowser(
-                                    files: files,
-                                    seriesInfos: seriesInfos,
-                                    selectedFiles: selectedFiles,
-                                    added: added,
-                                    unrestrictingFiles: unrestrictingFiles,
-                                    showPlayButtons: showPlayButtons,
-                                    torrent: torrent,
-                                    setLocal: setLocal,
-                                  )
-                                : ListView.separated(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      24,
-                                      8,
-                                      24,
-                                      16,
-                                    ),
-                                    shrinkWrap: true,
-                                    itemCount: files.length,
-                                    separatorBuilder: (_, __) =>
-                                        const SizedBox(height: 12),
-                                    itemBuilder: (context, index) {
-                                      final file = files[index];
-                                      String fileName =
-                                          file['path']?.toString() ??
-                                          'Unknown file';
-                                      if (fileName.startsWith('/')) {
-                                        fileName = fileName.split('/').last;
-                                      }
-                                      final fileSize =
-                                          (file['bytes'] ?? 0) as int;
-                                      final isVideo = FileUtils.isVideoFile(
-                                        fileName,
-                                      );
-                                      final isAdded = added.contains(index);
-                                      final isSelected = selectedFiles.contains(
-                                        index,
-                                      );
-                                      final isUnrestricting =
-                                          unrestrictingFiles[index] ?? false;
-
-                                      return _buildModernFileCard(
-                                        fileName: fileName,
-                                        fileSize: fileSize,
-                                        isVideo: isVideo,
-                                        isAdded: isAdded,
-                                        isSelected: isSelected,
-                                        isUnrestricting: isUnrestricting,
-                                        showPlayButtons: showPlayButtons,
-                                        onPlay: () => _playFileOnDemand(
-                                          torrent,
-                                          index,
-                                          setLocal,
-                                          unrestrictingFiles,
-                                        ),
-                                        onAddToPlaylist: () =>
-                                            _addFileToPlaylist(
-                                              torrent,
-                                              index,
-                                              setLocal,
-                                            ),
-                                        onDownload: () => _downloadFileOnDemand(
-                                          torrent,
-                                          index,
-                                          fileName,
-                                          setLocal,
-                                          added,
-                                          unrestrictingFiles,
-                                        ),
-                                        onCopy: () => _copyFileLinkOnDemand(
-                                          torrent,
-                                          index,
-                                          setLocal,
-                                          unrestrictingFiles,
-                                        ),
-                                        onSelect: () {
-                                          setLocal(() {
-                                            if (isSelected) {
-                                              selectedFiles.remove(index);
-                                            } else {
-                                              selectedFiles.add(index);
-                                            }
-                                          });
-                                        },
-                                        index: index,
-                                      );
-                                    },
-                                  ),
-                          ),
-
-                          // Compact footer with Download All, Download Selected, and Close buttons
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF0F172A,
-                              ).withValues(alpha: 0.5),
-                              borderRadius: const BorderRadius.only(
-                                bottomLeft: Radius.circular(28),
-                                bottomRight: Radius.circular(28),
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                // Download Selected button (only show when files are selected)
-                                if (selectedFiles.isNotEmpty) ...[
-                                  Container(
-                                    width: double.infinity,
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF8B5CF6),
-                                          Color(0xFF7C3AED),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(16),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFF8B5CF6,
-                                          ).withValues(alpha: 0.3),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 6),
-                                        ),
-                                      ],
-                                    ),
-                                    child: FilledButton.icon(
-                                      onPressed: downloadingAll
-                                          ? null
-                                          : () async {
-                                              setLocal(() {
-                                                downloadingAll = true;
-                                                addCount = 0;
-                                              });
-                                              final selectedIndices =
-                                                  selectedFiles.toList();
-                                              for (
-                                                var i = 0;
-                                                i < selectedIndices.length;
-                                                i++
-                                              ) {
-                                                final index =
-                                                    selectedIndices[i];
-                                                final file = files[index];
-                                                String fileName =
-                                                    file['path']?.toString() ??
-                                                    'file';
-                                                if (fileName.startsWith('/')) {
-                                                  fileName = fileName
-                                                      .split('/')
-                                                      .last;
-                                                }
-
-                                                // Queue download with restricted link (unrestriction happens on-demand)
-                                                try {
-                                                  final meta = jsonEncode({
-                                                    'restrictedLink':
-                                                        torrent.links[index],
-                                                    'apiKey': _apiKey ?? '',
-                                                    'torrentHash':
-                                                        (torrent.id ?? '')
-                                                            .toString(),
-                                                    'fileIndex': index,
-                                                  });
-                                                  await DownloadService.instance
-                                                      .enqueueDownload(
-                                                        url: torrent
-                                                            .links[index], // Use restricted link directly
-                                                        fileName: fileName,
-                                                        context: context,
-                                                        torrentName:
-                                                            torrent.filename,
-                                                        meta: meta,
-                                                      );
-                                                  setLocal(() {
-                                                    added.add(index);
-                                                    addCount = i + 1;
-                                                  });
-                                                } catch (e) {
-                                                  // Handle error silently for batch operations
-                                                }
-                                              }
-                                              setLocal(() {
-                                                downloadingAll = false;
-                                                selectedFiles
-                                                    .clear(); // Clear selection after download
-                                              });
-                                              if (mounted) {
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  SnackBar(
-                                                    content: Row(
-                                                      children: [
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets.all(
-                                                                8,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(
-                                                              0xFF8B5CF6,
-                                                            ),
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  8,
-                                                                ),
-                                                          ),
-                                                          child: const Icon(
-                                                            Icons.check,
-                                                            color: Colors.white,
-                                                            size: 16,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 12,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            'Added ${selectedIndices.length} selected downloads',
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w500,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    backgroundColor:
-                                                        const Color(0xFF1E293B),
-                                                    behavior: SnackBarBehavior
-                                                        .floating,
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            12,
-                                                          ),
-                                                    ),
-                                                    margin:
-                                                        const EdgeInsets.all(
-                                                          16,
-                                                        ),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                      icon: downloadingAll
-                                          ? const SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white,
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.download_rounded,
-                                              color: Colors.white,
-                                            ),
-                                      label: Text(
-                                        downloadingAll
-                                            ? 'Adding $addCount/${selectedFiles.length}…'
-                                            : 'Download Selected (${selectedFiles.length})',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: Colors.transparent,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 12,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                ],
-                                // Bottom row with Download All and Close buttons
-                                Row(
-                                  children: [
-                                    // Download All button
-                                    Expanded(
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          gradient: const LinearGradient(
-                                            colors: [
-                                              Color(0xFF10B981),
-                                              Color(0xFF059669),
-                                            ],
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(
-                                                0xFF10B981,
-                                              ).withValues(alpha: 0.3),
-                                              blurRadius: 12,
-                                              offset: const Offset(0, 6),
-                                            ),
-                                          ],
-                                        ),
-                                        child: FilledButton.icon(
-                                          onPressed: downloadingAll
-                                              ? null
-                                              : () async {
-                                                  setLocal(() {
-                                                    downloadingAll = true;
-                                                    addCount = 0;
-                                                  });
-                                                  for (
-                                                    var i = 0;
-                                                    i < files.length;
-                                                    i++
-                                                  ) {
-                                                    final file = files[i];
-                                                    String fileName =
-                                                        file['path']
-                                                            ?.toString() ??
-                                                        'file';
-                                                    if (fileName.startsWith(
-                                                      '/',
-                                                    )) {
-                                                      fileName = fileName
-                                                          .split('/')
-                                                          .last;
-                                                    }
-
-                                                    // Queue download with restricted link (unrestriction happens on-demand)
-                                                    try {
-                                                      final meta = jsonEncode({
-                                                        'restrictedLink':
-                                                            torrent.links[i],
-                                                        'apiKey': _apiKey ?? '',
-                                                        'torrentHash':
-                                                            (torrent.id ?? '')
-                                                                .toString(),
-                                                        'fileIndex': i,
-                                                      });
-                                                      await DownloadService
-                                                          .instance
-                                                          .enqueueDownload(
-                                                            url: torrent
-                                                                .links[i], // Use restricted link directly
-                                                            fileName: fileName,
-                                                            context: context,
-                                                            torrentName: torrent
-                                                                .filename,
-                                                            meta: meta,
-                                                          );
-                                                      setLocal(() {
-                                                        added.add(i);
-                                                        addCount = i + 1;
-                                                      });
-                                                    } catch (e) {
-                                                      // Handle error silently for batch operations
-                                                    }
-                                                  }
-                                                  setLocal(
-                                                    () =>
-                                                        downloadingAll = false,
-                                                  );
-                                                  if (mounted) {
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      SnackBar(
-                                                        content: Row(
-                                                          children: [
-                                                            Container(
-                                                              padding:
-                                                                  const EdgeInsets.all(
-                                                                    8,
-                                                                  ),
-                                                              decoration: BoxDecoration(
-                                                                color:
-                                                                    const Color(
-                                                                      0xFF10B981,
-                                                                    ),
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                      8,
-                                                                    ),
-                                                              ),
-                                                              child: const Icon(
-                                                                Icons.check,
-                                                                color: Colors
-                                                                    .white,
-                                                                size: 16,
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 12,
-                                                            ),
-                                                            Expanded(
-                                                              child: Text(
-                                                                'Added ${files.length} downloads',
-                                                                style: const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w500,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        backgroundColor:
-                                                            const Color(
-                                                              0xFF1E293B,
-                                                            ),
-                                                        behavior:
-                                                            SnackBarBehavior
-                                                                .floating,
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                12,
-                                                              ),
-                                                        ),
-                                                        margin:
-                                                            const EdgeInsets.all(
-                                                              16,
-                                                            ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                          icon: downloadingAll
-                                              ? const SizedBox(
-                                                  width: 16,
-                                                  height: 16,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.white,
-                                                      ),
-                                                )
-                                              : const Icon(
-                                                  Icons.download_rounded,
-                                                  color: Colors.white,
-                                                ),
-                                          label: Text(
-                                            downloadingAll
-                                                ? 'Adding $addCount/${files.length}…'
-                                                : 'Download All',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor: Colors.transparent,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 20,
-                                              vertical: 12,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    // Close button
-                                    SizedBox(
-                                      width: 100,
-                                      child: TextButton(
-                                        onPressed: () =>
-                                            Navigator.of(context).pop(),
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 12,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Close',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF6366F1),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
+  // Removed deprecated _showMultipleLinksDialog method
+  // The method has been replaced with _navigateIntoTorrent for multi-file torrents
 
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
@@ -2102,20 +1169,480 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
+  // ========== Folder Navigation Methods ==========
+
+  /// Navigate into a torrent (shows root level folders/files)
+  Future<void> _navigateIntoTorrent(RDTorrent torrent) async {
+    if (_apiKey == null) return;
+
+    setState(() {
+      _isLoadingFolder = true;
+    });
+
+    try {
+      // Get torrent info to check for RAR archives
+      final torrentInfo = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
+      final files = (torrentInfo['files'] as List<dynamic>?)?.map((f) => f as Map<String, dynamic>).toList() ?? [];
+      final links = (torrentInfo['links'] as List<dynamic>?) ?? [];
+
+      // Check if this is a RAR archive
+      final isRarArchive = RDFolderTreeBuilder.isRarArchive(files, links);
+
+      if (isRarArchive) {
+        // Show a message that this cannot be browsed
+        setState(() {
+          _isLoadingFolder = false;
+        });
+
+        // Show dialog explaining RAR archives and offering to download
+        if (mounted) {
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.archive, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'RAR Archive Detected',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                'This is a RAR archive that Real-Debrid has not extracted yet. '
+                'The folder structure shown represents the archive contents, but only the RAR file itself can be downloaded.\n\n'
+                'You can download the RAR archive to extract it locally.',
+                style: const TextStyle(color: Colors.grey),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    // Download the single RAR file
+                    if (links.isNotEmpty) {
+                      try {
+                        final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, links[0]);
+                        final downloadUrl = unrestrictResult['download'] as String?;
+                        if (downloadUrl != null) {
+                          _copyToClipboard(downloadUrl);
+                        }
+                      } catch (e) {
+                        _showError('Failed to get download link: ${e.toString()}');
+                      }
+                    }
+                  },
+                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF60A5FA)),
+                  child: const Text('Copy Download Link'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      // Not a RAR archive - proceed with normal folder navigation
+      // Get the folder tree for this torrent
+      final folderTree = await DebridService.getTorrentFolderTree(
+        _apiKey!,
+        torrent.id,
+      );
+      final rootNodes = RDFolderTreeBuilder.getRootLevelNodes(folderTree);
+
+      setState(() {
+        _currentTorrentId = torrent.id;
+        _currentTorrent = torrent;
+        _currentFolderTree = folderTree;
+        _currentViewNodes = rootNodes;
+        _folderPath = [];
+        _isLoadingFolder = false;
+      });
+
+    } catch (e) {
+      setState(() {
+        _isLoadingFolder = false;
+      });
+      _showError('Failed to load torrent contents: ${e.toString()}');
+    }
+  }
+
+  /// Navigate into a folder
+  void _navigateIntoFolder(RDFileNode folder) {
+    if (!folder.isFolder) return;
+
+    setState(() {
+      _folderPath.add(folder.name);
+      _currentViewNodes = folder.children;
+    });
+
+  }
+
+  /// Navigate up one level
+  void _navigateUp() {
+    if (_folderPath.isEmpty && _currentTorrentId != null) {
+      // Go back to torrents list
+      setState(() {
+        _currentTorrentId = null;
+        _currentTorrent = null;
+        _currentFolderTree = null;
+        _currentViewNodes = null;
+        _folderPath = [];
+      });
+
+    } else if (_folderPath.isNotEmpty && _currentFolderTree != null) {
+      // Go up one folder level
+      setState(() {
+        _folderPath.removeLast();
+        // Navigate to the folder at the current path
+        if (_folderPath.isEmpty) {
+          _currentViewNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
+        } else {
+          // Find the folder node at the current path
+          RDFileNode currentNode = _currentFolderTree!;
+          for (final folderName in _folderPath) {
+            final childFolder = currentNode.children.cast<RDFileNode?>().firstWhere(
+              (node) => node?.name == folderName && node?.isFolder == true,
+              orElse: () => null,
+            );
+            if (childFolder != null) {
+              currentNode = childFolder;
+            } else {
+              // Folder not found - reset to root
+              _folderPath.clear();
+              _currentViewNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
+              return;
+            }
+          }
+          _currentViewNodes = currentNode.children;
+        }
+      });
+
+    }
+  }
+
+  String _getCurrentFolderTitle() {
+    if (_currentTorrentId == null) return '';
+    if (_folderPath.isEmpty) {
+      return _currentTorrent?.filename ?? 'Torrent Files';
+    }
+    return _folderPath.last;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // If in folder browsing mode, show folder view
+    if (_currentTorrentId != null) {
+      return _buildFolderBrowserScaffold();
+    }
+
     final Widget content = _selectedView == _DebridDownloadsView.torrents
         ? _buildTorrentContent()
         : _buildDownloadContent();
 
     return Scaffold(
-      body: Column(
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Expanded(child: content),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFolderBrowserScaffold() {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          focusNode: _backButtonFocusNode,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _navigateUp,
+        ),
+        title: Text(_getCurrentFolderTitle()),
+        actions: [
+          IconButton(
+            focusNode: _refreshButtonFocusNode,
+            icon: const Icon(Icons.refresh),
+            onPressed: _currentTorrent != null
+                ? () => _navigateIntoTorrent(_currentTorrent!)
+                : null,
+          ),
+        ],
+      ),
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: _buildFolderContentsView(),
+      ),
+    );
+  }
+
+  Widget _buildFolderContentsView() {
+    if (_isLoadingFolder) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_currentViewNodes == null || _currentViewNodes!.isEmpty) {
+      return const Center(child: Text('Empty folder'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _currentViewNodes!.length,
+      cacheExtent: 200.0, // Pre-cache items for smoother scrolling
+      addRepaintBoundaries: true, // Optimize repainting
+      itemBuilder: (context, index) {
+        final node = _currentViewNodes![index];
+        return RepaintBoundary(
+          child: _buildNodeCard(node, index),
+        );
+      },
+    );
+  }
+
+  Widget _buildNodeCard(RDFileNode node, int index) {
+    final isFolder = node.isFolder;
+    final isVideo = !isFolder && FileUtils.isVideoFile(node.name);
+    final borderColor = Colors.white.withValues(alpha: 0.08);
+    final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
+
+    final cardContent = Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: glowColor,
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 8),
-          Expanded(child: content),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      isFolder
+                          ? Icons.folder
+                          : (isVideo
+                                ? Icons.play_circle_outline
+                                : Icons.insert_drive_file),
+                      color: isFolder
+                          ? Colors.amber
+                          : (isVideo ? Colors.blue : Colors.grey),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            node.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              color: Colors.white,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            isFolder
+                                ? '${RDFolderTreeBuilder.countFiles(node)} files • ${Formatters.formatFileSize(node.totalBytes)}'
+                                : Formatters.formatFileSize(node.bytes ?? 0),
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Action buttons (always show for all files)
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF131E33), Color(0xFF0B1224)],
+              ),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(18),
+                bottomRight: Radius.circular(18),
+              ),
+              border: Border(
+                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  if (isFolder) ...[
+                    Expanded(
+                      child: FilledButton.icon(
+                        autofocus: index == 0,
+                        onPressed: () => _navigateIntoFolder(node),
+                        icon: const Icon(Icons.folder_open, size: 18),
+                        label: const Text('Open'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _playFolder(node),
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Play'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (isVideo) ...[
+                    Expanded(
+                      child: FilledButton.icon(
+                        autofocus: index == 0,
+                        onPressed: () => _playFile(node),
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Play'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else ...[
+                    // Non-video files get a Download button
+                    Expanded(
+                      child: FilledButton.icon(
+                        autofocus: index == 0,
+                        onPressed: () => _downloadFile(node),
+                        icon: const Icon(Icons.download, size: 18),
+                        label: const Text('Download'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+
+                  // Three-dot menu
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: 'More options',
+                    onSelected: (value) {
+                      if (value == 'download') {
+                        isFolder ? _downloadFolder(node) : _downloadFile(node);
+                      } else if (value == 'add_to_playlist') {
+                        isFolder
+                            ? _addFolderToPlaylist(node)
+                            : _addNodeFileToPlaylist(node);
+                      } else if (value == 'copy_link') {
+                        _copyNodeDownloadLink(node);
+                      } else if (value == 'open_external') {
+                        _openWithExternalPlayer(node);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'download',
+                        child: Row(
+                          children: [
+                            Icon(Icons.download, size: 18, color: Colors.green),
+                            SizedBox(width: 12),
+                            Text('Download'),
+                          ],
+                        ),
+                      ),
+                      // Only show "Add to Playlist" for video files or folders (not for subtitle/other files)
+                      if (isFolder || isVideo)
+                        const PopupMenuItem(
+                          value: 'add_to_playlist',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.playlist_add,
+                                size: 18,
+                                color: Colors.blue,
+                              ),
+                              SizedBox(width: 12),
+                              Text('Add to Playlist'),
+                            ],
+                          ),
+                        ),
+                      // Only show "Open with External Player" for video files, not folders
+                      if (isVideo && !isFolder)
+                        const PopupMenuItem(
+                          value: 'open_external',
+                          child: Row(
+                            children: [
+                              Icon(Icons.open_in_new, size: 18, color: Colors.orange),
+                              SizedBox(width: 12),
+                              Text('Open with External Player'),
+                            ],
+                          ),
+                        ),
+                      // Only show "Copy Download Link" for files, not folders
+                      if (!isFolder)
+                        const PopupMenuItem(
+                          value: 'copy_link',
+                          child: Row(
+                            children: [
+                              Icon(Icons.link, size: 18, color: Colors.grey),
+                              SizedBox(width: 12),
+                              Text('Copy Download Link'),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
+
+    return cardContent;
   }
 
   Widget _buildViewSelector() {
@@ -2287,6 +1814,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
+                autofocus: true,
                 onPressed: () => _fetchTorrents(_apiKey!, reset: true),
                 child: const Text('Retry'),
               ),
@@ -2331,6 +1859,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           controller: _torrentScrollController,
           padding: const EdgeInsets.all(16),
           itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
+          cacheExtent: 200.0, // Pre-cache items for smoother scrolling
+          addRepaintBoundaries: true, // Optimize repainting
           itemBuilder: (context, index) {
             if (index == _torrents.length) {
               // Loading more indicator
@@ -2341,7 +1871,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             }
 
             final torrent = _torrents[index];
-            return _buildTorrentCard(torrent);
+            return KeyedSubtree(
+              key: ValueKey(torrent.id),
+              child: _buildTorrentCard(torrent, index),
+            );
           },
         ),
       );
@@ -2406,6 +1939,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
+                autofocus: true,
                 onPressed: () => _fetchDownloads(_apiKey!, reset: true),
                 child: const Text('Retry'),
               ),
@@ -2450,6 +1984,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           controller: _downloadScrollController,
           padding: const EdgeInsets.all(16),
           itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
+          cacheExtent: 200.0, // Pre-cache items for smoother scrolling
+          addRepaintBoundaries: true, // Optimize repainting
           itemBuilder: (context, index) {
             if (index == _downloads.length) {
               // Loading more indicator
@@ -2460,7 +1996,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             }
 
             final download = _downloads[index];
-            return _buildDownloadCard(download);
+            return KeyedSubtree(
+              key: ValueKey(download.id),
+              child: _buildDownloadCard(download),
+            );
           },
         ),
       );
@@ -2474,183 +2013,169 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
-  Widget _buildTorrentCard(RDTorrent torrent) {
-    final bool showProblematicVideo =
-        torrent.links.length == 1 &&
-        FileUtils.isProblematicVideo(torrent.filename);
-    const playColor = Color(0xFF7F1D1D); // softened red
-    const downloadColor = Color(0xFF065F46); // softened green
-    const problematicColor = Color(0xFFD97706);
-    final borderColor = Colors.white.withValues(alpha: 0.08);
-    final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 12),
-          ),
-          BoxShadow(
-            color: glowColor,
-            blurRadius: 26,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildTorrentCard(RDTorrent torrent, int index) {
+    // Always treat torrents as folders - user needs to "Open" to see actual files
+    // Never show Play button at root level
+    final cardContent = Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top section: Icon + Name + Metadata
+            Row(
               children: [
-                // Title and status
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
+                Icon(
+                  Icons.folder, // Always show folder icon
+                  color: Colors.amber,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         torrent.filename,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           fontSize: 16,
-                          color: Colors.white,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildMoreOptionsButton(torrent),
-                  ],
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            Formatters.formatFileSize(torrent.bytes),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '•',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${torrent.links.length} ${torrent.links.length == 1 ? 'file' : 'files'}',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '•',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatDate(torrent.added),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 12),
 
-                const SizedBox(height: 12),
-
-                // Stats row
-                Row(
-                  children: [
-                    StatChip(
-                      icon: Icons.storage,
-                      text: Formatters.formatFileSize(torrent.bytes),
-                      color: const Color(0xFF6366F1),
-                    ),
-                    const SizedBox(width: 8),
-                    StatChip(
-                      icon: Icons.link,
-                      text:
-                          '${torrent.links.length} file${torrent.links.length > 1 ? 's' : ''}',
-                      color: const Color(0xFFF59E0B),
-                    ),
-                    const SizedBox(width: 8),
-                    StatChip(
-                      icon: Icons.download_done,
-                      text: '100%',
-                      color: const Color(0xFF10B981),
-                    ),
-                  ],
+            // Bottom section: Action buttons
+            Row(
+              children: [
+                // Always show Open and Play buttons for all torrents
+                Expanded(
+                  child: FilledButton.icon(
+                    autofocus: index == 0,
+                    onPressed: () => _navigateIntoTorrent(torrent),
+                    icon: const Icon(Icons.folder_open, size: 18),
+                    label: const Text('Open'),
+                  ),
                 ),
-
-                const SizedBox(height: 12),
-
-                // Host info
-                Row(
-                  children: [
-                    Icon(Icons.computer, size: 16, color: Colors.grey[400]),
-                    const SizedBox(width: 4),
-                    Text(
-                      torrent.host,
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _handlePlayMultiFileTorrent(torrent),
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: const Text('Play'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
                     ),
-                    const Spacer(),
-                    Text(
-                      'Added ${Formatters.formatDateString(torrent.added)}',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Three-dot menu
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  tooltip: 'More options',
+                  onSelected: (value) {
+                    if (value == 'download') {
+                      _handleDownloadTorrent(torrent);
+                    } else if (value == 'add_to_playlist') {
+                      _handleAddTorrentToPlaylist(torrent);
+                    } else if (value == 'delete') {
+                      _handleDeleteTorrent(torrent);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'download',
+                      child: Row(
+                        children: [
+                          Icon(Icons.download, size: 18, color: Colors.green),
+                          SizedBox(width: 12),
+                          Text('Download'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'add_to_playlist',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.playlist_add,
+                            size: 18,
+                            color: Colors.blue,
+                          ),
+                          SizedBox(width: 12),
+                          Text('Add to Playlist'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: Colors.red,
+                          ),
+                          SizedBox(width: 12),
+                          Text('Delete'),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
-          ),
-          // Action buttons
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF131E33), Color(0xFF0B1224)],
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(18),
-                bottomRight: Radius.circular(18),
-              ),
-              border: Border(
-                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 380;
-                  final playButton = _buildPrimaryActionButton(
-                    icon: showProblematicVideo
-                        ? Icons.warning
-                        : Icons.play_arrow,
-                    label: 'Play',
-                    backgroundColor: showProblematicVideo
-                        ? problematicColor
-                        : playColor,
-                    onPressed: () {
-                      if (torrent.links.length == 1) {
-                        _handlePlayVideo(torrent);
-                      } else {
-                        _handlePlayMultiFileTorrent(torrent);
-                      }
-                    },
-                  );
-                  final downloadButton = _buildPrimaryActionButton(
-                    icon: Icons.download_rounded,
-                    label: 'Download',
-                    backgroundColor: downloadColor,
-                    onPressed: () => _handleDownloadTorrent(torrent),
-                  );
-
-                  if (isCompact) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(width: double.infinity, child: playButton),
-                        const SizedBox(height: 8),
-                        SizedBox(width: double.infinity, child: downloadButton),
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: playButton),
-                      const SizedBox(width: 12),
-                      Expanded(child: downloadButton),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+
+    return cardContent;
   }
 
   Widget _buildPrimaryActionButton({
@@ -2669,25 +2194,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildMoreOptionsButton(RDTorrent torrent) {
-    return IconButton(
-      onPressed: () => _showTorrentMoreOptions(torrent),
-      icon: const Icon(Icons.more_vert, size: 20),
-      tooltip: 'More options',
-      style: IconButton.styleFrom(
-        backgroundColor: const Color(0xFF111C32),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.all(12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: const Color(0xFF475569).withValues(alpha: 0.3),
-          ),
-        ),
       ),
     );
   }
@@ -2714,37 +2220,79 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _handleDownloadTorrent(RDTorrent torrent) async {
     if (_apiKey == null) return;
 
-    if (torrent.links.length == 1) {
-      try {
-        final meta = jsonEncode({
-          'restrictedLink': torrent.links.first,
-          'apiKey': _apiKey ?? '',
-          'torrentHash': (torrent.id ?? '').toString(),
-          'fileIndex': 0,
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Loading torrent files...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      // Get torrent info to access files and links
+      final torrentInfo = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
+      final allFiles = (torrentInfo['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final links = (torrentInfo['links'] as List).cast<String>();
+
+      // Filter to only selected files (files that were selected when adding to RD)
+      // Only selected files have corresponding links and can be downloaded
+      final files = allFiles.where((file) => file['selected'] == 1).toList();
+
+      if (mounted) Navigator.of(context).pop();
+
+      if (files.isEmpty || links.isEmpty) {
+        _showError('No files available for download');
+        return;
+      }
+
+      // Format files for FileSelectionDialog
+      final formattedFiles = <Map<String, dynamic>>[];
+      for (int i = 0; i < files.length; i++) {
+        final file = files[i];
+        final path = (file['path'] as String?) ?? '';
+        final bytes = file['bytes'] as int? ?? 0;
+
+        formattedFiles.add({
+          '_fullPath': path,  // Use path field for full path
+          'name': path,
+          'size': bytes.toString(),
+          '_linkIndex': i,  // Store the link index for later use
         });
-        await DownloadService.instance.enqueueDownload(
-          url: torrent.links.first,
-          fileName: torrent.filename,
-          context: context,
-          torrentName: torrent.filename,
-          meta: meta,
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Added to downloads')));
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to start download: $e')),
+      }
+
+      // Show file selection dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return FileSelectionDialog(
+            files: formattedFiles,
+            torrentName: torrent.filename,
+            onDownload: (selectedFiles) {
+              if (selectedFiles.isEmpty) return;
+              _downloadSelectedRealDebridFiles(
+                selectedFiles: selectedFiles,
+                links: links,
+                folderName: torrent.filename,
+              );
+            },
           );
-        }
-      }
-    } else {
-      if (mounted) {
-        _showMultipleLinksDialog(torrent, showPlayButtons: false);
-      }
+        },
+      );
+    } catch (e) {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      _showError('Failed to load torrent: $e');
     }
   }
 
@@ -2825,54 +2373,42 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   void _showOptionsSheet(List<_ActionSheetOption> options) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF0F172A).withValues(alpha: 0.98),
-                  const Color(0xFF1E293B).withValues(alpha: 0.98),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0F172A).withValues(alpha: 0.98),
+                    const Color(0xFF1E293B).withValues(alpha: 0.98),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 28,
+                    offset: const Offset(0, 16),
+                  ),
                 ],
               ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              border: Border.all(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  blurRadius: 28,
-                  offset: const Offset(0, 16),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 42,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
                     for (final option in options) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -2950,179 +2486,132 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Widget _buildDownloadCard(DebridDownload download) {
-    final borderColor = Colors.white.withValues(alpha: 0.08);
-    final glowColor = const Color(0xFF6366F1).withValues(alpha: 0.08);
     final canStream = download.streamable == 1;
-    final showProblematicVideo =
-        canStream && FileUtils.isProblematicVideo(download.filename);
-    const playColor = Color(0xFF7F1D1D);
-    const downloadColor = Color(0xFF065F46);
-    const problematicColor = Color(0xFFD97706);
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 12),
-          ),
-          BoxShadow(
-            color: glowColor,
-            blurRadius: 26,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final isVideo = FileUtils.isVideoFile(download.filename);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
+                Icon(
+                  canStream || isVideo
+                      ? Icons.play_circle_outline
+                      : Icons.insert_drive_file,
+                  color: canStream || isVideo ? Colors.blue : Colors.grey,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         download.filename,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           fontSize: 16,
-                          color: Colors.white,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildDownloadMoreOptionsButton(download),
-                  ],
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            Formatters.formatFileSize(download.filesize),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('•', style: TextStyle(color: Colors.grey.shade600)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              download.host,
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    StatChip(
-                      icon: Icons.storage,
-                      text: Formatters.formatFileSize(download.filesize),
-                      color: const Color(0xFF6366F1),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (canStream) ...[
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _handlePlayDownload(download),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play'),
                     ),
-                    const SizedBox(width: 8),
-                    StatChip(
-                      icon: Icons.link,
-                      text:
-                          '${download.chunks} chunk${download.chunks == 1 ? '' : 's'}',
-                      color: const Color(0xFFF59E0B),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _handleQueueDownload(download),
+                    icon: const Icon(Icons.download, size: 18),
+                    label: const Text('Download'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
                     ),
-                    const SizedBox(width: 8),
-                    StatChip(
-                      icon: canStream ? Icons.play_arrow : Icons.download,
-                      text: canStream ? 'Streamable' : 'Download only',
-                      color: canStream
-                          ? const Color(0xFFE50914)
-                          : const Color(0xFF10B981),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(Icons.computer, size: 16, color: Colors.grey[400]),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        download.host,
-                        style:
-                            TextStyle(color: Colors.grey[400], fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 8),
+                // 3-dot menu
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  tooltip: 'More options',
+                  onSelected: (value) {
+                    if (value == 'copy_link') {
+                      _handleDownloadAction(download);
+                    } else if (value == 'delete') {
+                      _handleDeleteDownload(download);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'copy_link',
+                      child: Row(
+                        children: [
+                          Icon(Icons.link, size: 18, color: Colors.orange),
+                          SizedBox(width: 12),
+                          Text('Copy Link'),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Generated ${Formatters.formatDateString(download.generated)}',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                          SizedBox(width: 12),
+                          Text('Delete'),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF131E33), Color(0xFF0B1224)],
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(18),
-                bottomRight: Radius.circular(18),
-              ),
-              border: Border(
-                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 380;
-                  final Widget downloadButton = _buildPrimaryActionButton(
-                    icon: Icons.download_rounded,
-                    label: 'Download',
-                    backgroundColor: downloadColor,
-                    onPressed: () => _handleQueueDownload(download),
-                  );
-
-                  if (!canStream) {
-                    return SizedBox(
-                      width: double.infinity,
-                      child: downloadButton,
-                    );
-                  }
-
-                  final Widget playButton = _buildPrimaryActionButton(
-                    icon:
-                        showProblematicVideo ? Icons.warning : Icons.play_arrow,
-                    label: 'Play',
-                    backgroundColor:
-                        showProblematicVideo ? problematicColor : playColor,
-                    onPressed: () => _handlePlayDownload(download),
-                  );
-
-                  if (isCompact) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        playButton,
-                        const SizedBox(height: 8),
-                        downloadButton,
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: playButton),
-                      const SizedBox(width: 12),
-                      Expanded(child: downloadButton),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -4611,6 +4100,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     required RDTorrent torrent,
     required StateSetter setLocal,
   }) {
+    // Track current season for navigation
+    int? _currentSeason;
+
     return StatefulBuilder(
       builder: (context, setBrowserState) {
         return _buildFileBrowserContent(
@@ -4623,6 +4115,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           torrent: torrent,
           setLocal: setLocal,
           setBrowserState: setBrowserState,
+          currentSeason: _currentSeason,
+          onSeasonChanged: (season) {
+            setBrowserState(() {
+              _currentSeason = season;
+            });
+          },
         );
       },
     );
@@ -4638,7 +4136,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     required RDTorrent torrent,
     required StateSetter setLocal,
     required StateSetter setBrowserState,
+    required int? currentSeason,
+    required Function(int?) onSeasonChanged,
   }) {
+    // Use the passed currentSeason instead of defining a local one
+    final _currentSeason = currentSeason;
     // Group files by season
     final seasonMap = <int, List<Map<String, dynamic>>>{};
     String? seriesTitle;
@@ -4683,7 +4185,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 GestureDetector(
                   onTap: () {
                     setBrowserState(() {
-                      _currentSeason = null;
+                      onSeasonChanged(null);
                     });
                   },
                   child: Container(
@@ -4769,6 +4271,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   torrent: torrent,
                   setLocal: setLocal,
                   setBrowserState: setBrowserState,
+                  onSeasonChanged: onSeasonChanged,
                 )
               : _buildEpisodesList(
                   seasonFiles: seasonMap[_currentSeason]!,
@@ -4794,6 +4297,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     required RDTorrent torrent,
     required StateSetter setLocal,
     required StateSetter setBrowserState,
+    required Function(int?) onSeasonChanged,
   }) {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
@@ -4822,6 +4326,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         );
 
         return Container(
+          key: ValueKey('season-$seasonNumber'),
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B).withValues(alpha: 0.3),
@@ -4834,7 +4339,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           child: GestureDetector(
             onTap: () {
               setBrowserState(() {
-                _currentSeason = seasonNumber;
+                onSeasonChanged(seasonNumber);
               });
             },
             child: Container(
@@ -4959,6 +4464,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         final isUnrestricting = unrestrictingFiles[fileIndex] ?? false;
 
         return Container(
+          key: ValueKey('file-$fileIndex'),
           margin: const EdgeInsets.only(bottom: 12),
           child: _buildModernFileCard(
             fileName: fileName,
@@ -5007,5 +4513,576 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         );
       },
     );
+  }
+
+  // ========== File/Folder Action Methods ==========
+
+  /// Play a single file from the folder browser
+  Future<void> _playFile(RDFileNode file) async {
+    if (_apiKey == null || _currentTorrentId == null) return;
+
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // Get download URL for the file
+      final downloadUrl = await DebridService.getFileDownloadUrl(
+        _apiKey!,
+        _currentTorrentId!,
+        file.linkIndex,
+      );
+
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Launch video player
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: downloadUrl,
+          title: file.name,
+          subtitle: Formatters.formatFileSize(file.bytes ?? 0),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        _showError('Failed to play file: ${e.toString()}');
+      }
+    }
+  }
+
+  /// Play all videos in a folder with a playlist
+  Future<void> _playFolder(RDFileNode folder) async {
+    if (_apiKey == null || _currentTorrentId == null || _currentTorrent == null) return;
+
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // Collect all video files in the folder
+      final videoFiles = RDFolderTreeBuilder.collectVideoFiles(folder);
+      if (videoFiles.isEmpty) {
+        if (mounted) {
+          Navigator.of(context).pop();
+          _showError('No video files found in this folder');
+        }
+        return;
+      }
+
+      // Sort videos using series parser to handle episode ordering
+      final fileNames = videoFiles.map((f) => f.name).toList();
+      final parsedVideos = SeriesParser.parsePlaylist(fileNames);
+
+      // Sort by season and episode if available, otherwise by name
+      final sortedVideoFiles = List<RDFileNode>.from(videoFiles)
+        ..sort((a, b) {
+          final aIndex = fileNames.indexOf(a.name);
+          final bIndex = fileNames.indexOf(b.name);
+
+          if (aIndex >= 0 &&
+              aIndex < parsedVideos.length &&
+              bIndex >= 0 &&
+              bIndex < parsedVideos.length) {
+            final aInfo = parsedVideos[aIndex];
+            final bInfo = parsedVideos[bIndex];
+
+            // Compare seasons first
+            final seasonCompare = (aInfo.season ?? 0).compareTo(
+              bInfo.season ?? 0,
+            );
+            if (seasonCompare != 0) return seasonCompare;
+
+            // Then compare episodes
+            final episodeCompare = (aInfo.episode ?? 0).compareTo(
+              bInfo.episode ?? 0,
+            );
+            if (episodeCompare != 0) return episodeCompare;
+          }
+
+          // Finally compare by filename
+          return a.name.compareTo(b.name);
+        });
+
+      // Get the first video URL to start playing
+      final firstVideoUrl = await DebridService.getFileDownloadUrl(
+        _apiKey!,
+        _currentTorrentId!,
+        sortedVideoFiles[0].linkIndex,
+      );
+
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Create playlist entries using restrictedLink (like _handlePlayMultiFileTorrent)
+      final playlist = sortedVideoFiles.map((file) {
+        return PlaylistEntry(
+          title: file.name,
+          url: '', // Will be loaded on demand
+          restrictedLink: _currentTorrent!.links[file.linkIndex],
+          sizeBytes: file.bytes ?? 0,
+        );
+      }).toList();
+
+      // Launch video player with playlist
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: firstVideoUrl,
+          title: folder.name,
+          subtitle: '${videoFiles.length} videos',
+          playlist: playlist,
+          startIndex: 0,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        _showError('Failed to play folder: ${e.toString()}');
+      }
+    }
+  }
+
+  /// Download a single file
+  Future<void> _downloadFile(RDFileNode file) async {
+    if (_apiKey == null || _currentTorrentId == null) {
+      _showError('No API key or torrent ID available');
+      return;
+    }
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Preparing download...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      // Get the torrent info to access the restricted link
+      final torrentInfo = await DebridService.getTorrentInfo(
+        _apiKey!,
+        _currentTorrentId!,
+      );
+      final links = (torrentInfo['links'] as List).cast<String>();
+
+      // Validate linkIndex
+      if (file.linkIndex >= links.length) {
+        if (mounted) Navigator.of(context).pop();
+        _showError('Invalid file link index');
+        return;
+      }
+
+      // Get restricted link (no unrestriction - download service will do it lazily)
+      final restrictedLink = links[file.linkIndex];
+
+      // Use file name from node (download service will get RD filename when unrestricting)
+      final fileName = file.name;
+
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Pass metadata for lazy unrestriction
+      final meta = jsonEncode({
+        'restrictedLink': restrictedLink,
+        'apiKey': _apiKey,
+        'torrentHash': _currentTorrent?.hash,
+        'fileIndex': file.linkIndex,
+      });
+
+      // Pass restricted link as URL (download service will replace it)
+      await DownloadService.instance.enqueueDownload(
+        url: restrictedLink,
+        fileName: fileName,
+        meta: meta,
+        torrentName: _currentTorrent?.filename,
+        context: mounted ? context : null,
+      );
+
+      _showSuccess('Download queued: $fileName');
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showError('Failed to download: $e');
+    }
+  }
+
+  /// Download files from a folder with file selection dialog
+  Future<void> _downloadFolder(RDFileNode folder) async {
+    if (_apiKey == null || _currentTorrentId == null) {
+      _showError('No API key or torrent ID available');
+      return;
+    }
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Scanning folder...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+
+      // Collect all files recursively
+      final allFiles = RDFolderTreeBuilder.collectAllFiles(folder);
+
+      // Get torrent info to access links
+      final torrentInfo = await DebridService.getTorrentInfo(
+        _apiKey!,
+        _currentTorrentId!,
+      );
+      final links = (torrentInfo['links'] as List).cast<String>();
+
+      if (mounted) Navigator.of(context).pop();
+
+      if (allFiles.isEmpty) {
+        _showError('No files found in folder');
+        return;
+      }
+
+      // Format files for FileSelectionDialog
+      final formattedFiles = <Map<String, dynamic>>[];
+      for (final file in allFiles) {
+        // Build relative path from folder name
+        final fullPath = file.path ?? file.name;
+        // Remove the parent folder name from the path if present
+        final relativePath = fullPath.contains('/')
+            ? fullPath.substring(fullPath.indexOf('/') + 1)
+            : fullPath;
+
+        formattedFiles.add({
+          '_fullPath': relativePath,
+          'name': file.name,
+          'size': (file.bytes ?? 0).toString(),
+          '_linkIndex': file.linkIndex,
+          '_rdFileNode': file, // Store original node for download
+        });
+      }
+
+      // Show file selection dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return FileSelectionDialog(
+            files: formattedFiles,
+            torrentName: folder.name,
+            onDownload: (selectedFiles) {
+              if (selectedFiles.isEmpty) return;
+              _downloadSelectedRealDebridFiles(
+                selectedFiles: selectedFiles,
+                links: links,
+                folderName: folder.name,
+              );
+            },
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showError('Failed to load folder: $e');
+    }
+  }
+
+  /// Download selected Real-Debrid files from file selection dialog
+  Future<void> _downloadSelectedRealDebridFiles({
+    required List<Map<String, dynamic>> selectedFiles,
+    required List<String> links,
+    required String folderName,
+  }) async {
+    if (!mounted) return;
+
+    try {
+      // Show progress
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Queuing ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}...',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      // Queue downloads for each selected file
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final fileData in selectedFiles) {
+        try {
+          // Extract link index and file name
+          final linkIndex = fileData['_linkIndex'] as int;
+          final fileName = (fileData['_fullPath'] as String?) ?? (fileData['name'] as String? ?? 'download');
+
+          // Validate linkIndex
+          if (linkIndex >= links.length) {
+            failCount++;
+            continue;
+          }
+
+          // Get restricted link (no API call - instant!)
+          final restrictedLink = links[linkIndex];
+
+          // Pass metadata for lazy unrestriction
+          final meta = jsonEncode({
+            'restrictedLink': restrictedLink,
+            'apiKey': _apiKey,
+            'torrentHash': _currentTorrent?.hash,
+            'fileIndex': linkIndex,
+          });
+
+          // Queue download instantly (download service will unrestrict when ready)
+          await DownloadService.instance.enqueueDownload(
+            url: restrictedLink, // Pass restricted link (will be replaced by download service)
+            fileName: fileName,
+            meta: meta,
+            torrentName: _currentTorrent?.filename ?? folderName,
+            context: mounted ? context : null,
+          );
+
+          successCount++;
+        } catch (e) {
+          // Silently handle individual file failures during batch operations
+          failCount++;
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Show result
+      if (successCount > 0 && failCount == 0) {
+        _showSuccess(
+          'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+        );
+      } else if (successCount > 0 && failCount > 0) {
+        _showError(
+          'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+        );
+      } else {
+        _showError('Failed to queue any files for download');
+      }
+    } catch (e) {
+      // Close any open dialogs
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showError('Failed to queue downloads: $e');
+    }
+  }
+
+  /// Add a single file to playlist
+  Future<void> _addNodeFileToPlaylist(RDFileNode file) async {
+    if (_currentTorrentId == null) return;
+
+    try {
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'rd',
+        'title': file.name,
+        'kind': 'single',
+        'rdTorrentId': _currentTorrentId,
+        'rdLinkIndex': file.linkIndex,
+        'sizeBytes': file.bytes,
+      });
+
+      if (mounted) {
+        _showSuccess(added ? 'Added to playlist' : 'Already in playlist');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Failed to add to playlist: ${e.toString()}');
+      }
+    }
+  }
+
+  /// Add all videos in a folder to playlist
+  Future<void> _addFolderToPlaylist(RDFileNode folder) async {
+    if (_currentTorrentId == null) return;
+
+    try {
+      // Collect video files
+      final videoFiles = RDFolderTreeBuilder.collectVideoFiles(folder);
+      if (videoFiles.isEmpty) {
+        _showError('No video files to add');
+        return;
+      }
+
+      // Add as a collection to playlist
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'rd',
+        'title': folder.name,
+        'kind': 'collection',
+        'rdTorrentId': _currentTorrentId,
+        'rdFileNodes': videoFiles.map((f) => f.toJson()).toList(),
+        'fileCount': videoFiles.length,
+        'totalBytes': folder.totalBytes,
+      });
+
+      if (mounted) {
+        _showSuccess(
+          added
+              ? 'Added ${videoFiles.length} videos to playlist'
+              : 'Already in playlist',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Failed to add to playlist: ${e.toString()}');
+      }
+    }
+  }
+
+  /// Format date to relative time or absolute date
+  String _formatDate(String isoDate) {
+    try {
+      final date = DateTime.parse(isoDate);
+      final now = DateTime.now();
+      final difference = now.difference(date);
+
+      if (difference.inDays == 0) {
+        if (difference.inHours == 0) {
+          return '${difference.inMinutes}m ago';
+        }
+        return '${difference.inHours}h ago';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays}d ago';
+      } else {
+        return '${date.month}/${date.day}/${date.year}';
+      }
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /// Copy download link for torrent to clipboard
+  Future<void> _copyDownloadLink(RDTorrent torrent) async {
+    if (_apiKey == null) return;
+
+    try {
+      // Get torrent info
+      final info = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
+      final links = (info['links'] as List).cast<String>();
+
+      if (links.isEmpty) {
+        _showError('No links available');
+        return;
+      }
+
+      // Unrestrict the first link
+      final unrestrictedData = await DebridService.unrestrictLink(
+        _apiKey!,
+        links[0],
+      );
+      final downloadUrl = unrestrictedData['download'] as String;
+
+      // Copy to clipboard
+      await Clipboard.setData(ClipboardData(text: downloadUrl));
+      _showSuccess('Download link copied to clipboard');
+    } catch (e) {
+      _showError('Failed to get download link: $e');
+    }
+  }
+
+  /// Copy download link for file node to clipboard
+  Future<void> _copyNodeDownloadLink(RDFileNode node) async {
+    if (_apiKey == null || _currentTorrentId == null) return;
+
+    try {
+      // Unrestrict the file's link
+      final downloadUrl = await DebridService.getFileDownloadUrl(
+        _apiKey!,
+        _currentTorrentId!,
+        node.linkIndex,
+      );
+
+      // Copy to clipboard
+      await Clipboard.setData(ClipboardData(text: downloadUrl));
+      _showSuccess('Download link copied to clipboard');
+    } catch (e) {
+      _showError('Failed to get download link: $e');
+    }
+  }
+
+  /// Open video file with external player
+  Future<void> _openWithExternalPlayer(RDFileNode node) async {
+    if (_apiKey == null || _currentTorrentId == null) return;
+
+    try {
+      // Show loading indicator
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Unrestrict the file's link
+      final downloadUrl = await DebridService.getFileDownloadUrl(
+        _apiKey!,
+        _currentTorrentId!,
+        node.linkIndex,
+      );
+
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Launch with external player
+      final Uri uri = Uri.parse(downloadUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        _showSuccess('Opening with external player...');
+      } else {
+        _showError('Could not open external player');
+      }
+    } catch (e) {
+      // Close loading indicator if still open
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      _showError('Failed to open with external player: $e');
+    }
   }
 }

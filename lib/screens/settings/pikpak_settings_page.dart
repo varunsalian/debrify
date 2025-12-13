@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/main_page_bridge.dart';
+import '../../widgets/pikpak_folder_picker_dialog.dart';
 
 class PikPakSettingsPage extends StatefulWidget {
   const PikPakSettingsPage({super.key});
@@ -20,8 +21,15 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   final FocusNode _emailFocusNode = FocusNode(debugLabel: 'pikpak-email');
   final FocusNode _passwordFocusNode = FocusNode(debugLabel: 'pikpak-password');
   final FocusNode _loginButtonFocusNode = FocusNode(debugLabel: 'pikpak-login');
-  final FocusNode _testButtonFocusNode = FocusNode(debugLabel: 'pikpak-test');
-  final FocusNode _logoutButtonFocusNode = FocusNode(debugLabel: 'pikpak-logout');
+  final FocusNode _logoutButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-logout',
+  );
+  final FocusNode _folderRestrictionSkipButtonFocusNode = FocusNode(
+    debugLabel: 'folder-restriction-skip',
+  );
+  final FocusNode _folderRestrictionSelectButtonFocusNode = FocusNode(
+    debugLabel: 'folder-restriction-select',
+  );
 
   bool _pikpakEnabled = false;
   bool _showVideosOnly = true;
@@ -29,6 +37,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   bool _isConnected = false;
   bool _isConnecting = false;
   bool _loading = true;
+  bool _hiddenFromNav = false;
+  String? _restrictedFolderId;
+  String? _restrictedFolderName;
 
   @override
   void initState() {
@@ -43,8 +54,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     _emailFocusNode.dispose();
     _passwordFocusNode.dispose();
     _loginButtonFocusNode.dispose();
-    _testButtonFocusNode.dispose();
     _logoutButtonFocusNode.dispose();
+    _folderRestrictionSkipButtonFocusNode.dispose();
+    _folderRestrictionSelectButtonFocusNode.dispose();
     super.dispose();
   }
 
@@ -54,6 +66,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     final ignoreSmallVideos = await StorageService.getPikPakIgnoreSmallVideos();
     final email = await StorageService.getPikPakEmail();
     final isAuth = await PikPakApiService.instance.isAuthenticated();
+    final restrictedId = await StorageService.getPikPakRestrictedFolderId();
+    final restrictedName = await StorageService.getPikPakRestrictedFolderName();
+    final hiddenFromNav = await StorageService.getPikPakHiddenFromNav();
 
     if (!mounted) return;
 
@@ -63,6 +78,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       _ignoreSmallVideos = ignoreSmallVideos;
       _emailController.text = email ?? '';
       _isConnected = isAuth;
+      _restrictedFolderId = restrictedId;
+      _restrictedFolderName = restrictedName;
+      _hiddenFromNav = hiddenFromNav;
       _loading = false;
     });
   }
@@ -99,6 +117,99 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
         // Clear password field for security
         _passwordController.clear();
+
+        // Ask if user wants to set up folder restriction
+        final shouldSetupRestriction = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            // Auto-focus the first button when dialog opens for TV navigation
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _folderRestrictionSkipButtonFocusNode.requestFocus();
+            });
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.folder_special, color: Colors.amber),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Folder Restriction (Optional)')),
+                ],
+              ),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'For enhanced security, you can restrict PikPak access to a specific folder.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '• Full Access: Browse all files in your account',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '• Restricted: Only access files in one folder',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Note: You must logout and login again to change this later.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                Focus(
+                  focusNode: _folderRestrictionSkipButtonFocusNode,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Skip (Full Access)'),
+                  ),
+                ),
+                Focus(
+                  focusNode: _folderRestrictionSelectButtonFocusNode,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    icon: const Icon(Icons.folder_open, size: 18),
+                    label: const Text('Select Folder'),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+
+        // If user wants to set restriction, show folder picker
+        if (shouldSetupRestriction == true && mounted) {
+          final folderResult = await showDialog<Map<String, dynamic>>(
+            context: context,
+            builder: (ctx) => const PikPakFolderPickerDialog(),
+          );
+
+          // Save folder restriction if selected
+          if (folderResult != null) {
+            final folderId = folderResult['folderId'] as String?;
+            final folderName = folderResult['folderName'] as String?;
+            await StorageService.setPikPakRestrictedFolder(
+              folderId,
+              folderName,
+            );
+            // Clear subfolder caches when restriction changes
+            await StorageService.clearPikPakSubfolderCaches();
+            setState(() {
+              _restrictedFolderId = folderId;
+              _restrictedFolderName = folderName;
+            });
+            _showSnackBar('Folder restriction applied', isError: false);
+          }
+        }
       } else {
         _showSnackBar('Login failed. Please check your credentials.');
       }
@@ -120,12 +231,24 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       await PikPakApiService.instance.logout();
       await StorageService.setPikPakEnabled(false);
 
+      // Clear folder restriction on logout
+      await StorageService.clearPikPakRestrictedFolder();
+
+      // Clear the hidden from nav flag on logout
+      await StorageService.clearPikPakHiddenFromNav();
+
       if (!mounted) return;
 
       setState(() {
         _isConnected = false;
         _passwordController.clear();
+        _restrictedFolderId = null;
+        _restrictedFolderName = null;
+        _hiddenFromNav = false;
       });
+
+      // Notify main page to update navigation
+      MainPageBridge.notifyIntegrationChanged();
 
       _showSnackBar('Logged out successfully', isError: false);
     } catch (e) {
@@ -135,23 +258,164 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     }
   }
 
-  Future<void> _testConnection() async {
-    try {
-      _showSnackBar('Testing connection...', isError: false);
+  Future<void> _selectRestrictedFolder() async {
+    if (!_isConnected) {
+      _showSnackBar('Please login to PikPak first');
+      return;
+    }
 
-      final success = await PikPakApiService.instance.testConnection();
+    // Security: Require logout/login to change existing restriction
+    if (_restrictedFolderId != null) {
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Security Restriction'),
+          content: const Text(
+            'To change the folder restriction, you must logout and login again. This is a security measure to prevent unauthorized changes.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
-      if (!mounted) return;
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => const PikPakFolderPickerDialog(),
+    );
 
-      if (success) {
-        _showSnackBar('Connection test successful!', isError: false);
-      } else {
-        _showSnackBar('Connection test failed');
+    if (result != null) {
+      final folderId = result['folderId'] as String?;
+      final folderName = result['folderName'] as String?;
+
+      await StorageService.setPikPakRestrictedFolder(folderId, folderName);
+      // Clear subfolder caches when restriction changes
+      await StorageService.clearPikPakSubfolderCaches();
+      setState(() {
+        _restrictedFolderId = folderId;
+        _restrictedFolderName = folderName;
+      });
+      _showSnackBar('Folder restriction applied', isError: false);
+    }
+  }
+
+  Future<void> _clearRestrictedFolder() async {
+    // Security: Require logout/login to remove restriction
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Security Restriction'),
+        content: const Text(
+          'To remove the folder restriction, you must logout and login again. This is a security measure to prevent unauthorized changes.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleHideFromNav(bool value) async {
+    if (value) {
+      // Show confirmation dialog before enabling
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Hide PikPak?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This will hide the PikPak tab from navigation.',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.amber.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'To show PikPak again, you must logout and login. This is a security measure.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Hide'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) {
+        return;
       }
-    } catch (e) {
-      print('Error testing connection: $e');
-      if (!mounted) return;
-      _showSnackBar('Test failed: $e');
+
+      // Enable hiding
+      await StorageService.setPikPakHiddenFromNav(true);
+      setState(() {
+        _hiddenFromNav = true;
+      });
+      MainPageBridge.notifyIntegrationChanged();
+      _showSnackBar('PikPak hidden from navigation', isError: false);
+    } else {
+      // Try to disable - show dialog explaining logout requirement
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Security Restriction'),
+          content: SingleChildScrollView(
+            child: Text(
+              'To show PikPak in navigation again, you must logout and login. This is a security measure to prevent unauthorized changes.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -168,261 +432,403 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('PikPak Settings'),
-      ),
+      appBar: AppBar(title: const Text('PikPak Settings')),
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-          const Text(
-            'PikPak Integration',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Send magnet links directly to your PikPak cloud storage.',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Enable/Disable Toggle
-          Card(
-            child: SwitchListTile(
-              title: const Text(
-                'Enable PikPak Integration',
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                _pikpakEnabled
-                    ? 'PikPak button and tab are visible'
-                    : 'PikPak button and tab are hidden',
-                style: const TextStyle(fontSize: 13),
-              ),
-              value: _pikpakEnabled,
-              onChanged: (value) async {
-                await StorageService.setPikPakEnabled(value);
-                setState(() {
-                  _pikpakEnabled = value;
-                });
-
-                // Notify main page to update navigation immediately
-                MainPageBridge.notifyIntegrationChanged();
-
-                _showSnackBar(
-                  value
-                      ? 'PikPak integration enabled'
-                      : 'PikPak integration disabled',
-                  isError: false,
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Show Videos Only Toggle
-          Card(
-            child: SwitchListTile(
-              title: const Text(
-                'Show Only Video Files',
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                _showVideosOnly
-                    ? 'Only video files are shown in folders'
-                    : 'All file types are shown in folders',
-                style: const TextStyle(fontSize: 13),
-              ),
-              value: _showVideosOnly,
-              onChanged: (value) async {
-                await StorageService.setPikPakShowVideosOnly(value);
-                setState(() {
-                  _showVideosOnly = value;
-                });
-                _showSnackBar(
-                  value
-                      ? 'Now showing only video files'
-                      : 'Now showing all file types',
-                  isError: false,
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Ignore Small Videos Toggle
-          Card(
-            child: SwitchListTile(
-              title: const Text(
-                'Ignore Videos Under 100MB',
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                _ignoreSmallVideos
-                    ? 'Videos smaller than 100MB are hidden'
-                    : 'All video sizes are shown',
-                style: const TextStyle(fontSize: 13),
-              ),
-              value: _ignoreSmallVideos,
-              onChanged: (value) async {
-                await StorageService.setPikPakIgnoreSmallVideos(value);
-                setState(() {
-                  _ignoreSmallVideos = value;
-                });
-                _showSnackBar(
-                  value
-                      ? 'Now hiding videos under 100MB'
-                      : 'Now showing all video sizes',
-                  isError: false,
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Connection status
-          Card(
-            color: _isConnected
-                ? Colors.green.withValues(alpha: 0.15)
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: ListTile(
-              leading: Icon(
-                _isConnected ? Icons.check_circle : Icons.circle_outlined,
-                color: _isConnected ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              title: Text(
-                _isConnected ? 'Connected' : 'Not Connected',
-                style: TextStyle(
-                  color: _isConnected ? Colors.green.shade700 : Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              subtitle: Text(
-                _isConnected
-                    ? 'Connected as: ${_emailController.text}'
-                    : 'Login with your PikPak account below',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          if (!_isConnected) ...[
             const Text(
-              'PikPak Account',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _TvFriendlyTextField(
-              controller: _emailController,
-              focusNode: _emailFocusNode,
-              labelText: 'Email',
-              hintText: 'your@email.com',
-              prefixIcon: const Icon(Icons.email),
-              keyboardType: TextInputType.emailAddress,
-              enabled: !_isConnecting,
-            ),
-            const SizedBox(height: 16),
-            _TvFriendlyTextField(
-              controller: _passwordController,
-              focusNode: _passwordFocusNode,
-              labelText: 'Password',
-              hintText: 'Your PikPak password',
-              prefixIcon: const Icon(Icons.lock),
-              obscureText: true,
-              enabled: !_isConnecting,
-              onSubmitted: (_) => _login(),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              focusNode: _loginButtonFocusNode,
-              onPressed: _isConnecting ? null : _login,
-              icon: _isConnecting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.login),
-              label: Text(_isConnecting ? 'Logging in...' : 'Login'),
-            ),
-          ] else ...[
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              focusNode: _testButtonFocusNode,
-              onPressed: _testConnection,
-              icon: const Icon(Icons.cloud_done),
-              label: const Text('Test Connection'),
+              'PikPak Integration',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              focusNode: _logoutButtonFocusNode,
-              onPressed: _logout,
-              icon: const Icon(Icons.logout),
-              label: const Text('Logout'),
+            const Text(
+              'Send magnet links directly to your PikPak cloud storage.',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
             ),
-          ],
+            const SizedBox(height: 24),
 
-          const SizedBox(height: 32),
-          const Divider(),
-          const SizedBox(height: 16),
+            // Enable/Disable Toggle
+            Card(
+              child: SwitchListTile(
+                title: const Text(
+                  'Enable PikPak Integration',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: Text(
+                  _pikpakEnabled
+                      ? 'PikPak button and tab are visible'
+                      : 'PikPak button and tab are hidden',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                value: _pikpakEnabled,
+                onChanged: (value) async {
+                  await StorageService.setPikPakEnabled(value);
+                  setState(() {
+                    _pikpakEnabled = value;
+                  });
 
-          const Text(
-            'How It Works',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+                  // Notify main page to update navigation immediately
+                  MainPageBridge.notifyIntegrationChanged();
+
+                  _showSnackBar(
+                    value
+                        ? 'PikPak integration enabled'
+                        : 'PikPak integration disabled',
+                    isError: false,
+                  );
+                },
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '1. Login with your PikPak account above\n'
-            '2. Search for torrents in the app\n'
-            '3. Click "PikPak" on any torrent\n'
-            '4. Magnet link is sent to your PikPak cloud\n'
-            '5. PikPak downloads the torrent to your cloud storage\n'
-            '6. Access and play files from PikPak tab',
-            style: TextStyle(fontSize: 14),
-          ),
 
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+            IgnorePointer(
+              ignoring: !_pikpakEnabled,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: _pikpakEnabled ? 1.0 : 0.5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Hide from Navigation Toggle
+                    Card(
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            value: _hiddenFromNav,
+                            onChanged: _isConnected ? _toggleHideFromNav : null,
+                            title: const Text(
+                              'Hide from Navigation',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            subtitle: Text(
+                              !_isConnected
+                                  ? 'Login to enable this option'
+                                  : _hiddenFromNav
+                                      ? 'PikPak is hidden from navigation'
+                                      : 'Show/hide PikPak tab from navigation bar',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            secondary: Icon(
+                              _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
+                              color: _hiddenFromNav ? Colors.amber : null,
+                            ),
+                          ),
+                          if (_hiddenFromNav)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.amber.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 16,
+                                      color: Colors.amber.shade700,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'To show PikPak in navigation again, please logout and login',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.amber.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-          const Text(
-            'About PikPak',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+                    // Show Videos Only Toggle
+                    Card(
+                      child: SwitchListTile(
+                        title: const Text(
+                          'Show Only Video Files',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(
+                          _showVideosOnly
+                              ? 'Only video files are shown in folders'
+                              : 'All file types are shown in folders',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        value: _showVideosOnly,
+                        onChanged: (value) async {
+                          await StorageService.setPikPakShowVideosOnly(value);
+                          setState(() {
+                            _showVideosOnly = value;
+                          });
+                          _showSnackBar(
+                            value
+                                ? 'Now showing only video files'
+                                : 'Now showing all file types',
+                            isError: false,
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Ignore Small Videos Toggle
+                    Card(
+                      child: SwitchListTile(
+                        title: const Text(
+                          'Ignore Videos Under 100MB',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(
+                          _ignoreSmallVideos
+                              ? 'Videos smaller than 100MB are hidden'
+                              : 'All video sizes are shown',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        value: _ignoreSmallVideos,
+                        onChanged: (value) async {
+                          await StorageService.setPikPakIgnoreSmallVideos(value);
+                          setState(() {
+                            _ignoreSmallVideos = value;
+                          });
+                          _showSnackBar(
+                            value
+                                ? 'Now hiding videos under 100MB'
+                                : 'Now showing all video sizes',
+                            isError: false,
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Folder Restriction
+                    Card(
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: Icon(
+                              Icons.folder_special,
+                              color: _restrictedFolderId != null ? Colors.amber : null,
+                            ),
+                            title: const Text(
+                              'Restrict Access to Folder',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            subtitle: Text(
+                              _restrictedFolderId != null
+                                  ? 'Restricted to: $_restrictedFolderName'
+                                  : 'Full account access (all folders)',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                          if (_restrictedFolderId != null)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.amber.withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.info_outline,
+                                          size: 16,
+                                          color: Colors.amber.shade700,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'To change or remove this restriction, please logout and login again',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.amber.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          onPressed: _selectRestrictedFolder,
+                                          icon: const Icon(Icons.edit, size: 18),
+                                          label: const Text('Change'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      OutlinedButton.icon(
+                                        onPressed: _clearRestrictedFolder,
+                                        icon: const Icon(Icons.clear, size: 18),
+                                        label: const Text('Remove'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed: _selectRestrictedFolder,
+                                  icon: const Icon(Icons.folder_open, size: 18),
+                                  label: const Text('Select Folder to Restrict'),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Connection status
+                    Card(
+                      color: _isConnected
+                          ? Colors.green.withValues(alpha: 0.15)
+                          : Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: ListTile(
+                        leading: Icon(
+                          _isConnected ? Icons.check_circle : Icons.circle_outlined,
+                          color: _isConnected
+                              ? Colors.green
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        title: Text(
+                          _isConnected ? 'Connected' : 'Not Connected',
+                          style: TextStyle(
+                            color: _isConnected
+                                ? Colors.green.shade700
+                                : Theme.of(context).colorScheme.onSurface,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        subtitle: Text(
+                          _isConnected
+                              ? 'Connected as: ${_emailController.text}'
+                              : 'Login with your PikPak account below',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    if (!_isConnected) ...[
+                      const Text(
+                        'PikPak Account',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      _TvFriendlyTextField(
+                        controller: _emailController,
+                        focusNode: _emailFocusNode,
+                        labelText: 'Email',
+                        hintText: 'your@email.com',
+                        prefixIcon: const Icon(Icons.email),
+                        keyboardType: TextInputType.emailAddress,
+                        enabled: !_isConnecting,
+                      ),
+                      const SizedBox(height: 16),
+                      _TvFriendlyTextField(
+                        controller: _passwordController,
+                        focusNode: _passwordFocusNode,
+                        labelText: 'Password',
+                        hintText: 'Your PikPak password',
+                        prefixIcon: const Icon(Icons.lock),
+                        obscureText: true,
+                        enabled: !_isConnecting,
+                        onSubmitted: (_) => _login(),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton.icon(
+                        focusNode: _loginButtonFocusNode,
+                        onPressed: _isConnecting ? null : _login,
+                        icon: _isConnecting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.login),
+                        label: Text(_isConnecting ? 'Logging in...' : 'Login'),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        focusNode: _logoutButtonFocusNode,
+                        onPressed: _logout,
+                        icon: const Icon(Icons.logout),
+                        label: const Text('Logout'),
+                      ),
+                    ],
+                    const SizedBox(height: 32),
+                    const Divider(),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      'How It Works',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '1. Login with your PikPak account above\n'
+                      '2. Search for torrents in the app\n'
+                      '3. Click "PikPak" on any torrent\n'
+                      '4. Magnet link is sent to your PikPak cloud\n'
+                      '5. PikPak downloads the torrent to your cloud storage\n'
+                      '6. Access and play files from PikPak tab',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      'About PikPak',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'PikPak is a cloud storage service that supports offline downloads from magnet links and torrents. Files are stored in your PikPak cloud and can be streamed or downloaded.',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'PikPak is a cloud storage service that supports offline downloads from magnet links and torrents. Files are stored in your PikPak cloud and can be streamed or downloaded.',
-            style: TextStyle(fontSize: 14),
-          ),
           ],
         ),
       ),
@@ -492,8 +898,13 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
     // Check if selection is valid
     final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-    final isAtStart = !isSelectionValid || (selection.baseOffset == 0 && selection.extentOffset == 0);
-    final isAtEnd = !isSelectionValid || (selection.baseOffset == textLength && selection.extentOffset == textLength);
+    final isAtStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == textLength &&
+            selection.extentOffset == textLength);
 
     // Allow escape from TextField with back button (escape key)
     if (key == LogicalKeyboardKey.escape ||

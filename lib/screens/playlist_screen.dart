@@ -14,6 +14,7 @@ import '../utils/formatters.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../services/pikpak_api_service.dart';
+import '../services/main_page_bridge.dart';
 import 'video_player_screen.dart';
 import 'playlist_file_browser_screen.dart';
 
@@ -50,15 +51,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       });
     _detectTelevision();
     _loadGlobalLastPlayed();
-  }
 
-  Future<void> _loadGlobalLastPlayed() async {
-    final lastPlayed = await StorageService.getGlobalLastPlayed();
-    if (mounted) {
-      setState(() {
-        _globalLastPlayed = lastPlayed;
-      });
-    }
+    // Register playlist item playback handler
+    MainPageBridge.playPlaylistItem = _playItem;
+
+    // Check if there's a pending auto-play item
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final itemToPlay = MainPageBridge.getAndClearPlaylistItemToAutoPlay();
+      if (itemToPlay != null) {
+        _playItem(itemToPlay);
+      }
+    });
   }
 
   Future<void> _detectTelevision() async {
@@ -73,6 +76,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Future<List<Map<String, dynamic>>> _syncAndLoadPlaylist() async {
     // Load and return playlist data
     return await StorageService.getPlaylistItemsRaw();
+  }
+
+  Future<void> _loadGlobalLastPlayed() async {
+    final lastPlayed = await StorageService.getGlobalLastPlayed();
+    if (mounted) {
+      setState(() {
+        _globalLastPlayed = lastPlayed;
+      });
+    }
   }
 
   Future<void> _refresh() async {
@@ -133,6 +145,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _searchController.removeListener(_handleSearchChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
+
+    // Unregister playlist item playback handler
+    MainPageBridge.playPlaylistItem = null;
+
     super.dispose();
   }
 
@@ -198,6 +214,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 ),
               ];
               
+              // Hide auto-launch overlay before launching player
+              MainPageBridge.notifyPlayerLaunching();
               await VideoPlayerLauncher.push(
                 context,
                 VideoPlayerLaunchArgs(
@@ -388,6 +406,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         }
 
         if (!mounted) return;
+        // Hide auto-launch overlay before launching player
+        MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -434,6 +454,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       ),
     ];
     
+    // Hide auto-launch overlay before launching player
+    MainPageBridge.notifyPlayerLaunching();
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -515,6 +537,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           ),
         ];
         
+        // Hide auto-launch overlay before launching player
+        MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -702,6 +726,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       if (!mounted) return;
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -764,8 +790,22 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       try {
-        debugPrint('PlaylistScreen: Playing PikPak single file, fileId=$pikpakFileId');
-        final fileData = await pikpak.getFileDetails(pikpakFileId);
+        // Check if we have stored metadata for instant access
+        final Map<String, dynamic>? storedFile = item['pikpakFile'] as Map<String, dynamic>?;
+        final bool hasStoredMetadata = storedFile != null && storedFile.isNotEmpty;
+
+        debugPrint('PlaylistScreen: Playing PikPak single file, fileId=$pikpakFileId, hasStoredMetadata=$hasStoredMetadata');
+
+        // Always need to get streaming URL, but can skip metadata fetch if we have it stored
+        final Map<String, dynamic> fileData;
+        if (hasStoredMetadata) {
+          // Use stored metadata and only fetch streaming URL
+          fileData = await pikpak.getFileDetails(pikpakFileId);
+        } else {
+          // Fetch full metadata (backward compatibility)
+          fileData = await pikpak.getFileDetails(pikpakFileId);
+        }
+
         final url = pikpak.getStreamingUrl(fileData);
 
         if (url == null || url.isEmpty) {
@@ -776,14 +816,25 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           return;
         }
 
-        final String resolvedTitle = (fileData['name'] as String?)?.isNotEmpty == true
-            ? fileData['name'] as String
-            : fallbackTitle;
-        final int? sizeBytes = _asInt(fileData['size']);
+        // Use stored metadata if available, otherwise use fetched data
+        final String resolvedTitle = hasStoredMetadata
+            ? ((storedFile['name'] as String?)?.isNotEmpty == true
+                ? storedFile['name'] as String
+                : fallbackTitle)
+            : ((fileData['name'] as String?)?.isNotEmpty == true
+                ? fileData['name'] as String
+                : fallbackTitle);
+
+        final int? sizeBytes = hasStoredMetadata
+            ? _asInt(storedFile['size'])
+            : _asInt(fileData['size']);
+
         final String? subtitle =
             sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
 
         if (!mounted) return;
+        // Hide auto-launch overlay before launching player
+        MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -801,6 +852,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               ),
             ],
             startIndex: 0,
+            pikpakCollectionId: pikpakFileId,
           ),
         );
         
@@ -821,8 +873,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
 
     // Handle COLLECTION items
+    // Check for new format with metadata first, fallback to old format
+    final List<dynamic>? pikpakFiles = item['pikpakFiles'] as List<dynamic>?;
     final List<dynamic>? pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
-    if (pikpakFileIds == null || pikpakFileIds.isEmpty) {
+
+    if ((pikpakFiles == null || pikpakFiles.isEmpty) &&
+        (pikpakFileIds == null || pikpakFileIds.isEmpty)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Missing PikPak files information.')),
@@ -830,44 +886,69 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       return;
     }
 
+    // Use stored metadata if available (instant), otherwise fetch it (backward compatibility)
+    final bool hasStoredMetadata = pikpakFiles != null && pikpakFiles.isNotEmpty;
+
     if (!mounted) return;
     bool dialogOpen = false;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        dialogOpen = true;
-        return const AlertDialog(
-          backgroundColor: Color(0xFF1E293B),
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Preparing playlist...', style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        );
-      },
-    );
+
+    // Only show loading dialog if we need to fetch metadata
+    if (!hasStoredMetadata) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          dialogOpen = true;
+          return const AlertDialog(
+            backgroundColor: Color(0xFF1E293B),
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Text('Preparing playlist...', style: TextStyle(color: Colors.white)),
+              ],
+            ),
+          );
+        },
+      );
+    }
 
     try {
-      debugPrint('PlaylistScreen: Playing PikPak collection with ${pikpakFileIds.length} files');
-
-      // Fetch file details for all files
       final List<Map<String, dynamic>> videoFiles = [];
-      for (final fileId in pikpakFileIds) {
-        try {
-          final fileData = await pikpak.getFileDetails(fileId.toString());
-          final mimeType = (fileData['mime_type'] as String?) ?? '';
-          final fileName = (fileData['name'] as String?) ?? '';
 
-          // Filter to video files only
-          if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
-            videoFiles.add(fileData);
+      if (hasStoredMetadata) {
+        // NEW: Use stored metadata - instant, no API calls needed!
+        debugPrint('PlaylistScreen: Using stored metadata for ${pikpakFiles.length} PikPak files (instant playback)');
+
+        for (final file in pikpakFiles) {
+          if (file is Map<String, dynamic>) {
+            final mimeType = (file['mime_type'] as String?) ?? '';
+            final fileName = (file['name'] as String?) ?? '';
+
+            // Filter to video files only
+            if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
+              videoFiles.add(file);
+            }
           }
-        } catch (e) {
-          debugPrint('PlaylistScreen: Failed to get PikPak file details for $fileId: $e');
-          // Continue with other files
+        }
+      } else {
+        // OLD: Fallback to fetching metadata for backward compatibility
+        debugPrint('PlaylistScreen: Fetching metadata for ${pikpakFileIds!.length} PikPak files (legacy format)');
+
+        for (final fileId in pikpakFileIds) {
+          try {
+            final fileData = await pikpak.getFileMetadata(fileId.toString());
+            final mimeType = (fileData['mime_type'] as String?) ?? '';
+            final fileName = (fileData['name'] as String?) ?? '';
+
+            // Filter to video files only
+            if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
+              videoFiles.add(fileData);
+            }
+          } catch (e) {
+            debugPrint('PlaylistScreen: Failed to get PikPak file metadata for $fileId: $e');
+            // Continue with other files
+          }
         }
       }
 
@@ -980,7 +1061,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         actualStartIndex = 0;
       }
 
-      // Resolve URL for the first video only (lazy loading for rest)
+      // Resolve URL ONLY for the starting episode (lazy loading for rest)
+      // This requires calling getFileDetails with usage=FETCH to get streaming URL
       String initialUrl = '';
       try {
         final firstFile = candidates[actualStartIndex].file;
@@ -1044,6 +1126,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       if (!mounted) return;
+
+      // Use the first file ID as the collection identifier for poster support
+      final firstFileId = candidates.isNotEmpty
+          ? (candidates[0].file['id'] as String?)
+          : null;
+
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -1052,7 +1142,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           subtitle: subtitle,
           playlist: playlistEntries,
           startIndex: actualStartIndex,
-          playlistId: playlistId,
         ),
       );
       
@@ -2833,36 +2922,32 @@ class _TvPlaylistCardState extends State<_TvPlaylistCard> {
 
     return Focus(
       focusNode: _focusNode,
-      child: AnimatedScale(
-        scale: _focused ? 1.08 : 1.0,
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: _focused
-                ? Border.all(color: highlightColor, width: 3)
-                : null,
-            boxShadow: _focused
-                ? [
-                    BoxShadow(
-                      color: highlightColor.withValues(alpha: 0.4),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 8),
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-          ),
-          child: Material(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: _focused
+              ? Border.all(color: highlightColor, width: 3)
+              : null,
+          boxShadow: _focused
+              ? [
+                  BoxShadow(
+                    color: highlightColor.withValues(alpha: 0.4),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+        ),
+        child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: widget.onPlay,
@@ -2903,8 +2988,8 @@ class _TvPlaylistCardState extends State<_TvPlaylistCard> {
                                   fontWeight: FontWeight.w600,
                                   height: 1.2,
                                 ),
-                                maxLines: _focused ? null : 2,
-                                overflow: _focused ? null : TextOverflow.ellipsis,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             if (_focused)
@@ -2973,7 +3058,6 @@ class _TvPlaylistCardState extends State<_TvPlaylistCard> {
             ),
           ),
         ),
-      ),
     );
   }
 

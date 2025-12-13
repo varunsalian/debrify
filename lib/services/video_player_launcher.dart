@@ -9,6 +9,7 @@ import '../screens/video_player_screen.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
+import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
@@ -37,6 +38,7 @@ class VideoPlayerLaunchArgs {
   final int? startIndex;
   final String? rdTorrentId;
   final String? playlistId; // For saving last played file
+  final String? pikpakCollectionId;
   final Future<Map<String, String>?> Function()? requestMagicNext;
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
   final bool startFromRandom;
@@ -58,6 +60,7 @@ class VideoPlayerLaunchArgs {
     this.startIndex,
     this.rdTorrentId,
     this.playlistId,
+    this.pikpakCollectionId,
     this.requestMagicNext,
     this.requestNextChannel,
     this.startFromRandom = false,
@@ -81,6 +84,7 @@ class VideoPlayerLaunchArgs {
       startIndex: startIndex,
       rdTorrentId: rdTorrentId,
       playlistId: playlistId,
+      pikpakCollectionId: pikpakCollectionId,
       requestMagicNext: requestMagicNext,
       requestNextChannel: requestNextChannel,
       startFromRandom: startFromRandom,
@@ -142,6 +146,9 @@ class VideoPlayerLauncher {
       final sessionId = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
       AndroidTvPlayerBridge.setCurrentSessionId(sessionId);
       debugPrint('VideoPlayerLauncher: Generated session ID: $sessionId');
+
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: result.payload.toMap(),

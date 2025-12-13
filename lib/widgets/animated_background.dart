@@ -19,11 +19,11 @@ class _AnimatedPremiumBackgroundState extends State<AnimatedPremiumBackground>
     super.initState();
     _gradientCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 18),
+      duration: const Duration(seconds: 12), // Reduced from 18s for better performance
     )..repeat(reverse: true);
     _noiseCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 30),
+      duration: const Duration(seconds: 20), // Reduced from 30s for better performance
     )..repeat();
   }
 
@@ -66,9 +66,11 @@ class _AnimatedPremiumBackgroundState extends State<AnimatedPremiumBackground>
                   ),
                 ),
               ),
-              // Floating particles
-              CustomPaint(
-                painter: _ParticlesPainter(_noiseCtrl.value),
+              // Floating particles - optimized with RepaintBoundary
+              RepaintBoundary(
+                child: CustomPaint(
+                  painter: _ParticlesPainter(_noiseCtrl.value),
+                ),
               ),
               // Blur frosted overlay for content contrast
               Container(
@@ -76,7 +78,10 @@ class _AnimatedPremiumBackgroundState extends State<AnimatedPremiumBackground>
                   color: Colors.black.withValues(alpha: 0.2),
                 ),
               ),
-              widget.child,
+              // RepaintBoundary to prevent child widgets from triggering background repaints
+              RepaintBoundary(
+                child: widget.child,
+              ),
             ],
           ),
         );
@@ -109,7 +114,7 @@ class _ParticlesPainter extends CustomPainter {
     final paint = Paint()
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
 
-    for (int i = 0; i < 24; i++) {
+    for (int i = 0; i < 12; i++) { // Reduced from 24 for TV performance
       final baseX = rnd.nextDouble() * size.width;
       final baseY = rnd.nextDouble() * size.height;
       final phase = rnd.nextDouble() * 2 * pi;

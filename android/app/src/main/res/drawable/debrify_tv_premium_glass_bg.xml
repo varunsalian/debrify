@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Outer shadow for depth -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="24dp" />
+            <solid android:color="#33000000" />
+        </shape>
+    </item>
+
+    <!-- Main glass container with blur effect simulation -->
+    <item
+        android:top="2dp"
+        android:bottom="4dp"
+        android:left="2dp"
+        android:right="2dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <!-- Multi-layered gradient for depth and glass effect -->
+            <gradient
+                android:angle="90"
+                android:startColor="#E6000000"
+                android:centerColor="#D9000000"
+                android:endColor="#CC000000"
+                android:type="linear" />
+        </shape>
+    </item>
+
+    <!-- Inner glass layer with subtle transparency -->
+    <item
+        android:top="2dp"
+        android:bottom="4dp"
+        android:left="2dp"
+        android:right="2dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <solid android:color="#0DFFFFFF" />
+        </shape>
+    </item>
+
+    <!-- Top highlight for glass effect -->
+    <item
+        android:top="2dp"
+        android:bottom="32dp"
+        android:left="2dp"
+        android:right="2dp">
+        <shape android:shape="rectangle">
+            <corners
+                android:topLeftRadius="22dp"
+                android:topRightRadius="22dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="#1AFFFFFF"
+                android:endColor="#00FFFFFF"
+                android:type="linear" />
+        </shape>
+    </item>
+
+    <!-- Subtle border for definition -->
+    <item
+        android:top="2dp"
+        android:bottom="4dp"
+        android:left="2dp"
+        android:right="2dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <stroke
+                android:width="0.5dp"
+                android:color="#26FFFFFF" />
+        </shape>
+    </item>
+
+</layer-list>

@@ -316,6 +316,7 @@ class TorrentService {
       futures.add(
         engine.executeSearch(
           imdbId: imdbId,
+          isSeries: !isMovie,
           season: (!isMovie && engine.supportsSeriesSearch) ? season : null,
           episode: (!isMovie && engine.supportsSeriesSearch) ? episode : null,
           maxResults: maxResults,
