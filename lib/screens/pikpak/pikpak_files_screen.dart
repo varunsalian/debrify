@@ -24,6 +24,9 @@ class PikPakFilesScreen extends StatefulWidget {
   State<PikPakFilesScreen> createState() => _PikPakFilesScreenState();
 }
 
+/// View modes for folder display
+enum _FolderViewMode { raw, sortedAZ, seriesArrange }
+
 class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _files = [];
@@ -48,6 +51,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   String? _restrictedFolderId;
   String? _restrictedFolderName;
   bool _isAtRestrictedRoot = false;
+
+  // View mode state (per-folder persistence during session)
+  final Map<String, _FolderViewMode> _folderViewModes = {};
+
+  // Virtual folder navigation for Series Arrange mode
+  bool _isInVirtualFolder = false;
+  String? _virtualFolderName; // e.g., "Season 1"
+  List<Map<String, dynamic>> _virtualFolderFiles = []; // Files in virtual Season
+
+  // Cache for recursive file listings (avoid repeated API calls)
+  final Map<String, List<Map<String, dynamic>>> _recursiveFileCache = {};
 
   // Focus nodes for TV/DPAD navigation
   final FocusNode _refreshButtonFocusNode = FocusNode(
@@ -182,9 +196,15 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       // Filter files based on settings
       final filteredFiles = _filterFiles(result.files);
 
+      // Apply current view mode transformation
+      final mode = _getCurrentViewMode();
+      final transformedFiles = mode == _FolderViewMode.seriesArrange
+          ? filteredFiles // Series Arrange is handled separately in _setViewMode
+          : _applyViewMode(mode, filteredFiles);
+
       setState(() {
         _files.clear();
-        _files.addAll(filteredFiles);
+        _files.addAll(transformedFiles);
         _nextPageToken = result.nextPageToken;
         _hasMore =
             result.nextPageToken != null && result.nextPageToken!.isNotEmpty;
@@ -236,6 +256,15 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _nextPageToken = result.nextPageToken;
         _hasMore =
             result.nextPageToken != null && result.nextPageToken!.isNotEmpty;
+
+        // Re-apply current view mode to maintain consistency
+        final mode = _getCurrentViewMode();
+        if (mode != _FolderViewMode.raw && mode != _FolderViewMode.seriesArrange) {
+          final transformed = _applyViewMode(mode, _files);
+          _files.clear();
+          _files.addAll(transformed);
+        }
+
         _isLoadingMore = false;
       });
     } catch (e) {
@@ -334,6 +363,52 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       }
     });
     _loadFiles();
+  }
+
+  /// Navigate up with virtual folder support
+  /// If in virtual folder, exit virtual folder first before navigating real folders
+  void _navigateUpWithVirtual() {
+    if (_isInVirtualFolder) {
+      // Exit virtual folder, go back to transformed view
+      setState(() {
+        _isInVirtualFolder = false;
+        _virtualFolderName = null;
+        _virtualFolderFiles.clear();
+      });
+
+      // Re-apply current view mode to show the season folders again
+      final mode = _getCurrentViewMode();
+      _setViewMode(mode);
+    } else {
+      // Normal navigation up real folders
+      _navigateUp();
+    }
+  }
+
+  /// Navigate into a virtual Season folder
+  void _navigateIntoVirtualFolder(Map<String, dynamic> virtualFolder) {
+    final seasonName = virtualFolder['name'] as String? ?? 'Virtual Folder';
+    final virtualFiles = virtualFolder['virtual_files'] as List<dynamic>? ?? [];
+
+    // Validate virtual files exist
+    if (virtualFiles.isEmpty) {
+      _showSnackBar('Virtual folder is empty', isError: true);
+      return;
+    }
+
+    try {
+      final typedFiles = virtualFiles.cast<Map<String, dynamic>>();
+      setState(() {
+        _isInVirtualFolder = true;
+        _virtualFolderName = seasonName;
+        _virtualFolderFiles = typedFiles;
+        _files.clear();
+        _files.addAll(_virtualFolderFiles);
+      });
+    } catch (e) {
+      print('Error navigating into virtual folder: $e');
+      _showSnackBar('Failed to open virtual folder: $e', isError: true);
+    }
   }
 
   Future<void> _playFile(Map<String, dynamic> fileData) async {
@@ -685,6 +760,20 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Future<void> _refreshFiles() async {
+    // Clear cache for current folder when refreshing
+    if (_currentFolderId != null) {
+      _recursiveFileCache.remove(_currentFolderId!);
+    }
+
+    // Exit virtual folder if in one
+    if (_isInVirtualFolder) {
+      setState(() {
+        _isInVirtualFolder = false;
+        _virtualFolderName = null;
+        _virtualFolderFiles.clear();
+      });
+    }
+
     await _loadFiles();
     _showSnackBar('Files refreshed', isError: false);
   }
@@ -819,6 +908,373 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     );
   }
 
+  // ========== VIEW MODE TRANSFORMATION METHODS ==========
+
+  /// Get current view mode for the active folder
+  _FolderViewMode _getCurrentViewMode() {
+    // Virtual folders don't have their own view modes
+    if (_isInVirtualFolder) return _FolderViewMode.seriesArrange;
+
+    // Root level (no folder selected) defaults to Raw
+    if (_currentFolderId == null) return _FolderViewMode.raw;
+
+    return _folderViewModes[_currentFolderId!] ?? _FolderViewMode.raw;
+  }
+
+  /// Set view mode and refresh display
+  Future<void> _setViewMode(_FolderViewMode mode) async {
+    if (_currentFolderId == null) return;
+
+    // If user selected Series Arrange, we need to fetch all files recursively
+    if (mode == _FolderViewMode.seriesArrange) {
+      // Show loading indicator
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        // Fetch all files recursively from this folder
+        List<Map<String, dynamic>> allFiles;
+        if (_recursiveFileCache.containsKey(_currentFolderId!)) {
+          allFiles = _recursiveFileCache[_currentFolderId!]!;
+        } else {
+          allFiles = await PikPakApiService.instance.listFilesRecursive(
+            folderId: _currentFolderId!,
+          );
+          _recursiveFileCache[_currentFolderId!] = allFiles;
+        }
+
+        // Filter for video files only
+        final videoFiles = allFiles.where((file) {
+          final kind = file['kind'] ?? '';
+          final mimeType = file['mime_type'] ?? '';
+          return kind != 'drive#folder' && mimeType.startsWith('video/');
+        }).toList();
+
+        // Detect if it's actually a series
+        if (videoFiles.length < 3) {
+          _showFallbackToSorted('Not enough video files for series detection', allFiles);
+          return;
+        }
+
+        final filenames = videoFiles.map((f) => f['name'] as String? ?? '').toList();
+        final isSeries = SeriesParser.isSeriesPlaylist(filenames);
+
+        if (!isSeries) {
+          _showFallbackToSorted('No series detected in this folder', allFiles);
+          return;
+        }
+
+        // It's a series! Apply Series Arrange view
+        setState(() {
+          _folderViewModes[_currentFolderId!] = mode;
+          final transformed = _applySeriesArrangeView(allFiles);
+          _files.clear();
+          _files.addAll(transformed);
+          _isLoading = false;
+        });
+      } catch (e) {
+        print('Error applying Series Arrange view: $e');
+        _showFallbackToSorted('Failed to load series view', null);
+      }
+    } else {
+      // For Raw and Sort modes, work with current page files
+      setState(() {
+        _folderViewModes[_currentFolderId!] = mode;
+        final transformed = _applyViewMode(mode, _files);
+        _files.clear();
+        _files.addAll(transformed);
+        // Reset pagination when transforming (can't mix transformed/raw data)
+        _nextPageToken = null;
+        _hasMore = false;
+      });
+    }
+  }
+
+  /// Show snackbar and fallback to sorted view
+  /// If allFiles is provided (from recursive fetch), use those instead of _files
+  void _showFallbackToSorted(String reason, List<Map<String, dynamic>>? allFiles) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
+        duration: Duration(seconds: 3),
+        backgroundColor: Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    setState(() {
+      _folderViewModes[_currentFolderId!] = _FolderViewMode.sortedAZ;
+      // Use allFiles if provided (preserves full recursive fetch), otherwise use _files
+      final filesToTransform = allFiles ?? _files;
+      final transformed = _applySortedView(filesToTransform);
+      _files.clear();
+      _files.addAll(transformed);
+      _isLoading = false;
+    });
+  }
+
+  /// Apply view mode transformation to a list of files
+  List<Map<String, dynamic>> _applyViewMode(
+    _FolderViewMode mode,
+    List<Map<String, dynamic>> items,
+  ) {
+    switch (mode) {
+      case _FolderViewMode.raw:
+        return items;
+      case _FolderViewMode.sortedAZ:
+        return _applySortedView(items);
+      case _FolderViewMode.seriesArrange:
+        return _applySeriesArrangeView(items);
+    }
+  }
+
+  /// Apply sorted view (folders first A-Z, then files A-Z) with numerical sorting
+  List<Map<String, dynamic>> _applySortedView(List<Map<String, dynamic>> items) {
+    final folders = items.where((item) {
+      final kind = item['kind'] ?? '';
+      return kind == 'drive#folder';
+    }).toList();
+
+    final files = items.where((item) {
+      final kind = item['kind'] ?? '';
+      return kind != 'drive#folder';
+    }).toList();
+
+    // Sort folders with numerical handling
+    folders.sort((a, b) {
+      final aName = a['name'] as String? ?? '';
+      final bName = b['name'] as String? ?? '';
+
+      final aNum = _extractSeasonNumber(aName);
+      final bNum = _extractSeasonNumber(bName);
+
+      // If both have numbers, sort numerically
+      if (aNum != null && bNum != null) {
+        return aNum.compareTo(bNum);
+      }
+
+      // If only one has a number, numbered folders come first
+      if (aNum != null) return -1;
+      if (bNum != null) return 1;
+
+      // Otherwise sort alphabetically
+      return aName.toLowerCase().compareTo(bName.toLowerCase());
+    });
+
+    // Sort files with numerical handling
+    files.sort((a, b) {
+      final aName = a['name'] as String? ?? '';
+      final bName = b['name'] as String? ?? '';
+
+      final aNum = _extractLeadingNumber(aName);
+      final bNum = _extractLeadingNumber(bName);
+
+      // If both start with numbers, sort numerically
+      if (aNum != null && bNum != null) {
+        return aNum.compareTo(bNum);
+      }
+
+      // If only one starts with a number, numbered files come first
+      if (aNum != null) return -1;
+      if (bNum != null) return 1;
+
+      // Otherwise sort alphabetically
+      return aName.toLowerCase().compareTo(bName.toLowerCase());
+    });
+
+    return [...folders, ...files];
+  }
+
+  /// Extract number from folder name for numerical sorting
+  /// Handles: "1. Introduction", "10. Chapter", "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
+  int? _extractSeasonNumber(String folderName) {
+    final patterns = [
+      // Leading numbers: "1. ", "10-", "5_", etc.
+      RegExp(r'^(\d+)[\s._-]'),
+      // Season/Chapter/Episode/Part keywords: "Season 10", "Chapter_12", etc.
+      RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
+      RegExp(r'chapter[\s_-]*(\d+)', caseSensitive: false),
+      RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
+      RegExp(r'part[\s_-]*(\d+)', caseSensitive: false),
+      // Generic word followed by number: "Lesson_5", "Module-3"
+      RegExp(r'^[a-z]+[\s_-]*(\d+)', caseSensitive: false),
+    ];
+
+    final lowerName = folderName.toLowerCase();
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(lowerName);
+      if (match != null && match.groupCount >= 1) {
+        return int.tryParse(match.group(1)!);
+      }
+    }
+
+    return null;
+  }
+
+  /// Extract leading number from filename for numerical sorting
+  /// Handles: "10. Video.mp4", "9 - Title.mkv", "05_Episode.mp4", etc.
+  int? _extractLeadingNumber(String filename) {
+    final pattern = RegExp(r'^(\d+)[\s._-]');
+    final match = pattern.firstMatch(filename);
+
+    if (match != null && match.groupCount >= 1) {
+      return int.tryParse(match.group(1)!);
+    }
+
+    return null;
+  }
+
+  /// Apply series arranged view (create virtual Season folders)
+  List<Map<String, dynamic>> _applySeriesArrangeView(
+    List<Map<String, dynamic>> items,
+  ) {
+    // Separate folders and files
+    final folders = items.where((item) {
+      final kind = item['kind'] ?? '';
+      return kind == 'drive#folder';
+    }).toList();
+
+    final files = items.where((item) {
+      final kind = item['kind'] ?? '';
+      return kind != 'drive#folder';
+    }).toList();
+
+    // Filter for video files only
+    final videoFiles = files.where((file) {
+      final mimeType = file['mime_type'] ?? '';
+      return mimeType.startsWith('video/');
+    }).toList();
+
+    final nonVideoFiles = files.where((file) {
+      final mimeType = file['mime_type'] ?? '';
+      return !mimeType.startsWith('video/');
+    }).toList();
+
+    if (videoFiles.isEmpty) return items;
+
+    final filenames = videoFiles.map((f) => f['name'] as String? ?? '').toList();
+
+    try {
+      final parsedInfos = SeriesParser.parsePlaylist(filenames);
+
+      // Group by season
+      final Map<int, List<Map<String, dynamic>>> seasonMap = {};
+      for (int i = 0; i < videoFiles.length; i++) {
+        final info = parsedInfos[i];
+        if (info.isSeries && info.season != null) {
+          seasonMap.putIfAbsent(info.season!, () => []);
+          seasonMap[info.season!]!.add(videoFiles[i]);
+        } else {
+          // If not parsed as series, default to Season 1
+          seasonMap.putIfAbsent(1, () => []);
+          seasonMap[1]!.add(videoFiles[i]);
+        }
+      }
+
+      // Create virtual season folders
+      final seasonFolders = seasonMap.entries.map((entry) {
+        final seasonNum = entry.key;
+        final seasonFiles = entry.value;
+
+        // Sort episodes within season by episode number
+        seasonFiles.sort((a, b) {
+          final aInfo = SeriesParser.parseFilename(a['name'] as String? ?? '');
+          final bInfo = SeriesParser.parseFilename(b['name'] as String? ?? '');
+          final aEp = aInfo.episode ?? 0;
+          final bEp = bInfo.episode ?? 0;
+          return aEp.compareTo(bEp);
+        });
+
+        // Create virtual folder (marked with special kind)
+        return {
+          'id': 'virtual_season_$seasonNum',
+          'kind': 'virtual#season',
+          'name': seasonNum == 0 ? 'Season 0 - Specials' : 'Season $seasonNum',
+          'season_number': seasonNum,
+          'virtual_files': seasonFiles, // Store the files inside
+          'size': seasonFiles.fold<int>(
+            0,
+            (sum, f) => sum + (int.tryParse(f['size']?.toString() ?? '0') ?? 0),
+          ),
+          'created_time': DateTime.now().toIso8601String(),
+        };
+      }).toList();
+
+      // Sort season folders by season number
+      seasonFolders.sort((a, b) {
+        final aNum = a['season_number'] as int? ?? 0;
+        final bNum = b['season_number'] as int? ?? 0;
+        return aNum.compareTo(bNum);
+      });
+
+      return [...folders, ...seasonFolders, ...nonVideoFiles];
+    } catch (e) {
+      print('Series arrangement failed: $e');
+      return _applySortedView(items); // Fallback to sorted view
+    }
+  }
+
+  /// Build the view mode dropdown (shown below AppBar when inside folders)
+  Widget _buildViewModeDropdown() {
+    final theme = Theme.of(context);
+    final mode = _getCurrentViewMode();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+      ),
+      child: DropdownButtonFormField<_FolderViewMode>(
+        isExpanded: true,
+        value: mode,
+        decoration: InputDecoration(
+          labelText: 'View Mode',
+          prefixIcon: Icon(
+            mode == _FolderViewMode.raw
+                ? Icons.view_list
+                : mode == _FolderViewMode.sortedAZ
+                    ? Icons.sort_by_alpha
+                    : Icons.video_library,
+            color: theme.colorScheme.primary,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          filled: true,
+          fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        items: const [
+          DropdownMenuItem(
+            value: _FolderViewMode.raw,
+            child: Text('Raw'),
+          ),
+          DropdownMenuItem(
+            value: _FolderViewMode.sortedAZ,
+            child: Text('Sort (A-Z)'),
+          ),
+          DropdownMenuItem(
+            value: _FolderViewMode.seriesArrange,
+            child: Text('Series Arrange'),
+          ),
+        ],
+        onChanged: (value) {
+          if (value != null) _setViewMode(value);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_pikpakEnabled) {
@@ -833,13 +1289,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       return _buildError();
     }
 
+    // Check if we should show the view mode dropdown
+    // Only show when navigated at least one level deep (inside a folder)
+    final showViewModeDropdown = _navigationStack.isNotEmpty || _isInVirtualFolder;
+
     return Scaffold(
       appBar: AppBar(
-        leading: _currentFolderId != null && !_isAtRestrictedRoot
+        leading: (_currentFolderId != null && !_isAtRestrictedRoot) || _isInVirtualFolder
             ? IconButton(
                 focusNode: _backButtonFocusNode,
                 icon: const Icon(Icons.arrow_back),
-                onPressed: _navigateUp,
+                onPressed: _navigateUpWithVirtual,
                 tooltip: 'Back',
               )
             : null,
@@ -847,8 +1307,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_currentFolderName),
-            if (_restrictedFolderId != null)
+            Text(_isInVirtualFolder
+                ? _virtualFolderName ?? 'Virtual Folder'
+                : _currentFolderName),
+            if (_restrictedFolderId != null && !_isInVirtualFolder)
               const Text(
                 'Restricted Access',
                 style: TextStyle(fontSize: 12, color: Colors.amber),
@@ -864,12 +1326,20 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           ),
         ],
       ),
-      body: FocusTraversalGroup(
-        policy: OrderedTraversalPolicy(),
-        child: RefreshIndicator(
-          onRefresh: _refreshFiles,
-          child: _files.isEmpty ? _buildEmpty() : _buildFileList(),
-        ),
+      body: Column(
+        children: [
+          // View mode dropdown (only shown when inside folders)
+          if (showViewModeDropdown && !_isInVirtualFolder) _buildViewModeDropdown(),
+          Expanded(
+            child: FocusTraversalGroup(
+              policy: OrderedTraversalPolicy(),
+              child: RefreshIndicator(
+                onRefresh: _refreshFiles,
+                child: _files.isEmpty ? _buildEmpty() : _buildFileList(),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1046,6 +1516,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     final createdTime = file['created_time'] ?? '';
 
     final isFolder = kind == 'drive#folder';
+    final isVirtualFolder = kind == 'virtual#season'; // Virtual Season folder
     final isVideo = mimeType.startsWith('video/');
     final isComplete = phase == 'PHASE_TYPE_COMPLETE';
 
@@ -1063,12 +1534,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             Row(
               children: [
                 Icon(
-                  isFolder
+                  isVirtualFolder
+                      ? Icons.video_library
+                      : isFolder
                       ? Icons.folder
                       : isVideo
                       ? Icons.play_circle_outline
                       : Icons.insert_drive_file,
-                  color: isFolder
+                  color: isVirtualFolder
+                      ? Colors.purple
+                      : isFolder
                       ? Colors.amber
                       : isVideo
                       ? Colors.blue
@@ -1149,7 +1624,21 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               policy: OrderedTraversalPolicy(),
               child: Row(
                 children: [
-                  if (isFolder) ...[
+                  if (isVirtualFolder) ...[
+                    // Virtual Season folder - just open it
+                    Expanded(
+                      child: FilledButton.icon(
+                        autofocus: index == 0,
+                        onPressed: () => _navigateIntoVirtualFolder(file),
+                        icon: const Icon(Icons.folder_open, size: 18),
+                        label: const Text('Open'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.purple.shade700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ] else if (isFolder) ...[
                     Expanded(
                       child: FilledButton.icon(
                         autofocus: index == 0, // Auto-focus first item's button
@@ -1181,64 +1670,65 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     ),
                     const SizedBox(width: 8),
                   ],
-                  // 3-dot menu for actions
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    tooltip: 'More options',
-                    onSelected: (value) {
-                      if (value == 'delete') {
-                        _showDeleteDialog(file);
-                      } else if (value == 'add_to_playlist') {
-                        _handleAddToPlaylist(file);
-                      } else if (value == 'download') {
-                        if (isFolder) {
-                          _downloadFolder(file);
-                        } else {
-                          _downloadFile(file);
+                  // 3-dot menu for actions (hidden for virtual folders)
+                  if (!isVirtualFolder)
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert),
+                      tooltip: 'More options',
+                      onSelected: (value) {
+                        if (value == 'delete') {
+                          _showDeleteDialog(file);
+                        } else if (value == 'add_to_playlist') {
+                          _handleAddToPlaylist(file);
+                        } else if (value == 'download') {
+                          if (isFolder) {
+                            _downloadFolder(file);
+                          } else {
+                            _downloadFile(file);
+                          }
                         }
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'download',
-                        child: Row(
-                          children: [
-                            Icon(Icons.download, size: 18, color: Colors.green),
-                            SizedBox(width: 12),
-                            Text('Download'),
-                          ],
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'download',
+                          child: Row(
+                            children: [
+                              Icon(Icons.download, size: 18, color: Colors.green),
+                              SizedBox(width: 12),
+                              Text('Download'),
+                            ],
+                          ),
                         ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'add_to_playlist',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.playlist_add,
-                              size: 18,
-                              color: Colors.blue,
-                            ),
-                            SizedBox(width: 12),
-                            Text('Add to Playlist'),
-                          ],
+                        const PopupMenuItem(
+                          value: 'add_to_playlist',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.playlist_add,
+                                size: 18,
+                                color: Colors.blue,
+                              ),
+                              SizedBox(width: 12),
+                              Text('Add to Playlist'),
+                            ],
+                          ),
                         ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.delete_outline,
-                              size: 18,
-                              color: Colors.red,
-                            ),
-                            SizedBox(width: 12),
-                            Text('Delete'),
-                          ],
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: Colors.red,
+                              ),
+                              SizedBox(width: 12),
+                              Text('Delete'),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                 ],
               ),
             ),

@@ -1514,11 +1514,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   /// Extract number from folder name for numerical sorting
-  /// Handles: "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
+  /// Handles: "1. Introduction", "10. Chapter", "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
   /// Returns null if no number pattern found
   int? _extractSeasonNumber(String folderName) {
     // Try multiple patterns in order of specificity
     final patterns = [
+      // Leading numbers: "1. ", "10-", "5_", etc.
+      RegExp(r'^(\d+)[\s._-]'),
       // Season X, Season_X, Season-X
       RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
       // Chapter X, Chapter_X, Chapter-X
