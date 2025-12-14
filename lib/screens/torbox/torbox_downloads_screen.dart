@@ -1,9 +1,11 @@
 import 'dart:ui';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import '../../models/torbox_file.dart';
 import '../../models/torbox_torrent.dart';
 import '../../models/rd_file_node.dart';
@@ -3056,12 +3058,25 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         if (!mounted) return;
         Navigator.of(context).pop(); // Close loading
 
-        final Uri uri = Uri.parse(downloadUrl);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // Launch with external player
+        if (Platform.isAndroid) {
+          // On Android, use intent with video MIME type to show video player chooser
+          final intent = AndroidIntent(
+            action: 'action_view',
+            data: downloadUrl,
+            type: 'video/*',
+          );
+          await intent.launch();
           _showSnackBar('Opening with external player...', isError: false);
         } else {
-          _showSnackBar('Could not open external player');
+          // On other platforms, use url_launcher
+          final Uri uri = Uri.parse(downloadUrl);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
+            _showSnackBar('Opening with external player...', isError: false);
+          } else {
+            _showSnackBar('Could not open external player');
+          }
         }
       } catch (e) {
         if (!mounted) return;

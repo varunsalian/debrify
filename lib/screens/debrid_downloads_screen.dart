@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import '../models/rd_torrent.dart';
 import '../models/rd_file_node.dart';
 import '../models/debrid_download.dart';
@@ -5070,12 +5072,24 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Launch with external player
-      final Uri uri = Uri.parse(downloadUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (Platform.isAndroid) {
+        // On Android, use intent with video MIME type to show video player chooser
+        final intent = AndroidIntent(
+          action: 'action_view',
+          data: downloadUrl,
+          type: 'video/*',
+        );
+        await intent.launch();
         _showSuccess('Opening with external player...');
       } else {
-        _showError('Could not open external player');
+        // On other platforms, use url_launcher
+        final Uri uri = Uri.parse(downloadUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
+          _showSuccess('Opening with external player...');
+        } else {
+          _showError('Could not open external player');
+        }
       }
     } catch (e) {
       // Close loading indicator if still open
