@@ -47,6 +47,8 @@ class _ActionSheetOption {
 
 enum _DebridDownloadsView { torrents, ddl }
 
+enum _FolderViewMode { raw, sortedAZ, seriesArrange }
+
 class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   _DebridDownloadsView _selectedView = _DebridDownloadsView.torrents;
 
@@ -78,6 +80,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   RDFileNode? _currentFolderTree;
   List<RDFileNode>? _currentViewNodes; // Current folder contents
   bool _isLoadingFolder = false;
+
+  // View mode state
+  final Map<String, _FolderViewMode> _torrentViewModes = {};
 
   // Magnet input
   final TextEditingController _magnetController = TextEditingController();
@@ -1267,11 +1272,29 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       );
       final rootNodes = RDFolderTreeBuilder.getRootLevelNodes(folderTree);
 
+      // Initialize view mode for this torrent if not already set
+      _torrentViewModes.putIfAbsent(torrent.id, () => _FolderViewMode.raw);
+
+      // Apply view mode transformation to root nodes
+      final mode = _torrentViewModes[torrent.id]!;
+      List<RDFileNode> transformedNodes;
+      switch (mode) {
+        case _FolderViewMode.raw:
+          transformedNodes = rootNodes;
+          break;
+        case _FolderViewMode.sortedAZ:
+          transformedNodes = _applySortedView(rootNodes);
+          break;
+        case _FolderViewMode.seriesArrange:
+          transformedNodes = _applySeriesArrangedView(rootNodes);
+          break;
+      }
+
       setState(() {
         _currentTorrentId = torrent.id;
         _currentTorrent = torrent;
         _currentFolderTree = folderTree;
-        _currentViewNodes = rootNodes;
+        _currentViewNodes = transformedNodes;
         _folderPath = [];
         _isLoadingFolder = false;
       });
@@ -1288,9 +1311,33 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   void _navigateIntoFolder(RDFileNode folder) {
     if (!folder.isFolder) return;
 
+    // Apply view mode to folder children
+    // NOTE: Series Arrange only makes sense at root level (it creates virtual Season folders)
+    // When inside any folder, show files in sorted or raw view
+    final mode = _getCurrentViewMode();
+    List<RDFileNode> transformedChildren;
+
+    if (mode == _FolderViewMode.seriesArrange) {
+      // Inside a folder with Series Arrange mode: show files sorted by name
+      transformedChildren = _applySortedView(folder.children);
+    } else {
+      switch (mode) {
+        case _FolderViewMode.raw:
+          transformedChildren = folder.children;
+          break;
+        case _FolderViewMode.sortedAZ:
+          transformedChildren = _applySortedView(folder.children);
+          break;
+        case _FolderViewMode.seriesArrange:
+          // Should never reach here
+          transformedChildren = folder.children;
+          break;
+      }
+    }
+
     setState(() {
       _folderPath.add(folder.name);
-      _currentViewNodes = folder.children;
+      _currentViewNodes = transformedChildren;
     });
 
   }
@@ -1309,30 +1356,73 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     } else if (_folderPath.isNotEmpty && _currentFolderTree != null) {
       // Go up one folder level
-      setState(() {
-        _folderPath.removeLast();
-        // Navigate to the folder at the current path
-        if (_folderPath.isEmpty) {
-          _currentViewNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
-        } else {
-          // Find the folder node at the current path
-          RDFileNode currentNode = _currentFolderTree!;
-          for (final folderName in _folderPath) {
-            final childFolder = currentNode.children.cast<RDFileNode?>().firstWhere(
-              (node) => node?.name == folderName && node?.isFolder == true,
-              orElse: () => null,
-            );
-            if (childFolder != null) {
-              currentNode = childFolder;
-            } else {
-              // Folder not found - reset to root
-              _folderPath.clear();
-              _currentViewNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
-              return;
+      _folderPath.removeLast();
+
+      // Get raw nodes at the new path
+      List<RDFileNode> rawNodes;
+      if (_folderPath.isEmpty) {
+        rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
+      } else {
+        // Find the folder node at the current path
+        RDFileNode currentNode = _currentFolderTree!;
+        for (final folderName in _folderPath) {
+          final childFolder = currentNode.children.cast<RDFileNode?>().firstWhere(
+            (node) => node?.name == folderName && node?.isFolder == true,
+            orElse: () => null,
+          );
+          if (childFolder != null) {
+            currentNode = childFolder;
+          } else {
+            // Folder not found - reset to root
+            _folderPath.clear();
+            rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
+            // Apply view mode and set state
+            final mode = _getCurrentViewMode();
+            List<RDFileNode> transformedNodes;
+            switch (mode) {
+              case _FolderViewMode.raw:
+                transformedNodes = rawNodes;
+                break;
+              case _FolderViewMode.sortedAZ:
+                transformedNodes = _applySortedView(rawNodes);
+                break;
+              case _FolderViewMode.seriesArrange:
+                transformedNodes = _applySeriesArrangedView(rawNodes);
+                break;
             }
+            setState(() {
+              _currentViewNodes = transformedNodes;
+            });
+            return;
           }
-          _currentViewNodes = currentNode.children;
         }
+        rawNodes = currentNode.children;
+      }
+
+      // Apply view mode transformation
+      // NOTE: Series Arrange only applies at root level
+      final mode = _getCurrentViewMode();
+      List<RDFileNode> transformedNodes;
+
+      if (mode == _FolderViewMode.seriesArrange && _folderPath.isNotEmpty) {
+        // Still inside a folder after going up - use sorted view
+        transformedNodes = _applySortedView(rawNodes);
+      } else {
+        switch (mode) {
+          case _FolderViewMode.raw:
+            transformedNodes = rawNodes;
+            break;
+          case _FolderViewMode.sortedAZ:
+            transformedNodes = _applySortedView(rawNodes);
+            break;
+          case _FolderViewMode.seriesArrange:
+            transformedNodes = _applySeriesArrangedView(rawNodes);
+            break;
+        }
+      }
+
+      setState(() {
+        _currentViewNodes = transformedNodes;
       });
 
     }
@@ -1344,6 +1434,271 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       return _currentTorrent?.filename ?? 'Torrent Files';
     }
     return _folderPath.last;
+  }
+
+  /// Detect if current folder contains series episodes
+  /// Checks recursively in subfolders as well
+  bool _detectSeriesPattern(List<RDFileNode> nodes) {
+    // Collect video files recursively from current level and subfolders
+    final videoFiles = _collectVideoFilesRecursively(nodes);
+
+    if (videoFiles.length < 3) return false;
+
+    final filenames = videoFiles.map((n) => n.name).toList();
+    final analysis = SeriesParser.analyzePlaylistConfidence(filenames);
+    return analysis.classification == PlaylistClassification.SERIES;
+  }
+
+  /// Recursively collect all video files from nodes and their subfolders
+  List<RDFileNode> _collectVideoFilesRecursively(List<RDFileNode> nodes) {
+    final videoFiles = <RDFileNode>[];
+
+    for (final node in nodes) {
+      if (node.isFolder) {
+        // Recursively collect from subfolder
+        videoFiles.addAll(_collectVideoFilesRecursively(node.children));
+      } else if (FileUtils.isVideoFile(node.name)) {
+        // Add video file
+        videoFiles.add(node);
+      }
+    }
+
+    return videoFiles;
+  }
+
+  /// Apply sorted view (folders first A-Z, then files A-Z)
+  /// Special handling for numbered folders and files to sort numerically
+  List<RDFileNode> _applySortedView(List<RDFileNode> nodes) {
+    final folders = nodes.where((n) => n.isFolder).toList();
+    final files = nodes.where((n) => !n.isFolder).toList();
+
+    // Sort folders with special handling for numbered folders
+    folders.sort((a, b) {
+      // Extract numbers if folders are named "Season X", "Chapter X", etc.
+      final aNum = _extractSeasonNumber(a.name);
+      final bNum = _extractSeasonNumber(b.name);
+
+      // If both have numbers, sort numerically
+      if (aNum != null && bNum != null) {
+        return aNum.compareTo(bNum);
+      }
+
+      // If only one has a number, numbered folders come first
+      if (aNum != null) return -1;
+      if (bNum != null) return 1;
+
+      // Otherwise sort alphabetically
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
+    // Sort files with special handling for files starting with numbers
+    files.sort((a, b) {
+      // Extract leading numbers from filenames (e.g., "10. Video.mp4" -> 10)
+      final aNum = _extractLeadingNumber(a.name);
+      final bNum = _extractLeadingNumber(b.name);
+
+      // If both start with numbers, sort numerically
+      if (aNum != null && bNum != null) {
+        return aNum.compareTo(bNum);
+      }
+
+      // If only one starts with a number, numbered files come first
+      if (aNum != null) return -1;
+      if (bNum != null) return 1;
+
+      // Otherwise sort alphabetically
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
+    return [...folders, ...files];
+  }
+
+  /// Extract number from folder name for numerical sorting
+  /// Handles: "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
+  /// Returns null if no number pattern found
+  int? _extractSeasonNumber(String folderName) {
+    // Try multiple patterns in order of specificity
+    final patterns = [
+      // Season X, Season_X, Season-X
+      RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
+      // Chapter X, Chapter_X, Chapter-X
+      RegExp(r'chapter[\s_-]*(\d+)', caseSensitive: false),
+      // Episode X, Episode_X, Episode-X
+      RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
+      // Part X, Part_X, Part-X
+      RegExp(r'part[\s_-]*(\d+)', caseSensitive: false),
+      // Any word followed by number at the start (e.g., "Lesson_5", "Module-3")
+      RegExp(r'^[a-z]+[\s_-]*(\d+)', caseSensitive: false),
+    ];
+
+    final lowerName = folderName.toLowerCase();
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(lowerName);
+      if (match != null && match.groupCount >= 1) {
+        return int.tryParse(match.group(1)!);
+      }
+    }
+
+    return null;
+  }
+
+  /// Extract leading number from filename for numerical sorting
+  /// Handles: "10. Video.mp4", "9 - Title.mkv", "05_Episode.mp4", etc.
+  /// Returns null if filename doesn't start with a number
+  int? _extractLeadingNumber(String filename) {
+    // Match numbers at the start of filename (before any separator like . - _ space)
+    // Examples: "10.", "9 -", "05_", "123-"
+    final pattern = RegExp(r'^(\d+)[\s._-]');
+    final match = pattern.firstMatch(filename);
+
+    if (match != null && match.groupCount >= 1) {
+      return int.tryParse(match.group(1)!);
+    }
+
+    return null;
+  }
+
+  /// Apply series arranged view (create virtual Season folders)
+  List<RDFileNode> _applySeriesArrangedView(List<RDFileNode> nodes) {
+    final folders = nodes.where((n) => n.isFolder).toList();
+    final files = nodes.where((n) => !n.isFolder).toList();
+
+    // Parse files for series info
+    final videoFiles = files.where((f) => FileUtils.isVideoFile(f.name)).toList();
+    final nonVideoFiles = files.where((f) => !FileUtils.isVideoFile(f.name)).toList();
+
+    if (videoFiles.isEmpty) return nodes;
+
+    final filenames = videoFiles.map((f) => f.name).toList();
+
+    try {
+      final parsedInfos = SeriesParser.parsePlaylist(filenames);
+
+      // Group by season
+      final Map<int, List<RDFileNode>> seasonMap = {};
+      for (int i = 0; i < videoFiles.length; i++) {
+        final info = parsedInfos[i];
+        if (info.isSeries && info.season != null) {
+          seasonMap.putIfAbsent(info.season!, () => []);
+          seasonMap[info.season!]!.add(videoFiles[i]);
+        } else {
+          // If not parsed as series, default to Season 1
+          seasonMap.putIfAbsent(1, () => []);
+          seasonMap[1]!.add(videoFiles[i]);
+        }
+      }
+
+      // Create virtual season folders
+      final seasonFolders = seasonMap.entries.map((entry) {
+        final seasonNum = entry.key;
+        final seasonFiles = entry.value;
+
+        // Sort episodes within season by episode number
+        seasonFiles.sort((a, b) {
+          final aInfo = SeriesParser.parseFilename(a.name);
+          final bInfo = SeriesParser.parseFilename(b.name);
+          final aEp = aInfo.episode ?? 0;
+          final bEp = bInfo.episode ?? 0;
+          return aEp.compareTo(bEp);
+        });
+
+        return RDFileNode.folder(
+          name: seasonNum == 0 ? 'Season 0 - Specials' : 'Season $seasonNum',
+          children: seasonFiles,
+        );
+      }).toList();
+
+      // Sort season folders by season number
+      seasonFolders.sort((a, b) {
+        final aNum = int.tryParse(a.name.replaceAll(RegExp(r'\D'), '')) ?? 0;
+        final bNum = int.tryParse(b.name.replaceAll(RegExp(r'\D'), '')) ?? 0;
+        return aNum.compareTo(bNum);
+      });
+
+      return [...folders, ...seasonFolders, ...nonVideoFiles];
+    } catch (e) {
+      debugPrint('Series arrangement failed: $e');
+      return _applySortedView(nodes); // Fallback to sorted view
+    }
+  }
+
+  /// Get current view mode for active torrent
+  _FolderViewMode _getCurrentViewMode() {
+    if (_currentTorrentId == null) return _FolderViewMode.raw;
+    return _torrentViewModes[_currentTorrentId] ?? _FolderViewMode.raw;
+  }
+
+  /// Set view mode and refresh display
+  void _setViewMode(_FolderViewMode mode) {
+    if (_currentTorrentId == null || _currentViewNodes == null) return;
+
+    // Get raw nodes based on current path
+    List<RDFileNode> rawNodes;
+    if (_folderPath.isEmpty && _currentFolderTree != null) {
+      rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
+    } else if (_currentFolderTree != null) {
+      // Navigate to current path to get raw nodes
+      RDFileNode currentNode = _currentFolderTree!;
+      for (final folderName in _folderPath) {
+        final childFolder = currentNode.children.cast<RDFileNode?>().firstWhere(
+          (node) => node?.name == folderName && node?.isFolder == true,
+          orElse: () => null,
+        );
+        if (childFolder != null) {
+          currentNode = childFolder;
+        } else {
+          setState(() {
+            _currentViewNodes = [];
+          });
+          return;
+        }
+      }
+      rawNodes = currentNode.children;
+    } else {
+      return;
+    }
+
+    // If user selected Series Arrange, detect if content is actually a series
+    if (mode == _FolderViewMode.seriesArrange) {
+      final isSeries = _detectSeriesPattern(rawNodes);
+
+      if (!isSeries) {
+        // Not a series - show snackbar and fallback to sorted view
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        // Switch to sorted view instead
+        setState(() {
+          _torrentViewModes[_currentTorrentId!] = _FolderViewMode.sortedAZ;
+          _currentViewNodes = _applySortedView(rawNodes);
+        });
+        return;
+      }
+    }
+
+    // Apply transformation based on mode
+    setState(() {
+      _torrentViewModes[_currentTorrentId!] = mode;
+
+      switch (mode) {
+        case _FolderViewMode.raw:
+          _currentViewNodes = rawNodes;
+          break;
+        case _FolderViewMode.sortedAZ:
+          _currentViewNodes = _applySortedView(rawNodes);
+          break;
+        case _FolderViewMode.seriesArrange:
+          _currentViewNodes = _applySeriesArrangedView(rawNodes);
+          break;
+      }
+    });
   }
 
   @override
@@ -1370,6 +1725,62 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
+  Widget _buildViewModeDropdown() {
+    final theme = Theme.of(context);
+    final mode = _getCurrentViewMode();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+      ),
+      child: DropdownButtonFormField<_FolderViewMode>(
+        isExpanded: true,
+        value: mode,
+        decoration: InputDecoration(
+          labelText: 'View Mode',
+          prefixIcon: Icon(
+            mode == _FolderViewMode.raw
+                ? Icons.view_list
+                : mode == _FolderViewMode.sortedAZ
+                    ? Icons.sort_by_alpha
+                    : Icons.video_library,
+            color: theme.colorScheme.primary,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          filled: true,
+          fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        items: const [
+          DropdownMenuItem(
+            value: _FolderViewMode.raw,
+            child: Text('Raw'),
+          ),
+          DropdownMenuItem(
+            value: _FolderViewMode.sortedAZ,
+            child: Text('Sort (A-Z)'),
+          ),
+          DropdownMenuItem(
+            value: _FolderViewMode.seriesArrange,
+            child: Text('Series Arrange'),
+          ),
+        ],
+        onChanged: (value) {
+          if (value != null) _setViewMode(value);
+        },
+      ),
+    );
+  }
+
   Widget _buildFolderBrowserScaffold() {
     return Scaffold(
       appBar: AppBar(
@@ -1389,9 +1800,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ),
         ],
       ),
-      body: FocusTraversalGroup(
-        policy: OrderedTraversalPolicy(),
-        child: _buildFolderContentsView(),
+      body: Column(
+        children: [
+          _buildViewModeDropdown(),
+          Expanded(
+            child: FocusTraversalGroup(
+              policy: OrderedTraversalPolicy(),
+              child: _buildFolderContentsView(),
+            ),
+          ),
+        ],
       ),
     );
   }
