@@ -96,6 +96,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   bool _isTelevision = false;
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'rd-back');
   final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
+  final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'rd-view-mode');
 
   @override
   void initState() {
@@ -170,6 +171,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     // Dispose focus nodes
     _backButtonFocusNode.dispose();
     _refreshButtonFocusNode.dispose();
+    _viewModeDropdownFocusNode.dispose();
 
     super.dispose();
   }
@@ -1743,6 +1745,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ),
       ),
       child: DropdownButtonFormField<_FolderViewMode>(
+        focusNode: _viewModeDropdownFocusNode,
+        autofocus: true,
         isExpanded: true,
         value: mode,
         decoration: InputDecoration(

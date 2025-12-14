@@ -62,6 +62,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   final Map<int, _FolderViewMode> _torrentViewModes = {};
   List<RDFileNode>? _currentViewNodes;
 
+  // Focus nodes for TV/DPAD navigation
+  final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'torbox-view-mode');
+
   static const int _limit = 50;
 
   @override
@@ -715,6 +718,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   void dispose() {
     _scrollController.dispose();
     _magnetController.dispose();
+    _viewModeDropdownFocusNode.dispose();
     super.dispose();
   }
 
@@ -3835,6 +3839,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         ),
       ),
       child: DropdownButtonFormField<_FolderViewMode>(
+        focusNode: _viewModeDropdownFocusNode,
+        autofocus: true,
         isExpanded: true,
         value: mode,
         decoration: InputDecoration(

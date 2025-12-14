@@ -72,6 +72,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   final FocusNode _settingsButtonFocusNode = FocusNode(
     debugLabel: 'pikpak-settings',
   );
+  final FocusNode _viewModeDropdownFocusNode = FocusNode(
+    debugLabel: 'pikpak-view-mode',
+  );
 
   @override
   void initState() {
@@ -95,6 +98,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _backButtonFocusNode.dispose();
     _retryButtonFocusNode.dispose();
     _settingsButtonFocusNode.dispose();
+    _viewModeDropdownFocusNode.dispose();
     super.dispose();
   }
 
@@ -1235,6 +1239,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         ),
       ),
       child: DropdownButtonFormField<_FolderViewMode>(
+        focusNode: _viewModeDropdownFocusNode,
+        autofocus: true,
         isExpanded: true,
         value: mode,
         decoration: InputDecoration(
