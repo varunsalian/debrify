@@ -73,6 +73,12 @@ Future<void> _initOrientation() async {
         DeviceOrientation.landscapeRight,
       ]);
     }
+
+    // Set transparent navigation bar for edge-to-edge display
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
   } catch (_) {
     _updateFocusHighlightStrategy(false);
     // Fallback to all orientations if detection fails
@@ -82,6 +88,12 @@ Future<void> _initOrientation() async {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+
+    // Set transparent navigation bar for edge-to-edge display
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
   }
 }
 
@@ -983,29 +995,31 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                 ),
                 automaticallyImplyLeading: false,
               ),
-              body: FadeTransition(
-                opacity: _fadeAnimation,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 350),
-                  transitionBuilder: (child, animation) {
-                    final offsetAnimation =
-                        Tween<Offset>(
-                          begin: const Offset(0.02, 0.02),
-                          end: Offset.zero,
-                        ).animate(
-                          CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutCubic,
-                          ),
-                        );
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(position: offsetAnimation, child: child),
-                    );
-                  },
-                  child: KeyedSubtree(
-                    key: ValueKey<int>(_selectedIndex),
-                    child: _pages[_selectedIndex],
+              body: SafeArea(
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 350),
+                    transitionBuilder: (child, animation) {
+                      final offsetAnimation =
+                          Tween<Offset>(
+                            begin: const Offset(0.02, 0.02),
+                            end: Offset.zero,
+                          ).animate(
+                            CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            ),
+                          );
+                      return FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(position: offsetAnimation, child: child),
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(_selectedIndex),
+                      child: _pages[_selectedIndex],
+                    ),
                   ),
                 ),
               ),
