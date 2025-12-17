@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Moon shape for night mode -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9 9,-4.03 9,-9c0,-0.46 -0.04,-0.92 -0.1,-1.36 -1.37,1.26 -3.17,2.03 -5.16,2.03 -4.28,0 -7.74,-3.46 -7.74,-7.74 0,-1.99 0.77,-3.79 2.03,-5.16C9.63,3.03 10.17,3 12,3z" />
+    <!-- Small volume/speaker bars to indicate audio compression -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17,11.5l-1.5,0 0,1 1.5,0c0.28,0 0.5,0.22 0.5,0.5s-0.22,0.5 -0.5,0.5l-1.5,0 0,1 1.5,0c0.28,0 0.5,-0.22 0.5,-0.5l0,-2c0,-0.28 -0.22,-0.5 -0.5,-0.5z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M19,10.5l-0.5,0 0,3 0.5,0c0.28,0 0.5,-0.22 0.5,-0.5l0,-2c0,-0.28 -0.22,-0.5 -0.5,-0.5z" />
+</vector>

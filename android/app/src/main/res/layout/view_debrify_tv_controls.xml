@@ -97,10 +97,10 @@
                 android:text="Speed" />
 
             <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_seek_button"
+                android:id="@+id/debrify_night_mode_button"
                 style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_seek"
-                android:text="Seek"
+                android:drawableStart="@drawable/ic_night_mode"
+                android:text="Off"
                 android:singleLine="true"
                 android:layout_marginEnd="0dp" />
 

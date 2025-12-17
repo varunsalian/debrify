@@ -34,6 +34,7 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import android.media.audiofx.LoudnessEnhancer
 import com.debrify.app.MainActivity
 import com.debrify.app.R
 import org.json.JSONArray
@@ -76,7 +77,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitleButton: AppCompatButton? = null
     private var aspectButton: AppCompatButton? = null
     private var speedButton: AppCompatButton? = null
-    private var seekButton: AppCompatButton? = null
+    private var nightModeButton: AppCompatButton? = null
 
     // Time Display in Controls
     private var debrifyTimeDisplay: TextView? = null
@@ -101,6 +102,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var videoDuration: Long = 0
     private var resizeModeIndex = 0
     private var playbackSpeedIndex = 2  // 1.0x
+    private var nightModeIndex = 0  // Off by default
+    private var loudnessEnhancer: LoudnessEnhancer? = null
     private var playlistMode: PlaylistMode = PlaylistMode.NONE
     private var playlistAdapter: PlaylistOverlayAdapter? = null
     private var seriesPlaylistAdapter: PlaylistAdapter? = null
@@ -124,6 +127,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private val playbackSpeeds = arrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     private val playbackSpeedLabels = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x")
+
+    private val nightModeGains = arrayOf(0, 500, 1000, 1500)  // millibels
+    private val nightModeLabels = arrayOf("Off", "Low", "Med", "High")
 
     // Handlers
     private val progressHandler = Handler(Looper.getMainLooper())
@@ -176,6 +182,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         }
                         pendingSeekMs = 0
                     }
+                    // Initialize night mode if needed
+                    if (loudnessEnhancer == null && nightModeIndex > 0) {
+                        initializeLoudnessEnhancer()
+                    }
                 }
                 Player.STATE_ENDED -> {
                     sendProgress(completed = true)
@@ -197,6 +207,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             updatePauseButtonLabel()
+        }
+
+        override fun onAudioSessionIdChanged(audioSessionId: Int) {
+            // Reinitialize night mode effect when audio session changes
+            if (nightModeIndex > 0 && audioSessionId != 0) {
+                releaseLoudnessEnhancer()
+                initializeLoudnessEnhancer()
+            }
         }
     }
 
@@ -1004,7 +1022,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun setupControls() {
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root)
         pauseButton = playerView.findViewById(R.id.debrify_pause_button)
-        seekButton = playerView.findViewById(R.id.debrify_seek_button)
+        nightModeButton = playerView.findViewById(R.id.debrify_night_mode_button)
         audioButton = playerView.findViewById(R.id.debrify_audio_button)
         subtitleButton = playerView.findViewById(R.id.debrify_subtitle_button)
         aspectButton = playerView.findViewById(R.id.debrify_aspect_button)
@@ -1054,7 +1072,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Apply Apple TV animations to all control buttons
         applyAppleTvAnimation(pauseButton)
-        applyAppleTvAnimation(seekButton)
+        applyAppleTvAnimation(nightModeButton)
         applyAppleTvAnimation(audioButton)
         applyAppleTvAnimation(subtitleButton)
         applyAppleTvAnimation(aspectButton)
@@ -1079,11 +1097,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         pauseButton?.onFocusChangeListener = extendTimerOnFocus
 
-        seekButton?.setOnClickListener {
-            hideControlsMenu()
-            showSeekbar()
+        nightModeButton?.setOnClickListener {
+            cycleNightMode()
+            scheduleHideControlsMenu()
         }
-        seekButton?.onFocusChangeListener = extendTimerOnFocus
+        nightModeButton?.onFocusChangeListener = extendTimerOnFocus
+        updateNightModeButtonLabel()
 
         audioButton?.setOnClickListener {
             showAudioTrackDialog()
@@ -1754,6 +1773,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         aspectButton?.text = resizeModeLabels[resizeModeIndex]
     }
 
+    private fun updateNightModeButtonLabel() {
+        nightModeButton?.text = nightModeLabels[nightModeIndex]
+    }
+
     // Premium Seekbar Progress Updates
     private fun startSeekbarProgressUpdates() {
         seekbarHandler.removeCallbacks(seekbarProgressRunnable)
@@ -2288,6 +2311,56 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
     }
 
+    // Night mode (dynamic range compression)
+    private fun initializeLoudnessEnhancer() {
+        try {
+            val audioSessionId = player?.audioSessionId ?: return
+            if (audioSessionId == 0) return  // Invalid session
+
+            releaseLoudnessEnhancer()  // Clean up any existing instance
+
+            loudnessEnhancer = LoudnessEnhancer(audioSessionId)
+            loudnessEnhancer?.enabled = nightModeIndex > 0
+            if (nightModeIndex > 0) {
+                loudnessEnhancer?.setTargetGain(nightModeGains[nightModeIndex])
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "Failed to initialize LoudnessEnhancer", e)
+            loudnessEnhancer = null
+        }
+    }
+
+    private fun releaseLoudnessEnhancer() {
+        try {
+            loudnessEnhancer?.release()
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "Error releasing LoudnessEnhancer", e)
+        }
+        loudnessEnhancer = null
+    }
+
+    private fun cycleNightMode() {
+        nightModeIndex = (nightModeIndex + 1) % nightModeGains.size
+
+        if (nightModeIndex == 0) {
+            // Turn off
+            loudnessEnhancer?.enabled = false
+        } else {
+            // Turn on or adjust
+            if (loudnessEnhancer == null) {
+                initializeLoudnessEnhancer()
+            }
+            // Check if initialization succeeded before using
+            loudnessEnhancer?.let {
+                it.enabled = true
+                it.setTargetGain(nightModeGains[nightModeIndex])
+            }
+        }
+
+        updateNightModeButtonLabel()
+        Toast.makeText(this, "Night Mode: ${nightModeLabels[nightModeIndex]}", Toast.LENGTH_SHORT).show()
+    }
+
     // Progress reporting
     private fun restartProgressUpdates() {
         progressHandler.removeCallbacks(progressRunnable)
@@ -2464,6 +2537,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         titleHandler.removeCallbacksAndMessages(null)
         controlsHandler.removeCallbacksAndMessages(null)
         seekbarHandler.removeCallbacksAndMessages(null)
+
+        // Release night mode audio effect
+        releaseLoudnessEnhancer()
 
         // Clear player and listeners
         player?.let {

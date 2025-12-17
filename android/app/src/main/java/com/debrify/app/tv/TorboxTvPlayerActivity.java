@@ -20,6 +20,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.media.audiofx.LoudnessEnhancer;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -124,8 +125,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private AppCompatButton audioButton;
     private AppCompatButton subtitleButton;
     private AppCompatButton aspectButton;
-    private AppCompatButton seekButton;
+    private AppCompatButton nightModeButton;
     private AppCompatButton speedButton;
+    private int nightModeIndex = 0;  // Off by default
+    private LoudnessEnhancer loudnessEnhancer = null;
     private AppCompatButton guideButton;
     private AppCompatButton channelNextButton;
     private View nextOverlay;
@@ -195,6 +198,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private int playbackSpeedIndex = 2; // Default to 1.0x
     private final float[] playbackSpeeds = new float[] {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
     private final String[] playbackSpeedLabels = new String[] {"0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x"};
+    private final int[] nightModeGains = new int[] {0, 500, 1000, 1500};  // millibels
+    private final String[] nightModeLabels = new String[] {"Off", "Low", "Med", "High"};
 
     private final ArrayList<ChannelEntry> channelDirectoryEntries = new ArrayList<>();
     private final ArrayList<ChannelEntry> filteredChannelEntries = new ArrayList<>();
@@ -263,6 +268,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 if (startFromRandom && !randomApplied) {
                     maybeSeekRandomly();
                 }
+                // Initialize night mode if needed
+                if (loudnessEnhancer == null && nightModeIndex > 0) {
+                    initializeLoudnessEnhancer();
+                }
             } else if (playbackState == Player.STATE_ENDED) {
                 randomApplied = false;
                 requestNextStream();
@@ -273,6 +282,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         @Override
         public void onIsPlayingChanged(boolean isPlaying) {
             updatePauseButtonLabel();
+        }
+
+        @Override
+        public void onAudioSessionIdChanged(int audioSessionId) {
+            // Reinitialize night mode effect when audio session changes
+            if (nightModeIndex > 0 && audioSessionId != 0) {
+                releaseLoudnessEnhancer();
+                initializeLoudnessEnhancer();
+            }
         }
     };
 
@@ -417,6 +435,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @OptIn(markerClass = UnstableApi.class)
     private void createPlayer(LoadControl loadControl) {
+        // Release night mode effect before releasing player to prevent memory leak
+        releaseLoudnessEnhancer();
+
         if (player != null) {
             player.removeListener(playbackListener);
             player.release();
@@ -474,6 +495,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     Typeface.create("sans-serif", Typeface.NORMAL)));
         }
         playerView.requestFocus();
+
+        // Reinitialize night mode effect with new audio session if it was active
+        if (nightModeIndex > 0) {
+            initializeLoudnessEnhancer();
+        }
     }
 
     private LoadControl buildLoadControl(long estimatedBitrate) {
@@ -534,7 +560,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         debrifyProgressLine = playerView.findViewById(R.id.debrify_progress_line);
         buttonsRow = playerView.findViewById(R.id.debrify_controls_buttons);
         pauseButton = playerView.findViewById(R.id.debrify_pause_button);
-        seekButton = playerView.findViewById(R.id.debrify_seek_button);
+        nightModeButton = playerView.findViewById(R.id.debrify_night_mode_button);
         audioButton = playerView.findViewById(R.id.debrify_audio_button);
         subtitleButton = playerView.findViewById(R.id.debrify_subtitle_button);
         aspectButton = playerView.findViewById(R.id.debrify_aspect_button);
@@ -583,10 +609,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             updatePauseButtonLabel();
         }
 
-        if (seekButton != null) {
-            seekButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
-            seekButton.setOnClickListener(v -> handleControlAction("seek"));
-            seekButton.setOnFocusChangeListener(extendTimerOnFocus);
+        if (nightModeButton != null) {
+            nightModeButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
+            nightModeButton.setOnClickListener(v -> {
+                cycleNightMode();
+                scheduleHideControlsMenu();
+            });
+            nightModeButton.setOnFocusChangeListener(extendTimerOnFocus);
+            updateNightModeButtonLabel();
         }
 
         if (audioButton != null) {
@@ -878,8 +908,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (pauseButton != null) {
             pauseButton.setVisibility(target);
         }
-        if (seekButton != null) {
-            seekButton.setVisibility(target);
+        if (nightModeButton != null) {
+            nightModeButton.setVisibility(target);
         }
         if (audioButton != null) {
             audioButton.setVisibility(target);
@@ -913,6 +943,72 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         float speed = playbackSpeeds[playbackSpeedIndex];
         player.setPlaybackSpeed(speed);
         Toast.makeText(this, "Speed: " + playbackSpeedLabels[playbackSpeedIndex], Toast.LENGTH_SHORT).show();
+    }
+
+    // Night mode (dynamic range compression)
+    private void initializeLoudnessEnhancer() {
+        if (player == null) {
+            return;
+        }
+
+        try {
+            int audioSessionId = player.getAudioSessionId();
+            if (audioSessionId == 0) {
+                return;  // Invalid session
+            }
+
+            releaseLoudnessEnhancer();  // Clean up any existing instance
+
+            loudnessEnhancer = new LoudnessEnhancer(audioSessionId);
+            loudnessEnhancer.setEnabled(nightModeIndex > 0);
+            if (nightModeIndex > 0) {
+                loudnessEnhancer.setTargetGain(nightModeGains[nightModeIndex]);
+            }
+        } catch (Exception e) {
+            android.util.Log.e("TorboxTvPlayer", "Failed to initialize LoudnessEnhancer", e);
+            loudnessEnhancer = null;
+        }
+    }
+
+    private void releaseLoudnessEnhancer() {
+        if (loudnessEnhancer != null) {
+            try {
+                loudnessEnhancer.release();
+            } catch (Exception e) {
+                android.util.Log.e("TorboxTvPlayer", "Error releasing LoudnessEnhancer", e);
+            }
+            loudnessEnhancer = null;
+        }
+    }
+
+    private void cycleNightMode() {
+        nightModeIndex = (nightModeIndex + 1) % nightModeGains.length;
+
+        if (nightModeIndex == 0) {
+            // Turn off
+            if (loudnessEnhancer != null) {
+                loudnessEnhancer.setEnabled(false);
+            }
+        } else {
+            // Turn on or adjust
+            if (loudnessEnhancer == null) {
+                initializeLoudnessEnhancer();
+            }
+            // Check if initialization succeeded before using
+            if (loudnessEnhancer != null) {
+                loudnessEnhancer.setEnabled(true);
+                loudnessEnhancer.setTargetGain(nightModeGains[nightModeIndex]);
+            }
+        }
+
+        updateNightModeButtonLabel();
+        showToast("Night Mode: " + nightModeLabels[nightModeIndex]);
+    }
+
+    private void updateNightModeButtonLabel() {
+        if (nightModeButton != null) {
+            nightModeButton.setText(nightModeLabels[nightModeIndex]);
+        }
     }
 
     private void setupCustomSeekbar() {
@@ -3319,7 +3415,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (dotsAnimator != null && dotsAnimator.isRunning()) {
             dotsAnimator.cancel();
         }
-        
+
+        // Release night mode audio effect
+        releaseLoudnessEnhancer();
+
         if (player != null) {
             player.removeListener(playbackListener);
             // Remove subtitle listener to prevent memory leaks
