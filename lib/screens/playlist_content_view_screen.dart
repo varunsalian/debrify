@@ -247,28 +247,76 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Load PikPak content
   Future<void> _loadPikPakContent() async {
-    // Check if we have cached files
-    final cachedFiles = widget.playlistItem['pikpakFiles'] as List?;
+    // Get the folder/file ID
+    final pikpakFileId = widget.playlistItem['pikpakFileId'] as String?;
 
-    if (cachedFiles != null && cachedFiles.isNotEmpty) {
-      // Use cached data
-      final files = cachedFiles.cast<Map<String, dynamic>>();
-      _rootContent = _buildPikPakFileTree(files);
+    if (pikpakFileId != null) {
+      // Preferred: Fetch fresh folder structure from PikPak
+      _rootContent = await _buildPikPakFolderTree(pikpakFileId);
     } else {
-      // Fetch from API
-      final pikpakFileId = widget.playlistItem['pikpakFileId'] as String?;
-      if (pikpakFileId == null) {
-        throw Exception('No PikPak file ID found');
+      // Fallback: Use cached files (for old playlist items without pikpakFileId)
+      final cachedFiles = widget.playlistItem['pikpakFiles'] as List?;
+      if (cachedFiles != null && cachedFiles.isNotEmpty) {
+        final files = cachedFiles.cast<Map<String, dynamic>>();
+        _rootContent = _buildPikPakFileTree(files);
+      } else {
+        throw Exception('No PikPak file data found. Please remove and re-add this item to playlist.');
       }
-
-      // Fetch folder contents recursively
-      final files = await PikPakApiService.instance.listFilesRecursive(folderId: pikpakFileId);
-      _rootContent = _buildPikPakFileTree(files);
     }
   }
 
+  /// Build folder tree from PikPak by fetching folder structure
+  /// This properly preserves the folder hierarchy
+  Future<RDFileNode> _buildPikPakFolderTree(String folderId) async {
+    final pikpak = PikPakApiService.instance;
+
+    // Fetch files in this folder (non-recursive)
+    final result = await pikpak.listFiles(parentId: folderId, limit: 100);
+    final files = result.files;
+
+    final List<RDFileNode> children = [];
+    int fileIndex = 0;
+
+    for (final file in files) {
+      final kind = file['kind'] ?? '';
+      final name = (file['name'] as String?) ?? 'Unknown';
+      final fileId = file['id'] as String?;
+
+      if (kind == 'drive#folder') {
+        // Recursively build subfolder
+        if (fileId != null) {
+          final subTree = await _buildPikPakFolderTree(fileId);
+          children.add(RDFileNode.folder(
+            name: name,
+            children: subTree.children,
+          ));
+        }
+      } else {
+        // Add file node
+        final sizeRaw = file['size'];
+        final size = sizeRaw is int ? sizeRaw : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
+
+        // Store the PikPak file metadata in the node's path field (we'll parse it later)
+        // Format: "pikpak://fileId|fileName"
+        final pikpakUrl = 'pikpak://$fileId|$name';
+
+        children.add(RDFileNode.file(
+          name: name,
+          fileId: fileIndex,
+          path: pikpakUrl, // Store PikPak file ID and name here
+          bytes: size,
+          linkIndex: fileIndex,
+        ));
+        fileIndex++;
+      }
+    }
+
+    return RDFileNode.folder(name: 'Root', children: children);
+  }
+
   /// Build file tree from PikPak files (from recursive list)
-  /// Since PikPak provides a flat list from recursive fetch, we display it as-is
+  /// Used as fallback for old playlist items without pikpakFileId
+  /// Displays as a flat list since we don't have folder structure info
   RDFileNode _buildPikPakFileTree(List<Map<String, dynamic>> files) {
     final List<RDFileNode> nodes = [];
 
@@ -276,22 +324,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       final file = files[i];
       final kind = file['kind'] ?? '';
       final name = (file['name'] as String?) ?? 'Unknown';
+      final fileId = file['id'] as String?;
+
       // PikPak returns size as String, need to parse it
       final sizeRaw = file['size'];
       final size = sizeRaw is int ? sizeRaw : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
 
       if (kind == 'drive#folder') {
-        // Add folder node (children will be in the flat list separately)
-        nodes.add(RDFileNode.folder(
-          name: name,
-          children: [], // Flat structure - folders appear empty but work with series/sort views
-        ));
-      } else {
-        // Add file node
+        // Skip folders in flat view since we don't have hierarchy
+        continue;
+      } else if (fileId != null) {
+        // Add file node with pikpak:// URL for playback
+        final pikpakUrl = 'pikpak://$fileId|$name';
+
         nodes.add(RDFileNode.file(
           name: name,
           fileId: i,
-          path: name,
+          path: pikpakUrl, // Store PikPak file ID for playback
           bytes: size,
           linkIndex: i,
         ));
@@ -353,46 +402,80 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final folders = nodes.where((n) => n.isFolder).toList();
     final files = nodes.where((n) => !n.isFolder).toList();
 
-    // Sort folders numerically/alphabetically
+    // Sort folders with numerical handling (same logic as PikPak/RD/Torbox)
     folders.sort((a, b) {
-      final aNum = _extractNumber(a.name);
-      final bNum = _extractNumber(b.name);
+      final aNum = _extractSeasonNumber(a.name);
+      final bNum = _extractSeasonNumber(b.name);
 
+      // If both have numbers, sort numerically
       if (aNum != null && bNum != null) {
         return aNum.compareTo(bNum);
       }
 
+      // If only one has a number, numbered folders come first
+      if (aNum != null) return -1;
+      if (bNum != null) return 1;
+
+      // Otherwise sort alphabetically
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
 
-    // Sort files numerically/alphabetically
+    // Sort files with numerical handling (same logic as PikPak/RD/Torbox)
     files.sort((a, b) {
-      final aNum = _extractNumber(a.name);
-      final bNum = _extractNumber(b.name);
+      final aNum = _extractLeadingNumber(a.name);
+      final bNum = _extractLeadingNumber(b.name);
 
+      // If both start with numbers, sort numerically
       if (aNum != null && bNum != null) {
         return aNum.compareTo(bNum);
       }
 
+      // If only one starts with a number, numbered files come first
+      if (aNum != null) return -1;
+      if (bNum != null) return 1;
+
+      // Otherwise sort alphabetically
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
 
     return [...folders, ...files];
   }
 
-  /// Extract number from filename for numerical sorting
-  int? _extractNumber(String name) {
+  /// Extract number from folder name for numerical sorting
+  /// Handles: "1. Introduction", "10. Chapter", "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
+  int? _extractSeasonNumber(String folderName) {
     final patterns = [
+      // Leading numbers: "1. ", "10-", "5_", etc.
       RegExp(r'^(\d+)[\s._-]'),
+      // Season/Chapter/Episode/Part keywords: "Season 10", "Chapter_12", etc.
       RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
+      RegExp(r'chapter[\s_-]*(\d+)', caseSensitive: false),
       RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
+      RegExp(r'part[\s_-]*(\d+)', caseSensitive: false),
+      // Generic word followed by number: "Lesson_5", "Module-3"
+      RegExp(r'^[a-z]+[\s_-]*(\d+)', caseSensitive: false),
     ];
 
+    final lowerName = folderName.toLowerCase();
+
     for (final pattern in patterns) {
-      final match = pattern.firstMatch(name);
+      final match = pattern.firstMatch(lowerName);
       if (match != null && match.groupCount >= 1) {
         return int.tryParse(match.group(1)!);
       }
+    }
+
+    return null;
+  }
+
+  /// Extract leading number from filename for numerical sorting
+  /// Handles: "10. Video.mp4", "9 - Title.mkv", "05_Episode.mp4", etc.
+  int? _extractLeadingNumber(String filename) {
+    final pattern = RegExp(r'^(\d+)[\s._-]');
+    final match = pattern.firstMatch(filename);
+
+    if (match != null && match.groupCount >= 1) {
+      return int.tryParse(match.group(1)!);
     }
 
     return null;
@@ -601,22 +684,17 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('Please login to PikPak in Settings');
     }
 
-    // For PikPak, we need to get the file details to get streaming URL
-    // The file.path contains the original filename from the cached data
-    // We need to find the file ID from the cached files
-
-    final cachedFiles = widget.playlistItem['pikpakFiles'] as List?;
-    if (cachedFiles == null || cachedFiles.isEmpty) {
-      throw Exception('No PikPak file information available');
+    // Extract PikPak file ID from the path field
+    // Format: "pikpak://fileId|fileName"
+    String? fileId;
+    final path = file.path;
+    if (path != null && path.startsWith('pikpak://')) {
+      final parts = path.substring(9).split('|');
+      if (parts.isNotEmpty) {
+        fileId = parts[0];
+      }
     }
 
-    // Find the file in cached data by matching name
-    final fileData = cachedFiles.cast<Map<String, dynamic>>().firstWhere(
-      (f) => f['name'] == file.name,
-      orElse: () => throw Exception('File not found in cached data'),
-    );
-
-    final fileId = fileData['id'] as String?;
     if (fileId == null || fileId.isEmpty) {
       throw Exception('File ID not found');
     }
@@ -2009,25 +2087,22 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('Please login to PikPak in Settings');
     }
 
-    final cachedFiles = widget.playlistItem['pikpakFiles'] as List<dynamic>?;
-    if (cachedFiles == null || cachedFiles.isEmpty) {
-      throw Exception('No cached files found');
-    }
-
     // Build playlist entries
     final List<PlaylistEntry> entries = [];
     for (int i = 0; i < videoFiles.length; i++) {
       final file = videoFiles[i];
 
-      // Find matching file in cached files by name
-      final cachedFile = cachedFiles.firstWhere(
-        (f) => (f['name'] as String?) == file.name,
-        orElse: () => null,
-      );
+      // Extract PikPak file ID from the path field
+      // Format: "pikpak://fileId|fileName"
+      String? fileId;
+      final path = file.path;
+      if (path != null && path.startsWith('pikpak://')) {
+        final parts = path.substring(9).split('|');
+        if (parts.isNotEmpty) {
+          fileId = parts[0];
+        }
+      }
 
-      if (cachedFile == null) continue;
-
-      final fileId = cachedFile['id'] as String?;
       if (fileId == null) continue;
 
       if (i == startIndex) {

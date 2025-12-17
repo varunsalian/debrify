@@ -2160,6 +2160,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           'provider': 'pikpak',
           'title': folderName,
           'kind': 'collection',
+          'pikpakFileId': folderId, // Store the folder ID for folder structure
           'pikpakFiles':
               filesMetadata, // NEW: Full metadata for instant playback
           'pikpakFileIds':
