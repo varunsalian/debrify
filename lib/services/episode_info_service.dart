@@ -164,7 +164,7 @@ class EpisodeInfoService {
   }
 
   /// Clear cache for a specific series
-  static void clearSeriesCache(String seriesTitle) {
+  static Future<void> clearSeriesCache(String seriesTitle) async {
     final keysToRemove = <String>[];
     for (final key in _cache.keys) {
       if (key.startsWith('${seriesTitle}_') || key == 'series_$seriesTitle' || key == 'all_episodes_$seriesTitle') {
@@ -174,6 +174,8 @@ class EpisodeInfoService {
     for (final key in keysToRemove) {
       _cache.remove(key);
     }
+    // Also clear TVMaze service cache
+    await TVMazeService.clearSeriesCache(seriesTitle);
   }
 
   /// Dispose resources

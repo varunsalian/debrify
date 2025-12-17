@@ -125,6 +125,7 @@ class StorageService {
       'debrify_tv_min_torrents_per_keyword';
 
   static const String _playlistKey = 'user_playlist_v1';
+  static const String _playlistViewModesKey = 'playlist_view_modes_v1';
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
@@ -1206,6 +1207,44 @@ class StorageService {
     items[itemIndex]['posterUrl'] = posterUrl;
     await savePlaylistItemsRaw(items);
     return true;
+  }
+
+  /// Get saved view mode for a playlist item
+  /// Returns null if no view mode has been saved for this item
+  static Future<String?> getPlaylistItemViewMode(Map<String, dynamic> item) async {
+    final prefs = await SharedPreferences.getInstance();
+    final viewModesJson = prefs.getString(_playlistViewModesKey);
+
+    if (viewModesJson == null) return null;
+
+    try {
+      final viewModes = jsonDecode(viewModesJson) as Map<String, dynamic>;
+      final dedupeKey = computePlaylistDedupeKey(item);
+      return viewModes[dedupeKey] as String?;
+    } catch (e) {
+      print('Error reading playlist view modes: $e');
+      return null;
+    }
+  }
+
+  /// Save view mode for a playlist item
+  static Future<void> savePlaylistItemViewMode(Map<String, dynamic> item, String viewMode) async {
+    final prefs = await SharedPreferences.getInstance();
+    final viewModesJson = prefs.getString(_playlistViewModesKey);
+
+    Map<String, dynamic> viewModes = {};
+    if (viewModesJson != null) {
+      try {
+        viewModes = jsonDecode(viewModesJson) as Map<String, dynamic>;
+      } catch (e) {
+        print('Error parsing playlist view modes: $e');
+      }
+    }
+
+    final dedupeKey = computePlaylistDedupeKey(item);
+    viewModes[dedupeKey] = viewMode;
+
+    await prefs.setString(_playlistViewModesKey, jsonEncode(viewModes));
   }
 
   // Debrify TV Search Engine Settings

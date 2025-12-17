@@ -50,6 +50,7 @@ class VideoPlayerLaunchArgs {
   final bool hideOptions;
   final bool hideBackButton;
   final bool Function()? isAndroidTvOverride;
+  final bool disableAutoResume;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -71,6 +72,7 @@ class VideoPlayerLaunchArgs {
     this.hideOptions = false,
     this.hideBackButton = false,
     this.isAndroidTvOverride,
+    this.disableAutoResume = false,
   });
 
   VideoPlayerScreen toWidget() {
@@ -93,6 +95,7 @@ class VideoPlayerLaunchArgs {
       showVideoTitle: showVideoTitle,
       hideOptions: hideOptions,
       hideBackButton: hideBackButton,
+      disableAutoResume: disableAutoResume,
     );
   }
 }
@@ -938,6 +941,12 @@ class _AndroidTvPlaybackPayloadBuilder {
   }
 
   Future<int> _determineSeriesStartIndex(SeriesPlaylist? playlist) async {
+    // If auto-resume is disabled, use startIndex directly
+    if (args.disableAutoResume) {
+      debugPrint('AndroidTV: auto-resume disabled, using startIndex=${args.startIndex ?? 0}');
+      return args.startIndex ?? 0;
+    }
+
     if (playlist == null || playlist.allEpisodes.isEmpty) {
       return args.startIndex ?? 0;
     }
@@ -973,6 +982,12 @@ class _AndroidTvPlaybackPayloadBuilder {
     List<PlaylistEntry> entries,
     List<_PerItemState> perItemState,
   ) {
+    // If auto-resume is disabled, use startIndex directly
+    if (args.disableAutoResume) {
+      debugPrint('AndroidTV: auto-resume disabled for collection, using startIndex=${args.startIndex ?? 0}');
+      return args.startIndex ?? 0;
+    }
+
     int bestIndex = -1;
     int bestUpdatedAt = -1;
     for (int i = 0; i < entries.length; i++) {

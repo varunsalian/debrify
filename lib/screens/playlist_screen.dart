@@ -16,6 +16,7 @@ import '../models/torbox_file.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/main_page_bridge.dart';
 import 'video_player_screen.dart';
+import 'playlist_content_view_screen.dart';
 
 class PlaylistScreen extends StatefulWidget {
   const PlaylistScreen({super.key});
@@ -1165,6 +1166,32 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
+  /// View playlist item contents
+  Future<void> _viewItem(Map<String, dynamic> item) async {
+    if (!mounted) return;
+
+    // Import the screen
+    final screen = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) {
+          // Dynamically import to avoid circular dependencies
+          return PlaylistContentViewScreen(
+            playlistItem: item,
+            onPlaybackStarted: () {
+              // Hide auto-launch overlay if active
+              MainPageBridge.notifyPlayerLaunching();
+            },
+          );
+        },
+      ),
+    );
+
+    // Refresh playlist in case anything changed
+    if (mounted) {
+      await _refresh();
+    }
+  }
+
   Future<void> _removeItem(Map<String, dynamic> item) async {
     final key = StorageService.computePlaylistDedupeKey(item);
     await StorageService.removePlaylistItemByKey(key);
@@ -1531,6 +1558,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                       metadata: metadata,
                                       onPlay: () => _playItem(item),
                                       onRemove: () => _removeItem(item),
+                                      onView: () => _viewItem(item),
                                     );
                                   },
                                   childCount: filteredItems.length,
@@ -1570,6 +1598,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                         addedLabel: addedLabel,
                                         onPlay: () => _playItem(item),
                                         onRemove: () => _removeItem(item),
+                                        onView: () => _viewItem(item),
                                       ),
                                     );
                                   },
@@ -1597,6 +1626,7 @@ class _PlaylistCard extends StatefulWidget {
   final String? addedLabel;
   final VoidCallback onPlay;
   final VoidCallback onRemove;
+  final VoidCallback onView;
 
   const _PlaylistCard({
     required this.title,
@@ -1606,6 +1636,7 @@ class _PlaylistCard extends StatefulWidget {
     this.addedLabel,
     required this.onPlay,
     required this.onRemove,
+    required this.onView,
   });
 
   @override
@@ -1615,8 +1646,10 @@ class _PlaylistCard extends StatefulWidget {
 class _PlaylistCardState extends State<_PlaylistCard> {
   late final FocusNode _focusNode;
   late final FocusNode _removeFocusNode;
+  late final FocusNode _viewFocusNode;
   bool _focused = false;
   bool _removeFocused = false;
+  bool _viewFocused = false;
 
   static const Map<ShortcutActivator, Intent> _activateShortcuts = <ShortcutActivator, Intent>{
     SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
@@ -1631,6 +1664,8 @@ class _PlaylistCardState extends State<_PlaylistCard> {
       ..addListener(_handleCardFocusChange);
     _removeFocusNode = FocusNode(debugLabel: 'playlist-card-remove-${widget.title}')
       ..addListener(_handleRemoveFocusChange);
+    _viewFocusNode = FocusNode(debugLabel: 'playlist-card-view-${widget.title}')
+      ..addListener(_handleViewFocusChange);
   }
 
   @override
@@ -1639,6 +1674,7 @@ class _PlaylistCardState extends State<_PlaylistCard> {
     if (widget.title != oldWidget.title) {
       _focusNode.debugLabel = 'playlist-card-${widget.title}';
       _removeFocusNode.debugLabel = 'playlist-card-remove-${widget.title}';
+      _viewFocusNode.debugLabel = 'playlist-card-view-${widget.title}';
     }
   }
 
@@ -1648,6 +1684,8 @@ class _PlaylistCardState extends State<_PlaylistCard> {
     _focusNode.dispose();
     _removeFocusNode.removeListener(_handleRemoveFocusChange);
     _removeFocusNode.dispose();
+    _viewFocusNode.removeListener(_handleViewFocusChange);
+    _viewFocusNode.dispose();
     super.dispose();
   }
 
@@ -1673,6 +1711,13 @@ class _PlaylistCardState extends State<_PlaylistCard> {
     if (!mounted) return;
     setState(() {
       _removeFocused = _removeFocusNode.hasFocus;
+    });
+  }
+
+  void _handleViewFocusChange() {
+    if (!mounted) return;
+    setState(() {
+      _viewFocused = _viewFocusNode.hasFocus;
     });
   }
 
@@ -1853,7 +1898,9 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 8),
+                                  _buildViewButton(context),
+                                  const SizedBox(width: 8),
                                   _buildRemoveButton(context),
                                 ],
                               ),
@@ -2024,6 +2071,60 @@ class _PlaylistCardState extends State<_PlaylistCard> {
               padding: EdgeInsets.all(10),
               child: Icon(
                 Icons.delete_outline_rounded,
+                color: Colors.white70,
+                size: 22,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewButton(BuildContext context) {
+    final theme = Theme.of(context);
+    final highlightColor = theme.colorScheme.primary;
+
+    return FocusableActionDetector(
+      focusNode: _viewFocusNode,
+      shortcuts: _activateShortcuts,
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            widget.onView();
+            return null;
+          },
+        ),
+      },
+      onShowFocusHighlight: (visible) {
+        if (_viewFocused != visible) {
+          setState(() => _viewFocused = visible);
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: _viewFocused
+              ? highlightColor.withValues(alpha: 0.22)
+              : Colors.black.withValues(alpha: 0.32),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: _viewFocused
+                ? highlightColor.withValues(alpha: 0.7)
+                : Colors.white.withValues(alpha: 0.12),
+          ),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: widget.onView,
+            customBorder: const CircleBorder(),
+            canRequestFocus: false,
+            child: const Padding(
+              padding: EdgeInsets.all(10),
+              child: Icon(
+                Icons.folder_open_rounded,
                 color: Colors.white70,
                 size: 22,
               ),
@@ -2382,6 +2483,7 @@ class _TvPlaylistCard extends StatefulWidget {
   final List<String> metadata;
   final VoidCallback onPlay;
   final VoidCallback onRemove;
+  final VoidCallback onView;
 
   const _TvPlaylistCard({
     required this.title,
@@ -2390,6 +2492,7 @@ class _TvPlaylistCard extends StatefulWidget {
     this.metadata = const <String>[],
     required this.onPlay,
     required this.onRemove,
+    required this.onView,
   });
 
   @override
@@ -2445,6 +2548,15 @@ class _TvPlaylistCardState extends State<_TvPlaylistCard> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    // Handle info/menu button for View
+    if (event.logicalKey == LogicalKeyboardKey.info ||
+        event.logicalKey == LogicalKeyboardKey.contextMenu) {
+      if (event is KeyDownEvent) {
+        widget.onView();
+        return KeyEventResult.handled;
+      }
+    }
+
     final isActivateKey = event.logicalKey == LogicalKeyboardKey.select ||
         event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.space;

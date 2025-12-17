@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'tvmaze_cache_service.dart';
 
 class TVMazeService {
   static const String _baseUrl = 'https://api.tvmaze.com';
@@ -10,11 +11,27 @@ class TVMazeService {
   static const Duration _timeout = Duration(seconds: 15);
   static bool _isAvailable = true;
   static DateTime? _lastAvailabilityCheck;
+  static bool _cacheInitialized = false;
+
+  /// Initialize the service and cleanup expired cache
+  static Future<void> initialize() async {
+    if (_cacheInitialized) return;
+
+    try {
+      await TVMazeCacheService.cleanupExpired();
+      _cacheInitialized = true;
+    } catch (e) {
+      // Silently fail - cache is optional
+    }
+  }
 
   /// Check if the service is available with caching
   static Future<bool> isAvailable() async {
+    // Ensure cache is initialized
+    await initialize();
+
     // Cache availability check for 5 minutes to avoid excessive checks
-    if (_lastAvailabilityCheck != null && 
+    if (_lastAvailabilityCheck != null &&
         DateTime.now().difference(_lastAvailabilityCheck!) < const Duration(minutes: 5)) {
       return _isAvailable;
     }
@@ -26,7 +43,7 @@ class TVMazeService {
           'Accept': 'application/json',
         },
       ).timeout(const Duration(seconds: 10));
-      
+
       _isAvailable = response.statusCode == 200;
       _lastAvailabilityCheck = DateTime.now();
       return _isAvailable;
@@ -145,10 +162,26 @@ class TVMazeService {
   static Future<Map<String, dynamic>?> searchShow(String showName) async {
     final cleanName = _cleanShowName(showName);
     final cacheKey = 'search_$cleanName';
-    
+
+    // Check in-memory cache first
     if (_cache.containsKey(cacheKey)) {
+      print('🎯 TVMaze: Memory cache HIT for "$cleanName"');
       return _cache[cacheKey];
     }
+
+    // Check persistent cache
+    final persistedData = await TVMazeCacheService.get(cacheKey);
+    if (persistedData != null) {
+      print('💾 TVMaze: Persistent cache HIT for "$cleanName"');
+      // Store in memory cache for faster access
+      _cache[cacheKey] = persistedData;
+      if (persistedData['id'] != null) {
+        _seriesIdCache[cleanName.toLowerCase()] = persistedData['id'] as int;
+      }
+      return persistedData;
+    }
+
+    print('❌ TVMaze: Cache MISS for "$cleanName", calling API...');
 
     // Check availability first
     if (!await isAvailable()) {
@@ -157,6 +190,8 @@ class TVMazeService {
       if (alternativeResult != null) {
         _cache[cacheKey] = alternativeResult;
         _seriesIdCache[cleanName.toLowerCase()] = alternativeResult['id'] as int;
+        // Save to persistent cache
+        await TVMazeCacheService.set(cacheKey, alternativeResult);
         return alternativeResult;
       }
       // Cache the failure to prevent repeated API calls
@@ -188,6 +223,9 @@ class TVMazeService {
               final show = results.first['show'] as Map<String, dynamic>;
               _cache[cacheKey] = show;
               _seriesIdCache[cleanName.toLowerCase()] = show['id'] as int;
+              // Save to persistent cache
+              await TVMazeCacheService.set(cacheKey, show);
+              print('✅ TVMaze: API success for "$cleanName" → cached (expires in 30 days)');
               return show;
             }
           } else if (response.statusCode == 429) {
@@ -223,9 +261,11 @@ class TVMazeService {
     if (alternativeResult != null) {
       _cache[cacheKey] = alternativeResult;
       _seriesIdCache[cleanName.toLowerCase()] = alternativeResult['id'] as int;
+      // Save to persistent cache
+      await TVMazeCacheService.set(cacheKey, alternativeResult);
       return alternativeResult;
     }
-    
+
     // Cache the failure to prevent repeated API calls
     _cache[cacheKey] = null;
     return null;
@@ -234,12 +274,26 @@ class TVMazeService {
   /// Get episodes for a show by ID with retry logic
   static Future<List<Map<String, dynamic>>> getEpisodes(int showId) async {
     final cacheKey = 'episodes_$showId';
+
+    // Check in-memory cache first
     if (_cache.containsKey(cacheKey)) {
       final cached = _cache[cacheKey];
       if (cached is List) {
+        print('🎯 TVMaze: Memory cache HIT for episodes (showId: $showId)');
         return List<Map<String, dynamic>>.from(cached);
       }
     }
+
+    // Check persistent cache
+    final persistedData = await TVMazeCacheService.getList(cacheKey);
+    if (persistedData != null) {
+      print('💾 TVMaze: Persistent cache HIT for episodes (showId: $showId, count: ${persistedData.length})');
+      // Store in memory cache for faster access
+      _cache[cacheKey] = persistedData;
+      return persistedData;
+    }
+
+    print('❌ TVMaze: Cache MISS for episodes (showId: $showId), calling API...');
 
     // Check availability first
     if (!await isAvailable()) {
@@ -261,6 +315,9 @@ class TVMazeService {
               .map((episode) => episode as Map<String, dynamic>)
               .toList();
           _cache[cacheKey] = episodeList;
+          // Save to persistent cache
+          await TVMazeCacheService.setList(cacheKey, episodeList);
+          print('✅ TVMaze: API success for episodes (showId: $showId, count: ${episodeList.length}) → cached (expires in 30 days)');
           return episodeList;
         } else if (response.statusCode == 429) {
           // Rate limited, wait and retry
@@ -342,20 +399,24 @@ class TVMazeService {
   static bool get currentAvailability => _isAvailable;
 
   /// Clear cache
-  static void clearCache() {
+  static Future<void> clearCache() async {
     _cache.clear();
     _seriesIdCache.clear();
     _lastAvailabilityCheck = null;
+    // Clear persistent cache too
+    await TVMazeCacheService.clearAll();
   }
 
   /// Clear cache for a specific series
-  static void clearSeriesCache(String seriesTitle) {
+  static Future<void> clearSeriesCache(String seriesTitle) async {
     final cleanName = _cleanShowName(seriesTitle);
     final searchKey = 'search_$cleanName';
     final seriesIdKey = cleanName.toLowerCase();
-    
+
     _cache.remove(searchKey);
     _seriesIdCache.remove(seriesIdKey);
-    
+
+    // Clear persistent cache too
+    await TVMazeCacheService.clearSeriesCache(seriesTitle);
   }
-} 
+}

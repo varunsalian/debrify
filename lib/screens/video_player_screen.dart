@@ -61,6 +61,8 @@ class VideoPlayerScreen extends StatefulWidget {
   final bool hideBackButton;
   // HTTP headers for authenticated streaming (e.g., PikPak, private CDNs)
   final Map<String, String>? httpHeaders;
+  // Disable auto-resume - start from the specified startIndex instead of last played
+  final bool disableAutoResume;
 
   const VideoPlayerScreen({
     Key? key,
@@ -83,6 +85,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.hideOptions = false,
     this.hideBackButton = false,
     this.httpHeaders,
+    this.disableAutoResume = false,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -337,30 +340,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (widget.playlist != null && widget.playlist!.isNotEmpty) {
       // Initialize playlist
 
-      // Check if this is a series and we should find the first episode by season/episode
-      final seriesPlaylist = _seriesPlaylist;
-      if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-        // Try to restore the last played episode first
-        final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
-        if (lastEpisode != null) {
-          debugPrint(
-            'VideoPlayer: resume series "${seriesPlaylist.seriesTitle}" at S${lastEpisode['season']}E${lastEpisode['episode']} originalIndex=${lastEpisode['originalIndex']}',
-          );
-          initialIndex = lastEpisode['originalIndex'] as int;
-        } else {
-          // Find the first episode (lowest season, lowest episode)
-          final firstEpisodeIndex = seriesPlaylist
-              .getFirstEpisodeOriginalIndex();
-          if (firstEpisodeIndex != -1) {
-            initialIndex = firstEpisodeIndex;
-          } else {
-            initialIndex = widget.startIndex ?? 0;
-          }
-          debugPrint(
-            'VideoPlayer: no stored resume for "${seriesPlaylist.seriesTitle}", defaulting to index=$initialIndex',
-          );
-        }
+      // If auto-resume is disabled, use startIndex directly
+      if (widget.disableAutoResume) {
+        initialIndex = widget.startIndex ?? 0;
+        debugPrint('VideoPlayer: auto-resume disabled, using startIndex=$initialIndex');
       } else {
+        // Check if this is a series and we should find the first episode by season/episode
+        final seriesPlaylist = _seriesPlaylist;
+        if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+          // Try to restore the last played episode first
+          final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
+          if (lastEpisode != null) {
+            debugPrint(
+              'VideoPlayer: resume series "${seriesPlaylist.seriesTitle}" at S${lastEpisode['season']}E${lastEpisode['episode']} originalIndex=${lastEpisode['originalIndex']}',
+            );
+            initialIndex = lastEpisode['originalIndex'] as int;
+          } else {
+            // Find the first episode (lowest season, lowest episode)
+            final firstEpisodeIndex = seriesPlaylist
+                .getFirstEpisodeOriginalIndex();
+            if (firstEpisodeIndex != -1) {
+              initialIndex = firstEpisodeIndex;
+            } else {
+              initialIndex = widget.startIndex ?? 0;
+            }
+            debugPrint(
+              'VideoPlayer: no stored resume for "${seriesPlaylist.seriesTitle}", defaulting to index=$initialIndex',
+            );
+          }
+        } else {
         // For non-series playlists, try to restore the last played video
 		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
 			// Try to find the last played video by checking each playlist entry
@@ -401,6 +409,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 			initialIndex = widget.startIndex ?? 0;
 		}
 	}
+      }
     } else {}
 
     // Get the initial URL from the determined index

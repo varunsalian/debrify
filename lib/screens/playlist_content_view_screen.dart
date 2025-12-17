@@ -1,0 +1,2087 @@
+import 'package:flutter/material.dart';
+
+import '../models/rd_file_node.dart';
+import '../models/series_playlist.dart';
+import '../services/storage_service.dart';
+import '../services/debrid_service.dart';
+import '../services/torbox_service.dart';
+import '../services/pikpak_api_service.dart';
+import '../services/video_player_launcher.dart';
+import '../services/main_page_bridge.dart';
+import '../utils/series_parser.dart';
+import '../utils/file_utils.dart';
+import '../utils/formatters.dart';
+import '../utils/rd_folder_tree_builder.dart';
+import '../utils/torbox_folder_tree_builder.dart';
+import '../widgets/view_mode_dropdown.dart';
+import 'video_player_screen.dart';
+
+/// Screen for viewing contents of a playlist item
+/// Supports Raw, Sort, and Series Arrange view modes
+/// Handles folder navigation and progress tracking
+class PlaylistContentViewScreen extends StatefulWidget {
+  final Map<String, dynamic> playlistItem;
+  final VoidCallback? onPlaybackStarted;
+
+  const PlaylistContentViewScreen({
+    super.key,
+    required this.playlistItem,
+    this.onPlaybackStarted,
+  });
+
+  @override
+  State<PlaylistContentViewScreen> createState() => _PlaylistContentViewScreenState();
+}
+
+class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  // Current navigation state
+  List<String> _folderPath = []; // Path segments for breadcrumbs
+  RDFileNode? _rootContent; // Root content tree
+  List<RDFileNode>? _currentViewNodes; // Current folder's visible nodes (after view mode transformation)
+
+  // View mode state
+  FolderViewMode _currentViewMode = FolderViewMode.raw;
+
+  // Focus management for TV navigation
+  final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'playlist-view-mode-dropdown');
+  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'playlist-back-button');
+
+  // Progress tracking cache
+  Map<String, Map<String, dynamic>> _fileProgressCache = {};
+
+  // OTT View state
+  SeriesPlaylist? _seriesPlaylist;
+  int _selectedSeasonNumber = 1;
+  bool _isLoadingSeriesMetadata = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeScreen();
+  }
+
+  /// Initialize screen by loading saved mode first, then content
+  Future<void> _initializeScreen() async {
+    // Load saved view mode first
+    await _loadSavedViewMode();
+
+    // Then load content and apply the saved (or default) view mode
+    await _loadContent();
+
+    // Load progress data for files
+    await _loadProgressData();
+  }
+
+  @override
+  void dispose() {
+    _viewModeDropdownFocusNode.dispose();
+    _backButtonFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// Load saved view mode for this playlist item
+  Future<void> _loadSavedViewMode() async {
+    final savedModeString = await StorageService.getPlaylistItemViewMode(widget.playlistItem);
+    if (savedModeString != null && mounted) {
+      setState(() {
+        _currentViewMode = _viewModeFromString(savedModeString);
+      });
+    }
+  }
+
+  /// Convert string to FolderViewMode
+  FolderViewMode _viewModeFromString(String mode) {
+    switch (mode) {
+      case 'raw':
+        return FolderViewMode.raw;
+      case 'sortedAZ':
+        return FolderViewMode.sortedAZ;
+      case 'seriesArrange':
+        return FolderViewMode.seriesArrange;
+      default:
+        return FolderViewMode.raw;
+    }
+  }
+
+  /// Convert FolderViewMode to string
+  String _viewModeToString(FolderViewMode mode) {
+    switch (mode) {
+      case FolderViewMode.raw:
+        return 'raw';
+      case FolderViewMode.sortedAZ:
+        return 'sortedAZ';
+      case FolderViewMode.seriesArrange:
+        return 'seriesArrange';
+    }
+  }
+
+  /// Load progress data for all files
+  Future<void> _loadProgressData() async {
+    try {
+      // Get the series/collection title from the playlist item
+      final String? seriesTitle = widget.playlistItem['seriesTitle'] as String?;
+      print('🎬 Loading progress for series: $seriesTitle');
+      print('📦 Playlist item keys: ${widget.playlistItem.keys.toList()}');
+
+      // If it's a series, load all episode progress
+      if (seriesTitle != null && seriesTitle.isNotEmpty) {
+        final episodeProgress = await StorageService.getEpisodeProgress(
+          seriesTitle: seriesTitle,
+        );
+        print('📊 Loaded ${episodeProgress.length} episodes with progress');
+        print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
+        setState(() {
+          _fileProgressCache = episodeProgress;
+        });
+      } else {
+        print('⚠️ No series title found, trying fallback methods');
+        // Fallback: try to get title from other fields
+        final title = widget.playlistItem['title'] as String?;
+        if (title != null) {
+          print('🔄 Trying with title: $title');
+          final episodeProgress = await StorageService.getEpisodeProgress(
+            seriesTitle: title,
+          );
+          print('📊 Loaded ${episodeProgress.length} episodes with progress');
+          print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
+          setState(() {
+            _fileProgressCache = episodeProgress;
+          });
+        } else {
+          _fileProgressCache = {};
+        }
+      }
+    } catch (e) {
+      print('❌ Error loading progress data: $e');
+      _fileProgressCache = {};
+    }
+  }
+
+  /// Load content from provider
+  Future<void> _loadContent() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final provider = (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
+
+      if (provider == 'torbox') {
+        await _loadTorboxContent();
+      } else if (provider == 'pikpak') {
+        await _loadPikPakContent();
+      } else {
+        await _loadRealDebridContent();
+      }
+
+      // Apply initial view mode
+      if (_rootContent != null) {
+        _applyViewMode(_currentViewMode);
+      }
+    } catch (e) {
+      print('Error loading content: $e');
+      setState(() {
+        _errorMessage = 'Failed to load content: ${e.toString()}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Load Real-Debrid content
+  Future<void> _loadRealDebridContent() async {
+    final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
+    if (rdTorrentId == null) {
+      throw Exception('No Real-Debrid torrent ID found');
+    }
+
+    final apiKey = await StorageService.getApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('No API key configured');
+    }
+
+    final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
+    final allFiles = (info['files'] as List<dynamic>? ?? const []);
+
+    if (allFiles.isEmpty) {
+      throw Exception('No files found in torrent');
+    }
+
+    // Use existing RDFolderTreeBuilder utility
+    _rootContent = RDFolderTreeBuilder.buildTree(allFiles.cast<Map<String, dynamic>>());
+  }
+
+  /// Load Torbox content
+  Future<void> _loadTorboxContent() async {
+    final torboxTorrentId = widget.playlistItem['torboxTorrentId'] as int?;
+    if (torboxTorrentId == null) {
+      throw Exception('No Torbox torrent ID found');
+    }
+
+    final String? apiKey = await StorageService.getTorboxApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Please set your Torbox API key in Settings');
+    }
+
+    final cachedTorrent = await TorboxService.getTorrentById(apiKey, torboxTorrentId);
+    if (cachedTorrent == null) {
+      throw Exception('Torrent not found');
+    }
+
+    final allFiles = cachedTorrent.files ?? [];
+    if (allFiles.isEmpty) {
+      throw Exception('No files found in torrent');
+    }
+
+    // Use existing TorboxFolderTreeBuilder utility which accepts TorboxFile objects
+    _rootContent = TorboxFolderTreeBuilder.buildTree(allFiles);
+  }
+
+  /// Load PikPak content
+  Future<void> _loadPikPakContent() async {
+    // Check if we have cached files
+    final cachedFiles = widget.playlistItem['pikpakFiles'] as List?;
+
+    if (cachedFiles != null && cachedFiles.isNotEmpty) {
+      // Use cached data
+      final files = cachedFiles.cast<Map<String, dynamic>>();
+      _rootContent = _buildPikPakFileTree(files);
+    } else {
+      // Fetch from API
+      final pikpakFileId = widget.playlistItem['pikpakFileId'] as String?;
+      if (pikpakFileId == null) {
+        throw Exception('No PikPak file ID found');
+      }
+
+      // Fetch folder contents recursively
+      final files = await PikPakApiService.instance.listFilesRecursive(folderId: pikpakFileId);
+      _rootContent = _buildPikPakFileTree(files);
+    }
+  }
+
+  /// Build file tree from PikPak files (from recursive list)
+  /// Since PikPak provides a flat list from recursive fetch, we display it as-is
+  RDFileNode _buildPikPakFileTree(List<Map<String, dynamic>> files) {
+    final List<RDFileNode> nodes = [];
+
+    for (int i = 0; i < files.length; i++) {
+      final file = files[i];
+      final kind = file['kind'] ?? '';
+      final name = (file['name'] as String?) ?? 'Unknown';
+      // PikPak returns size as String, need to parse it
+      final sizeRaw = file['size'];
+      final size = sizeRaw is int ? sizeRaw : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
+
+      if (kind == 'drive#folder') {
+        // Add folder node (children will be in the flat list separately)
+        nodes.add(RDFileNode.folder(
+          name: name,
+          children: [], // Flat structure - folders appear empty but work with series/sort views
+        ));
+      } else {
+        // Add file node
+        nodes.add(RDFileNode.file(
+          name: name,
+          fileId: i,
+          path: name,
+          bytes: size,
+          linkIndex: i,
+        ));
+      }
+    }
+
+    return RDFileNode.folder(name: 'Root', children: nodes);
+  }
+
+  /// Apply view mode transformation
+  void _applyViewMode(FolderViewMode mode) {
+    if (_rootContent == null) return;
+
+    setState(() {
+      _currentViewMode = mode;
+
+      // Get current folder's nodes
+      RDFileNode currentFolder = _rootContent!;
+      for (final segment in _folderPath) {
+        // Find child folder by name
+        RDFileNode? child;
+        try {
+          child = currentFolder.children.firstWhere(
+            (c) => c.name == segment && c.isFolder,
+          );
+        } catch (e) {
+          // Folder not found - reset to root
+          print('Warning: Folder "$segment" not found in current view, resetting to root');
+          _folderPath.clear();
+          currentFolder = _rootContent!;
+          break;
+        }
+
+        if (child != null) {
+          currentFolder = child;
+        }
+      }
+
+      // Apply transformation based on mode
+      switch (mode) {
+        case FolderViewMode.raw:
+          _currentViewNodes = currentFolder.children;
+          break;
+        case FolderViewMode.sortedAZ:
+          _currentViewNodes = _applySortedView(currentFolder.children);
+          break;
+        case FolderViewMode.seriesArrange:
+          _currentViewNodes = _applySeriesArrangeView(currentFolder.children);
+          break;
+      }
+    });
+
+    // Save view mode preference
+    StorageService.savePlaylistItemViewMode(widget.playlistItem, _viewModeToString(mode));
+  }
+
+  /// Apply sorted A-Z view
+  List<RDFileNode> _applySortedView(List<RDFileNode> nodes) {
+    final folders = nodes.where((n) => n.isFolder).toList();
+    final files = nodes.where((n) => !n.isFolder).toList();
+
+    // Sort folders numerically/alphabetically
+    folders.sort((a, b) {
+      final aNum = _extractNumber(a.name);
+      final bNum = _extractNumber(b.name);
+
+      if (aNum != null && bNum != null) {
+        return aNum.compareTo(bNum);
+      }
+
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
+    // Sort files numerically/alphabetically
+    files.sort((a, b) {
+      final aNum = _extractNumber(a.name);
+      final bNum = _extractNumber(b.name);
+
+      if (aNum != null && bNum != null) {
+        return aNum.compareTo(bNum);
+      }
+
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
+    return [...folders, ...files];
+  }
+
+  /// Extract number from filename for numerical sorting
+  int? _extractNumber(String name) {
+    final patterns = [
+      RegExp(r'^(\d+)[\s._-]'),
+      RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
+      RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(name);
+      if (match != null && match.groupCount >= 1) {
+        return int.tryParse(match.group(1)!);
+      }
+    }
+
+    return null;
+  }
+
+  /// Apply series arrange view (creates virtual season folders)
+  List<RDFileNode> _applySeriesArrangeView(List<RDFileNode> nodes) {
+    final videoFiles = nodes.where((n) => !n.isFolder && FileUtils.isVideoFile(n.name)).toList();
+    final otherNodes = nodes.where((n) => n.isFolder || !FileUtils.isVideoFile(n.name)).toList();
+
+    if (videoFiles.length < 3) {
+      // Not enough files for series detection, fallback to sorted
+      _showSeriesDetectionFailed();
+      return _applySortedView(nodes);
+    }
+
+    // Parse filenames
+    final filenames = videoFiles.map((f) => f.name).toList();
+    final parsed = SeriesParser.parsePlaylist(filenames);
+
+    // Check if it's actually a series
+    final analysis = SeriesParser.analyzePlaylistConfidence(filenames);
+    if (analysis.classification != PlaylistClassification.SERIES) {
+      _showSeriesDetectionFailed();
+      return _applySortedView(nodes);
+    }
+
+    // Group by season
+    final Map<int, List<RDFileNode>> seasonMap = {};
+    for (int i = 0; i < videoFiles.length; i++) {
+      final info = parsed[i];
+      if (info.isSeries && info.season != null) {
+        seasonMap.putIfAbsent(info.season!, () => []);
+        seasonMap[info.season!]!.add(videoFiles[i]);
+      }
+    }
+
+    // Create virtual season folders
+    final List<RDFileNode> seasonFolders = [];
+    for (final seasonNum in seasonMap.keys.toList()..sort()) {
+      final seasonFiles = seasonMap[seasonNum]!;
+      seasonFolders.add(RDFileNode.folder(
+        name: seasonNum == 0 ? 'Season 0 - Specials' : 'Season $seasonNum',
+        children: seasonFiles,
+      ));
+    }
+
+    return [...otherNodes, ...seasonFolders];
+  }
+
+  /// Show snackbar when series detection fails
+  void _showSeriesDetectionFailed() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No series detected. Switching to Sort (A-Z) view.'),
+        duration: Duration(seconds: 3),
+        backgroundColor: Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Navigate into a folder
+  void _navigateIntoFolder(RDFileNode folder) {
+    if (!folder.isFolder) return;
+
+    setState(() {
+      _folderPath.add(folder.name);
+    });
+
+    _applyViewMode(_currentViewMode);
+  }
+
+  /// Navigate up one level
+  void _navigateUp() {
+    if (_folderPath.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    setState(() {
+      _folderPath.removeLast();
+    });
+
+    _applyViewMode(_currentViewMode);
+  }
+
+  /// Play a file
+  Future<void> _playFile(RDFileNode file) async {
+    if (file.isFolder) return;
+
+    widget.onPlaybackStarted?.call();
+
+    // Implementation depends on provider
+    final provider = (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
+
+    try {
+      if (provider == 'torbox') {
+        await _playTorboxFile(file);
+      } else if (provider == 'pikpak') {
+        await _playPikPakFile(file);
+      } else {
+        await _playRealDebridFile(file);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to play file: $e')),
+      );
+    }
+  }
+
+  /// Play Real-Debrid file
+  Future<void> _playRealDebridFile(RDFileNode file) async {
+    final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
+    if (rdTorrentId == null) {
+      throw Exception('No Real-Debrid torrent ID found');
+    }
+
+    final apiKey = await StorageService.getApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('No API key configured');
+    }
+
+    // Get torrent info to access the links array
+    final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
+    final links = (info['links'] as List<dynamic>?) ?? [];
+
+    if (file.linkIndex < 0 || file.linkIndex >= links.length) {
+      throw Exception('Invalid link index for file');
+    }
+
+    // Get the restricted link for this specific file
+    final restrictedLink = links[file.linkIndex].toString();
+
+    // Unrestrict the link to get the direct download URL
+    final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
+    final downloadLink = unrestrictResult['download']?.toString() ?? '';
+
+    if (downloadLink.isEmpty) {
+      throw Exception('Failed to get download link');
+    }
+
+    if (!mounted) return;
+
+    // Launch video player
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: downloadLink,
+        title: file.name,
+        subtitle: Formatters.formatFileSize(file.bytes ?? 0),
+        rdTorrentId: rdTorrentId,
+      ),
+    );
+  }
+
+  /// Play Torbox file
+  Future<void> _playTorboxFile(RDFileNode file) async {
+    final torboxTorrentId = widget.playlistItem['torboxTorrentId'] as int?;
+    if (torboxTorrentId == null) {
+      throw Exception('No Torbox torrent ID found');
+    }
+
+    final String? apiKey = await StorageService.getTorboxApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Please set your Torbox API key in Settings');
+    }
+
+    // Get streaming link for the file
+    if (file.fileId == null) {
+      throw Exception('File ID not found');
+    }
+
+    final url = await TorboxService.requestFileDownloadLink(
+      apiKey: apiKey,
+      torrentId: torboxTorrentId,
+      fileId: file.fileId!,
+    );
+
+    if (url.isEmpty) {
+      throw Exception('Failed to get streaming URL');
+    }
+
+    if (!mounted) return;
+
+    // Launch video player
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: url,
+        title: file.name,
+        subtitle: Formatters.formatFileSize(file.bytes ?? 0),
+      ),
+    );
+  }
+
+  /// Play PikPak file
+  Future<void> _playPikPakFile(RDFileNode file) async {
+    final pikpak = PikPakApiService.instance;
+
+    // Check if PikPak is authenticated
+    if (!await pikpak.isAuthenticated()) {
+      throw Exception('Please login to PikPak in Settings');
+    }
+
+    // For PikPak, we need to get the file details to get streaming URL
+    // The file.path contains the original filename from the cached data
+    // We need to find the file ID from the cached files
+
+    final cachedFiles = widget.playlistItem['pikpakFiles'] as List?;
+    if (cachedFiles == null || cachedFiles.isEmpty) {
+      throw Exception('No PikPak file information available');
+    }
+
+    // Find the file in cached data by matching name
+    final fileData = cachedFiles.cast<Map<String, dynamic>>().firstWhere(
+      (f) => f['name'] == file.name,
+      orElse: () => throw Exception('File not found in cached data'),
+    );
+
+    final fileId = fileData['id'] as String?;
+    if (fileId == null || fileId.isEmpty) {
+      throw Exception('File ID not found');
+    }
+
+    // Get file details with streaming URL
+    final details = await pikpak.getFileDetails(fileId);
+    final url = pikpak.getStreamingUrl(details);
+
+    if (url == null || url.isEmpty) {
+      throw Exception('Failed to get streaming URL');
+    }
+
+    if (!mounted) return;
+
+    // Launch video player
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: url,
+        title: file.name,
+        subtitle: Formatters.formatFileSize(file.bytes ?? 0),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (widget.playlistItem['title'] as String?) ?? 'Playlist Item';
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          focusNode: _backButtonFocusNode,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _navigateUp,
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 16)),
+            if (_folderPath.isNotEmpty)
+              Text(
+                _folderPath.join(' > '),
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadContent,
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // View mode dropdown
+          if (!_isLoading && _errorMessage == null)
+            ViewModeDropdown(
+              currentMode: _currentViewMode,
+              onModeChanged: _applyViewMode,
+              focusNode: _viewModeDropdownFocusNode,
+            ),
+
+          // Content area
+          Expanded(
+            child: _buildContent(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadContent,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_currentViewNodes == null || _currentViewNodes!.isEmpty) {
+      return const Center(child: Text('No files found'));
+    }
+
+    // For Series Arrange mode, show OTT-style view
+    if (_currentViewMode == FolderViewMode.seriesArrange) {
+      return _buildOTTView();
+    }
+
+    // For Raw and Sort modes, show file browser
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _currentViewNodes!.length,
+      itemBuilder: (context, index) {
+        final node = _currentViewNodes![index];
+        return _buildFileCard(node);
+      },
+    );
+  }
+
+  Widget _buildFileCard(RDFileNode node) {
+    final isFolder = node.isFolder;
+    final isVideo = !isFolder && FileUtils.isVideoFile(node.name);
+
+    // Get progress for this file (if it's a video)
+    double progress = 0.0;
+    bool isFinished = false;
+    if (isVideo) {
+      // Try to get progress from cache
+      // For series, use season/episode key; for others use filename
+      final progressData = _getProgressForFile(node);
+      if (progressData != null) {
+        final positionMs = progressData['positionMs'] as int? ?? 0;
+        final durationMs = progressData['durationMs'] as int? ?? 0;
+        if (durationMs > 0) {
+          progress = positionMs / durationMs;
+          // Consider finished if 90%+ watched or less than 2 minutes remaining
+          isFinished = progress >= 0.9 || (durationMs - positionMs) < 120000;
+        }
+      }
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: const Color(0xFF1E293B),
+      child: InkWell(
+        onTap: () {
+          if (isFolder) {
+            _navigateIntoFolder(node);
+          } else if (isVideo) {
+            _playFile(node);
+          }
+        },
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  // Icon
+                  Icon(
+                    isFolder
+                        ? Icons.folder
+                        : isVideo
+                            ? Icons.play_circle_outline
+                            : Icons.insert_drive_file,
+                    color: isFolder ? Colors.amber : Colors.blue,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 12),
+
+                  // File info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          node.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isFolder
+                              ? '${node.fileCount} files • ${Formatters.formatFileSize(node.totalBytes)}'
+                              : Formatters.formatFileSize(node.bytes ?? 0),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Arrow for folders or progress indicator for videos
+                  if (isFolder)
+                    const Icon(Icons.chevron_right, color: Colors.white54)
+                  else if (isVideo && progress > 0.0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isFinished ? const Color(0xFF059669) : Colors.blue,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        isFinished ? 'DONE' : '${(progress * 100).round()}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Progress bar overlay for videos
+            if (isVideo && progress > 0.0)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.3),
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: progress,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isFinished ? const Color(0xFF059669) : Colors.blue,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Get progress data for a specific file
+  Map<String, dynamic>? _getProgressForFile(RDFileNode file) {
+    // Try to parse season/episode from filename for series
+    final seriesInfo = SeriesParser.parseFilename(file.name);
+    if (seriesInfo.isSeries && seriesInfo.season != null && seriesInfo.episode != null) {
+      final key = '${seriesInfo.season}_${seriesInfo.episode}';
+      return _fileProgressCache[key];
+    }
+
+    // For non-series, try using filename as key
+    return _fileProgressCache[file.name];
+  }
+
+  /// Build OTT-style view for Series Arrange mode
+  Widget _buildOTTView() {
+    // Parse series playlist if not already done
+    if (_seriesPlaylist == null && _rootContent != null) {
+      _parseSeriesPlaylist();
+    }
+
+    if (_seriesPlaylist == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (!_seriesPlaylist!.isSeries) {
+      // Auto-switch to Sort (A-Z) view after a brief delay
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && _currentViewMode == FolderViewMode.seriesArrange) {
+          setState(() {
+            _currentViewMode = FolderViewMode.sortedAZ;
+            _applyViewMode(FolderViewMode.sortedAZ);
+          });
+        }
+      });
+
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.info_outline, size: 48, color: Colors.white70),
+              const SizedBox(height: 16),
+              const Text(
+                'No series detected in this content',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Switching to Sort (A-Z) view...',
+                style: TextStyle(color: Colors.white60, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final season = _seriesPlaylist!.getSeason(_selectedSeasonNumber);
+    if (season == null) {
+      // Default to first available season
+      if (_seriesPlaylist!.seasons.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          setState(() {
+            _selectedSeasonNumber = _seriesPlaylist!.seasons.first.seasonNumber;
+          });
+        });
+      }
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Column(
+      children: [
+        // Season selector
+        _buildSeasonSelector(),
+
+        // Loading indicator for metadata
+        if (_isLoadingSeriesMetadata)
+          const LinearProgressIndicator(),
+
+        // Episode list
+        Expanded(
+          child: _buildEpisodeList(season),
+        ),
+      ],
+    );
+  }
+
+  /// Parse series playlist from current view nodes
+  Future<void> _parseSeriesPlaylist() async {
+    if (_rootContent == null) return;
+
+    setState(() {
+      _isLoadingSeriesMetadata = true;
+    });
+
+    try {
+      // Get ALL video files recursively from the entire content tree
+      final allFiles = _rootContent!.getAllFiles();
+      final videoFiles = allFiles
+          .where((node) => FileUtils.isVideoFile(node.name))
+          .toList();
+
+      if (videoFiles.isEmpty) {
+        setState(() {
+          _isLoadingSeriesMetadata = false;
+        });
+        return;
+      }
+
+      // Create PlaylistEntry objects from video files
+      final entries = videoFiles.map((f) => PlaylistEntry(
+        url: '',  // Not needed for parsing
+        title: f.name,
+      )).toList();
+
+      // Get series title from playlist item
+      final String? seriesTitle = widget.playlistItem['seriesTitle'] as String?;
+
+      _seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
+        entries,
+        collectionTitle: seriesTitle,
+      );
+
+      // Reload progress with the clean extracted series title!
+      if (_seriesPlaylist!.isSeries && _seriesPlaylist!.seriesTitle != null) {
+        print('🔄 Reloading progress with clean title: ${_seriesPlaylist!.seriesTitle}');
+        final episodeProgress = await StorageService.getEpisodeProgress(
+          seriesTitle: _seriesPlaylist!.seriesTitle!,
+        );
+        print('📊 Loaded ${episodeProgress.length} episodes with progress');
+        print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
+        _fileProgressCache = episodeProgress;
+      }
+
+      // Fetch TVMaze metadata asynchronously
+      if (_seriesPlaylist!.isSeries) {
+        _seriesPlaylist!.fetchEpisodeInfo().then((_) {
+          if (mounted) {
+            setState(() {
+              _isLoadingSeriesMetadata = false;
+            });
+          }
+        }).catchError((e) {
+          print('Failed to fetch episode metadata: $e');
+          if (mounted) {
+            setState(() {
+              _isLoadingSeriesMetadata = false;
+            });
+          }
+        });
+      } else {
+        setState(() {
+          _isLoadingSeriesMetadata = false;
+        });
+      }
+    } catch (e) {
+      print('Failed to parse series playlist: $e');
+      setState(() {
+        _isLoadingSeriesMetadata = false;
+      });
+    }
+  }
+
+  /// Build season selector dropdown
+  Widget _buildSeasonSelector() {
+    if (_seriesPlaylist == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.video_library, size: 20, color: Colors.white70),
+          const SizedBox(width: 12),
+          Text(
+            _seriesPlaylist!.seriesTitle ?? 'Series',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const Spacer(),
+          DropdownButton<int>(
+            value: _selectedSeasonNumber,
+            dropdownColor: const Color(0xFF1E293B),
+            underline: const SizedBox.shrink(),
+            items: _seriesPlaylist!.seasons.map((season) {
+              return DropdownMenuItem(
+                value: season.seasonNumber,
+                child: Text(
+                  season.seasonNumber == 0
+                      ? 'Specials'
+                      : 'Season ${season.seasonNumber}',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              );
+            }).toList(),
+            onChanged: (value) {
+              if (value != null) {
+                setState(() {
+                  _selectedSeasonNumber = value;
+                });
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build episode list
+  Widget _buildEpisodeList(SeriesSeason season) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: season.episodes.length,
+      itemBuilder: (context, index) {
+        final episode = season.episodes[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: _buildEpisodeCard(episode),
+        );
+      },
+    );
+  }
+
+  /// Build episode card with responsive layout (vertical on mobile, horizontal on desktop)
+  Widget _buildEpisodeCard(SeriesEpisode episode) {
+    // Get progress for this episode
+    double progress = 0.0;
+    bool isFinished = false;
+    if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+      final key = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
+      print('🔍 Looking for progress with key: $key for ${episode.displayTitle}');
+      print('💾 Available keys in cache: ${_fileProgressCache.keys.toList()}');
+      final progressData = _fileProgressCache[key];
+      if (progressData != null) {
+        print('✅ Found progress data: $progressData');
+        final positionMs = progressData['positionMs'] as int? ?? 0;
+        final durationMs = progressData['durationMs'] as int? ?? 0;
+        if (durationMs > 0) {
+          progress = positionMs / durationMs;
+          isFinished = progress >= 0.9 || (durationMs - positionMs) < 120000;
+          print('📈 Progress: ${(progress * 100).round()}%, Finished: $isFinished');
+        }
+      } else {
+        print('❌ No progress data found for key: $key');
+      }
+    }
+
+    final episodeInfo = episode.episodeInfo;
+    final hasMetadata = episodeInfo != null;
+
+    // Detect screen width for responsive layout
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    return Card(
+      color: const Color(0xFF1E293B),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _playEpisode(episode),
+        child: isMobile
+            ? _buildMobileEpisodeCard(episode, progress, isFinished, hasMetadata, episodeInfo)
+            : _buildDesktopEpisodeCard(episode, progress, isFinished, hasMetadata, episodeInfo),
+      ),
+    );
+  }
+
+  /// Build mobile vertical layout (thumbnail top, info bottom)
+  Widget _buildMobileEpisodeCard(
+    SeriesEpisode episode,
+    double progress,
+    bool isFinished,
+    bool hasMetadata,
+    EpisodeInfo? episodeInfo,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Thumbnail section with 16:9 aspect ratio
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Episode thumbnail or placeholder
+              if (hasMetadata && episodeInfo!.poster != null)
+                Image.network(
+                  episodeInfo.poster!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildThumbnailPlaceholder(episode);
+                  },
+                )
+              else
+                _buildThumbnailPlaceholder(episode),
+
+              // Play button overlay
+              Center(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    shape: BoxShape.circle,
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                ),
+              ),
+
+              // Top left: Episode number badge
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: const Color(0xFF6366F1),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(
+                    episode.seasonEpisodeString,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Top right: IMDB rating badge
+              if (hasMetadata && episodeInfo!.rating != null)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5C518),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star, color: Colors.black, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          episodeInfo.rating!.toStringAsFixed(1),
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Watch status badge (bottom left corner)
+              if (progress > 0.0)
+                Positioned(
+                  bottom: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isFinished
+                          ? const Color(0xFF059669)
+                          : const Color(0xFF6366F1),
+                      borderRadius: BorderRadius.circular(6),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isFinished ? Icons.check_circle : Icons.play_circle_filled,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isFinished
+                              ? 'WATCHED'
+                              : '${(progress * 100).round()}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+        // Info section below thumbnail
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Episode title with status chip
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      episode.displayTitle,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (progress > 0.0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isFinished
+                            ? const Color(0xFF059669).withValues(alpha: 0.2)
+                            : const Color(0xFF6366F1).withValues(alpha: 0.2),
+                        border: Border.all(
+                          color: isFinished
+                              ? const Color(0xFF059669)
+                              : const Color(0xFF6366F1),
+                          width: 1,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        isFinished ? 'WATCHED' : 'WATCHING',
+                        style: TextStyle(
+                          color: isFinished
+                              ? const Color(0xFF059669)
+                              : const Color(0xFF6366F1),
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Watch progress info
+              if (progress > 0.0 && !isFinished)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.history,
+                        size: 14,
+                        color: const Color(0xFF6366F1),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${(progress * 100).round()}% watched',
+                        style: const TextStyle(
+                          color: Color(0xFF6366F1),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Runtime and Air date
+              if (hasMetadata)
+                Row(
+                  children: [
+                    if (episodeInfo!.runtime != null) ...[
+                      const Icon(Icons.schedule, size: 14, color: Colors.white60),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${episodeInfo.runtime} min',
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    if (episodeInfo.runtime != null && episodeInfo.airDate != null)
+                      const Text('  •  ', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    if (episodeInfo.airDate != null) ...[
+                      const Icon(Icons.calendar_today, size: 14, color: Colors.white60),
+                      const SizedBox(width: 4),
+                      Text(
+                        episodeInfo.airDate!,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              const SizedBox(height: 8),
+
+              // Description
+              Text(
+                hasMetadata && episodeInfo!.plot != null
+                    ? episodeInfo.plot!
+                    : 'No description available',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+
+        // Progress bar at the bottom
+        if (progress > 0.0)
+          SizedBox(
+            height: 6,
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.black.withValues(alpha: 0.3),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isFinished ? const Color(0xFF059669) : const Color(0xFF6366F1),
+              ),
+              minHeight: 6,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build desktop horizontal layout (thumbnail left, info right)
+  Widget _buildDesktopEpisodeCard(
+    SeriesEpisode episode,
+    double progress,
+    bool isFinished,
+    bool hasMetadata,
+    EpisodeInfo? episodeInfo,
+  ) {
+    return Column(
+      children: [
+        // Main content - horizontal layout
+        SizedBox(
+          height: 140,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left: Thumbnail with overlays
+              SizedBox(
+                width: 240,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Episode thumbnail or placeholder
+                    if (hasMetadata && episodeInfo!.poster != null)
+                      Image.network(
+                        episodeInfo.poster!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return _buildThumbnailPlaceholder(episode);
+                        },
+                      )
+                    else
+                      _buildThumbnailPlaceholder(episode),
+
+                    // Play button overlay
+                    Center(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                          size: 40,
+                        ),
+                      ),
+                    ),
+
+                    // Top left: Episode number badge
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(0xFF6366F1),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          episode.seasonEpisodeString,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Top right: IMDB rating badge
+                    if (hasMetadata && episodeInfo?.rating != null)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5C518),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.star, color: Colors.black, size: 14),
+                              const SizedBox(width: 4),
+                              Text(
+                                episodeInfo!.rating!.toStringAsFixed(1),
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    // Watch status badge (bottom left corner)
+                    if (progress > 0.0)
+                      Positioned(
+                        bottom: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isFinished
+                                ? const Color(0xFF059669)
+                                : const Color(0xFF6366F1),
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isFinished ? Icons.check_circle : Icons.play_circle_filled,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isFinished
+                                    ? 'WATCHED'
+                                    : '${(progress * 100).round()}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Right: Episode info
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Episode title with status chip
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              episode.displayTitle,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (progress > 0.0) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isFinished
+                                    ? const Color(0xFF059669).withValues(alpha: 0.2)
+                                    : const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                border: Border.all(
+                                  color: isFinished
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFF6366F1),
+                                  width: 1,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                isFinished ? 'WATCHED' : 'WATCHING',
+                                style: TextStyle(
+                                  color: isFinished
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFF6366F1),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Watch progress info
+                      if (progress > 0.0 && !isFinished)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.history,
+                                size: 14,
+                                color: const Color(0xFF6366F1),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${(progress * 100).round()}% watched',
+                                style: const TextStyle(
+                                  color: Color(0xFF6366F1),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Runtime and Air date
+                      if (hasMetadata)
+                        Row(
+                          children: [
+                            if (episodeInfo!.runtime != null) ...[
+                              const Icon(Icons.schedule, size: 14, color: Colors.white60),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${episodeInfo!.runtime} min',
+                                style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                            if (episodeInfo!.runtime != null && episodeInfo!.airDate != null)
+                              const Text('  •  ', style: TextStyle(color: Colors.white60)),
+                            if (episodeInfo!.airDate != null) ...[
+                              const Icon(Icons.calendar_today, size: 14, color: Colors.white60),
+                              const SizedBox(width: 4),
+                              Text(
+                                episodeInfo!.airDate!,
+                                style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      const SizedBox(height: 8),
+
+                      // Description
+                      Expanded(
+                        child: Text(
+                          hasMetadata && episodeInfo!.plot != null
+                              ? episodeInfo.plot!
+                              : 'No description available',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Progress bar at the bottom
+        if (progress > 0.0)
+          SizedBox(
+            height: 6,
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.black.withValues(alpha: 0.3),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isFinished ? const Color(0xFF059669) : const Color(0xFF6366F1),
+              ),
+              minHeight: 6,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build thumbnail placeholder
+  Widget _buildThumbnailPlaceholder(SeriesEpisode episode) {
+    return Container(
+      color: Colors.grey.shade900,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.video_library,
+              color: Colors.white38,
+              size: 48,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              episode.seasonEpisodeString,
+              style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Play episode from OTT view with full playlist support
+  Future<void> _playEpisode(SeriesEpisode episode) async {
+    if (_rootContent == null || !mounted) return;
+
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+
+      // Get all video files from the entire tree
+      final allFiles = _rootContent!.getAllFiles();
+      final videoFiles = allFiles
+          .where((node) => FileUtils.isVideoFile(node.name))
+          .toList();
+
+      if (videoFiles.isEmpty) {
+        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        return;
+      }
+
+      // Find the selected episode index
+      int startIndex = 0;
+      if (episode.originalIndex >= 0 && episode.originalIndex < videoFiles.length) {
+        startIndex = episode.originalIndex;
+      } else {
+        // Fallback: try to match by filename
+        for (int i = 0; i < videoFiles.length; i++) {
+          if (videoFiles[i].name == episode.filename) {
+            startIndex = i;
+            break;
+          }
+        }
+      }
+
+      final provider = ((widget.playlistItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
+
+      if (provider == 'realdebrid') {
+        await _playRealDebridPlaylist(videoFiles, startIndex);
+      } else if (provider == 'torbox') {
+        await _playTorboxPlaylist(videoFiles, startIndex);
+      } else if (provider == 'pikpak') {
+        await _playPikPakPlaylist(videoFiles, startIndex);
+      }
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      print('❌ Error playing episode: $e');
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  /// Play Real-Debrid playlist
+  Future<void> _playRealDebridPlaylist(List<RDFileNode> videoFiles, int startIndex) async {
+    final String? apiKey = await StorageService.getApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Please set your Real-Debrid API key in Settings');
+    }
+
+    final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
+    if (rdTorrentId == null) {
+      throw Exception('No Real-Debrid torrent ID found');
+    }
+
+    final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
+    final links = (info['links'] as List<dynamic>?) ?? [];
+
+    // Build playlist entries
+    final List<PlaylistEntry> entries = [];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final file = videoFiles[i];
+      final linkIndex = file.linkIndex ?? i;
+
+      if (linkIndex >= links.length) continue;
+
+      if (i == startIndex) {
+        // Unrestrict the first file
+        try {
+          final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[linkIndex]);
+          final url = unrestrictResult['download']?.toString() ?? '';
+          entries.add(PlaylistEntry(
+            url: url,
+            title: file.name,
+            rdTorrentId: rdTorrentId,
+            rdLinkIndex: linkIndex,
+            sizeBytes: file.bytes,
+          ));
+        } catch (_) {
+          entries.add(PlaylistEntry(
+            url: '',
+            title: file.name,
+            restrictedLink: links[linkIndex],
+            rdTorrentId: rdTorrentId,
+            rdLinkIndex: linkIndex,
+            sizeBytes: file.bytes,
+          ));
+        }
+      } else {
+        entries.add(PlaylistEntry(
+          url: '',
+          title: file.name,
+          restrictedLink: links[linkIndex],
+          rdTorrentId: rdTorrentId,
+          rdLinkIndex: linkIndex,
+          sizeBytes: file.bytes,
+        ));
+      }
+    }
+
+    if (entries.isEmpty) {
+      throw Exception('No playable files found');
+    }
+
+    final String initialVideoUrl = entries[startIndex].url;
+    final String seriesTitle = _seriesPlaylist?.seriesTitle ?? widget.playlistItem['title'] as String? ?? 'Series';
+
+    if (!mounted) return;
+
+    // Hide auto-launch overlay before launching player
+    widget.onPlaybackStarted?.call();
+    MainPageBridge.notifyPlayerLaunching();
+
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialVideoUrl,
+        title: seriesTitle,
+        subtitle: '${entries.length} episodes',
+        playlist: entries,
+        startIndex: startIndex,
+        rdTorrentId: rdTorrentId,
+        disableAutoResume: true,
+      ),
+    );
+  }
+
+  /// Play Torbox playlist
+  Future<void> _playTorboxPlaylist(List<RDFileNode> videoFiles, int startIndex) async {
+    final String? apiKey = await StorageService.getTorboxApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Please set your Torbox API key in Settings');
+    }
+
+    final torboxTorrentId = widget.playlistItem['torboxTorrentId'] as int?;
+    if (torboxTorrentId == null) {
+      throw Exception('No Torbox torrent ID found');
+    }
+
+    // Build playlist entries
+    final List<PlaylistEntry> entries = [];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final file = videoFiles[i];
+
+      if (i == startIndex) {
+        // Get streaming URL for first file
+        try {
+          if (file.fileId != null) {
+            final url = await TorboxService.requestFileDownloadLink(
+              apiKey: apiKey,
+              torrentId: torboxTorrentId,
+              fileId: file.fileId!,
+            );
+            entries.add(PlaylistEntry(
+              url: url,
+              title: file.name,
+              torboxTorrentId: torboxTorrentId,
+              torboxFileId: file.fileId,
+              sizeBytes: file.bytes,
+            ));
+          }
+        } catch (_) {
+          entries.add(PlaylistEntry(
+            url: '',
+            title: file.name,
+            torboxTorrentId: torboxTorrentId,
+            torboxFileId: file.fileId,
+            sizeBytes: file.bytes,
+          ));
+        }
+      } else {
+        entries.add(PlaylistEntry(
+          url: '',
+          title: file.name,
+          torboxTorrentId: torboxTorrentId,
+          torboxFileId: file.fileId,
+          sizeBytes: file.bytes,
+        ));
+      }
+    }
+
+    if (entries.isEmpty) {
+      throw Exception('No playable files found');
+    }
+
+    final String initialVideoUrl = entries[startIndex].url;
+    final String seriesTitle = _seriesPlaylist?.seriesTitle ?? widget.playlistItem['title'] as String? ?? 'Series';
+
+    if (!mounted) return;
+
+    // Hide auto-launch overlay before launching player
+    widget.onPlaybackStarted?.call();
+    MainPageBridge.notifyPlayerLaunching();
+
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialVideoUrl,
+        title: seriesTitle,
+        subtitle: '${entries.length} episodes',
+        playlist: entries,
+        startIndex: startIndex,
+        disableAutoResume: true,
+      ),
+    );
+  }
+
+  /// Play PikPak playlist
+  Future<void> _playPikPakPlaylist(List<RDFileNode> videoFiles, int startIndex) async {
+    final pikpak = PikPakApiService.instance;
+
+    if (!await pikpak.isAuthenticated()) {
+      throw Exception('Please login to PikPak in Settings');
+    }
+
+    final cachedFiles = widget.playlistItem['pikpakFiles'] as List<dynamic>?;
+    if (cachedFiles == null || cachedFiles.isEmpty) {
+      throw Exception('No cached files found');
+    }
+
+    // Build playlist entries
+    final List<PlaylistEntry> entries = [];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final file = videoFiles[i];
+
+      // Find matching file in cached files by name
+      final cachedFile = cachedFiles.firstWhere(
+        (f) => (f['name'] as String?) == file.name,
+        orElse: () => null,
+      );
+
+      if (cachedFile == null) continue;
+
+      final fileId = cachedFile['id'] as String?;
+      if (fileId == null) continue;
+
+      if (i == startIndex) {
+        // Get streaming URL for first file
+        try {
+          final fileData = await pikpak.getFileDetails(fileId);
+          final streamingUrl = pikpak.getStreamingUrl(fileData);
+          entries.add(PlaylistEntry(
+            url: streamingUrl ?? '',
+            title: file.name,
+            pikpakFileId: fileId,
+            sizeBytes: file.bytes,
+          ));
+        } catch (_) {
+          entries.add(PlaylistEntry(
+            url: '',
+            title: file.name,
+            pikpakFileId: fileId,
+            sizeBytes: file.bytes,
+          ));
+        }
+      } else {
+        entries.add(PlaylistEntry(
+          url: '',
+          title: file.name,
+          pikpakFileId: fileId,
+          sizeBytes: file.bytes,
+        ));
+      }
+    }
+
+    if (entries.isEmpty) {
+      throw Exception('No playable files found');
+    }
+
+    final String initialVideoUrl = entries[startIndex].url;
+    final String seriesTitle = _seriesPlaylist?.seriesTitle ?? widget.playlistItem['title'] as String? ?? 'Series';
+
+    if (!mounted) return;
+
+    // Hide auto-launch overlay before launching player
+    widget.onPlaybackStarted?.call();
+    MainPageBridge.notifyPlayerLaunching();
+
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialVideoUrl,
+        title: seriesTitle,
+        subtitle: '${entries.length} episodes',
+        playlist: entries,
+        startIndex: startIndex,
+        disableAutoResume: true,
+      ),
+    );
+  }
+}
