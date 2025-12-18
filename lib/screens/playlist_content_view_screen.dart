@@ -565,159 +565,71 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     _applyViewMode(_currentViewMode);
   }
 
-  /// Play a file
+  /// Play a file with full playlist support
   Future<void> _playFile(RDFileNode file) async {
-    if (file.isFolder) return;
-
-    widget.onPlaybackStarted?.call();
-
-    // Implementation depends on provider
-    final provider = (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
+    if (file.isFolder || _rootContent == null) return;
 
     try {
-      if (provider == 'torbox') {
-        await _playTorboxFile(file);
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+
+      // Get all video files from the entire tree
+      final allFiles = _rootContent!.getAllFiles();
+      final videoFiles = allFiles
+          .where((node) => FileUtils.isVideoFile(node.name))
+          .toList();
+
+      if (videoFiles.isEmpty) {
+        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        return;
+      }
+
+      // Find the selected file index
+      int startIndex = 0;
+      for (int i = 0; i < videoFiles.length; i++) {
+        if (videoFiles[i].name == file.name && videoFiles[i].path == file.path) {
+          startIndex = i;
+          break;
+        }
+      }
+
+      final provider = ((widget.playlistItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
+
+      if (provider == 'realdebrid') {
+        await _playRealDebridPlaylist(videoFiles, startIndex);
+      } else if (provider == 'torbox') {
+        await _playTorboxPlaylist(videoFiles, startIndex);
       } else if (provider == 'pikpak') {
-        await _playPikPakFile(file);
-      } else {
-        await _playRealDebridFile(file);
+        await _playPikPakPlaylist(videoFiles, startIndex);
+      }
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to play file: $e')),
-      );
-    }
-  }
-
-  /// Play Real-Debrid file
-  Future<void> _playRealDebridFile(RDFileNode file) async {
-    final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
-    if (rdTorrentId == null) {
-      throw Exception('No Real-Debrid torrent ID found');
-    }
-
-    final apiKey = await StorageService.getApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('No API key configured');
-    }
-
-    // Get torrent info to access the links array
-    final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
-    final links = (info['links'] as List<dynamic>?) ?? [];
-
-    if (file.linkIndex < 0 || file.linkIndex >= links.length) {
-      throw Exception('Invalid link index for file');
-    }
-
-    // Get the restricted link for this specific file
-    final restrictedLink = links[file.linkIndex].toString();
-
-    // Unrestrict the link to get the direct download URL
-    final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
-    final downloadLink = unrestrictResult['download']?.toString() ?? '';
-
-    if (downloadLink.isEmpty) {
-      throw Exception('Failed to get download link');
-    }
-
-    if (!mounted) return;
-
-    // Launch video player
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: downloadLink,
-        title: file.name,
-        subtitle: Formatters.formatFileSize(file.bytes ?? 0),
-        rdTorrentId: rdTorrentId,
-      ),
-    );
-  }
-
-  /// Play Torbox file
-  Future<void> _playTorboxFile(RDFileNode file) async {
-    final torboxTorrentId = widget.playlistItem['torboxTorrentId'] as int?;
-    if (torboxTorrentId == null) {
-      throw Exception('No Torbox torrent ID found');
-    }
-
-    final String? apiKey = await StorageService.getTorboxApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Please set your Torbox API key in Settings');
-    }
-
-    // Get streaming link for the file
-    if (file.fileId == null) {
-      throw Exception('File ID not found');
-    }
-
-    final url = await TorboxService.requestFileDownloadLink(
-      apiKey: apiKey,
-      torrentId: torboxTorrentId,
-      fileId: file.fileId!,
-    );
-
-    if (url.isEmpty) {
-      throw Exception('Failed to get streaming URL');
-    }
-
-    if (!mounted) return;
-
-    // Launch video player
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: url,
-        title: file.name,
-        subtitle: Formatters.formatFileSize(file.bytes ?? 0),
-      ),
-    );
-  }
-
-  /// Play PikPak file
-  Future<void> _playPikPakFile(RDFileNode file) async {
-    final pikpak = PikPakApiService.instance;
-
-    // Check if PikPak is authenticated
-    if (!await pikpak.isAuthenticated()) {
-      throw Exception('Please login to PikPak in Settings');
-    }
-
-    // Extract PikPak file ID from the path field
-    // Format: "pikpak://fileId|fileName"
-    String? fileId;
-    final path = file.path;
-    if (path != null && path.startsWith('pikpak://')) {
-      final parts = path.substring(9).split('|');
-      if (parts.isNotEmpty) {
-        fileId = parts[0];
+      print('❌ Error playing file: $e');
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to play file: $e')),
+        );
       }
     }
-
-    if (fileId == null || fileId.isEmpty) {
-      throw Exception('File ID not found');
-    }
-
-    // Get file details with streaming URL
-    final details = await pikpak.getFileDetails(fileId);
-    final url = pikpak.getStreamingUrl(details);
-
-    if (url == null || url.isEmpty) {
-      throw Exception('Failed to get streaming URL');
-    }
-
-    if (!mounted) return;
-
-    // Launch video player
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: url,
-        title: file.name,
-        subtitle: Formatters.formatFileSize(file.bytes ?? 0),
-      ),
-    );
   }
 
   @override
