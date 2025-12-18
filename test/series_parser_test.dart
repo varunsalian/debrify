@@ -590,6 +590,33 @@ void main() {
       );
       expect(result, 'The Wire');
     });
+
+    // SPECIAL CASES - Real-world edge cases
+
+    test('SPECIAL: should handle + MOVIES pattern', () {
+      final result = SeriesParser.cleanCollectionTitle('Family Guy - COMPLETE SEASON 1-8 + MOVIES + STAR WARS EPS');
+      expect(result, 'Family Guy');
+    });
+
+    test('SPECIAL: should remove trailing dashes from extracted common titles', () {
+      final filenames = [
+        'Family Guy - 101 - Death Has A Shadow.avi',
+        'Family Guy - 102 - I Never Met The Dead Man.avi',
+        'Family Guy - 103 - Chitty Chitty Death Bang.avi',
+      ];
+      final title = SeriesParser.extractCommonSeriesTitle(filenames);
+      expect(title, 'family guy'); // Should NOT include trailing dash
+    });
+
+    test('SPECIAL: should handle orphaned plus signs', () {
+      final result = SeriesParser.cleanCollectionTitle('Breaking Bad Complete + Special Features');
+      expect(result, 'Breaking Bad');
+    });
+
+    test('SPECIAL: should handle multiple plus patterns', () {
+      final result = SeriesParser.cleanCollectionTitle('The Office Complete + Movies + Specials + Deleted Scenes');
+      expect(result, 'The Office');
+    });
   });
 
   group('Enhanced Title Validation Tests', () {

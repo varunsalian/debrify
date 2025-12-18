@@ -206,7 +206,11 @@ class SeriesParser {
     for (final filename in filenames.take(10)) { // Limit to first 10 for performance
       final info = parseFilename(filename);
       if (info.title != null && info.title!.isNotEmpty) {
-        titles.add(info.title!.toLowerCase().trim());
+        // Clean up trailing separators from extracted titles
+        final cleanedTitle = info.title!.toLowerCase().trim().replaceAll(RegExp(r'[\s\-_\+]+$'), '');
+        if (cleanedTitle.isNotEmpty) {
+          titles.add(cleanedTitle);
+        }
       }
     }
 
@@ -227,8 +231,8 @@ class SeriesParser {
       final sortedTitles = titles.toList()..sort();
       String prefix = _longestCommonPrefix(sortedTitles);
 
-      // Clean prefix
-      prefix = prefix.trim().replaceAll(RegExp(r'[\s\-_]+$'), '');
+      // Clean prefix - remove trailing separators
+      prefix = prefix.trim().replaceAll(RegExp(r'[\s\-_\+]+$'), '');
 
       if (prefix.length >= 3 && isValidSeriesTitle(prefix)) {
         debugPrint('SeriesParser: Found common prefix: "$prefix"');
@@ -458,12 +462,16 @@ class SeriesParser {
     // "Season 1-9", "Seasons 1-9", "Series 1-9"
     text = text.replaceAll(RegExp(r'\b(?:Season|Series)s?\s+\d+\s*-\s*\d+\b', caseSensitive: false), ' ');
 
-    // Standalone "COMPLETE" as a keyword (but not when it's part of a title like "Complete Saga")
-    // Only remove if followed by typical metadata patterns
-    text = text.replaceAll(RegExp(r'\bComplete\s*$', caseSensitive: false), ' ');
+    // Handle "Complete" followed by "+" - remove "Complete" in this context
+    text = text.replaceAll(RegExp(r'\bComplete\s+\+', caseSensitive: false), ' +');
 
-    // Remove "+ OVA", "+ Movie", "+ Specials", "+ Complete" patterns
-    text = text.replaceAll(RegExp(r'\+\s*(?:OVA|Movie|Specials?|Complete)\b', caseSensitive: false), ' ');
+    // Remove everything from first "+" to end (simplest approach)
+    // This handles "+ Movies + Specials + STAR WARS + Special Features" etc.
+    text = text.replaceAll(RegExp(r'\+.*$', caseSensitive: false), ' ');
+
+    // Standalone "COMPLETE" as a keyword (but not when it's part of a title like "Complete Saga")
+    // Only remove if at the end
+    text = text.replaceAll(RegExp(r'\bComplete\s*$', caseSensitive: false), ' ');
 
     return text;
   }
@@ -572,12 +580,16 @@ class SeriesParser {
     text = text.replaceAll(RegExp(r'\(\s*\)'), ' ');
     text = text.replaceAll(RegExp(r'\{\s*\}'), ' ');
 
+    // Remove orphaned plus signs (from "+ MOVIES" removal)
+    text = text.replaceAll(RegExp(r'\s+\+\s*'), ' ');
+    text = text.replaceAll(RegExp(r'\+\s+'), ' ');
+
     // Replace multiple spaces with single space
     text = text.replaceAll(RegExp(r'\s+'), ' ');
 
-    // Remove leading/trailing dashes, dots, underscores after spaces
-    text = text.replaceAll(RegExp(r'^\s*[\-\._]+\s*'), '');
-    text = text.replaceAll(RegExp(r'\s*[\-\._]+\s*$'), '');
+    // Remove leading/trailing dashes, dots, underscores, plus signs after spaces
+    text = text.replaceAll(RegExp(r'^\s*[\-\._\+]+\s*'), '');
+    text = text.replaceAll(RegExp(r'\s*[\-\._\+]+\s*$'), '');
 
     // Clean up "- -" patterns that might remain
     text = text.replaceAll(RegExp(r'\s*-\s*-\s*'), ' - ');
