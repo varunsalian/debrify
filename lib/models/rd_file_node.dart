@@ -4,7 +4,8 @@ class RDFileNode {
   final bool isFolder;
   final List<RDFileNode> children; // Empty if it's a file
   final int? fileId; // The file ID from RD API (null for folders)
-  final String? path; // Full path from the RD API
+  final String? path; // Full path from the RD API (or pikpak:// URL for PikPak)
+  final String? relativePath; // Clean relative path for series parsing (e.g. "Season 1/Episode 1.mkv")
   final int? bytes; // File size in bytes (null for folders)
   final int linkIndex; // Index in the torrent's links array for unrestricting
   final bool selected; // Whether this file was selected for download
@@ -15,6 +16,7 @@ class RDFileNode {
     this.children = const [],
     this.fileId,
     this.path,
+    this.relativePath,
     this.bytes,
     required this.linkIndex,
     this.selected = true,
@@ -38,6 +40,7 @@ class RDFileNode {
     required String name,
     required int fileId,
     required String path,
+    String? relativePath,
     required int bytes,
     required int linkIndex,
     bool selected = true,
@@ -48,6 +51,7 @@ class RDFileNode {
       children: const [],
       fileId: fileId,
       path: path,
+      relativePath: relativePath,
       bytes: bytes,
       linkIndex: linkIndex,
       selected: selected,
@@ -102,6 +106,7 @@ class RDFileNode {
     List<RDFileNode>? children,
     int? fileId,
     String? path,
+    String? relativePath,
     int? bytes,
     int? linkIndex,
     bool? selected,
@@ -112,6 +117,7 @@ class RDFileNode {
       children: children ?? this.children,
       fileId: fileId ?? this.fileId,
       path: path ?? this.path,
+      relativePath: relativePath ?? this.relativePath,
       bytes: bytes ?? this.bytes,
       linkIndex: linkIndex ?? this.linkIndex,
       selected: selected ?? this.selected,
@@ -125,6 +131,7 @@ class RDFileNode {
       'children': children.map((child) => child.toJson()).toList(),
       'fileId': fileId,
       'path': path,
+      'relativePath': relativePath,
       'bytes': bytes,
       'linkIndex': linkIndex,
       'selected': selected,
@@ -141,6 +148,7 @@ class RDFileNode {
           const [],
       fileId: json['fileId'] as int?,
       path: json['path'] as String?,
+      relativePath: json['relativePath'] as String?,
       bytes: json['bytes'] as int?,
       linkIndex: json['linkIndex'] as int? ?? -1,
       selected: json['selected'] as bool? ?? true,

@@ -10,21 +10,45 @@ class DuplicateGroup {
   final int episode;
   final List<int> indices;
   final List<int> fileSizes;
+  final List<bool> isAuxiliary; // Track if each file is in auxiliary folder
 
   DuplicateGroup({
     required this.season,
     required this.episode,
     required this.indices,
     required this.fileSizes,
+    required this.isAuxiliary,
   });
 
-  /// Get index of the largest file
-  int get largestFileIndex {
-    if (fileSizes.isEmpty) return indices.first;
+  /// Get index of the best file (prioritize normal over auxiliary, then largest)
+  int get bestFileIndex {
+    if (indices.isEmpty) return -1;
+    if (indices.length == 1) return indices.first;
 
-    int maxSize = 0;
-    int maxIndex = 0;
-    for (int i = 0; i < fileSizes.length; i++) {
+    // Separate normal and auxiliary files
+    final normalIndices = <int>[];
+    final auxiliaryIndices = <int>[];
+
+    for (int i = 0; i < indices.length; i++) {
+      if (isAuxiliary[i]) {
+        auxiliaryIndices.add(i);
+      } else {
+        normalIndices.add(i);
+      }
+    }
+
+    // Prefer normal content over auxiliary
+    final indicesToConsider = normalIndices.isNotEmpty ? normalIndices : auxiliaryIndices;
+
+    // Safety check
+    if (indicesToConsider.isEmpty) return indices.first;
+
+    // Find largest file among the preferred type
+    // Initialize with the first item we're considering (not 0!)
+    int maxSize = fileSizes[indicesToConsider.first];
+    int maxIndex = indicesToConsider.first;
+
+    for (int i in indicesToConsider) {
       if (fileSizes[i] > maxSize) {
         maxSize = fileSizes[i];
         maxIndex = i;
@@ -32,6 +56,9 @@ class DuplicateGroup {
     }
     return indices[maxIndex];
   }
+
+  /// Legacy method for backward compatibility
+  int get largestFileIndex => bestFileIndex;
 }
 
 class EpisodeInfo {
@@ -207,6 +234,8 @@ class SeriesPlaylist {
   }) {
     debugPrint('SeriesPlaylist: Processing ${entries.length} entries${collectionTitle != null ? ", collection: \"$collectionTitle\"" : ""}');
 
+    // Use filenames for parsing (existing regex patterns expect just filenames)
+    // Path info is available in entries[i].relativePath for future enhancements
     final filenames = entries.map((e) => e.title).toList();
 
     // Log first 2 filenames for debugging
@@ -296,15 +325,28 @@ class SeriesPlaylist {
     }
 
     // Detect and resolve duplicates
-    final duplicateGroups = _detectDuplicates(seriesInfos, validFileSizes);
+    final duplicateGroups = _detectDuplicates(seriesInfos, validFileSizes, validEntries);
     final indicesToKeep = <int>{};
     final duplicateIndicesToMoveSeason0 = <int, String>{}; // index -> original S##E## label
 
     for (final group in duplicateGroups.values) {
       if (group.indices.length > 1) {
-        final keepIndex = group.largestFileIndex;
+        final keepIndex = group.bestFileIndex;
         indicesToKeep.add(keepIndex);
-        debugPrint('SeriesPlaylist: Found duplicate S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')} - keeping largest (index $keepIndex, ${validFileSizes[keepIndex]} bytes)');
+
+        // Check if we prioritized based on folder type
+        final keptIsAuxiliary = group.isAuxiliary[group.indices.indexOf(keepIndex)];
+        final hasNormalContent = group.isAuxiliary.contains(false);
+        final hasAuxiliaryContent = group.isAuxiliary.contains(true);
+
+        String reason = 'largest file';
+        if (hasNormalContent && hasAuxiliaryContent && !keptIsAuxiliary) {
+          reason = 'main content over extras';
+        } else if (!hasNormalContent && hasAuxiliaryContent) {
+          reason = 'largest auxiliary file';
+        }
+
+        debugPrint('SeriesPlaylist: Found duplicate S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')} - keeping $reason (index $keepIndex, ${validFileSizes[keepIndex]} bytes)');
 
         // Track other duplicates to move to Season 0
         for (final idx in group.indices) {
@@ -429,8 +471,23 @@ class SeriesPlaylist {
         final playlistEntry = validEntries[idx];
         final originalInfo = seriesInfos[idx];
 
-        // Create episode title with original label and filename for reference
-        final episodeTitle = 'Alternate Version - $originalLabel (${validFilenames[idx]})';
+        // Check if this file is in an auxiliary folder
+        final isAux = _isAuxiliaryFolder(playlistEntry.relativePath);
+
+        // Create episode title with appropriate label
+        String episodeTitle;
+        if (isAux && playlistEntry.relativePath != null) {
+          // Extract folder name for auxiliary content
+          final parts = playlistEntry.relativePath!.split('/');
+          if (parts.length > 1) {
+            final folderName = parts[parts.length - 2]; // Folder before filename
+            episodeTitle = '$folderName - $originalLabel (${validFilenames[idx]})';
+          } else {
+            episodeTitle = 'Extra - $originalLabel (${validFilenames[idx]})';
+          }
+        } else {
+          episodeTitle = 'Alternate Version - $originalLabel (${validFilenames[idx]})';
+        }
 
         final alternateSeriesInfo = originalInfo.copyWith(
           season: 0,
@@ -446,7 +503,7 @@ class SeriesPlaylist {
           originalIndex: validIndices[idx],
         ));
 
-        debugPrint('SeriesPlaylist: Added alternate version to S00E${alternateEpisodeNum.toString().padLeft(2, '0')}: $episodeTitle');
+        debugPrint('SeriesPlaylist: Added ${isAux ? "auxiliary content" : "alternate version"} to S00E${alternateEpisodeNum.toString().padLeft(2, '0')}: $episodeTitle');
         alternateEpisodeNum++;
       }
     }
@@ -706,10 +763,53 @@ class SeriesPlaylist {
     return -1;
   }
 
+  /// Check if a file is in an auxiliary/extras folder
+  /// Returns true if the path contains folders indicating bonus/extra content
+  static bool _isAuxiliaryFolder(String? relativePath) {
+    if (relativePath == null) return false;
+
+    // Define auxiliary folder patterns (case-insensitive)
+    const auxiliaryPatterns = [
+      'extras', 'extra',
+      'behind the scenes', 'bts', 'behind-the-scenes',
+      'deleted scenes', 'deleted',
+      'bonus', 'bonus content', 'bonus material',
+      'featurettes', 'featurette',
+      'interviews', 'interview',
+      'after party', 'afterparty',
+      'making of', 'making-of',
+      'bloopers', 'blooper',
+      'gag reel', 'gag-reel',
+      'trailers', 'trailer',
+      'scenes',
+      'documentary', 'documentaries',
+      'commentary', 'commentaries',
+    ];
+
+    // Extract folders from path (exclude filename)
+    final parts = relativePath.split('/');
+    if (parts.length <= 1) return false; // Just filename, no folders
+
+    final folders = parts.sublist(0, parts.length - 1); // Exclude filename
+
+    // Check if any folder matches auxiliary patterns
+    for (final folder in folders) {
+      final lowerFolder = folder.toLowerCase().trim();
+      for (final pattern in auxiliaryPatterns) {
+        if (lowerFolder.contains(pattern)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   /// Detect duplicate episodes based on S##E## numbers
   static Map<String, DuplicateGroup> _detectDuplicates(
     List<SeriesInfo> seriesInfos,
     List<int> fileSizes,
+    List<PlaylistEntry> entries,
   ) {
     final duplicateMap = <String, DuplicateGroup>{};
 
@@ -724,6 +824,7 @@ class SeriesPlaylist {
             episode: info.episode!,
             indices: [],
             fileSizes: [],
+            isAuxiliary: [],
           );
         }
 
@@ -733,6 +834,10 @@ class SeriesPlaylist {
         } else {
           duplicateMap[key]!.fileSizes.add(0);
         }
+
+        // Check if this file is in an auxiliary folder
+        final isAux = _isAuxiliaryFolder(entries[i].relativePath);
+        duplicateMap[key]!.isAuxiliary.add(isAux);
       }
     }
 

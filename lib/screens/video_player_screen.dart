@@ -96,6 +96,7 @@ class VideoPlayerScreen extends StatefulWidget {
 class PlaylistEntry {
   final String url;
   final String title;
+  final String? relativePath; // Full relative path from torrent root (e.g. "/Season 1/Episode 1.mkv")
   final String? restrictedLink; // The original restricted link from debrid
   final String? torrentHash; // SHA1 Hash of the torrent
   final int? sizeBytes; // Original file size in bytes, when known
@@ -109,6 +110,7 @@ class PlaylistEntry {
   const PlaylistEntry({
     required this.url,
     required this.title,
+    this.relativePath,
     this.restrictedLink,
     this.torrentHash,
     this.sizeBytes,

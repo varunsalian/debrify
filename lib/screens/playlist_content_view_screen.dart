@@ -273,7 +273,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build folder tree from PikPak by fetching folder structure
   /// This properly preserves the folder hierarchy
-  Future<RDFileNode> _buildPikPakFolderTree(String folderId, {int depth = 0}) async {
+  Future<RDFileNode> _buildPikPakFolderTree(String folderId, {int depth = 0, String currentPath = ''}) async {
     final pikpak = PikPakApiService.instance;
 
     // Prevent infinite recursion or excessively deep folder structures
@@ -297,7 +297,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (kind == 'drive#folder') {
         // Recursively build subfolder
         if (fileId != null) {
-          final subTree = await _buildPikPakFolderTree(fileId, depth: depth + 1);
+          // Build path for subfolder
+          final subPath = currentPath.isEmpty ? name : '$currentPath/$name';
+          final subTree = await _buildPikPakFolderTree(fileId, depth: depth + 1, currentPath: subPath);
           children.add(RDFileNode.folder(
             name: name,
             children: subTree.children,
@@ -312,10 +314,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Format: "pikpak://fileId|fileName"
         final pikpakUrl = 'pikpak://$fileId|$name';
 
+        // Build relative path for series parsing
+        final relPath = currentPath.isEmpty ? name : '$currentPath/$name';
+
         children.add(RDFileNode.file(
           name: name,
           fileId: fileIndex,
           path: pikpakUrl, // Store PikPak file ID and name here
+          relativePath: relPath, // Store clean path for series parsing
           bytes: size,
           linkIndex: fileIndex,
         ));
@@ -1007,6 +1013,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       final entries = videoFiles.map((f) => PlaylistEntry(
         url: '',  // Not needed for parsing
         title: f.name,
+        relativePath: f.relativePath ?? f.path, // Use relativePath if available, fallback to path
       )).toList();
 
       // Get series/collection title from playlist item
@@ -1897,6 +1904,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           entries.add(PlaylistEntry(
             url: url,
             title: file.name,
+            relativePath: file.path,
             rdTorrentId: rdTorrentId,
             rdLinkIndex: linkIndex,
             sizeBytes: file.bytes,
@@ -1905,6 +1913,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           entries.add(PlaylistEntry(
             url: '',
             title: file.name,
+            relativePath: file.path,
             restrictedLink: links[linkIndex],
             rdTorrentId: rdTorrentId,
             rdLinkIndex: linkIndex,
@@ -1915,6 +1924,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         entries.add(PlaylistEntry(
           url: '',
           title: file.name,
+          relativePath: file.path,
           restrictedLink: links[linkIndex],
           rdTorrentId: rdTorrentId,
           rdLinkIndex: linkIndex,
@@ -1979,6 +1989,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             entries.add(PlaylistEntry(
               url: url,
               title: file.name,
+              relativePath: _cleanTorboxPath(file.path),
               torboxTorrentId: torboxTorrentId,
               torboxFileId: file.fileId,
               sizeBytes: file.bytes,
@@ -1988,6 +1999,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           entries.add(PlaylistEntry(
             url: '',
             title: file.name,
+            relativePath: _cleanTorboxPath(file.path),
             torboxTorrentId: torboxTorrentId,
             torboxFileId: file.fileId,
             sizeBytes: file.bytes,
@@ -1997,6 +2009,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         entries.add(PlaylistEntry(
           url: '',
           title: file.name,
+          relativePath: _cleanTorboxPath(file.path),
           torboxTorrentId: torboxTorrentId,
           torboxFileId: file.fileId,
           sizeBytes: file.bytes,
@@ -2064,6 +2077,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           entries.add(PlaylistEntry(
             url: streamingUrl ?? '',
             title: file.name,
+            relativePath: file.relativePath,
             pikpakFileId: fileId,
             sizeBytes: file.bytes,
           ));
@@ -2071,6 +2085,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           entries.add(PlaylistEntry(
             url: '',
             title: file.name,
+            relativePath: file.relativePath,
             pikpakFileId: fileId,
             sizeBytes: file.bytes,
           ));
@@ -2079,6 +2094,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         entries.add(PlaylistEntry(
           url: '',
           title: file.name,
+          relativePath: file.relativePath,
           pikpakFileId: fileId,
           sizeBytes: file.bytes,
         ));
@@ -2109,5 +2125,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         disableAutoResume: true,
       ),
     );
+  }
+
+  /// Clean Torbox path by removing "TorrentName..." prefix
+  /// Example: "TorrentName.../Season 1/Episode 1.mkv" -> "Season 1/Episode 1.mkv"
+  String? _cleanTorboxPath(String? path) {
+    if (path == null) return null;
+
+    // Check if there's a "..." separator (torrent name prefix)
+    if (path.contains('.../')) {
+      final parts = path.split('.../');
+      if (parts.length > 1) {
+        // Return everything after the first "..."
+        return parts.skip(1).join('.../');
+      }
+    }
+
+    // If no "..." separator, return as-is
+    return path;
   }
 }
