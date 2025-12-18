@@ -373,6 +373,35 @@ class VideoPlayerLauncher {
           'updatedAt': DateTime.now().millisecondsSinceEpoch,
         });
       }
+
+      // ALSO save in collection format for Android TV playlist progress tracking
+      // This allows the playlist screen to display progress indicators for collections
+      if (payload.contentType == _PlaybackContentType.collection &&
+          payload.seriesTitle != null) {
+        debugPrint('📺 AndroidTV Collection Save Check: seriesTitle="${payload.seriesTitle}", itemIndex=$fallbackIndex');
+
+        await StorageService.saveSeriesPlaybackState(
+          seriesTitle: payload.seriesTitle!,
+          season: 0, // Use season 0 for non-series collections
+          episode: fallbackIndex + 1, // Use 1-based index as episode number
+          positionMs: positionMs,
+          durationMs: durationMs,
+          speed: speed,
+          aspect: aspect,
+        );
+
+        debugPrint('✅ AndroidTV Collection Save: title="${payload.seriesTitle}" S0E${fallbackIndex + 1} pos=${positionMs}ms');
+
+        // Mark as finished if completed
+        if (completed) {
+          await StorageService.markEpisodeAsFinished(
+            seriesTitle: payload.seriesTitle!,
+            season: 0,
+            episode: fallbackIndex + 1,
+          );
+          debugPrint('✅ AndroidTV Collection: Marked S0E${fallbackIndex + 1} as finished');
+        }
+      }
     } catch (e) {
       debugPrint('VideoPlayerLauncher: failed to persist progress: $e');
     }

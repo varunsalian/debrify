@@ -71,8 +71,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Then load content and apply the saved (or default) view mode
     await _loadContent();
 
-    // Load progress data for files
-    await _loadProgressData();
+    // Parse series playlist to extract clean series title
+    // This ensures progress is loaded with the correct series title for all view modes
+    if (_rootContent != null) {
+      await _parseSeriesPlaylist();
+    }
+
+    // Note: Progress is now loaded within _parseSeriesPlaylist()
+    // so we don't need to call _loadProgressData() here anymore
   }
 
   @override
@@ -267,8 +273,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build folder tree from PikPak by fetching folder structure
   /// This properly preserves the folder hierarchy
-  Future<RDFileNode> _buildPikPakFolderTree(String folderId) async {
+  Future<RDFileNode> _buildPikPakFolderTree(String folderId, {int depth = 0}) async {
     final pikpak = PikPakApiService.instance;
+
+    // Prevent infinite recursion or excessively deep folder structures
+    const int maxDepth = 4;
+    if (depth > maxDepth) {
+      throw Exception('Folder hierarchy too deep (max $maxDepth levels). Please reorganize your folders.');
+    }
 
     // Fetch files in this folder (non-recursive)
     final result = await pikpak.listFiles(parentId: folderId, limit: 100);
@@ -285,7 +297,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (kind == 'drive#folder') {
         // Recursively build subfolder
         if (fileId != null) {
-          final subTree = await _buildPikPakFolderTree(fileId);
+          final subTree = await _buildPikPakFolderTree(fileId, depth: depth + 1);
           children.add(RDFileNode.folder(
             name: name,
             children: subTree.children,
@@ -870,7 +882,27 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       return _fileProgressCache[key];
     }
 
-    // For non-series, try using filename as key
+    // For non-series collections, try using season 0 with index
+    // Find the file index in all video files
+    if (_rootContent != null && _seriesPlaylist != null && !_seriesPlaylist!.isSeries) {
+      final allFiles = _rootContent!.getAllFiles();
+      final videoFiles = allFiles
+          .where((node) => FileUtils.isVideoFile(node.name))
+          .toList();
+
+      final fileIndex = videoFiles.indexWhere((node) =>
+        node.name == file.name && node.path == file.path);
+
+      if (fileIndex >= 0) {
+        final key = '0_${fileIndex + 1}'; // season 0, 1-based episode index
+        final progress = _fileProgressCache[key];
+        if (progress != null) {
+          return progress;
+        }
+      }
+    }
+
+    // Fallback: try using filename as key
     return _fileProgressCache[file.name];
   }
 
@@ -977,19 +1009,26 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         title: f.name,
       )).toList();
 
-      // Get series title from playlist item
-      final String? seriesTitle = widget.playlistItem['seriesTitle'] as String?;
+      // Get series/collection title from playlist item
+      // Try 'seriesTitle' first (if previously extracted), fallback to 'title' (raw torrent name)
+      final String? collectionTitle = widget.playlistItem['seriesTitle'] as String? ??
+                                       widget.playlistItem['title'] as String?;
 
       _seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
         entries,
-        collectionTitle: seriesTitle,
+        collectionTitle: collectionTitle,
       );
 
-      // Reload progress with the clean extracted series title!
-      if (_seriesPlaylist!.isSeries && _seriesPlaylist!.seriesTitle != null) {
-        print('🔄 Reloading progress with clean title: ${_seriesPlaylist!.seriesTitle}');
+      // Reload progress with the clean extracted series/collection title!
+      // This works for both series and movie collections
+      final String? titleForProgress = _seriesPlaylist!.seriesTitle ??
+                                        widget.playlistItem['title'] as String?;
+
+      if (titleForProgress != null && titleForProgress.isNotEmpty) {
+        print('🔄 Reloading progress with clean title: $titleForProgress');
+        print('📌 isSeries: ${_seriesPlaylist!.isSeries}');
         final episodeProgress = await StorageService.getEpisodeProgress(
-          seriesTitle: _seriesPlaylist!.seriesTitle!,
+          seriesTitle: titleForProgress,
         );
         print('📊 Loaded ${episodeProgress.length} episodes with progress');
         print('🔑 Progress keys: ${episodeProgress.keys.toList()}');

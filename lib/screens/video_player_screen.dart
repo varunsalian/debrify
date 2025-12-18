@@ -2107,6 +2107,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 					speed: _playbackSpeed,
 					aspect: aspectStr,
 				);
+
+				// ALSO save in collection format for playlist progress tracking
+				// This allows the playlist screen to display progress indicators
+				debugPrint('💾 Collection Save Check: seriesPlaylist=${seriesPlaylist != null}, seriesTitle="${seriesPlaylist?.seriesTitle}", isSeries=${seriesPlaylist?.isSeries}');
+				if (seriesPlaylist != null && seriesPlaylist.seriesTitle != null) {
+					// Use filename as the key for non-series collections
+					await StorageService.saveSeriesPlaybackState(
+						seriesTitle: seriesPlaylist.seriesTitle!,
+						season: 0, // Use season 0 for non-series collections
+						episode: _currentIndex + 1, // Use 1-based index as episode number
+						positionMs: pos.inMilliseconds,
+						durationMs: dur.inMilliseconds,
+						speed: _playbackSpeed,
+						aspect: aspectStr,
+					);
+					debugPrint('✅ Collection Save: title="${seriesPlaylist.seriesTitle}" index=${_currentIndex} filename="${currentEntry.title}"');
+				} else {
+					debugPrint('❌ Collection Save SKIPPED: seriesPlaylist is null or has no title');
+				}
 			}
 		} else {
 			// Single video file (no playlist)

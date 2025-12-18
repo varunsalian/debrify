@@ -256,6 +256,18 @@ class SeriesPlaylist {
 
     if (!isSeries) {
       debugPrint('SeriesPlaylist: Treating as movie collection');
+
+      // For collections, use the collectionTitle if provided
+      String? collectionSeriesTitle = collectionTitle;
+      if (collectionSeriesTitle != null) {
+        debugPrint('SeriesPlaylist: Using collection title for movie collection: "$collectionSeriesTitle"');
+      } else if (seriesInfos.firstOrNull?.title != null) {
+        collectionSeriesTitle = seriesInfos.firstOrNull!.title;
+        debugPrint('SeriesPlaylist: Using extracted title from first file: "$collectionSeriesTitle"');
+      } else {
+        debugPrint('SeriesPlaylist: No title available for collection');
+      }
+
       // Treat as movie collection: single season with all entries
       final episodes = validEntries.asMap().entries.map((entry) {
         final index = entry.key;
@@ -270,12 +282,12 @@ class SeriesPlaylist {
       }).toList();
 
       return SeriesPlaylist(
-        seriesTitle: seriesInfos.firstOrNull?.title,
+        seriesTitle: collectionSeriesTitle,
         seasons: [
           SeriesSeason(
             seasonNumber: 1,
             episodes: episodes,
-            seriesTitle: seriesInfos.firstOrNull?.title,
+            seriesTitle: collectionSeriesTitle,
           ),
         ],
         allEpisodes: episodes,
