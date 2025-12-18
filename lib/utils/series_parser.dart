@@ -270,37 +270,54 @@ class SeriesParser {
     final originalTitle = title;
     String cleaned = title;
 
+    // PHASE 1: NORMALIZATION
     // 1. Normalize separators - replace dots and underscores with spaces
     cleaned = cleaned.replaceAll(RegExp(r'[._]'), ' ');
 
     // 2. Normalize country codes [US]/[UK] to just US/UK (BEFORE removing release groups)
+    //    This preserves country codes while removing other bracketed content
     cleaned = _normalizeCountryCodes(cleaned);
 
-    // 3. Remove release group tags in brackets
-    // Match [UPPERCASE] or [ALPHANUMERIC] patterns (greedy)
+    // PHASE 2: REMOVE METADATA (Order matters!)
+    // 3. Remove regional/language tags (BEFORE release groups to avoid conflicts)
+    cleaned = _removeRegionalTags(cleaned);
+
+    // 4. Remove release group tags in brackets
+    //    Match [UPPERCASE] or [ALPHANUMERIC] patterns (greedy)
     cleaned = _removeReleaseGroupTags(cleaned);
 
-    // 4. Remove quality/format tags
+    // 5. Remove scene release metadata tags (PROPER, REPACK, etc.)
+    cleaned = _removeSceneTags(cleaned);
+
+    // 6. Remove quality/format/platform tags
+    //    Includes multi-word tags (WEB DL) and platform tags (AMZN, NETFLIX)
     cleaned = _removeQualityTags(cleaned);
 
-    // 5. Remove season/series metadata
+    // 7. Remove season/series metadata
+    //    Includes extended keywords (Full Series, Box Set) and alternative formats
     cleaned = _removeSeasonMetadata(cleaned);
 
-    // 6. Remove year ranges (2005-2013) or (2005-2013)
+    // 8. Remove date formats (for daily shows like talk shows, news)
+    cleaned = _removeDateFormats(cleaned);
+
+    // 9. Remove year ranges - ALL variations
+    //    (2005-2013), (2011 2019), [2011-2019], {2011-2019}
     cleaned = _removeYearRanges(cleaned);
 
-    // 7. Remove trailing single year (2005) at end only - preserve years in middle
+    // 10. Remove trailing single year (2005) at end only - preserve years in middle
     cleaned = _removeTrailingYear(cleaned);
 
-    // 8. Remove edition tags
+    // 11. Remove edition tags (Extended, Unrated, Director's Cut)
     cleaned = _removeEditionTags(cleaned);
 
-    // 9. Clean up remaining artifacts - separators, empty brackets
+    // PHASE 3: CLEANUP
+    // 12. Clean up remaining artifacts - separators, empty brackets
     cleaned = _cleanupSeparators(cleaned);
 
-    // 10. Final trim
+    // 13. Final trim
     cleaned = cleaned.trim();
 
+    // VALIDATION
     // If result is empty or too short (likely all metadata), return original
     if (cleaned.isEmpty || cleaned.length < 2) {
       debugPrint('SeriesParser: cleanCollectionTitle - result too short, returning original: "$originalTitle"');
@@ -332,8 +349,49 @@ class SeriesParser {
     return text;
   }
 
+  /// Remove scene release metadata tags
+  /// Scene releases use specific tags to indicate version/fix status
+  static String _removeSceneTags(String text) {
+    // Scene metadata tags:
+    // PROPER - Correct version by different group
+    // REPACK - Fixed by same group
+    // INTERNAL - Internal release (not widespread)
+    // DIRFIX - Directory name fix
+    // NFOFIX - NFO file fix
+    // SUBFIX - Subtitle fix
+    // READNFO - Read NFO for important info
+    // REAL - Verified authentic
+    // RETAIL - Retail source
+    // DUBBED/SUBBED - Audio/subtitle variants
+    final scenePattern = RegExp(
+      r'\b(?:REPACK|PROPER|INTERNAL|DIRFIX|NFOFIX|SUBFIX|READNFO|REAL|'
+      r'RETAIL|DUBBED|SUBBED|UNRATED|UNCUT|LIMITED)\b',
+      caseSensitive: false,
+    );
+
+    text = text.replaceAll(scenePattern, ' ');
+
+    return text;
+  }
+
   /// Remove quality and format tags
   static String _removeQualityTags(String text) {
+    // PHASE 2: Remove multi-word quality tags FIRST (before hyphenated versions)
+    // WEB DL, Blu Ray, DVD Rip, HD TV (sometimes not hyphenated)
+    text = text.replaceAll(RegExp(r'\bWEB\s+DL\b', caseSensitive: false), ' ');
+    text = text.replaceAll(RegExp(r'\bBlu\s+Ray\b', caseSensitive: false), ' ');
+    text = text.replaceAll(RegExp(r'\bDVD\s+Rip\b', caseSensitive: false), ' ');
+    text = text.replaceAll(RegExp(r'\bHD\s+TV\b', caseSensitive: false), ' ');
+
+    // PHASE 1: Platform/Service tags (streaming platforms and abbreviations)
+    // Full names: NETFLIX, AMAZON, HULU, DISNEY, HBO, APPLE
+    // Abbreviations: AMZN, NF, HMAX, DSNP, ATVP
+    final platformPattern = RegExp(
+      r'\b(?:AMZN|NF|HMAX|DSNP|ATVP|NETFLIX|AMAZON|HULU|DISNEY|HBO|APPLE)\b',
+      caseSensitive: false,
+    );
+    text = text.replaceAll(platformPattern, ' ');
+
     // Quality tags: 1080p, 720p, 480p, 2160p, 4K, UHD, FHD, HD, HDR
     // Format tags: BluRay, BRRip, WEBRip, WEB-DL, HDTV, DVDRip
     // Codec tags: x264, x265, H264, H265, HEVC, AVC
@@ -347,6 +405,9 @@ class SeriesParser {
     );
 
     text = text.replaceAll(qualityPattern, ' ');
+
+    // Remove orphaned audio channel numbers (from 5.1, 7.1 after separator normalization)
+    text = text.replaceAll(RegExp(r'\b[57]\s+1\b'), ' ');
 
     // Also remove common quality indicators in brackets
     text = text.replaceAll(RegExp(r'\[(?:1080p|720p|480p|2160p|4K|BluRay|WEB-DL|x264|x265|HEVC|HDR)\]', caseSensitive: false), ' ');
@@ -370,6 +431,23 @@ class SeriesParser {
 
   /// Remove season/series metadata
   static String _removeSeasonMetadata(String text) {
+    // CRITICAL: Handle "The Complete Series/Collection" FIRST before other patterns
+    // Remove with optional preceding space/paren
+    text = text.replaceAll(RegExp(r'[\s\)]+The\s+Complete\s+(?:Series|Collection)', caseSensitive: false), ' ');
+
+    // PHASE 2: Extended season keywords (Full, Entire, Box Set)
+    // "Full Series", "Entire Series", "Complete Box Set", "Full Collection"
+    text = text.replaceAll(RegExp(r'\b(?:Full|Entire|Complete)\s+(?:Series|Collection)\b', caseSensitive: false), ' ');
+    text = text.replaceAll(RegExp(r'\bBox\s+Set\b', caseSensitive: false), ' ');
+
+    // PHASE 2: Alternative season range formats
+    // "Seasons 1 to 9", "Seasons 1 through 9", "Seasons 1 thru 9"
+    // Note: Using looser word boundary to handle edge cases
+    text = text.replaceAll(RegExp(r'\bSeasons?\s+\d+\s+(?:to|through|thru)\s+\d+(?:\s|$)', caseSensitive: false), ' ');
+
+    // Space-separated season list: "S01 S02 S03" (at least 2 instances)
+    text = text.replaceAll(RegExp(r'(?:S\d{1,2}\s+){2,}', caseSensitive: false), ' ');
+
     // "Complete Season 1-9", "Complete Series", "All Seasons", "All Episodes"
     text = text.replaceAll(RegExp(r'\b(?:Complete\s+)?(?:Season|Series|Collection)s?\s*\d*\s*-?\s*\d*\b', caseSensitive: false), ' ');
     text = text.replaceAll(RegExp(r'\bAll\s+(?:Seasons?|Episodes?)\b', caseSensitive: false), ' ');
@@ -392,14 +470,50 @@ class SeriesParser {
 
   /// Normalize country codes - convert [US]/[UK] to US/UK
   static String _normalizeCountryCodes(String text) {
-    // Replace [US] with " US ", [UK] with " UK "
+    // PHASE 3: Support ALL bracket types for country codes
+    // [US], (US), {US}, <US> → " US "
+    // Supports: US, UK, AU, CA, NZ, IN, BR, FR, DE, JP, KR
     text = text.replaceAllMapped(
-      RegExp(r'\[(US|UK|AU|CA|NZ)\]', caseSensitive: false),
+      RegExp(r'[\[{(<](US|UK|AU|CA|NZ|IN|BR|FR|DE|JP|KR)[\]}>)]', caseSensitive: false),
       (match) => ' ${match.group(1)!.toUpperCase()} ',
     );
-    text = text.replaceAllMapped(
-      RegExp(r'\((US|UK|AU|CA|NZ)\)', caseSensitive: false),
-      (match) => ' ${match.group(1)!.toUpperCase()} ',
+
+    return text;
+  }
+
+  /// PHASE 3: Remove date formats for daily shows
+  /// Daily/weekly shows often use date formats in filenames
+  static String _removeDateFormats(String text) {
+    // Date formats: YYYY.MM.DD, YYYY-MM-DD (ISO format)
+    // Examples: 2024.01.15, 2024-01-15
+    // NOTE: Dots may have been converted to spaces by separator normalization
+    text = text.replaceAll(RegExp(r'\b\d{4}[\.\-\s]\d{2}[\.\-\s]\d{2}\b'), ' ');
+
+    // Alternative date formats: MM.DD.YYYY, DD.MM.YYYY
+    // Examples: 01.15.2024, 15.01.2024
+    // NOTE: Dots may have been converted to spaces by separator normalization
+    text = text.replaceAll(RegExp(r'\b\d{2}[\.\-\s]\d{2}[\.\-\s]\d{4}\b'), ' ');
+
+    return text;
+  }
+
+  /// PHASE 3: Remove regional/language tags
+  /// Remove language and regional variant tags
+  static String _removeRegionalTags(String text) {
+    // Language tags in brackets
+    // [HINDI], [SPANISH], [FRENCH], [Multi-Audio], [Dual-Audio]
+    final regionalPattern = RegExp(
+      r'\[(?:HINDI|SPANISH|FRENCH|GERMAN|CHINESE|JAPANESE|KOREAN|ITALIAN|'
+      r'PORTUGUESE|RUSSIAN|ARABIC|Multi-?Audio|Dual-?Audio)\]',
+      caseSensitive: false,
+    );
+    text = text.replaceAll(regionalPattern, ' ');
+
+    // Remove platform tags in brackets (also covers regional variants)
+    // [NETFLIX], [AMAZON], [HULU], [DISNEY+], [HBO]
+    text = text.replaceAll(
+      RegExp(r'\[(?:NETFLIX|AMAZON|HULU|DISNEY\+?|HBO|APPLE)\]', caseSensitive: false),
+      ' ',
     );
 
     return text;
@@ -407,9 +521,17 @@ class SeriesParser {
 
   /// Remove year ranges like (2005-2013) or 2005-2013
   static String _removeYearRanges(String text) {
-    // Remove year ranges in parentheses or standalone
+    // Remove year ranges in parentheses or standalone WITH DASH
     // (2005-2013), (2005 - 2013), 2005-2013, 2005 - 2013
     text = text.replaceAll(RegExp(r'\(?\d{4}\s*-\s*\d{4}\)?'), ' ');
+
+    // CRITICAL FIX: Remove year ranges with SPACE ONLY (no dash)
+    // (2011 2019), 2011 2019 - common in many torrents
+    text = text.replaceAll(RegExp(r'\(?\d{4}\s+\d{4}\)?'), ' ');
+
+    // Remove year ranges in SQUARE or CURLY brackets
+    // [2011-2019], {2011-2019}, [2011 2019], {2011 2019}
+    text = text.replaceAll(RegExp(r'[\[{]\d{4}\s*-?\s*\d{4}[\]}]'), ' ');
 
     return text;
   }

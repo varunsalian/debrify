@@ -346,6 +346,250 @@ void main() {
       final result = SeriesParser.cleanCollectionTitle('Friends - Complete Series DVDRip HDTV');
       expect(result, 'Friends');
     });
+
+    // ============================================================================
+    // COMPREHENSIVE NEW PATTERN TESTS (All 3 Phases)
+    // ============================================================================
+
+    // PHASE 1 - CRITICAL PATTERNS
+
+    test('PHASE 1: should handle year range without dash (space only)', () {
+      final result = SeriesParser.cleanCollectionTitle('Person Of Interest (2011 2016) The Complete Series');
+      expect(result, 'Person Of Interest');
+    });
+
+    test('PHASE 1: should handle year range with space only - no parentheses', () {
+      final result = SeriesParser.cleanCollectionTitle('Game of Thrones 2011 2019 Complete 1080p');
+      expect(result, 'Game of Thrones');
+    });
+
+    test('PHASE 1: should handle bracketed year ranges with square brackets', () {
+      final result = SeriesParser.cleanCollectionTitle('Breaking Bad [2008-2013] Complete');
+      expect(result, 'Breaking Bad');
+    });
+
+    test('PHASE 1: should handle bracketed year ranges with curly brackets', () {
+      final result = SeriesParser.cleanCollectionTitle('The Wire {2002-2008} Complete Series');
+      expect(result, 'The Wire');
+    });
+
+    test('PHASE 1: should handle bracketed year ranges without dash', () {
+      final result = SeriesParser.cleanCollectionTitle('Lost [2004 2010] Complete Series');
+      expect(result, 'Lost');
+    });
+
+    test('PHASE 1: should remove scene metadata tags - PROPER', () {
+      final result = SeriesParser.cleanCollectionTitle('The Office Complete PROPER');
+      expect(result, 'The Office');
+    });
+
+    test('PHASE 1: should remove scene metadata tags - REPACK', () {
+      final result = SeriesParser.cleanCollectionTitle('Breaking Bad S01-S05 REPACK 1080p');
+      expect(result, 'Breaking Bad');
+    });
+
+    test('PHASE 1: should remove scene metadata tags - INTERNAL', () {
+      final result = SeriesParser.cleanCollectionTitle('Game of Thrones INTERNAL Complete');
+      expect(result, 'Game of Thrones');
+    });
+
+    test('PHASE 1: should remove multiple scene tags', () {
+      final result = SeriesParser.cleanCollectionTitle('The Office PROPER REPACK INTERNAL');
+      expect(result, 'The Office');
+    });
+
+    test('PHASE 1: should remove platform tag - AMZN', () {
+      final result = SeriesParser.cleanCollectionTitle('Stranger Things Complete AMZN WEBRip');
+      expect(result, 'Stranger Things');
+    });
+
+    test('PHASE 1: should remove platform tag - NF (Netflix)', () {
+      final result = SeriesParser.cleanCollectionTitle('The Crown Complete NF 1080p');
+      expect(result, 'The Crown');
+    });
+
+    test('PHASE 1: should remove platform tag - HMAX', () {
+      final result = SeriesParser.cleanCollectionTitle('Game of Thrones HMAX Complete');
+      expect(result, 'Game of Thrones');
+    });
+
+    test('PHASE 1: should remove platform tag - DSNP (Disney+)', () {
+      final result = SeriesParser.cleanCollectionTitle('The Mandalorian DSNP Complete');
+      expect(result, 'The Mandalorian');
+    });
+
+    test('PHASE 1: should remove full platform names', () {
+      final result = SeriesParser.cleanCollectionTitle('Stranger Things NETFLIX AMAZON Complete');
+      expect(result, 'Stranger Things');
+    });
+
+    // PHASE 2 - HIGH PRIORITY PATTERNS
+
+    test('PHASE 2: should remove multi-word quality tag - WEB DL', () {
+      final result = SeriesParser.cleanCollectionTitle('Friends Complete WEB DL 1080p');
+      expect(result, 'Friends');
+    });
+
+    test('PHASE 2: should remove multi-word quality tag - Blu Ray', () {
+      final result = SeriesParser.cleanCollectionTitle('Breaking Bad Blu Ray Complete');
+      expect(result, 'Breaking Bad');
+    });
+
+    test('PHASE 2: should remove multi-word quality tag - DVD Rip', () {
+      final result = SeriesParser.cleanCollectionTitle('The Office DVD Rip Complete');
+      expect(result, 'The Office');
+    });
+
+    test('PHASE 2: should remove multi-word quality tag - HD TV', () {
+      final result = SeriesParser.cleanCollectionTitle('Game of Thrones HD TV Complete');
+      expect(result, 'Game of Thrones');
+    });
+
+    test('PHASE 2: should handle extended season keyword - Full Series', () {
+      final result = SeriesParser.cleanCollectionTitle('Breaking Bad Full Series 1080p');
+      expect(result, 'Breaking Bad');
+    });
+
+    test('PHASE 2: should handle extended season keyword - Entire Series', () {
+      final result = SeriesParser.cleanCollectionTitle('The Wire Entire Series Complete');
+      expect(result, 'The Wire');
+    });
+
+    test('PHASE 2: should handle extended season keyword - Complete Box Set', () {
+      final result = SeriesParser.cleanCollectionTitle('Friends Complete Box Set 720p');
+      expect(result, 'Friends');
+    });
+
+    test('PHASE 2: should handle extended season keyword - Full Collection', () {
+      final result = SeriesParser.cleanCollectionTitle('Game of Thrones Full Collection');
+      expect(result, 'Game of Thrones');
+    });
+
+    test('PHASE 2: should handle alternative season range - to', () {
+      final result = SeriesParser.cleanCollectionTitle('The Wire Seasons 1 to 5 Complete');
+      expect(result, 'The Wire');
+    });
+
+    test('PHASE 2: should handle alternative season range - through', () {
+      final result = SeriesParser.cleanCollectionTitle('Breaking Bad Seasons 1 through 5');
+      expect(result, 'Breaking Bad');
+    });
+
+    test('PHASE 2: should handle alternative season range - thru', () {
+      final result = SeriesParser.cleanCollectionTitle('The Office Seasons 1 thru 9');
+      expect(result, 'The Office');
+    });
+
+    test('PHASE 2: should handle space-separated season list', () {
+      final result = SeriesParser.cleanCollectionTitle('Game of Thrones S01 S02 S03 Complete');
+      expect(result, 'Game of Thrones');
+    });
+
+    // PHASE 3 - MEDIUM PRIORITY PATTERNS
+
+    test('PHASE 3: should remove date format YYYY.MM.DD', () {
+      final result = SeriesParser.cleanCollectionTitle('The Daily Show 2024.01.15 1080p');
+      expect(result, 'The Daily Show');
+    });
+
+    test('PHASE 3: should remove date format YYYY-MM-DD', () {
+      final result = SeriesParser.cleanCollectionTitle('Last Week Tonight 2024-03-10 HDTV');
+      expect(result, 'Last Week Tonight');
+    });
+
+    test('PHASE 3: should remove date format MM.DD.YYYY', () {
+      final result = SeriesParser.cleanCollectionTitle('The Tonight Show 01.15.2024 720p');
+      expect(result, 'The Tonight Show');
+    });
+
+    test('PHASE 3: should remove date format DD.MM.YYYY', () {
+      final result = SeriesParser.cleanCollectionTitle('Late Night Show 15.01.2024 HDTV');
+      expect(result, 'Late Night Show');
+    });
+
+    test('PHASE 3: should remove regional tag - HINDI', () {
+      final result = SeriesParser.cleanCollectionTitle('Game of Thrones [HINDI] Complete');
+      expect(result, 'Game of Thrones');
+    });
+
+    test('PHASE 3: should remove regional tag - SPANISH', () {
+      final result = SeriesParser.cleanCollectionTitle('Breaking Bad [SPANISH] Complete Series');
+      expect(result, 'Breaking Bad');
+    });
+
+    test('PHASE 3: should remove regional tag - Multi-Audio', () {
+      final result = SeriesParser.cleanCollectionTitle('The Office [Multi-Audio] Complete');
+      expect(result, 'The Office');
+    });
+
+    test('PHASE 3: should remove regional tag - Dual-Audio', () {
+      final result = SeriesParser.cleanCollectionTitle('Friends [Dual-Audio] Complete Series');
+      expect(result, 'Friends');
+    });
+
+    test('PHASE 3: should remove platform tags in brackets', () {
+      final result = SeriesParser.cleanCollectionTitle('Stranger Things [NETFLIX] Complete');
+      expect(result, 'Stranger Things');
+    });
+
+    test('PHASE 3: should handle country codes with curly brackets', () {
+      final result = SeriesParser.cleanCollectionTitle('The Office {US} Complete Series');
+      expect(result, 'The Office US');
+    });
+
+    test('PHASE 3: should handle country codes with angle brackets', () {
+      final result = SeriesParser.cleanCollectionTitle('Shameless <US> Complete');
+      expect(result, 'Shameless US');
+    });
+
+    test('PHASE 3: should handle multiple country codes formats', () {
+      final result = SeriesParser.cleanCollectionTitle('The Office [UK] Shameless {US}');
+      expect(result, 'The Office UK Shameless US');
+    });
+
+    // COMBINED PATTERNS - Real-world complex examples
+
+    test('COMBINED: should handle multiple new patterns together', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'Game of Thrones [2011-2019] AMZN WEB DL Full Series [HINDI] [Multi-Audio] 1080p'
+      );
+      expect(result, 'Game of Thrones');
+    });
+
+    test('COMBINED: should handle scene tags with platform and quality', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'Breaking Bad PROPER REPACK AMZN WEB DL Complete Box Set'
+      );
+      expect(result, 'Breaking Bad');
+    });
+
+    test('COMBINED: should handle daily show with all patterns', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'The Daily Show 2024.01.15 [Multi-Audio] HMAX HD TV 1080p'
+      );
+      expect(result, 'The Daily Show');
+    });
+
+    test('COMBINED: should handle year range without dash and platform tags', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'Person Of Interest (2011 2016) NETFLIX Full Series PROPER'
+      );
+      expect(result, 'Person Of Interest');
+    });
+
+    test('COMBINED: should preserve numbers in titles with new patterns', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'Beverly Hills 90210 {2008-2013} Complete Box Set AMZN'
+      );
+      expect(result, 'Beverly Hills 90210');
+    });
+
+    test('COMBINED: should handle alternative season ranges with scene tags', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'The Wire Seasons 1 through 5 PROPER Blu Ray'
+      );
+      expect(result, 'The Wire');
+    });
   });
 
   group('Enhanced Title Validation Tests', () {
