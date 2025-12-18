@@ -1433,18 +1433,17 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               const SizedBox(height: 8),
 
               // Description
-              Text(
-                hasMetadata && episodeInfo!.plot != null
-                    ? episodeInfo.plot!
-                    : 'No description available',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  height: 1.4,
+              if (hasMetadata && episodeInfo!.plot != null)
+                Text(
+                  episodeInfo.plot!,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
             ],
           ),
         ),
@@ -1478,7 +1477,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       children: [
         // Main content - horizontal layout
         SizedBox(
-          height: 140,
+          height: 180,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1728,20 +1727,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       const SizedBox(height: 8),
 
                       // Description
-                      Expanded(
-                        child: Text(
-                          hasMetadata && episodeInfo!.plot != null
-                              ? episodeInfo.plot!
-                              : 'No description available',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            height: 1.4,
+                      if (hasMetadata && episodeInfo!.plot != null)
+                        Expanded(
+                          child: Text(
+                            episodeInfo.plot!,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                              height: 1.4,
+                            ),
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                        )
+                      else
+                        const Spacer(),
                     ],
                   ),
                 ),
