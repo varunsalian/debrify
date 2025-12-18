@@ -274,6 +274,30 @@ class SeriesParser {
     final originalTitle = title;
     String cleaned = title;
 
+    // PRE-PROCESSING: Handle multi-line titles and file metadata
+    // 1. Take only the first line (before any newline)
+    if (cleaned.contains('\n')) {
+      cleaned = cleaned.split('\n').first.trim();
+    }
+
+    // 2. Remove emoji metadata (👤 💾 ⚙️ and similar) - do this BEFORE other cleaning
+    // Remove common file metadata emojis and everything after them
+    cleaned = cleaned.replaceAll(RegExp(r'[👤💾⚙️📁📂🎬🎥🎞️📽️🎦]+.*$'), '');
+    // Remove any remaining emoji characters
+    cleaned = cleaned.replaceAll(RegExp(r'[\u{1F300}-\u{1F9FF}]', unicode: true), '');
+    // Remove emoji variation selectors and other unicode symbols
+    cleaned = cleaned.replaceAll(RegExp(r'[\u{2600}-\u{26FF}]', unicode: true), '');
+    cleaned = cleaned.replaceAll(RegExp(r'[\u{2700}-\u{27BF}]', unicode: true), '');
+
+    // 3. Remove file paths (anything with forward/back slashes)
+    // Match patterns like "Season 1/file.mkv" or " /folder/file"
+    cleaned = cleaned.replaceAll(RegExp(r'[/\\][^/\\]+\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v).*$', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\s*[/\\].+$'), '');
+
+    // 4. Trim and remove trailing numbers that are leftovers (like "HEVC 1" → "1")
+    cleaned = cleaned.trim();
+    cleaned = cleaned.replaceAll(RegExp(r'\s+\d+\s*$'), '');
+
     // PHASE 1: NORMALIZATION
     // 1. Normalize separators - replace dots and underscores with spaces
     cleaned = cleaned.replaceAll(RegExp(r'[._]'), ' ');
@@ -318,7 +342,14 @@ class SeriesParser {
     // 12. Clean up remaining artifacts - separators, empty brackets
     cleaned = _cleanupSeparators(cleaned);
 
-    // 13. Final trim
+    // 13. Remove orphaned punctuation (leftover from bracket/paren content removal)
+    // This handles cases where content inside brackets was removed but brackets remain
+    cleaned = cleaned.replaceAll(RegExp(r'\s*\(\s*$'), ''); // trailing "("
+    cleaned = cleaned.replaceAll(RegExp(r'\s*\[\s*$'), ''); // trailing "["
+    cleaned = cleaned.replaceAll(RegExp(r'\s*\)\s*$'), ''); // trailing ")"
+    cleaned = cleaned.replaceAll(RegExp(r'\s*\]\s*$'), ''); // trailing "]"
+
+    // 14. Final trim
     cleaned = cleaned.trim();
 
     // VALIDATION
@@ -470,8 +501,8 @@ class SeriesParser {
     text = text.replaceAll(RegExp(r'\+.*$', caseSensitive: false), ' ');
 
     // Standalone "COMPLETE" as a keyword (but not when it's part of a title like "Complete Saga")
-    // Only remove if at the end
-    text = text.replaceAll(RegExp(r'\bComplete\s*$', caseSensitive: false), ' ');
+    // Remove if at the end OR followed by year/punctuation (like "Complete (2011)")
+    text = text.replaceAll(RegExp(r'\bComplete\s*(?=\(|\[|$)', caseSensitive: false), ' ');
 
     return text;
   }

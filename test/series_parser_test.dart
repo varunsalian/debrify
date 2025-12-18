@@ -617,6 +617,36 @@ void main() {
       final result = SeriesParser.cleanCollectionTitle('The Office Complete + Movies + Specials + Deleted Scenes');
       expect(result, 'The Office');
     });
+
+    // MULTI-LINE AND METADATA HANDLING
+
+    test('MULTILINE: should extract only first line from multi-line title', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'Breaking Bad (2008) Season 1-5 S01-S05 (1080p BluRay x265 HEVC 1\nSeason 1/Breaking Bad (2008) - S01E01 - Pilot.mkv\n👤 382 💾 2.56 GB ⚙️ ThePirateBay'
+      );
+      expect(result, 'Breaking Bad');
+    });
+
+    test('MULTILINE: should remove file paths', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'Breaking Bad Complete Season 1/Breaking Bad S01E01.mkv'
+      );
+      expect(result, 'Breaking Bad');
+    });
+
+    test('MULTILINE: should remove emoji metadata', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'Breaking Bad S01-S05 👤 382 💾 2.56 GB ⚙️ ThePirateBay'
+      );
+      expect(result, 'Breaking Bad');
+    });
+
+    test('MULTILINE: should handle complex real-world example', () {
+      final result = SeriesParser.cleanCollectionTitle(
+        'Game of Thrones Complete (2011-2019) 1080p\nSeason 1/Game.of.Thrones.S01E01.mkv\n👤 1234 💾 50 GB'
+      );
+      expect(result, 'Game of Thrones');
+    });
   });
 
   group('Enhanced Title Validation Tests', () {
