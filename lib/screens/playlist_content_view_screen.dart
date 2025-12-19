@@ -1043,14 +1043,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Fetch TVMaze metadata asynchronously
       if (_seriesPlaylist!.isSeries) {
         _seriesPlaylist!.fetchEpisodeInfo(playlistItem: widget.playlistItem).then((_) {
-          if (mounted && _isLoadingSeriesMetadata) {
+          if (mounted) {
             setState(() {
               _isLoadingSeriesMetadata = false;
             });
           }
         }).catchError((e) {
           print('Failed to fetch episode metadata: $e');
-          if (mounted && _isLoadingSeriesMetadata) {
+          if (mounted) {
             setState(() {
               _isLoadingSeriesMetadata = false;
             });
@@ -1113,7 +1113,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       // Reload episode info with the new show ID
-      if (_seriesPlaylist != null && _seriesPlaylist!.isSeries) {
+      if (_seriesPlaylist != null && _seriesPlaylist!.isSeries && mounted) {
         setState(() {
           _isLoadingSeriesMetadata = true;
         });
