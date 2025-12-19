@@ -3151,7 +3151,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     enabled: hasVideo,
                     onTap: () {
                       Navigator.of(ctx).pop();
-                      _addPikPakToPlaylist(videoFiles, torrentName);
+                      _addPikPakToPlaylist(videoFiles, torrentName, fileId);
                     },
                   ),
                   const SizedBox(height: 12),
@@ -3348,7 +3348,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return fallback;
   }
 
-  Future<void> _addPikPakToPlaylist(List<Map<String, dynamic>> videoFiles, String torrentName) async {
+  Future<void> _addPikPakToPlaylist(List<Map<String, dynamic>> videoFiles, String torrentName, String folderId) async {
     if (videoFiles.isEmpty) {
       _showPikPakSnack('No video files to add', isError: true);
       return;
@@ -3385,6 +3385,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'provider': 'pikpak',
         'title': torrentName,
         'kind': 'collection',
+        'pikpakFileId': folderId,       // Store the folder ID for folder structure preservation
         'pikpakFiles': filesMetadata,  // NEW: Full metadata for instant playback
         'pikpakFileIds': fileIds,       // KEEP: For backward compatibility and deduplication
         'count': videoFiles.length,
