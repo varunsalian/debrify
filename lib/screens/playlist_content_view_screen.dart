@@ -71,13 +71,16 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Load saved view mode first
     await _loadSavedViewMode();
 
-    // Then load content and apply the saved (or default) view mode
+    // Then load content
     await _loadContent();
 
-    // Parse series playlist to extract clean series title
-    // This ensures progress is loaded with the correct series title for all view modes
+    // Parse series playlist BEFORE applying view mode
+    // This ensures _seriesPlaylist is available when _applyViewMode() checks it
     if (_rootContent != null) {
       await _parseSeriesPlaylist();
+
+      // THEN apply view mode (can now use _seriesPlaylist.isSeries)
+      _applyViewMode(_currentViewMode);
     }
 
     // Note: Progress is now loaded within _parseSeriesPlaylist()
@@ -187,10 +190,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _loadRealDebridContent();
       }
 
-      // Apply initial view mode
-      if (_rootContent != null) {
-        _applyViewMode(_currentViewMode);
-      }
+      // Note: View mode is now applied in _initializeScreen() after _parseSeriesPlaylist()
+      // This ensures _seriesPlaylist is available for series detection
     } catch (e) {
       print('Error loading content: $e');
       setState(() {
@@ -509,20 +510,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     if (videoFiles.length < 3) {
       // Not enough files for series detection, fallback to sorted
-      _showSeriesDetectionFailed();
       return _applySortedView(nodes);
     }
 
-    // Parse filenames
+    // Use the already-parsed _seriesPlaylist instead of re-parsing filenames
+    // This is more accurate (considers TVMaze mappings) and faster
+    if (_seriesPlaylist == null || !_seriesPlaylist!.isSeries) {
+      return _applySortedView(nodes);
+    }
+
+    // Parse filenames for season/episode extraction
     final filenames = videoFiles.map((f) => f.name).toList();
     final parsed = SeriesParser.parsePlaylist(filenames);
-
-    // Check if it's actually a series
-    final analysis = SeriesParser.analyzePlaylistConfidence(filenames);
-    if (analysis.classification != PlaylistClassification.SERIES) {
-      _showSeriesDetectionFailed();
-      return _applySortedView(nodes);
-    }
 
     // Group by season
     final Map<int, List<RDFileNode>> seasonMap = {};
@@ -547,19 +546,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     return [...otherNodes, ...seasonFolders];
   }
 
-  /// Show snackbar when series detection fails
-  void _showSeriesDetectionFailed() {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No series detected. Switching to Sort (A-Z) view.'),
-        duration: Duration(seconds: 3),
-        backgroundColor: Color(0xFF1E293B),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 
   /// Navigate into a folder
   void _navigateIntoFolder(RDFileNode folder) {
@@ -994,10 +980,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   Future<void> _parseSeriesPlaylist() async {
     if (_rootContent == null) return;
 
-    setState(() {
-      _isLoadingSeriesMetadata = true;
-    });
-
     try {
       // Get ALL video files recursively from the entire content tree
       final allFiles = _rootContent!.getAllFiles();
@@ -1006,9 +988,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           .toList();
 
       if (videoFiles.isEmpty) {
-        setState(() {
-          _isLoadingSeriesMetadata = false;
-        });
         return;
       }
 
@@ -1045,25 +1024,37 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         _fileProgressCache = episodeProgress;
       }
 
+      // Check if we have a saved TVMaze mapping (indicates cached data)
+      // Only show loading indicator if data needs to be fetched
+      bool showLoading = true;
+      if (widget.playlistItem != null) {
+        final mapping = await StorageService.getTVMazeSeriesMapping(widget.playlistItem!);
+        if (mapping != null) {
+          showLoading = false;  // Data should be cached, skip loading indicator
+        }
+      }
+
+      if (showLoading) {
+        setState(() {
+          _isLoadingSeriesMetadata = true;
+        });
+      }
+
       // Fetch TVMaze metadata asynchronously
       if (_seriesPlaylist!.isSeries) {
         _seriesPlaylist!.fetchEpisodeInfo(playlistItem: widget.playlistItem).then((_) {
-          if (mounted) {
+          if (mounted && _isLoadingSeriesMetadata) {
             setState(() {
               _isLoadingSeriesMetadata = false;
             });
           }
         }).catchError((e) {
           print('Failed to fetch episode metadata: $e');
-          if (mounted) {
+          if (mounted && _isLoadingSeriesMetadata) {
             setState(() {
               _isLoadingSeriesMetadata = false;
             });
           }
-        });
-      } else {
-        setState(() {
-          _isLoadingSeriesMetadata = false;
         });
       }
     } catch (e) {
