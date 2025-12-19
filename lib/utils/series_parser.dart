@@ -272,6 +272,9 @@ class SeriesParser {
   /// - "Game of Thrones - Complete Series (2011-2019) [1080p]" → "Game of Thrones"
   /// - "The Office [US] - Complete Series" → "The Office US"
   /// - "Beverly Hills 90210" → "Beverly Hills 90210" (preserves numbers in title)
+  /// - "The Walking Dead - The Complete Collection (2010-2022) BDRip 1080p [Part 2]" → "The Walking Dead"
+  /// - "Breaking Bad - Complete Series [Vol 1]" → "Breaking Bad"
+  /// - "Game of Thrones S01-S08 [Disc 2]" → "Game of Thrones"
   static String cleanCollectionTitle(String title) {
     if (title.isEmpty) return title;
 
@@ -314,46 +317,50 @@ class SeriesParser {
     // 3. Remove regional/language tags (BEFORE release groups to avoid conflicts)
     cleaned = _removeRegionalTags(cleaned);
 
-    // 4. Remove release group tags in brackets
+    // 4. Remove collection part indicators BEFORE release group tags
+    //    This ensures [Part 2], [Vol 1], [Disc 3] are removed for TVMaze search
+    cleaned = _removeCollectionPartIndicators(cleaned);
+
+    // 5. Remove release group tags in brackets
     //    Match [UPPERCASE] or [ALPHANUMERIC] patterns (greedy)
     cleaned = _removeReleaseGroupTags(cleaned);
 
-    // 5. Remove scene release metadata tags (PROPER, REPACK, etc.)
+    // 6. Remove scene release metadata tags (PROPER, REPACK, etc.)
     cleaned = _removeSceneTags(cleaned);
 
-    // 6. Remove quality/format/platform tags
+    // 7. Remove quality/format/platform tags
     //    Includes multi-word tags (WEB DL) and platform tags (AMZN, NETFLIX)
     cleaned = _removeQualityTags(cleaned);
 
-    // 7. Remove season/series metadata
+    // 8. Remove season/series metadata
     //    Includes extended keywords (Full Series, Box Set) and alternative formats
     cleaned = _removeSeasonMetadata(cleaned);
 
-    // 8. Remove date formats (for daily shows like talk shows, news)
+    // 9. Remove date formats (for daily shows like talk shows, news)
     cleaned = _removeDateFormats(cleaned);
 
-    // 9. Remove year ranges - ALL variations
+    // 10. Remove year ranges - ALL variations
     //    (2005-2013), (2011 2019), [2011-2019], {2011-2019}
     cleaned = _removeYearRanges(cleaned);
 
-    // 10. Remove trailing single year (2005) at end only - preserve years in middle
+    // 11. Remove trailing single year (2005) at end only - preserve years in middle
     cleaned = _removeTrailingYear(cleaned);
 
-    // 11. Remove edition tags (Extended, Unrated, Director's Cut)
+    // 12. Remove edition tags (Extended, Unrated, Director's Cut)
     cleaned = _removeEditionTags(cleaned);
 
     // PHASE 3: CLEANUP
-    // 12. Clean up remaining artifacts - separators, empty brackets
+    // 13. Clean up remaining artifacts - separators, empty brackets
     cleaned = _cleanupSeparators(cleaned);
 
-    // 13. Remove orphaned punctuation (leftover from bracket/paren content removal)
+    // 14. Remove orphaned punctuation (leftover from bracket/paren content removal)
     // This handles cases where content inside brackets was removed but brackets remain
     cleaned = cleaned.replaceAll(RegExp(r'\s*\(\s*$'), ''); // trailing "("
     cleaned = cleaned.replaceAll(RegExp(r'\s*\[\s*$'), ''); // trailing "["
     cleaned = cleaned.replaceAll(RegExp(r'\s*\)\s*$'), ''); // trailing ")"
     cleaned = cleaned.replaceAll(RegExp(r'\s*\]\s*$'), ''); // trailing "]"
 
-    // 14. Final trim
+    // 15. Final trim
     cleaned = cleaned.trim();
 
     // VALIDATION
@@ -375,6 +382,7 @@ class SeriesParser {
   static String _removeReleaseGroupTags(String text) {
     // Remove square brackets with uppercase/alphanumeric content
     // Examples: [F4S7], [YIFY], [RARBG], [PublicHD]
+    // Note: Collection part indicators like [Part 2] are now handled by _removeCollectionPartIndicators
     text = text.replaceAll(RegExp(r'\[[A-Z0-9]+\]', caseSensitive: false), ' ');
 
     // Remove curly braces with uppercase/alphanumeric content
@@ -432,12 +440,12 @@ class SeriesParser {
     text = text.replaceAll(platformPattern, ' ');
 
     // Quality tags: 1080p, 720p, 480p, 2160p, 4K, UHD, FHD, HD, HDR
-    // Format tags: BluRay, BRRip, WEBRip, WEB-DL, HDTV, DVDRip
+    // Format tags: BluRay, BRRip, BDRip, WEBRip, WEB-DL, HDTV, DVDRip
     // Codec tags: x264, x265, H264, H265, HEVC, AVC
     // Audio tags: AAC, AC3, DTS, Atmos, 5.1, 7.1
     final qualityPattern = RegExp(
       r'\b(?:1080p|720p|480p|2160p|4K|UHD|FHD|HD|HDR|'
-      r'BluRay|BRRip|WEBRip|WEB-DL|HDTV|DVDRip|HDRip|'
+      r'BluRay|BRRip|BDRip|WEBRip|WEB-DL|HDTV|DVDRip|HDRip|'
       r'x264|x265|H\.?264|H\.?265|HEVC|AVC|'
       r'AAC|AC3|DTS|Atmos|5\.1|7\.1|10bit|8bit)\b',
       caseSensitive: false,
@@ -636,6 +644,34 @@ class SeriesParser {
     // Clean up standalone dashes
     text = text.replaceAll(RegExp(r'\s+-\s+$'), '');
     text = text.replaceAll(RegExp(r'^\s*-\s+'), '');
+
+    return text;
+  }
+
+  /// Remove collection part indicators like [Part 1], [Vol 2], [Disc 3]
+  /// These are metadata used in collections and should be removed for TVMaze search
+  static String _removeCollectionPartIndicators(String text) {
+    // Remove collection part indicators in square brackets
+    // [Part X], [Part 1], [Part One], etc.
+    text = text.replaceAll(RegExp(r'\[Part\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\]', caseSensitive: false), ' ');
+
+    // Remove volume indicators
+    // [Vol X], [Vol. X], [Volume X], etc.
+    text = text.replaceAll(RegExp(r'\[Vol(?:ume)?\.?\s+\d+\]', caseSensitive: false), ' ');
+
+    // Remove disc/disk indicators
+    // [Disc X], [Disk X], [DVD X], [CD X]
+    text = text.replaceAll(RegExp(r'\[(?:Disc|Disk|DVD|CD)\s+\d+\]', caseSensitive: false), ' ');
+
+    // Also remove these patterns in parentheses
+    text = text.replaceAll(RegExp(r'\(Part\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\)', caseSensitive: false), ' ');
+    text = text.replaceAll(RegExp(r'\(Vol(?:ume)?\.?\s+\d+\)', caseSensitive: false), ' ');
+    text = text.replaceAll(RegExp(r'\((?:Disc|Disk|DVD|CD)\s+\d+\)', caseSensitive: false), ' ');
+
+    // Remove these patterns without brackets too (at word boundaries)
+    text = text.replaceAll(RegExp(r'\bPart\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\b', caseSensitive: false), ' ');
+    text = text.replaceAll(RegExp(r'\bVol(?:ume)?\.?\s+\d+\b', caseSensitive: false), ' ');
+    text = text.replaceAll(RegExp(r'\b(?:Disc|Disk|DVD|CD)\s+\d+\b', caseSensitive: false), ' ');
 
     return text;
   }
