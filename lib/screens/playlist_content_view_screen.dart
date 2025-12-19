@@ -79,6 +79,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     if (_rootContent != null) {
       await _parseSeriesPlaylist();
 
+      // Auto-set Series View for detected series (only if no saved preference exists)
+      final savedViewMode = await StorageService.getPlaylistItemViewMode(widget.playlistItem);
+      if (_seriesPlaylist?.isSeries == true && savedViewMode == null) {
+        setState(() {
+          _currentViewMode = FolderViewMode.seriesArrange;
+        });
+      }
+
       // THEN apply view mode (can now use _seriesPlaylist.isSeries)
       _applyViewMode(_currentViewMode);
     }
