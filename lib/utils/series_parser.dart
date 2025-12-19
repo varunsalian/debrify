@@ -127,6 +127,8 @@ class SeriesParser {
   static final List<RegExp> _seasonEpisodePatterns = [
     // Bracket notation: [S.E] or [S.E.E] (MUST BE FIRST for priority)
     RegExp(r'^\[(\d{1,2})\.(\d{1,2})(?:\.(\d{1,2}))?\]'),
+    // S01EP02, S1EP2, S01.EP02, S1.EP2 (EP variant - MUST BE BEFORE standard E pattern)
+    RegExp(r'[Ss](\d{1,2})[Ee][Pp](\d{1,3})'),
     // S01E02, S1E2, S01.E02, S1.E2
     RegExp(r'[Ss](\d{1,2})[Ee](\d{1,3})'),
     // 1x02, 01x02, 1.02, 01.02
@@ -154,6 +156,8 @@ class SeriesParser {
 
   static final List<RegExp> _titlePatterns = [
     // Common series title patterns
+    // S01EP02 variant (MUST BE BEFORE standard S01E02 pattern)
+    RegExp(r'^(.+?)\s*[Ss](\d{1,2})[Ee][Pp](\d{1,3})'),
     RegExp(r'^(.+?)\s*[Ss](\d{1,2})[Ee](\d{1,3})'),
     RegExp(r'^(.+?)\s*(\d{1,2})[xX](\d{1,3})'),
     RegExp(r'^(.+?)\s*(\d{1,2})\.(\d{1,3})'),
