@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'tvmaze_service.dart';
+import 'storage_service.dart';
 
 class EpisodeInfoService {
   static final Map<String, dynamic> _cache = {};
@@ -178,9 +180,90 @@ class EpisodeInfoService {
     await TVMazeService.clearSeriesCache(seriesTitle);
   }
 
+  /// Clear all cached data for a specific show ID
+  static Future<void> clearShowCache(int showId) async {
+    _cache.remove('show_$showId');
+    _cache.remove('episodes_$showId');
+    debugPrint('🧹 EpisodeInfoService: Cleared cache for show ID $showId');
+  }
+
   /// Dispose resources
   static void dispose() {
     _rateLimitTimer?.cancel();
     clearCache();
+  }
+
+  /// Get TVMaze mapping for a playlist item
+  static Future<Map<String, dynamic>?> getTVMazeMapping(Map<String, dynamic> playlistItem) async {
+    return await StorageService.getTVMazeSeriesMapping(playlistItem);
+  }
+
+  /// Get show info by ID from TVMaze
+  static Future<Map<String, dynamic>?> getShowById(int showId) async {
+    final cacheKey = 'show_$showId';
+
+    // Check cache first
+    if (_cache.containsKey(cacheKey)) {
+      final cached = _cache[cacheKey];
+      if (cached is Map<String, dynamic>) {
+        return cached;
+      } else if (cached == null) {
+        return null;
+      }
+    }
+
+    // Check if TVMaze is available
+    if (!TVMazeService.currentAvailability) {
+      _cache[cacheKey] = null;
+      return null;
+    }
+
+    await _rateLimit();
+
+    try {
+      final showInfo = await TVMazeService.getShowById(showId);
+      if (showInfo != null) {
+        _cache[cacheKey] = showInfo;
+        return showInfo;
+      } else {
+        _cache[cacheKey] = null;
+        return null;
+      }
+    } catch (e) {
+      _cache[cacheKey] = null;
+      return null;
+    }
+  }
+
+  /// Get episodes by show ID from TVMaze
+  static Future<List<Map<String, dynamic>>> getEpisodesByShowId(int showId) async {
+    final cacheKey = 'episodes_$showId';
+
+    // Check cache first
+    if (_cache.containsKey(cacheKey)) {
+      final cached = _cache[cacheKey];
+      if (cached is List) {
+        return List<Map<String, dynamic>>.from(cached);
+      } else if (cached == null) {
+        return [];
+      }
+    }
+
+    // Check if TVMaze is available
+    if (!TVMazeService.currentAvailability) {
+      _cache[cacheKey] = null;
+      return [];
+    }
+
+    await _rateLimit();
+
+    try {
+      final episodes = await TVMazeService.getEpisodes(showId);
+      _cache[cacheKey] = episodes;
+      return episodes;
+    } catch (e) {
+      _cache[cacheKey] = null;
+      return [];
+    }
   }
 } 

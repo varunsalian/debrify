@@ -8,12 +8,15 @@ import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/main_page_bridge.dart';
+import '../services/episode_info_service.dart';
+import '../services/tvmaze_service.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
 import '../utils/rd_folder_tree_builder.dart';
 import '../utils/torbox_folder_tree_builder.dart';
 import '../widgets/view_mode_dropdown.dart';
+import '../widgets/tvmaze_search_dialog.dart';
 import 'video_player_screen.dart';
 
 /// Screen for viewing contents of a playlist item
@@ -1044,7 +1047,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Fetch TVMaze metadata asynchronously
       if (_seriesPlaylist!.isSeries) {
-        _seriesPlaylist!.fetchEpisodeInfo().then((_) {
+        _seriesPlaylist!.fetchEpisodeInfo(playlistItem: widget.playlistItem).then((_) {
           if (mounted) {
             setState(() {
               _isLoadingSeriesMetadata = false;
@@ -1071,6 +1074,152 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
   }
 
+  /// Show the Fix Metadata dialog to manually select a TV show
+  Future<void> _showFixMetadataDialog() async {
+    // Show the search dialog
+    final selectedShow = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => TVMazeSearchDialog(
+        initialQuery: _seriesPlaylist?.seriesTitle ?? '',
+      ),
+    );
+
+    if (selectedShow != null && mounted) {
+      // 1. Get OLD mapping (before it's overwritten)
+      final oldMapping = await StorageService.getTVMazeSeriesMapping(widget.playlistItem);
+      final oldShowId = oldMapping?['tvmazeShowId'] as int?;
+
+      // 2. Clear old show ID cache if it exists
+      if (oldShowId != null && oldShowId != selectedShow['id']) {
+        debugPrint('🧹 Clearing old show ID cache: $oldShowId');
+        await TVMazeService.clearShowCache(oldShowId);
+        await EpisodeInfoService.clearShowCache(oldShowId);
+      }
+
+      // 3. Clear series name cache (existing logic)
+      await EpisodeInfoService.clearSeriesCache(_seriesPlaylist?.seriesTitle ?? '');
+      await TVMazeService.clearSeriesCache(_seriesPlaylist?.seriesTitle ?? '');
+
+      // 4. Save new mapping
+      await StorageService.saveTVMazeSeriesMapping(
+        playlistItem: widget.playlistItem,
+        tvmazeShowId: selectedShow['id'] as int,
+        showName: selectedShow['name'] as String,
+      );
+
+      // Update playlist item poster/cover image
+      await _updatePlaylistPoster(selectedShow);
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Metadata fixed! Using "${selectedShow['name']}" from TVMaze'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // Reload episode info with the new show ID
+      if (_seriesPlaylist != null && _seriesPlaylist!.isSeries) {
+        setState(() {
+          _isLoadingSeriesMetadata = true;
+        });
+
+        _seriesPlaylist!.fetchEpisodeInfo(playlistItem: widget.playlistItem).then((_) {
+          if (mounted) {
+            setState(() {
+              _isLoadingSeriesMetadata = false;
+            });
+          }
+        }).catchError((e) {
+          print('Failed to refresh episode metadata: $e');
+          if (mounted) {
+            setState(() {
+              _isLoadingSeriesMetadata = false;
+            });
+          }
+        });
+      }
+    }
+  }
+
+  /// Update the playlist item's poster/cover image with the TVMaze show poster
+  Future<void> _updatePlaylistPoster(Map<String, dynamic> showInfo) async {
+    try {
+      // Extract poster URL from TVMaze show data
+      // TVMaze provides 'image' with 'medium' and 'original' URLs
+      final image = showInfo['image'];
+      String? posterUrl;
+
+      if (image != null && image is Map<String, dynamic>) {
+        // Prefer original over medium for better quality
+        posterUrl = image['original'] as String? ?? image['medium'] as String?;
+      }
+
+      if (posterUrl == null || posterUrl.isEmpty) {
+        print('No poster URL found in TVMaze show data');
+        return;
+      }
+
+      print('🎬 Updating playlist poster with: $posterUrl');
+
+      // CRITICAL: Save poster override to persistent storage
+      // This ensures the poster persists across app restarts
+      await StorageService.savePlaylistPosterOverride(
+        playlistItem: widget.playlistItem,
+        posterUrl: posterUrl,
+      );
+
+      // Also update the in-memory playlist item for immediate UI update
+      final provider = (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
+      bool updated = false;
+
+      if (provider.toLowerCase() == 'realdebrid') {
+        final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
+        if (rdTorrentId != null) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            rdTorrentId: rdTorrentId,
+          );
+        }
+      } else if (provider.toLowerCase() == 'torbox') {
+        final torboxTorrentId = widget.playlistItem['torboxTorrentId'];
+        if (torboxTorrentId != null) {
+          // Torbox uses integer IDs, but updatePlaylistItemPoster expects String
+          // We need to update the playlist manually
+          final items = await StorageService.getPlaylistItemsRaw();
+          final itemIndex = items.indexWhere(
+            (item) => item['torboxTorrentId'] == torboxTorrentId,
+          );
+
+          if (itemIndex >= 0) {
+            items[itemIndex]['posterUrl'] = posterUrl;
+            await StorageService.savePlaylistItemsRaw(items);
+            updated = true;
+          }
+        }
+      } else if (provider.toLowerCase() == 'pikpak') {
+        final pikpakCollectionId = widget.playlistItem['pikpakCollectionId'] as String?;
+        if (pikpakCollectionId != null) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            pikpakCollectionId: pikpakCollectionId,
+          );
+        }
+      }
+
+      if (updated) {
+        print('✅ Successfully updated playlist poster in memory and persistent storage');
+      } else {
+        print('⚠️ Updated persistent storage but in-memory update failed - poster will still persist on restart');
+      }
+    } catch (e) {
+      print('❌ Error updating playlist poster: $e');
+    }
+  }
+
   /// Build season selector dropdown
   Widget _buildSeasonSelector() {
     if (_seriesPlaylist == null) return const SizedBox.shrink();
@@ -1090,14 +1239,57 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         children: [
           const Icon(Icons.video_library, size: 20, color: Colors.white70),
           const SizedBox(width: 12),
-          Text(
-            _seriesPlaylist!.seriesTitle ?? 'Series',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+          Expanded(
+            child: Text(
+              _seriesPlaylist!.seriesTitle ?? 'Series',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
+          // Fix Metadata button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _showFixMetadataDialog,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.build,
+                      color: Colors.orange,
+                      size: 14,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Fix Metadata',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
           DropdownButton<int>(
             value: _selectedSeasonNumber,
             dropdownColor: const Color(0xFF1E293B),

@@ -602,7 +602,8 @@ class SeriesPlaylist {
   }
 
   /// Fetch episode information for all episodes in the playlist
-  Future<void> fetchEpisodeInfo() async {
+  /// Pass [playlistItem] to enable saved TVMaze mapping lookup
+  Future<void> fetchEpisodeInfo({Map<String, dynamic>? playlistItem}) async {
     if (!isSeries) {
       debugPrint('SeriesPlaylist: Not a series, skipping TVMaze fetch');
       return;
@@ -623,10 +624,33 @@ class SeriesPlaylist {
     final validSearchTitle = searchTitle!;
     debugPrint('TVMaze: Searching for "$validSearchTitle"');
 
+    // Check for saved TVMaze mapping first
+    int? overrideShowId;
+    if (playlistItem != null) {
+      try {
+        final mapping = await _getTVMazeMapping(playlistItem);
+        if (mapping != null && mapping['tvmazeShowId'] != null) {
+          overrideShowId = mapping['tvmazeShowId'] as int;
+          debugPrint('TVMaze: Using saved mapping - Show ID $overrideShowId (${mapping['showName']})');
+        }
+      } catch (e) {
+        debugPrint('TVMaze: Error loading saved mapping: $e');
+      }
+    }
+
     // First, get the show information to extract genres, language, network, etc.
     Map<String, dynamic>? showInfo;
     try {
-      showInfo = await EpisodeInfoService.getSeriesInfo(validSearchTitle);
+      if (overrideShowId != null) {
+        // Use the saved show ID directly
+        showInfo = await _getShowById(overrideShowId);
+        if (showInfo != null) {
+          debugPrint('TVMaze: Loaded show info using saved mapping');
+        }
+      } else {
+        // Fall back to searching by series title
+        showInfo = await EpisodeInfoService.getSeriesInfo(validSearchTitle);
+      }
       // Found series info (no log needed, success assumed)
     } catch (e) {
       debugPrint('TVMaze: Series lookup failed: $e');
@@ -640,7 +664,13 @@ class SeriesPlaylist {
 
     if (hasTitleOnlyEpisodes && showInfo != null) {
       try {
-        allTVMazeEpisodes = await EpisodeInfoService.getAllEpisodes(validSearchTitle);
+        if (overrideShowId != null) {
+          // Use the saved show ID directly
+          allTVMazeEpisodes = await _getEpisodesByShowId(overrideShowId);
+        } else {
+          // Fall back to searching by series title
+          allTVMazeEpisodes = await EpisodeInfoService.getAllEpisodes(validSearchTitle);
+        }
         debugPrint('TVMaze: Got ${allTVMazeEpisodes.length} episodes for title matching');
       } catch (e) {
         debugPrint('TVMaze: Episode list failed: $e');
@@ -658,11 +688,27 @@ class SeriesPlaylist {
         if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
           // Standard episode with S##E## format
           try {
-            final episodeData = await EpisodeInfoService.getEpisodeInfo(
-              validSearchTitle,
-              episode.seriesInfo.season!,
-              episode.seriesInfo.episode!,
-            );
+            Map<String, dynamic>? episodeData;
+
+            if (overrideShowId != null) {
+              // Use saved show ID to get episode directly
+              final episodes = await _getEpisodesByShowId(overrideShowId);
+              // Find the specific episode
+              for (final ep in episodes) {
+                if (ep['season'] == episode.seriesInfo.season && ep['number'] == episode.seriesInfo.episode) {
+                  episodeData = ep;
+                  break;
+                }
+              }
+            } else {
+              // Fall back to searching by series title
+              episodeData = await EpisodeInfoService.getEpisodeInfo(
+                validSearchTitle,
+                episode.seriesInfo.season!,
+                episode.seriesInfo.episode!,
+              );
+            }
+
             if (episodeData != null) {
               episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
               // Episode matched (no log per episode)
@@ -879,5 +925,38 @@ class SeriesPlaylist {
     if (totalWords == 0) return 0.0;
 
     return matchingWords / totalWords;
+  }
+
+  /// Helper method to get TVMaze mapping from storage
+  /// Note: This needs to import StorageService
+  static Future<Map<String, dynamic>?> _getTVMazeMapping(Map<String, dynamic> playlistItem) async {
+    // Import at top of file: import '../services/storage_service.dart';
+    try {
+      // Dynamically import to avoid circular dependency
+      return await EpisodeInfoService.getTVMazeMapping(playlistItem);
+    } catch (e) {
+      debugPrint('Error getting TVMaze mapping: $e');
+      return null;
+    }
+  }
+
+  /// Helper method to get show info by ID from TVMaze
+  static Future<Map<String, dynamic>?> _getShowById(int showId) async {
+    try {
+      return await EpisodeInfoService.getShowById(showId);
+    } catch (e) {
+      debugPrint('Error getting show by ID: $e');
+      return null;
+    }
+  }
+
+  /// Helper method to get episodes by show ID from TVMaze
+  static Future<List<Map<String, dynamic>>> _getEpisodesByShowId(int showId) async {
+    try {
+      return await EpisodeInfoService.getEpisodesByShowId(showId);
+    } catch (e) {
+      debugPrint('Error getting episodes by show ID: $e');
+      return [];
+    }
   }
 }

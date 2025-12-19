@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
 import '../services/episode_info_service.dart';
 import '../services/storage_service.dart';
+import '../services/tvmaze_service.dart';
+import 'tvmaze_search_dialog.dart';
 
 // Premium blue accent used throughout the playlist view
 const Color kPremiumBlue = Color(0xFF6366F1);
@@ -12,12 +13,14 @@ class SeriesBrowser extends StatefulWidget {
   final SeriesPlaylist seriesPlaylist;
   final Function(int season, int episode) onEpisodeSelected;
   final int currentEpisodeIndex;
+  final Map<String, dynamic>? playlistItem; // For Fix Metadata feature
 
   const SeriesBrowser({
     super.key,
     required this.seriesPlaylist,
     required this.onEpisodeSelected,
     required this.currentEpisodeIndex,
+    this.playlistItem, // Optional playlist item data
   });
 
   @override
@@ -95,6 +98,18 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     }
   }
 
+  Future<int?> _getOverrideShowId() async {
+    // Check if there's a saved mapping for this playlist item
+    if (widget.playlistItem != null) {
+      final mapping = await StorageService.getTVMazeSeriesMapping(widget.playlistItem!);
+      if (mapping != null && mapping['tvmazeShowId'] != null) {
+        print('Using saved TVMaze mapping: Show ID ${mapping['tvmazeShowId']} (${mapping['showName']})');
+        return mapping['tvmazeShowId'] as int;
+      }
+    }
+    return null;
+  }
+
   Future<void> _loadEpisodeInfoInBackground() async {
     final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
     if (selectedSeason == null) {
@@ -118,18 +133,37 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Future<void> _loadEpisodeInfo(SeriesEpisode episode) async {
     if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
       try {
-        final episodeData = await EpisodeInfoService.getEpisodeInfo(
-          widget.seriesPlaylist.seriesTitle!,
-          episode.seriesInfo.season!,
-          episode.seriesInfo.episode!,
-        );
-        
+        // Check if we have a saved TVMaze show ID override
+        final overrideShowId = await _getOverrideShowId();
+
+        Map<String, dynamic>? episodeData;
+
+        if (overrideShowId != null) {
+          // Use the saved show ID directly
+          final episodes = await TVMazeService.getEpisodes(overrideShowId);
+          // Find the specific episode
+          for (final ep in episodes) {
+            if (ep['season'] == episode.seriesInfo.season && ep['number'] == episode.seriesInfo.episode) {
+              episodeData = ep;
+              break;
+            }
+          }
+        } else {
+          // Fall back to searching by series title
+          episodeData = await EpisodeInfoService.getEpisodeInfo(
+            widget.seriesPlaylist.seriesTitle!,
+            episode.seriesInfo.season!,
+            episode.seriesInfo.episode!,
+          );
+        }
+
         if (episodeData != null && mounted) {
           setState(() {
-            episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData);
+            episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData!);
           });
         }
       } catch (e) {
+        print('Error loading episode info: $e');
       } finally {
         final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
         _loadingEpisodes.remove(episodeKey);
@@ -179,6 +213,148 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         });
       }
     } catch (e) {
+    }
+  }
+
+  /// Show the Fix Metadata dialog to manually select a TV show
+  Future<void> _showFixMetadataDialog() async {
+    if (widget.playlistItem == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fix Metadata is not available for this content'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Show the search dialog
+    final selectedShow = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => TVMazeSearchDialog(
+        initialQuery: widget.seriesPlaylist.seriesTitle ?? '',
+      ),
+    );
+
+    if (selectedShow != null && mounted) {
+      // 1. Get OLD mapping (before it's overwritten)
+      final oldMapping = await StorageService.getTVMazeSeriesMapping(widget.playlistItem!);
+      final oldShowId = oldMapping?['tvmazeShowId'] as int?;
+
+      // 2. Clear old show ID cache if it exists
+      if (oldShowId != null && oldShowId != selectedShow['id']) {
+        debugPrint('🧹 Clearing old show ID cache: $oldShowId');
+        await TVMazeService.clearShowCache(oldShowId);
+        await EpisodeInfoService.clearShowCache(oldShowId);
+      }
+
+      // 3. Clear series name cache (existing logic)
+      await EpisodeInfoService.clearSeriesCache(widget.seriesPlaylist.seriesTitle ?? '');
+      await TVMazeService.clearSeriesCache(widget.seriesPlaylist.seriesTitle ?? '');
+
+      // 4. Save new mapping
+      await StorageService.saveTVMazeSeriesMapping(
+        playlistItem: widget.playlistItem!,
+        tvmazeShowId: selectedShow['id'] as int,
+        showName: selectedShow['name'] as String,
+      );
+
+      // Update playlist item poster/cover image
+      await _updatePlaylistPoster(selectedShow);
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Metadata fixed! Using "${selectedShow['name']}" from TVMaze'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // Reload episode info with the new show ID
+      setState(() {
+        _tvmazeAvailable = true;
+      });
+      _startBackgroundEpisodeInfoLoading();
+    }
+  }
+
+  /// Update the playlist item's poster/cover image with the TVMaze show poster
+  Future<void> _updatePlaylistPoster(Map<String, dynamic> showInfo) async {
+    if (widget.playlistItem == null) return;
+
+    try {
+      // Extract poster URL from TVMaze show data
+      // TVMaze provides 'image' with 'medium' and 'original' URLs
+      final image = showInfo['image'];
+      String? posterUrl;
+
+      if (image != null && image is Map<String, dynamic>) {
+        // Prefer original over medium for better quality
+        posterUrl = image['original'] as String? ?? image['medium'] as String?;
+      }
+
+      if (posterUrl == null || posterUrl.isEmpty) {
+        print('No poster URL found in TVMaze show data');
+        return;
+      }
+
+      print('🎬 Updating playlist poster with: $posterUrl');
+
+      // CRITICAL: Save poster override to persistent storage
+      // This ensures the poster persists across app restarts
+      await StorageService.savePlaylistPosterOverride(
+        playlistItem: widget.playlistItem!,
+        posterUrl: posterUrl,
+      );
+
+      // Also update the in-memory playlist item for immediate UI update
+      final provider = (widget.playlistItem!['provider'] as String?) ?? 'realdebrid';
+      bool updated = false;
+
+      if (provider.toLowerCase() == 'realdebrid') {
+        final rdTorrentId = widget.playlistItem!['rdTorrentId'] as String?;
+        if (rdTorrentId != null) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            rdTorrentId: rdTorrentId,
+          );
+        }
+      } else if (provider.toLowerCase() == 'torbox') {
+        final torboxTorrentId = widget.playlistItem!['torboxTorrentId'];
+        if (torboxTorrentId != null) {
+          // Torbox uses integer IDs, but updatePlaylistItemPoster expects String
+          // We need to update the playlist manually
+          final items = await StorageService.getPlaylistItemsRaw();
+          final itemIndex = items.indexWhere(
+            (item) => item['torboxTorrentId'] == torboxTorrentId,
+          );
+
+          if (itemIndex >= 0) {
+            items[itemIndex]['posterUrl'] = posterUrl;
+            await StorageService.savePlaylistItemsRaw(items);
+            updated = true;
+          }
+        }
+      } else if (provider.toLowerCase() == 'pikpak') {
+        final pikpakCollectionId = widget.playlistItem!['pikpakCollectionId'] as String?;
+        if (pikpakCollectionId != null) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            pikpakCollectionId: pikpakCollectionId,
+          );
+        }
+      }
+
+      if (updated) {
+        print('✅ Successfully updated playlist poster in memory and persistent storage');
+      } else {
+        print('⚠️ Updated persistent storage but in-memory update failed - poster will still persist on restart');
+      }
+    } catch (e) {
+      print('❌ Error updating playlist poster: $e');
     }
   }
 
@@ -326,15 +502,58 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                   ),
                 ),
                 const SizedBox(width: 12),
+                // Fix Metadata button
+                if (widget.playlistItem != null) ...[
+                  Focus(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _showFixMetadataDialog,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.orange.withOpacity(0.5),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.build,
+                                color: Colors.orange,
+                                size: 14,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Fix Metadata',
+                                style: TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _tvmazeAvailable 
-                        ? const Color(0xFF059669).withOpacity(0.2) 
+                    color: _tvmazeAvailable
+                        ? const Color(0xFF059669).withOpacity(0.2)
                         : const Color(0xFFEF4444).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: _tvmazeAvailable 
+                      color: _tvmazeAvailable
                           ? const Color(0xFF059669)
                           : const Color(0xFFEF4444),
                       width: 1,
@@ -343,7 +562,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                   child: Text(
                     _tvmazeAvailable ? 'TVMaze ✓' : 'TVMaze ✗',
                     style: TextStyle(
-                      color: _tvmazeAvailable 
+                      color: _tvmazeAvailable
                           ? const Color(0xFF059669)
                           : const Color(0xFFEF4444),
                       fontSize: 10,

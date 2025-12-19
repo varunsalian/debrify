@@ -71,13 +71,24 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _syncAndLoadPlaylist() async {
-    // Load and return playlist data
-    return await StorageService.getPlaylistItemsRaw();
+    // Load playlist data
+    final items = await StorageService.getPlaylistItemsRaw();
+
+    // Apply poster overrides for items that have saved custom posters
+    for (var item in items) {
+      final posterOverride = await StorageService.getPlaylistPosterOverride(item);
+      if (posterOverride != null && posterOverride.isNotEmpty) {
+        // Override the poster URL with the saved custom poster
+        item['posterUrl'] = posterOverride;
+      }
+    }
+
+    return items;
   }
 
   Future<void> _refresh() async {
     setState(() {
-      _loader = StorageService.getPlaylistItemsRaw();
+      _loader = _syncAndLoadPlaylist();
     });
   }
 

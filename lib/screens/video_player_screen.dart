@@ -154,6 +154,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? _pikPakRetryMessage;
   int _pikPakRetryId = 0; // Cancellation token: increments on each new video to cancel old retries
 
+  /// Construct playlist item data for the Fix Metadata feature
+  Map<String, dynamic>? _constructPlaylistItemData() {
+    // Need at least one identifier
+    if ((widget.rdTorrentId == null || widget.rdTorrentId!.isEmpty) &&
+        (widget.pikpakCollectionId == null || widget.pikpakCollectionId!.isEmpty) &&
+        (widget.playlist == null || widget.playlist!.isEmpty)) {
+      return null;
+    }
+
+    final data = <String, dynamic>{};
+
+    // Add RealDebrid torrent ID if available
+    if (widget.rdTorrentId != null && widget.rdTorrentId!.isNotEmpty) {
+      data['rdTorrentId'] = widget.rdTorrentId;
+    }
+
+    // Add PikPak collection ID if available
+    if (widget.pikpakCollectionId != null && widget.pikpakCollectionId!.isNotEmpty) {
+      data['pikpakFileId'] = widget.pikpakCollectionId;
+    }
+
+    // Add title
+    data['title'] = widget.title;
+
+    return data.isNotEmpty ? data : null;
+  }
+
   SeriesPlaylist? get _seriesPlaylist {
     if (widget.playlist == null || widget.playlist!.isEmpty) return null;
     if (_cachedSeriesPlaylist == null) {
@@ -1639,7 +1666,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (seriesPlaylist != null && seriesPlaylist.isSeries) {
       // Preload episode information in the background
       seriesPlaylist
-          .fetchEpisodeInfo()
+          .fetchEpisodeInfo(playlistItem: _constructPlaylistItemData())
           .then((_) async {
             // Extract poster URL from series data and save to playlist
             await _saveSeriesPosterToPlaylist(seriesPlaylist);
@@ -2912,6 +2939,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ? SeriesBrowser(
                     seriesPlaylist: seriesPlaylist,
                     currentEpisodeIndex: _currentIndex,
+                    playlistItem: _constructPlaylistItemData(),
                     onEpisodeSelected: (season, episode) async {
                       // Find the original index in the PlaylistEntry array
                       final originalIndex = seriesPlaylist

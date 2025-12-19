@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Service for managing persistent cache of TVMaze API responses
@@ -221,6 +222,13 @@ class TVMazeCacheService {
     } catch (e) {
       print('⚠️ TVMaze Cache: Error clearing series cache: $e');
     }
+  }
+
+  /// Clear all cached data for a specific show ID from persistent storage
+  static Future<void> clearShowCache(int showId) async {
+    await _remove('show_$showId');
+    await _remove('episodes_$showId');
+    debugPrint('🧹 TVMazeCacheService: Cleared persistent cache for show ID $showId');
   }
 
   /// Clean show name for consistency (mirrors TVMazeService._cleanShowName)

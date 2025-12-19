@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'tvmaze_cache_service.dart';
 
@@ -418,5 +419,117 @@ class TVMazeService {
 
     // Clear persistent cache too
     await TVMazeCacheService.clearSeriesCache(seriesTitle);
+  }
+
+  /// Clear all cached data for a specific show ID
+  /// This includes both in-memory and persistent cache entries
+  static Future<void> clearShowCache(int showId) async {
+    // Clear in-memory cache
+    _cache.remove('show_$showId');
+    _cache.remove('episodes_$showId');
+
+    // Clear persistent cache
+    await TVMazeCacheService.clearShowCache(showId);
+
+    debugPrint('🧹 TVMazeService: Cleared cache for show ID $showId');
+  }
+
+  /// Search for shows by query (public method for manual search)
+  /// Returns a list of shows matching the search query
+  static Future<List<Map<String, dynamic>>> searchShows(String query) async {
+    // Check availability first
+    if (!await isAvailable()) {
+      return [];
+    }
+
+    try {
+      // Use proper URL encoding
+      final encodedQuery = Uri.encodeComponent(query);
+      final url = '$_baseUrl/search/shows?q=$encodedQuery';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Accept': 'application/json',
+        },
+      ).timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final List<dynamic> results = json.decode(response.body);
+        // Extract the show objects from the search results
+        final shows = results.map((result) {
+          final show = result['show'] as Map<String, dynamic>;
+          // Add score for relevance
+          if (result['score'] != null) {
+            show['_searchScore'] = result['score'];
+          }
+          return show;
+        }).toList();
+
+        print('✅ TVMaze: Found ${shows.length} shows for query "$query"');
+        return shows;
+      } else if (response.statusCode == 429) {
+        // Rate limited
+        print('⚠️ TVMaze: Rate limited while searching for "$query"');
+        return [];
+      } else {
+        print('❌ TVMaze: Search failed with status ${response.statusCode} for "$query"');
+        return [];
+      }
+    } catch (e) {
+      print('❌ TVMaze: Error searching for "$query": $e');
+      return [];
+    }
+  }
+
+  /// Get show details by ID
+  static Future<Map<String, dynamic>?> getShowById(int showId) async {
+    final cacheKey = 'show_$showId';
+
+    // Check in-memory cache first
+    if (_cache.containsKey(cacheKey)) {
+      print('🎯 TVMaze: Memory cache HIT for show ID $showId');
+      return _cache[cacheKey];
+    }
+
+    // Check persistent cache
+    final persistedData = await TVMazeCacheService.get(cacheKey);
+    if (persistedData != null) {
+      print('💾 TVMaze: Persistent cache HIT for show ID $showId');
+      // Store in memory cache for faster access
+      _cache[cacheKey] = persistedData;
+      return persistedData;
+    }
+
+    print('❌ TVMaze: Cache MISS for show ID $showId, calling API...');
+
+    // Check availability first
+    if (!await isAvailable()) {
+      return null;
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/shows/$showId'),
+        headers: {
+          'Accept': 'application/json',
+        },
+      ).timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final show = json.decode(response.body) as Map<String, dynamic>;
+        _cache[cacheKey] = show;
+        // Save to persistent cache
+        await TVMazeCacheService.set(cacheKey, show);
+        print('✅ TVMaze: API success for show ID $showId → cached');
+        return show;
+      } else {
+        print('❌ TVMaze: Failed to fetch show ID $showId - status ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('❌ TVMaze: Error fetching show ID $showId: $e');
+      return null;
+    }
   }
 }
