@@ -10,6 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
+import '../utils/time_formatters.dart';
 import '../services/episode_info_service.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
@@ -29,6 +30,7 @@ import 'video_player/painters/tv_scanlines_painter.dart';
 import 'video_player/painters/tv_vignette_painter.dart';
 import 'video_player/utils/gesture_helpers.dart';
 import 'video_player/utils/language_mapping.dart';
+import 'video_player/utils/aspect_mode_utils.dart';
 import 'video_player/widgets/seek_hud.dart';
 import 'video_player/widgets/vertical_hud.dart';
 import 'video_player/widgets/aspect_ratio_hud.dart';
@@ -870,13 +872,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (entries.isEmpty) return;
     final rnd = math.Random();
     final nextIndex = rnd.nextInt(entries.length);
-    _isManualEpisodeSelection = true;
-    _allowResumeForManualSelection = false;
-    _manualSelectionResetTimer?.cancel();
-    _manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
-      _isManualEpisodeSelection = false;
-      _allowResumeForManualSelection = false;
-    });
+    _setManualSelectionMode();
     await _loadPlaylistIndex(nextIndex, autoplay: true);
   }
 
@@ -956,15 +952,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final nextIndex = _findNextEpisodeIndex();
     if (nextIndex != -1) {
       // Mark this as a manual episode selection
-      _isManualEpisodeSelection = true;
-      _allowResumeForManualSelection =
-          false; // Don't allow resuming for next/previous navigation
-      // Reset the flag after 30 seconds to allow position saving
-      _manualSelectionResetTimer?.cancel();
-      _manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
-        _isManualEpisodeSelection = false;
-        _allowResumeForManualSelection = false;
-      });
+      _setManualSelectionMode();
       await _loadPlaylistIndex(nextIndex, autoplay: true);
       return;
     }
@@ -1163,15 +1151,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final previousIndex = _findPreviousEpisodeIndex();
     if (previousIndex != -1) {
       // Mark this as a manual episode selection
-      _isManualEpisodeSelection = true;
-      _allowResumeForManualSelection =
-          false; // Don't allow resuming for next/previous navigation
-      // Reset the flag after 30 seconds to allow position saving
-      _manualSelectionResetTimer?.cancel();
-      _manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
-        _isManualEpisodeSelection = false;
-        _allowResumeForManualSelection = false;
-      });
+      _setManualSelectionMode();
       await _loadPlaylistIndex(previousIndex, autoplay: true);
     } else {
       // Clear transition state if no previous episode found
@@ -1863,37 +1843,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
 
       // restore aspect
-      switch (aspect) {
-        case 'cover':
-          _aspectMode = AspectMode.cover;
-          break;
-        case 'fitWidth':
-          _aspectMode = AspectMode.fitWidth;
-          break;
-        case 'fitHeight':
-          _aspectMode = AspectMode.fitHeight;
-          break;
-        case '16:9':
-          _aspectMode = AspectMode.aspect16_9;
-          break;
-        case '4:3':
-          _aspectMode = AspectMode.aspect4_3;
-          break;
-        case '21:9':
-          _aspectMode = AspectMode.aspect21_9;
-          break;
-        case '1:1':
-          _aspectMode = AspectMode.aspect1_1;
-          break;
-        case '3:2':
-          _aspectMode = AspectMode.aspect3_2;
-          break;
-        case '5:4':
-          _aspectMode = AspectMode.aspect5_4;
-          break;
-        default:
-          _aspectMode = AspectMode.contain;
-      }
+      _aspectMode = AspectModeUtils.stringToAspectMode(aspect);
       return;
     }
     // Fallback to legacy resume system
@@ -1922,37 +1872,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _playbackSpeed = speed;
     }
     // restore aspect
-    switch (aspect) {
-      case 'cover':
-        _aspectMode = AspectMode.cover;
-        break;
-      case 'fitWidth':
-        _aspectMode = AspectMode.fitWidth;
-        break;
-      case 'fitHeight':
-        _aspectMode = AspectMode.fitHeight;
-        break;
-      case '16:9':
-        _aspectMode = AspectMode.aspect16_9;
-        break;
-      case '4:3':
-        _aspectMode = AspectMode.aspect4_3;
-        break;
-      case '21:9':
-        _aspectMode = AspectMode.aspect21_9;
-        break;
-      case '1:1':
-        _aspectMode = AspectMode.aspect1_1;
-        break;
-      case '3:2':
-        _aspectMode = AspectMode.aspect3_2;
-        break;
-      case '5:4':
-        _aspectMode = AspectMode.aspect5_4;
-        break;
-      default:
-        _aspectMode = AspectMode.contain;
-    }
+    _aspectMode = AspectModeUtils.stringToAspectMode(aspect);
   }
 
   /// Get enhanced playback state for current content
@@ -2032,30 +1952,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    final aspectStr = () {
-      switch (_aspectMode) {
-        case AspectMode.cover:
-          return 'cover';
-        case AspectMode.fitWidth:
-          return 'fitWidth';
-        case AspectMode.fitHeight:
-          return 'fitHeight';
-        case AspectMode.aspect16_9:
-          return '16:9';
-        case AspectMode.aspect4_3:
-          return '4:3';
-        case AspectMode.aspect21_9:
-          return '21:9';
-        case AspectMode.aspect1_1:
-          return '1:1';
-        case AspectMode.aspect3_2:
-          return '3:2';
-        case AspectMode.aspect5_4:
-          return '5:4';
-        case AspectMode.contain:
-          return 'contain';
-      }
-    }();
+    final aspectStr = AspectModeUtils.aspectModeToString(_aspectMode);
 
     // Save to enhanced playback state system
     try {
@@ -2367,17 +2264,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
-  String _format(Duration d) {
-    final sign = d.isNegative ? '-' : '';
-    final abs = d.abs();
-    final h = abs.inHours;
-    final m = abs.inMinutes % 60;
-    final s = abs.inSeconds % 60;
-    if (h > 0) {
-      return '$sign${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '$sign${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
+  String _format(Duration d) => formatDuration(d);
 
   void _togglePlay() {
     if (!_isReady) return;
@@ -2387,6 +2274,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _player.play();
     }
     _scheduleAutoHide();
+  }
+
+  /// Sets manual episode selection mode with automatic reset after 30 seconds
+  void _setManualSelectionMode({bool allowResume = false}) {
+    _isManualEpisodeSelection = true;
+    _allowResumeForManualSelection = allowResume;
+    _manualSelectionResetTimer?.cancel();
+    _manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+      _isManualEpisodeSelection = false;
+      _allowResumeForManualSelection = false;
+    });
   }
 
   void _cycleAspectMode() {
@@ -2496,25 +2394,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _scheduleAutoHide();
   }
 
-  BoxFit _currentFit() {
-    switch (_aspectMode) {
-      case AspectMode.contain:
-        return BoxFit.contain;
-      case AspectMode.cover:
-        return BoxFit.cover;
-      case AspectMode.fitWidth:
-        return BoxFit.fitWidth;
-      case AspectMode.fitHeight:
-        return BoxFit.fitHeight;
-      case AspectMode.aspect16_9:
-      case AspectMode.aspect4_3:
-      case AspectMode.aspect21_9:
-      case AspectMode.aspect1_1:
-      case AspectMode.aspect3_2:
-      case AspectMode.aspect5_4:
-        return BoxFit.cover; // We'll handle custom aspect ratios in the widget
-    }
-  }
+  BoxFit _currentFit() => AspectModeUtils.getBoxFitForMode(_aspectMode);
 
   // Build video with custom aspect ratio
   Widget _buildCustomAspectRatioVideo() {
@@ -2866,24 +2746,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   // Get the custom aspect ratio for specific modes
-  double? _getCustomAspectRatio() {
-    switch (_aspectMode) {
-      case AspectMode.aspect16_9:
-        return 16.0 / 9.0;
-      case AspectMode.aspect4_3:
-        return 4.0 / 3.0;
-      case AspectMode.aspect21_9:
-        return 21.0 / 9.0;
-      case AspectMode.aspect1_1:
-        return 1.0;
-      case AspectMode.aspect3_2:
-        return 3.0 / 2.0;
-      case AspectMode.aspect5_4:
-        return 5.0 / 4.0;
-      default:
-        return null;
-    }
-  }
+  double? _getCustomAspectRatio() =>
+      AspectModeUtils.getAspectRatioValue(_aspectMode);
 
   Future<void> _showPlaylistSheet(BuildContext context) async {
     if (widget.playlist == null || widget.playlist!.isEmpty) return;
@@ -2928,20 +2792,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               episode: episode,
                             );
 
-                        // Allow resuming if the episode has saved progress
-                        _allowResumeForManualSelection = playbackState != null;
-
                         // Mark this as a manual episode selection
-                        _isManualEpisodeSelection = true;
-                        // Reset the flag after 30 seconds to allow position saving
-                        _manualSelectionResetTimer?.cancel();
-                        _manualSelectionResetTimer = Timer(
-                          const Duration(seconds: 30),
-                          () {
-                            _isManualEpisodeSelection = false;
-                            _allowResumeForManualSelection = false;
-                          },
-                        );
+                        // Allow resuming if the episode has saved progress
+                        _setManualSelectionMode(allowResume: playbackState != null);
                         await _loadPlaylistIndex(originalIndex, autoplay: true);
                       } else {
                         // Show error message to user
@@ -2964,16 +2817,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     playlist: widget.playlist ?? const [],
                     currentIndex: _currentIndex,
                     onSelectIndex: (idx) async {
-                      _isManualEpisodeSelection = true;
-                      _allowResumeForManualSelection = false;
-                      _manualSelectionResetTimer?.cancel();
-                      _manualSelectionResetTimer = Timer(
-                        const Duration(seconds: 30),
-                        () {
-                          _isManualEpisodeSelection = false;
-                          _allowResumeForManualSelection = false;
-                        },
-                      );
+                      _setManualSelectionMode();
                       await _loadPlaylistIndex(idx, autoplay: true);
                     },
                   ),
@@ -2983,259 +2827,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  // Legacy simple playlist helpers removed
-  /*
-Widget _buildSimplePlaylist() {
-		return Container(
-			height: MediaQuery.of(context).size.height * 0.85,
-			padding: const EdgeInsets.all(20),
-			child: Column(
-				mainAxisSize: MainAxisSize.min,
-				children: [
-					// Netflix-style header
-					Row(
-						children: [
-							Container(
-								padding: const EdgeInsets.all(8),
-								decoration: BoxDecoration(
-									color: const Color(0xFFE50914).withOpacity(0.2),
-									borderRadius: BorderRadius.circular(8),
-								),
-								child: const Icon(
-									Icons.playlist_play_rounded,
-									color: Color(0xFFE50914),
-									size: 20,
-								),
-							),
-							const SizedBox(width: 12),
-							const Text(
-							'All Files',
-								style: TextStyle(
-									color: Colors.white,
-									fontWeight: FontWeight.w700,
-									fontSize: 18,
-									letterSpacing: 0.5,
-								),
-							),
-							const Spacer(),
-						Builder(
-							builder: (context) {
-								final groups = _getPlaylistGroups();
-								final mainCount = groups[_FilesGroup.main]!.length;
-								final extrasCount = groups[_FilesGroup.extras]!.length;
-								return Container(
-									decoration: BoxDecoration(
-										color: Colors.black.withOpacity(0.4),
-										borderRadius: BorderRadius.circular(8),
-										border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
-									),
-									child: PopupMenuButton<_FilesGroup>(
-										padding: const EdgeInsets.symmetric(horizontal: 12),
-										color: const Color(0xFF1A1A1A),
-										position: PopupMenuPosition.under,
-										initialValue: _selectedFilesGroup,
-										onSelected: (value) => setState(() => _selectedFilesGroup = value),
-										itemBuilder: (context) => [
-											PopupMenuItem(
-												value: _FilesGroup.main,
-												child: Text('Main ($mainCount)', style: const TextStyle(color: Colors.white)),
-											),
-											PopupMenuItem(
-												value: _FilesGroup.extras,
-												child: Text('Extras ($extrasCount)', style: const TextStyle(color: Colors.white)),
-											),
-										],
-										child: Row(
-											children: [
-												Icon(Icons.filter_list, color: Colors.white.withOpacity(0.9), size: 18),
-												const SizedBox(width: 6),
-												Text(
-													_selectedFilesGroup == _FilesGroup.main ? 'Main ($mainCount)' : 'Extras ($extrasCount)',
-													style: const TextStyle(color: Colors.white, fontSize: 12),
-												),
-												const SizedBox(width: 6),
-												const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
-											],
-										),
-									),
-								);
-							},
-						),
-							Container(
-								decoration: BoxDecoration(
-									color: Colors.black.withOpacity(0.4),
-									borderRadius: BorderRadius.circular(8),
-									border: Border.all(
-										color: Colors.white.withOpacity(0.2),
-										width: 1,
-									),
-								),
-									child: IconButton(
-										icon: const Icon(Icons.shuffle_rounded, color: Colors.white, size: 20),
-										onPressed: _playRandom,
-										style: IconButton.styleFrom(
-											padding: const EdgeInsets.all(8),
-											minimumSize: const Size(36, 36),
-										),
-									),
-							),
-						],
-					),
-					const SizedBox(height: 20),
-					Flexible(
-						child: FutureBuilder<Set<int>>(
-							future: _getFinishedEpisodesForSimplePlaylist(),
-							builder: (context, snapshot) {
-								final finishedEpisodes = snapshot.data ?? <int>{};
-								
-						final groups = _getPlaylistGroups();
-						final visibleIndices = _selectedFilesGroup == _FilesGroup.main
-							? groups[_FilesGroup.main]!
-							: groups[_FilesGroup.extras]!;
-						return ListView.builder(
-							shrinkWrap: true,
-							itemCount: visibleIndices.length,
-							itemBuilder: (context, visibleIdx) {
-								final index = visibleIndices[visibleIdx];
-								final entry = widget.playlist![index];
-										final active = index == _currentIndex;
-										final isFinished = finishedEpisodes.contains(index);
-										
-										return Container(
-											margin: const EdgeInsets.only(bottom: 12),
-											decoration: BoxDecoration(
-												color: active 
-													? const Color(0xFFE50914).withOpacity(0.2)
-													: const Color(0xFF1A1A1A).withOpacity(0.8),
-												borderRadius: BorderRadius.circular(12),
-												border: Border.all(
-													color: active 
-														? const Color(0xFFE50914)
-														: Colors.white.withOpacity(0.1),
-													width: 1,
-												),
-												boxShadow: [
-													BoxShadow(
-														color: Colors.black.withOpacity(0.2),
-														blurRadius: 8,
-														offset: const Offset(0, 2),
-													),
-												],
-											),
-											child: Material(
-												color: Colors.transparent,
-												child: InkWell(
-													onTap: () async {
-														Navigator.of(context).pop();
-														// Mark this as a manual episode selection
-														_isManualEpisodeSelection = true;
-														_allowResumeForManualSelection = false; // Don't allow resuming for simple playlist navigation
-														// Reset the flag after 30 seconds to allow position saving
-														_manualSelectionResetTimer?.cancel();
-														_manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
-															_isManualEpisodeSelection = false;
-															_allowResumeForManualSelection = false;
-														});
-														await _loadPlaylistIndex(index, autoplay: true);
-													},
-													borderRadius: BorderRadius.circular(12),
-													child: Padding(
-														padding: const EdgeInsets.all(16),
-														child: Row(
-															children: [
-																Container(
-																	padding: const EdgeInsets.all(8),
-																	decoration: BoxDecoration(
-																		color: active 
-																			? const Color(0xFFE50914)
-																			: Colors.white.withOpacity(0.1),
-																		borderRadius: BorderRadius.circular(8),
-																	),
-																	child: Icon(
-																		active ? Icons.play_arrow_rounded : Icons.movie_rounded,
-																		color: active 
-																			? Colors.white
-																			: Colors.white.withOpacity(0.7),
-																		size: 20,
-																	),
-																),
-																const SizedBox(width: 16),
-																Expanded(
-																	child: Column(
-																		crossAxisAlignment: CrossAxisAlignment.start,
-																		children: [
-																			Text(
-																				entry.title,
-																				maxLines: 2,
-																				overflow: TextOverflow.ellipsis,
-																				style: TextStyle(
-																					color: active 
-																						? Colors.white
-																						: Colors.white.withOpacity(0.9),
-																					fontWeight: active 
-																						? FontWeight.w600
-																						: FontWeight.w400,
-																					fontSize: 14,
-																					decoration: isFinished ? TextDecoration.lineThrough : null,
-																				),
-																			),
-																			if (active) ...[
-																				const SizedBox(height: 4),
-																				Container(
-																					padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-																					decoration: BoxDecoration(
-																						color: const Color(0xFFE50914),
-																						borderRadius: BorderRadius.circular(8),
-																					),
-																					child: const Text(
-																						'Now Playing',
-																						style: TextStyle(
-																							color: Colors.white,
-																							fontSize: 10,
-																							fontWeight: FontWeight.w600,
-																						),
-																					),
-																				),
-																			],
-																		],
-																	),
-																),
-																if (isFinished)
-																	Container(
-																		padding: const EdgeInsets.all(6),
-																		decoration: BoxDecoration(
-																			color: const Color(0xFF059669).withOpacity(0.2),
-																			borderRadius: BorderRadius.circular(6),
-																		),
-																		child: const Icon(
-																			Icons.check_circle,
-																			color: Color(0xFF059669),
-																			size: 16,
-																		),
-																	),
-															],
-														),
-													),
-												),
-											),
-										);
-									},
-								);
-							},
-						),
-					),
-				],
-			),
-		);
-	}
-
-/// Get finished episodes for simple playlist (non-series content)
-Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
-		// For simple playlists, we don't track finished episodes
-		// This is mainly for series content
-  return <int>{};
-}
-	*/
 
   @override
   Widget build(BuildContext context) {
@@ -3243,7 +2834,6 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
     final duration = _duration;
     final pos = _position;
     final String? channelBadgeText = _channelBadgeText;
-    // final remaining = (duration - pos).clamp(Duration.zero, duration); // not used
 
     return Scaffold(
       backgroundColor: Colors.black,
