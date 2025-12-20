@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import '../screens/video_player_screen.dart';
+import '../models/movie_collection.dart';
+import '../screens/video_player/models/playlist_entry.dart';
 import '../services/storage_service.dart';
 
-enum MovieGroup { main, extras }
-
 class MovieCollectionBrowser extends StatefulWidget {
-  final List<PlaylistEntry> playlist;
+  final MovieCollection collection;
   final int currentIndex;
   final void Function(int index) onSelectIndex;
 
   const MovieCollectionBrowser({
     super.key,
-    required this.playlist,
+    required this.collection,
     required this.currentIndex,
     required this.onSelectIndex,
   });
@@ -21,7 +20,7 @@ class MovieCollectionBrowser extends StatefulWidget {
 }
 
 class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
-  MovieGroup _group = MovieGroup.main;
+  int _group = 0; // Current group index
   final Map<int, Map<String, dynamic>> _progressByIndex = {};
   int _lastCurrentIndex = -1;
 
@@ -35,7 +34,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
   @override
   void didUpdateWidget(covariant MovieCollectionBrowser oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.playlist != widget.playlist) {
+    if (oldWidget.collection != widget.collection) {
       _progressByIndex.clear();
       _loadProgress();
     }
@@ -46,8 +45,8 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
 
   Future<void> _loadProgress() async {
     final futures = <Future<void>>[];
-    for (int i = 0; i < widget.playlist.length; i++) {
-      final entry = widget.playlist[i];
+    for (int i = 0; i < widget.collection.allFiles.length; i++) {
+      final entry = widget.collection.allFiles[i];
       futures.add(() async {
         final key = _resumeIdForEntry(entry);
         final state = await StorageService.getVideoPlaybackState(videoTitle: key);
@@ -63,61 +62,24 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
   void _syncGroupWithCurrent() {
     if (widget.currentIndex == _lastCurrentIndex) return;
     _lastCurrentIndex = widget.currentIndex;
-    if (_lastCurrentIndex >= 0 && _lastCurrentIndex < widget.playlist.length) {
-      final groupsNow = _groups();
-      if (groupsNow[MovieGroup.extras]!.contains(_lastCurrentIndex)) {
-        _group = MovieGroup.extras;
-      } else {
-        _group = MovieGroup.main;
+    if (_lastCurrentIndex >= 0 && _lastCurrentIndex < widget.collection.allFiles.length) {
+      // Find which group contains the current index
+      for (int i = 0; i < widget.collection.groups.length; i++) {
+        if (widget.collection.groups[i].fileIndices.contains(_lastCurrentIndex)) {
+          _group = i;
+          break;
+        }
       }
       if (mounted) setState(() {});
     }
   }
 
-  Map<MovieGroup, List<int>> _groups() {
-    final entries = widget.playlist;
-    final main = <int>[];
-    final extras = <int>[];
-    int maxSize = -1;
-    for (int i = 0; i < entries.length; i++) {
-      final s = entries[i].sizeBytes ?? -1;
-      if (s > maxSize) maxSize = s;
-    }
-    final double threshold = maxSize > 0 ? maxSize * 0.40 : -1;
-    for (int i = 0; i < entries.length; i++) {
-      final e = entries[i];
-      final isSmall = threshold > 0 && (e.sizeBytes != null && e.sizeBytes! < threshold);
-      if (isSmall) {
-        extras.add(i);
-      } else {
-        main.add(i);
-      }
-    }
-    int sizeOf(int idx) => entries[idx].sizeBytes ?? -1;
-    int? yearOf(int idx) => _extractYear(entries[idx].title);
-    main.sort((a, b) {
-      final ya = yearOf(a);
-      final yb = yearOf(b);
-      if (ya != null && yb != null) {
-        return ya.compareTo(yb); // older first
-      }
-      return sizeOf(b).compareTo(sizeOf(a));
-    });
-    extras.sort((a, b) {
-      final sa = entries[a].sizeBytes ?? 0;
-      final sb = entries[b].sizeBytes ?? 0;
-      return sa.compareTo(sb);
-    });
-    return {MovieGroup.main: main, MovieGroup.extras: extras};
-  }
 
   @override
   Widget build(BuildContext context) {
     // no auto group switching during build; handled on index change
-    final groups = _groups();
-    final visible = _group == MovieGroup.main ? groups[MovieGroup.main]! : groups[MovieGroup.extras]!;
-    final mainCount = groups[MovieGroup.main]!.length;
-    final extrasCount = groups[MovieGroup.extras]!.length;
+    final currentGroup = widget.collection.groups[_group];
+    final visible = currentGroup.fileIndices;
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
@@ -131,7 +93,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
               const SizedBox(width: 8),
               const Text('Movie Files', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
               const Spacer(),
-              PopupMenuButton<MovieGroup>(
+              PopupMenuButton<int>(
                 color: const Color(0xFF1A1A1A),
                 initialValue: _group,
                 onSelected: (v) {
@@ -140,8 +102,14 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                   }
                 },
                 itemBuilder: (context) => [
-                  PopupMenuItem(value: MovieGroup.main, child: Text('Main ($mainCount)', style: const TextStyle(color: Colors.white))),
-                  PopupMenuItem(value: MovieGroup.extras, child: Text('Extras ($extrasCount)', style: const TextStyle(color: Colors.white))),
+                  for (int i = 0; i < widget.collection.groups.length; i++)
+                    PopupMenuItem(
+                      value: i,
+                      child: Text(
+                        '${widget.collection.groups[i].name} (${widget.collection.groups[i].fileCount})',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
                 ],
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -154,7 +122,10 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                     children: [
                       const Icon(Icons.filter_list, color: Colors.white, size: 18),
                       const SizedBox(width: 6),
-                      Text(_group == MovieGroup.main ? 'Main ($mainCount)' : 'Extras ($extrasCount)', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                      Text(
+                        '${currentGroup.name} (${currentGroup.fileCount})',
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
                       const SizedBox(width: 6),
                       const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
                     ],
@@ -175,7 +146,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
               itemCount: visible.length,
               itemBuilder: (context, idx) {
                 final i = visible[idx];
-                final e = widget.playlist[i];
+                final e = widget.collection.allFiles[i];
                 final active = i == widget.currentIndex;
                 final sizeText = e.sizeBytes != null ? _formatBytes(e.sizeBytes!) : '';
 
@@ -304,12 +275,4 @@ String _resumeIdForEntry(PlaylistEntry entry) {
     return 'torbox_${entry.torboxTorrentId}_${entry.torboxFileId}';
   }
   return _filenameHash(entry.title);
-}
-
-int? _extractYear(String title) {
-  final match = RegExp(r'\b(19|20)\d{2}\b').firstMatch(title);
-  if (match != null) {
-    return int.tryParse(match.group(0)!);
-  }
-  return null;
 }

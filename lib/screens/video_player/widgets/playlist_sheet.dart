@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/series_playlist.dart';
+import '../../../models/movie_collection.dart';
 import '../../../widgets/series_browser.dart';
 import '../../../widgets/movie_collection_browser.dart';
 import '../models/playlist_entry.dart';
@@ -88,7 +89,10 @@ class PlaylistSheet {
                     },
                   )
                 : MovieCollectionBrowser(
-                    playlist: playlist,
+                    collection: MovieCollection.fromPlaylistWithMainExtras(
+                      playlist: playlist,
+                      title: playlistItemData?['title'] as String?,
+                    ),
                     currentIndex: currentIndex,
                     onSelectIndex: (idx) async {
                       await onSelect(idx, allowResume: false);

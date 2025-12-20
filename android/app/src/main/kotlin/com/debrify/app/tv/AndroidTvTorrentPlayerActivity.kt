@@ -301,9 +301,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
 
                 val item = model.items[originalIndex]
-                val newTitle = update.optString("title", null)
-                val newDescription = update.optString("description", null)
-                val newArtwork = update.optString("artwork", null)
+                val newTitle: String? = if (update.has("title")) update.optString("title") else null
+                val newDescription: String? = if (update.has("description")) update.optString("description") else null
+                val newArtwork: String? = if (update.has("artwork")) update.optString("artwork") else null
                 val newRating = if (update.has("rating")) update.optDouble("rating") else null
 
                 // Create updated item with new metadata
@@ -655,33 +655,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         movieTabs.clear()
         seasonTabsContainer.removeAllViews()
 
-        val tabs = mutableListOf<MovieGroup>()
-        tabs.add(MovieGroup.MAIN)
-        if (groups.extras.isNotEmpty()) {
-            tabs.add(MovieGroup.EXTRAS)
+        if (groups.groups.isEmpty()) {
+            seasonTabsContainer.visibility = View.GONE
+            return
         }
 
-        if (tabs.size <= 1) {
+        if (groups.groups.size <= 1) {
             seasonTabsContainer.visibility = View.GONE
-            // Ensure adapter still shows main group
-            adapter.showGroup(MovieGroup.MAIN, force = true)
+            // Ensure adapter still shows first group
+            adapter.showGroup(0, force = true)
             return
         }
 
         seasonTabsContainer.visibility = View.VISIBLE
 
-        tabs.forEach { group ->
-            val label = if (group == MovieGroup.MAIN) {
-                "MAIN (${groups.main.size})"
-            } else {
-                "EXTRAS (${groups.extras.size})"
-            }
-            val tab = createMovieTab(label, group, adapter)
+        groups.groups.forEachIndexed { index, group ->
+            val label = "${group.name.uppercase()} (${group.fileIndices.size})"
+            val tab = createMovieTab(label, index, group.name, adapter)
             seasonTabsContainer.addView(tab)
-            movieTabs.add(MovieTab(tab, group))
+            movieTabs.add(MovieTab(tab, index, group.name))
         }
 
-        selectMovieTab(MovieGroup.MAIN, adapter, scrollToTop = false, forceAdapterUpdate = true)
+        selectMovieTab(0, adapter, scrollToTop = false, forceAdapterUpdate = true)
     }
 
     private fun setupPlaylistNavigation() {
@@ -980,7 +975,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun createMovieTab(label: String, group: MovieGroup, adapter: MoviePlaylistAdapter): TextView {
+    private fun createMovieTab(label: String, groupIndex: Int, groupName: String, adapter: MoviePlaylistAdapter): TextView {
         val tab = TextView(this)
         tab.text = label
         tab.textSize = 14f
@@ -998,22 +993,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         tab.layoutParams = params
 
         tab.setOnClickListener {
-            selectMovieTab(group, adapter)
+            selectMovieTab(groupIndex, adapter)
         }
 
         return tab
     }
 
     private fun selectMovieTab(
-        group: MovieGroup,
+        groupIndex: Int,
         adapter: MoviePlaylistAdapter,
         scrollToTop: Boolean = true,
         forceAdapterUpdate: Boolean = false,
     ) {
         movieTabs.forEach { movieTab ->
-            movieTab.view.isSelected = movieTab.group == group
+            movieTab.view.isSelected = movieTab.groupIndex == groupIndex
         }
-        val changed = adapter.showGroup(group, force = forceAdapterUpdate)
+        val changed = adapter.showGroup(groupIndex, force = forceAdapterUpdate)
         if ((scrollToTop || changed) && adapter.itemCount > 0) {
             playlistView.scrollToPosition(0)
         }
@@ -2023,8 +2018,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun alignMovieTabsForCurrentItem() {
         val adapter = moviePlaylistAdapter ?: return
         val groups = movieGroups ?: return
-        val group = if (groups.extras.contains(currentIndex)) MovieGroup.EXTRAS else MovieGroup.MAIN
-        selectMovieTab(group, adapter, scrollToTop = false)
+        val groupIndex = groups.getGroupIndex(currentIndex)
+        if (groupIndex >= 0) {
+            selectMovieTab(groupIndex, adapter, scrollToTop = false)
+        }
     }
 
     private fun getNextPlayableIndex(fromIndex: Int): Int? {
@@ -2041,17 +2038,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // For collections, continue using movie group logic
         if (playlistMode == PlaylistMode.COLLECTION) {
             val groups = movieGroups ?: return null
-            val currentGroup = when {
-                groups.main.contains(fromIndex) -> MovieGroup.MAIN
-                groups.extras.contains(fromIndex) -> MovieGroup.EXTRAS
-                else -> null
-            }
-
-            val source = when (currentGroup) {
-                MovieGroup.MAIN -> groups.main
-                MovieGroup.EXTRAS -> groups.extras
-                else -> null
-            }
+            val currentGroup = groups.findGroupContaining(fromIndex) ?: return null
+            val source = currentGroup.fileIndices
 
             if (source.isNullOrEmpty()) {
                 return null
@@ -2087,17 +2075,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // For collections, use movie group logic
         if (playlistMode == PlaylistMode.COLLECTION) {
             val groups = movieGroups ?: return null
-            val currentGroup = when {
-                groups.main.contains(fromIndex) -> MovieGroup.MAIN
-                groups.extras.contains(fromIndex) -> MovieGroup.EXTRAS
-                else -> null
-            }
-
-            val source = when (currentGroup) {
-                MovieGroup.MAIN -> groups.main
-                MovieGroup.EXTRAS -> groups.extras
-                else -> null
-            }
+            val currentGroup = groups.findGroupContaining(fromIndex) ?: return null
+            val source = currentGroup.fileIndices
 
             if (source.isNullOrEmpty()) {
                 return null
@@ -2118,9 +2097,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun computeMovieGroups(items: List<PlaybackItem>): MovieGroups {
         if (items.isEmpty()) {
-            return MovieGroups(emptyList(), emptyList())
+            return MovieGroups(emptyList())
         }
 
+        // Check if payload contains collection groups
+        val payloadGroups = payload?.collectionGroups
+        if (!payloadGroups.isNullOrEmpty()) {
+            // Use groups from Flutter payload
+            val groups = payloadGroups.map { group ->
+                CollectionGroup(
+                    name = group.optString("name", "Group"),
+                    fileIndices = mutableListOf<Int>().apply {
+                        val indicesArray = group.optJSONArray("fileIndices")
+                        if (indicesArray != null) {
+                            for (i in 0 until indicesArray.length()) {
+                                add(indicesArray.getInt(i))
+                            }
+                        }
+                    }
+                )
+            }.filter { it.fileIndices.isNotEmpty() } // Only include non-empty groups
+
+            android.util.Log.d("AndroidTvPlayer", "Using ${groups.size} collection groups from payload")
+            return MovieGroups(groups)
+        }
+
+        // Fallback: compute Main/Extras groups based on file size (40% threshold)
+        // This maintains backward compatibility
         var maxSize = -1L
         items.forEach { item ->
             val size = item.sizeBytes ?: -1L
@@ -2168,7 +2171,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             sizeOf(a).compareTo(sizeOf(b))
         }
 
-        return MovieGroups(main, extras)
+        val groups = mutableListOf<CollectionGroup>()
+        if (main.isNotEmpty()) {
+            groups.add(CollectionGroup("Main", main))
+        }
+        if (extras.isNotEmpty()) {
+            groups.add(CollectionGroup("Extras", extras))
+        }
+
+        android.util.Log.d("AndroidTvPlayer", "Computed ${groups.size} collection groups (fallback)")
+        return MovieGroups(groups)
     }
 
     private fun hidePlaylist() {
@@ -2450,7 +2462,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
 
-            android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}")
+            // Parse collection groups if present
+            val collectionGroupsJson = obj.optJSONArray("collectionGroups")
+            val collectionGroups = if (collectionGroupsJson != null) {
+                mutableListOf<JSONObject>().apply {
+                    for (i in 0 until collectionGroupsJson.length()) {
+                        add(collectionGroupsJson.getJSONObject(i))
+                    }
+                }
+            } else null
+
+            android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}")
 
             PlaybackPayload(
                 title = obj.optString("title"),
@@ -2460,7 +2482,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 startIndex = startIndex,
                 seriesTitle = obj.optString("seriesTitle"),
                 nextEpisodeMap = nextEpisodeMap,
-                prevEpisodeMap = prevEpisodeMap
+                prevEpisodeMap = prevEpisodeMap,
+                collectionGroups = collectionGroups
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "parsePayload failed", e)
@@ -2589,16 +2612,32 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
 private enum class PlaylistMode { NONE, SERIES, COLLECTION }
 
-private enum class MovieGroup { MAIN, EXTRAS }
+private data class CollectionGroup(
+    val name: String,
+    val fileIndices: List<Int>,
+)
 
 private data class MovieGroups(
-    val main: List<Int>,
-    val extras: List<Int>,
-)
+    val groups: List<CollectionGroup>,
+) {
+    // Helper to get group by index
+    fun getGroup(index: Int): CollectionGroup? = groups.getOrNull(index)
+
+    // Helper to find which group contains a file index
+    fun findGroupContaining(fileIndex: Int): CollectionGroup? {
+        return groups.firstOrNull { it.fileIndices.contains(fileIndex) }
+    }
+
+    // Helper to get group index for a file
+    fun getGroupIndex(fileIndex: Int): Int {
+        return groups.indexOfFirst { it.fileIndices.contains(fileIndex) }
+    }
+}
 
 private data class MovieTab(
     val view: TextView,
-    val group: MovieGroup,
+    val groupIndex: Int, // Index into MovieGroups.groups list
+    val groupName: String,
 )
 
 private interface PlaylistOverlayAdapter {
@@ -2615,7 +2654,8 @@ private data class PlaybackPayload(
     val startIndex: Int,
     val seriesTitle: String?,
     val nextEpisodeMap: Map<Int, Int> = emptyMap(),
-    val prevEpisodeMap: Map<Int, Int> = emptyMap()
+    val prevEpisodeMap: Map<Int, Int> = emptyMap(),
+    val collectionGroups: List<JSONObject>? = null // Collection groups from Flutter
 )
 
 private data class PlaybackItem(
@@ -2654,15 +2694,15 @@ private data class PlaybackItem(
                 index = obj.optInt("index", 0),
                 season = obj.optInt("season").takeIf { obj.has("season") },
                 episode = obj.optInt("episode").takeIf { obj.has("episode") },
-                artwork = obj.optString("artwork", null),
-                description = obj.optString("description", null),
+                artwork = if (obj.has("artwork")) obj.optString("artwork") else null,
+                description = if (obj.has("description")) obj.optString("description") else null,
                 resumePositionMs = obj.optLong("resumePositionMs", 0),
                 durationMs = obj.optLong("durationMs", 0),
                 updatedAt = obj.optLong("updatedAt", 0),
-                resumeId = obj.optString("resumeId", null),
+                resumeId = if (obj.has("resumeId")) obj.optString("resumeId") else null,
                 sizeBytes = if (obj.has("sizeBytes")) obj.optLong("sizeBytes") else null,
                 rating = if (obj.has("rating")) obj.optDouble("rating") else null,
-                provider = obj.optString("provider", null),
+                provider = if (obj.has("provider")) obj.optString("provider") else null,
             )
         }
     }
@@ -3058,18 +3098,18 @@ private class MoviePlaylistAdapter(
 ) : RecyclerView.Adapter<MoviePlaylistAdapter.MovieViewHolder>(), PlaylistOverlayAdapter {
 
     private var activeItemIndex = -1
-    private var currentGroup: MovieGroup = MovieGroup.MAIN
+    private var currentGroupIndex: Int = 0
     private val visibleIndices = mutableListOf<Int>()
 
     init {
-        showGroup(MovieGroup.MAIN, force = true)
+        showGroup(0, force = true)
     }
 
-    fun showGroup(group: MovieGroup, force: Boolean = false): Boolean {
-        if (!force && currentGroup == group) {
+    fun showGroup(groupIndex: Int, force: Boolean = false): Boolean {
+        if (!force && currentGroupIndex == groupIndex) {
             return false
         }
-        currentGroup = group
+        currentGroupIndex = groupIndex
         rebuildVisibleItems()
         notifyDataSetChanged()
         return true
@@ -3077,11 +3117,10 @@ private class MoviePlaylistAdapter(
 
     private fun rebuildVisibleItems() {
         visibleIndices.clear()
-        val source = when (currentGroup) {
-            MovieGroup.MAIN -> groups.main
-            MovieGroup.EXTRAS -> groups.extras
+        val currentGroup = groups.getGroup(currentGroupIndex)
+        if (currentGroup != null) {
+            visibleIndices.addAll(currentGroup.fileIndices)
         }
-        visibleIndices.addAll(source)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MovieViewHolder {
@@ -3094,7 +3133,8 @@ private class MoviePlaylistAdapter(
         val itemIndex = visibleIndices.getOrNull(position) ?: return
         val item = items[itemIndex]
         val isActive = itemIndex == activeItemIndex
-        holder.bind(item, itemIndex, isActive, currentGroup)
+        val groupName = groups.getGroup(currentGroupIndex)?.name ?: ""
+        holder.bind(item, itemIndex, isActive, groupName)
     }
 
     override fun onBindViewHolder(holder: MovieViewHolder, position: Int, payloads: MutableList<Any>) {
@@ -3164,8 +3204,8 @@ private class MoviePlaylistAdapter(
         private val progressContainer: View = itemView.findViewById(R.id.android_tv_playlist_item_progress_container)
         private val progressText: TextView = itemView.findViewById(R.id.android_tv_playlist_item_progress_text)
 
-        fun bind(item: PlaybackItem, itemIndex: Int, isActive: Boolean, group: MovieGroup) {
-            badgeView.text = if (group == MovieGroup.MAIN) "MAIN" else "EXTRA"
+        fun bind(item: PlaybackItem, itemIndex: Int, isActive: Boolean, groupName: String) {
+            badgeView.text = groupName.uppercase()
             titleView.text = item.title
 
             val cleanedDescription = item.description
@@ -3206,7 +3246,7 @@ private class MoviePlaylistAdapter(
                 posterProgress.visibility = View.GONE
             }
 
-            loadPosterImage(item, itemIndex, group)
+            loadPosterImage(item, itemIndex, groupName)
 
             container.isSelected = isActive
             container.isFocusable = true
@@ -3267,7 +3307,7 @@ private class MoviePlaylistAdapter(
             }
         }
 
-        private fun loadPosterImage(item: PlaybackItem, itemIndex: Int, group: MovieGroup) {
+        private fun loadPosterImage(item: PlaybackItem, itemIndex: Int, groupName: String) {
             val artwork = item.artwork
             if (!artwork.isNullOrBlank()) {
                 com.bumptech.glide.Glide.with(itemView.context)
@@ -3282,7 +3322,7 @@ private class MoviePlaylistAdapter(
                             target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
                             isFirstResource: Boolean
                         ): Boolean {
-                            showFallback(itemIndex, group)
+                            showFallback(itemIndex, groupName)
                             return false
                         }
 
@@ -3300,11 +3340,11 @@ private class MoviePlaylistAdapter(
                     })
                     .into(posterImageView)
             } else {
-                showFallback(itemIndex, group)
+                showFallback(itemIndex, groupName)
             }
         }
 
-        private fun showFallback(itemIndex: Int, group: MovieGroup) {
+        private fun showFallback(itemIndex: Int, groupName: String) {
             posterImageView.visibility = View.GONE
             fallbackTextView.visibility = View.VISIBLE
             val positionNumber = if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
@@ -3313,14 +3353,18 @@ private class MoviePlaylistAdapter(
                 itemIndex + 1
             }
             fallbackTextView.text = positionNumber.coerceAtLeast(1).toString()
-            fallbackTextView.setBackgroundColor(getGroupColor(group))
+            fallbackTextView.setBackgroundColor(getGroupColor(groupName))
         }
 
-        private fun getGroupColor(group: MovieGroup): Int {
-            return if (group == MovieGroup.MAIN) {
-                0xFF6366F1.toInt()
-            } else {
-                0xFFF59E0B.toInt()
+        private fun getGroupColor(groupName: String): Int {
+            // Use different colors for different groups
+            return when (groupName.uppercase()) {
+                "MAIN" -> 0xFF6366F1.toInt() // Indigo
+                "EXTRAS" -> 0xFFF59E0B.toInt() // Amber
+                "BEHIND THE SCENES" -> 0xFF10B981.toInt() // Emerald
+                "DELETED SCENES" -> 0xFFEF4444.toInt() // Red
+                "FEATURETTES" -> 0xFF8B5CF6.toInt() // Violet
+                else -> 0xFF6B7280.toInt() // Gray (default)
             }
         }
 

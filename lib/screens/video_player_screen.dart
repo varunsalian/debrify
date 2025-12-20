@@ -18,7 +18,6 @@ import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 
 import '../widgets/series_browser.dart';
-import '../widgets/movie_collection_browser.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 

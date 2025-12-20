@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
+import '../models/movie_collection.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../screens/video_player_screen.dart';
@@ -506,6 +507,7 @@ class _AndroidTvPlaybackPayload {
   final List<_AndroidTvSeriesSeason> seasons;
   final Map<int, int> nextEpisodeMap;
   final Map<int, int> prevEpisodeMap;
+  final List<_AndroidTvCollectionGroup>? collectionGroups;
 
   const _AndroidTvPlaybackPayload({
     required this.contentType,
@@ -517,6 +519,7 @@ class _AndroidTvPlaybackPayload {
     required this.seasons,
     this.nextEpisodeMap = const {},
     this.prevEpisodeMap = const {},
+    this.collectionGroups,
   });
 
   Map<String, dynamic> toMap() {
@@ -532,6 +535,8 @@ class _AndroidTvPlaybackPayload {
       // Navigation maps for series playback (mirrors mobile video_player_screen.dart)
       'nextEpisodeMap': nextEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
       'prevEpisodeMap': prevEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
+      // Collection groups for movie collections (dynamic groups)
+      'collectionGroups': collectionGroups?.map((e) => e.toMap()).toList(),
     };
   }
 }
@@ -602,6 +607,23 @@ class _AndroidTvSeriesSeason {
     return {
       'seasonNumber': seasonNumber,
       'episodes': episodes.map((e) => e.toMap()).toList(),
+    };
+  }
+}
+
+class _AndroidTvCollectionGroup {
+  final String name;
+  final List<int> fileIndices;
+
+  const _AndroidTvCollectionGroup({
+    required this.name,
+    required this.fileIndices,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'fileIndices': fileIndices,
     };
   }
 }
@@ -796,6 +818,33 @@ class _AndroidTvPlaybackPayloadBuilder {
     // This mirrors mobile video_player_screen.dart's navigation exactly
     final navigationMaps = _buildNavigationMaps(seriesPlaylist, items);
 
+    // Build collection groups for movie collections
+    List<_AndroidTvCollectionGroup>? collectionGroups;
+    if (contentType == _PlaybackContentType.collection && launcherEntries.isNotEmpty) {
+      // Extract PlaylistEntry objects from _LauncherEntry wrappers
+      final playlistEntries = launcherEntries.map((e) => e.entry).toList();
+
+      // Create MovieCollection with Main/Extras grouping (40% threshold)
+      final movieCollection = MovieCollection.fromPlaylistWithMainExtras(
+        playlist: playlistEntries,
+        title: args.title,
+      );
+
+      // Convert to Android TV collection groups
+      collectionGroups = movieCollection.groups
+          .where((group) => group.fileIndices.isNotEmpty) // Only include non-empty groups
+          .map((group) => _AndroidTvCollectionGroup(
+                name: group.name,
+                fileIndices: group.fileIndices,
+              ))
+          .toList();
+
+      debugPrint('VideoPlayerLauncher: Created ${collectionGroups.length} collection groups for Android TV');
+      for (final group in collectionGroups) {
+        debugPrint('  - ${group.name}: ${group.fileIndices.length} files');
+      }
+    }
+
     final payload = _AndroidTvPlaybackPayload(
       contentType: contentType,
       title: args.title,
@@ -806,6 +855,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       seasons: seasons,
       nextEpisodeMap: navigationMaps.nextMap,
       prevEpisodeMap: navigationMaps.prevMap,
+      collectionGroups: collectionGroups,
     );
 
     return _AndroidTvPlaybackPayloadResult(
@@ -1090,9 +1140,11 @@ class _AndroidTvPlaybackPayloadBuilder {
     }
 
     main.sort((a, b) {
-      final yearA = yearOf(a) ?? 0;
-      final yearB = yearOf(b) ?? 0;
-      if (yearA != yearB) return yearA.compareTo(yearB);
+      final yearA = yearOf(a);
+      final yearB = yearOf(b);
+      if (yearA != null && yearB != null) {
+        return yearA.compareTo(yearB);
+      }
       return sizeOf(b).compareTo(sizeOf(a));
     });
 
