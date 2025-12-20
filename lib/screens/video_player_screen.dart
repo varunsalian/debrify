@@ -92,6 +92,8 @@ class VideoPlayerScreen extends StatefulWidget {
   final Map<String, String>? httpHeaders;
   // Disable auto-resume - start from the specified startIndex instead of last played
   final bool disableAutoResume;
+  // Explicit series flag - if null, auto-detect from filenames
+  final bool? isSeries;
 
   const VideoPlayerScreen({
     Key? key,
@@ -115,6 +117,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.hideBackButton = false,
     this.httpHeaders,
     this.disableAutoResume = false,
+    this.isSeries,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -172,6 +175,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _cachedSeriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           widget.playlist!,
           collectionTitle: widget.title, // Pass video title as fallback
+          forceSeries: widget.isSeries, // Pass explicit series flag
         );
       } catch (e) {
         return null;

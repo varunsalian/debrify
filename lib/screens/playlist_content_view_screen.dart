@@ -2147,6 +2147,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         rdTorrentId: rdTorrentId,
         disableAutoResume: true,
+        isSeries: _seriesPlaylist?.isSeries, // Pass detected series flag
       ),
     );
   }
@@ -2230,6 +2231,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
+        isSeries: _seriesPlaylist?.isSeries, // Pass detected series flag
       ),
     );
   }
@@ -2314,6 +2316,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
+        isSeries: _seriesPlaylist?.isSeries, // Pass detected series flag
       ),
     );
   }

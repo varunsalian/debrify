@@ -51,6 +51,7 @@ class VideoPlayerLaunchArgs {
   final bool hideBackButton;
   final bool Function()? isAndroidTvOverride;
   final bool disableAutoResume;
+  final bool? isSeries;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -73,6 +74,7 @@ class VideoPlayerLaunchArgs {
     this.hideBackButton = false,
     this.isAndroidTvOverride,
     this.disableAutoResume = false,
+    this.isSeries,
   });
 
   VideoPlayerScreen toWidget() {
@@ -96,6 +98,7 @@ class VideoPlayerLaunchArgs {
       hideOptions: hideOptions,
       hideBackButton: hideBackButton,
       disableAutoResume: disableAutoResume,
+      isSeries: isSeries,
     );
   }
 }
@@ -168,7 +171,7 @@ class VideoPlayerLauncher {
       // Async TVMaze metadata fetch - don't block initial playback
       // This mirrors mobile video_player_screen.dart behavior
       // Pass sessionId to ensure stale metadata from previous sessions is discarded
-      _fetchAndPushMetadataAsync(result.payload, result.entries, sessionId);
+      _fetchAndPushMetadataAsync(result.payload, result.entries, sessionId, args.isSeries);
 
       return true;
     } catch (e) {
@@ -184,10 +187,11 @@ class VideoPlayerLauncher {
     _AndroidTvPlaybackPayload payload,
     List<_LauncherEntry> entries,
     String sessionId,
+    bool? forceSeries,
   ) {
     debugPrint('TVMazeAsync: _fetchAndPushMetadataAsync CALLED');
     debugPrint('TVMazeAsync: contentType=${payload.contentType}, title=${payload.title}');
-    debugPrint('TVMazeAsync: entries.length=${entries.length}');
+    debugPrint('TVMazeAsync: entries.length=${entries.length}, forceSeries=$forceSeries');
 
     if (payload.contentType != _PlaybackContentType.series) {
       debugPrint('TVMazeAsync: SKIPPED - not series content (contentType=${payload.contentType})');
@@ -210,6 +214,7 @@ class VideoPlayerLauncher {
         final seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           playlistEntries,
           collectionTitle: payload.title,
+          forceSeries: forceSeries, // Pass explicit series flag
         );
 
         debugPrint('TVMazeAsync: SeriesPlaylist created - isSeries=${seriesPlaylist.isSeries}, seriesTitle=${seriesPlaylist.seriesTitle}');
@@ -930,6 +935,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       final playlist = SeriesPlaylist.fromPlaylistEntries(
         entries,
         collectionTitle: args.title, // Pass collection/torrent title as fallback
+        forceSeries: args.isSeries, // Pass explicit series flag
       );
       // DO NOT await fetchEpisodeInfo() here - TVMaze loading is now async
       // Metadata will be fetched and pushed separately after playback launches

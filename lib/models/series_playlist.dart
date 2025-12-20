@@ -231,8 +231,9 @@ class SeriesPlaylist {
     List<PlaylistEntry> entries, {
     List<int>? fileSizes,
     String? collectionTitle,
+    bool? forceSeries,
   }) {
-    debugPrint('SeriesPlaylist: Processing ${entries.length} entries${collectionTitle != null ? ", collection: \"$collectionTitle\"" : ""}');
+    debugPrint('SeriesPlaylist: Processing ${entries.length} entries${collectionTitle != null ? ", collection: \"$collectionTitle\"" : ""}${forceSeries != null ? ", forceSeries: $forceSeries" : ""}');
 
     // Use filenames for parsing (existing regex patterns expect just filenames)
     // Path info is available in entries[i].relativePath for future enhancements
@@ -279,7 +280,8 @@ class SeriesPlaylist {
     // Parse with file sizes for duplicate resolution
     final seriesInfos = SeriesParser.parsePlaylist(validFilenames, fileSizes: validFileSizes);
     final analysis = SeriesParser.analyzePlaylistConfidence(validFilenames);
-    final isSeries = analysis.classification == PlaylistClassification.SERIES;
+    // Use forceSeries if provided, otherwise use auto-detection
+    final isSeries = forceSeries ?? (analysis.classification == PlaylistClassification.SERIES);
 
     debugPrint('SeriesPlaylist: Playlist classification: ${analysis.classification} (confidence: ${analysis.confidenceScore})');
 

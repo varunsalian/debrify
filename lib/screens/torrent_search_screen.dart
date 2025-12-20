@@ -3199,6 +3199,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 ),
               ],
               startIndex: 0,
+              isSeries: false, // Single file playback
             ),
           );
         }
@@ -3311,6 +3312,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         subtitle: subtitle,
         playlist: playlistEntries,
         startIndex: startIndex,
+        isSeries: isSeriesCollection, // Pass detected series flag
       ),
     );
   }
@@ -5079,6 +5081,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             videoUrl: streamUrl,
             title: torrent.name,
             subtitle: Formatters.formatFileSize(file.size),
+            isSeries: false, // Single file playback
           ),
         );
       } catch (e) {
@@ -5199,6 +5202,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         subtitle: subtitle,
         playlist: playlistEntries,
         startIndex: startIndex,
+        isSeries: isSeriesCollection, // Pass detected series flag
       ),
     );
   }
@@ -5924,6 +5928,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           VideoPlayerLaunchArgs(
             videoUrl: videoUrl,
             title: finalTitle,
+            isSeries: false, // Single file playback
           ),
         );
       } else {
@@ -6398,6 +6403,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           subtitle: '${entries.length} files',
           playlist: entries.isNotEmpty ? entries : null,
           startIndex: 0,
+          isSeries: isSeries, // Pass detected series flag
         ),
       );
     } catch (e) {

@@ -452,6 +452,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 videoUrl: downloadLink,
                 title: torrent.filename,
                 subtitle: Formatters.formatFileSize(torrent.bytes),
+                isSeries: false, // Single file playback
               ),
             );
           }
@@ -493,6 +494,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             videoUrl: download.download,
             title: download.filename,
             subtitle: Formatters.formatFileSize(download.filesize),
+            isSeries: false, // Single file playback
           ),
         );
       }
@@ -3309,6 +3311,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         initialVideoUrl = entries.first.url;
       }
 
+      // isSeries is already detected earlier in this function (line 3126)
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -3317,6 +3320,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           subtitle: '${entries.length} files',
           playlist: entries,
           startIndex: 0,
+          isSeries: isSeries, // Pass detected series flag (already computed at line 3126)
         ),
       );
     } catch (e) {
@@ -3930,6 +3934,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 videoUrl: downloadLink,
                 title: torrent.filename,
                 subtitle: 'File ${index + 1}',
+                isSeries: false, // Single file playback
               ),
             );
           }
@@ -4972,6 +4977,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           videoUrl: downloadUrl,
           title: file.name,
           subtitle: Formatters.formatFileSize(file.bytes ?? 0),
+          isSeries: false, // Single file playback
         ),
       );
     } catch (e) {
@@ -5058,6 +5064,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         );
       }).toList();
 
+      // Detect if it's a series collection
+      final filenames = playlist.map((e) => e.title).toList();
+      final isSeries = playlist.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
       // Launch video player with playlist
       await VideoPlayerLauncher.push(
         context,
@@ -5067,6 +5077,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           subtitle: '${videoFiles.length} videos',
           playlist: playlist,
           startIndex: 0,
+          isSeries: isSeries, // Pass detected series flag
         ),
       );
     } catch (e) {
