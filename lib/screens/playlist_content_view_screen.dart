@@ -2108,7 +2108,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           entries.add(PlaylistEntry(
             url: url,
             title: file.name,
-            relativePath: file.path,
+            relativePath: file.relativePath ?? file.path,
             rdTorrentId: rdTorrentId,
             rdLinkIndex: linkIndex,
             sizeBytes: file.bytes,
@@ -2117,7 +2117,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           entries.add(PlaylistEntry(
             url: '',
             title: file.name,
-            relativePath: file.path,
+            relativePath: file.relativePath ?? file.path,
             restrictedLink: links[linkIndex],
             rdTorrentId: rdTorrentId,
             rdLinkIndex: linkIndex,
@@ -2128,7 +2128,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         entries.add(PlaylistEntry(
           url: '',
           title: file.name,
-          relativePath: file.path,
+          relativePath: file.relativePath ?? file.path,
           restrictedLink: links[linkIndex],
           rdTorrentId: rdTorrentId,
           rdLinkIndex: linkIndex,

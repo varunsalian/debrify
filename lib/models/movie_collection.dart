@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../screens/video_player/models/playlist_entry.dart';
 
 /// Represents a group (folder) within a movie collection
@@ -92,6 +93,70 @@ class MovieCollection {
       groups: groups,
       allFiles: playlist,
     );
+  }
+
+  /// Creates a MovieCollection organized by actual folder structure
+  /// Preserves original file order (no sorting)
+  /// Used for raw/unsorted view mode
+  factory MovieCollection.fromFolderStructure({
+    required List<PlaylistEntry> playlist,
+    String? title,
+  }) {
+    debugPrint('📁 MovieCollection.fromFolderStructure: Processing ${playlist.length} entries');
+
+    final folderMap = <String, List<int>>{};
+
+    // Group files by their top-level folder
+    for (int i = 0; i < playlist.length; i++) {
+      final entry = playlist[i];
+      final path = entry.relativePath ?? '';
+      final folderName = _extractTopLevelFolder(path);
+
+      if (i < 5) {  // Log first 5 entries
+        debugPrint('  Entry[$i]: title="${entry.title}"');
+        debugPrint('    relativePath: "$path"');
+        debugPrint('    extractedFolder: "$folderName"');
+      }
+
+      folderMap.putIfAbsent(folderName, () => []);
+      folderMap[folderName]!.add(i);  // Store index in original order
+    }
+
+    debugPrint('📁 Extracted ${folderMap.length} folders: ${folderMap.keys.toList()}');
+    for (final entry in folderMap.entries) {
+      debugPrint('  - ${entry.key}: ${entry.value.length} files');
+    }
+
+    // Create collection groups (no sorting)
+    final groups = folderMap.entries
+        .map((entry) => CollectionGroup(
+              name: entry.key,
+              fileIndices: entry.value,
+            ))
+        .toList();
+
+    return MovieCollection(
+      title: title,
+      groups: groups,
+      allFiles: playlist,
+    );
+  }
+
+  /// Extract top-level folder name from relative path
+  /// Examples:
+  ///   "Season 1/Episode 1.mkv" -> "Season 1"
+  ///   "Extras/Behind The Scenes.mkv" -> "Extras"
+  ///   "Movie.mkv" -> "Root"
+  ///   "" -> "Root"
+  static String _extractTopLevelFolder(String path) {
+    if (path.isEmpty) return 'Root';
+
+    final parts = path.split('/');
+    if (parts.length > 1) {
+      return parts[0];  // First folder
+    }
+
+    return 'Root';  // File in root directory
   }
 }
 

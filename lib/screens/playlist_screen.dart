@@ -11,6 +11,7 @@ import '../services/android_native_downloader.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
+import '../utils/rd_folder_tree_builder.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
@@ -216,13 +217,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           return;
         }
 
-        // Use selected files if marked; otherwise all
-        final selectedFiles = allFiles.where((f) => f['selected'] == 1).toList();
-        final filesToUse = selectedFiles.isNotEmpty ? selectedFiles : allFiles;
-
         final links = (info['links'] as List<dynamic>? ?? const []);
 
         // Archive check: multiple files but only one RD link
+        final selectedFiles = allFiles.where((f) => f['selected'] == 1).toList();
+        final filesToUse = selectedFiles.isNotEmpty ? selectedFiles : allFiles;
         if (filesToUse.length > 1 && links.length == 1) {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -231,13 +230,22 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           return;
         }
 
-        // Build filenames list
-        final filenames = filesToUse.map((file) {
-          String? name = file['name']?.toString() ?? file['filename']?.toString() ?? file['path']?.toString();
-          if (name != null && name.startsWith('/')) name = name.split('/').last;
-          return name ?? 'Unknown File';
-        }).toList();
+        // Build folder tree (preserves structure)
+        final rootNode = RDFolderTreeBuilder.buildTree(allFiles.cast<Map<String, dynamic>>());
 
+        // Collect video files with folder info
+        final videoFiles = RDFolderTreeBuilder.collectVideoFiles(rootNode);
+
+        if (videoFiles.isEmpty) {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No playable video files found in this torrent.')),
+          );
+          return;
+        }
+
+        // Detect first episode index for series
+        final filenames = videoFiles.map((f) => f.name).toList();
         final bool isSeries = SeriesParser.isSeriesPlaylist(filenames);
         int firstIndex = 0;
         if (isSeries) {
@@ -255,40 +263,65 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           }
         }
 
-        // Map from original file index in allFiles to its index within selected/used files (for links[] mapping)
-        final List<int> usedOriginalIndices = [];
-        for (int i = 0; i < allFiles.length; i++) {
-          if (filesToUse.contains(allFiles[i])) usedOriginalIndices.add(i);
-        }
-
         final List<PlaylistEntry> entries = [];
-        for (int i = 0; i < filesToUse.length; i++) {
-          final f = filesToUse[i];
-          String? filename = f['name']?.toString() ?? f['filename']?.toString() ?? f['path']?.toString();
-          if (filename != null && filename.startsWith('/')) filename = filename.split('/').last;
-          final finalFilename = filename ?? 'Unknown File';
-          final int? sizeBytes = (f is Map) ? (f['bytes'] as int?) : null;
+        for (int i = 0; i < videoFiles.length; i++) {
+          final file = videoFiles[i];
+          final linkIndex = file.linkIndex;
 
-          // Map to original index to pick RD link via usedOriginalIndices position
-          final originalIndex = allFiles.indexOf(f);
-          final linkIndex = usedOriginalIndices.indexOf(originalIndex);
-          if (originalIndex < 0 || linkIndex < 0 || linkIndex >= links.length) continue;
+          if (linkIndex < 0 || linkIndex >= links.length) continue;
+
+          final restrictedLink = links[linkIndex]?.toString() ?? '';
 
           if (i == firstIndex) {
             // Try unrestrict first for immediate start
             try {
-              final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[linkIndex]);
+              final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
-                entries.add(PlaylistEntry(url: url, title: finalFilename, torrentHash: torrentHash, sizeBytes: sizeBytes));
+                entries.add(PlaylistEntry(
+                  url: url,
+                  title: file.name,
+                  relativePath: file.relativePath ?? file.path,
+                  rdTorrentId: rdTorrentId,
+                  rdLinkIndex: linkIndex,
+                  torrentHash: torrentHash,
+                  sizeBytes: file.bytes,
+                ));
               } else {
-                entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash, sizeBytes: sizeBytes));
+                entries.add(PlaylistEntry(
+                  url: '',
+                  title: file.name,
+                  relativePath: file.relativePath ?? file.path,
+                  restrictedLink: restrictedLink,
+                  rdTorrentId: rdTorrentId,
+                  rdLinkIndex: linkIndex,
+                  torrentHash: torrentHash,
+                  sizeBytes: file.bytes,
+                ));
               }
             } catch (_) {
-              entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash, sizeBytes: sizeBytes));
+              entries.add(PlaylistEntry(
+                url: '',
+                title: file.name,
+                relativePath: file.relativePath ?? file.path,
+                restrictedLink: restrictedLink,
+                rdTorrentId: rdTorrentId,
+                rdLinkIndex: linkIndex,
+                torrentHash: torrentHash,
+                sizeBytes: file.bytes,
+              ));
             }
           } else {
-            entries.add(PlaylistEntry(url: '', title: finalFilename, restrictedLink: links[linkIndex], torrentHash: torrentHash, sizeBytes: sizeBytes));
+            entries.add(PlaylistEntry(
+              url: '',
+              title: file.name,
+              relativePath: file.relativePath ?? file.path,
+              restrictedLink: restrictedLink,
+              rdTorrentId: rdTorrentId,
+              rdLinkIndex: linkIndex,
+              torrentHash: torrentHash,
+              sizeBytes: file.bytes,
+            ));
           }
         }
 
@@ -298,6 +331,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             const SnackBar(content: Text('No playable video files found in this torrent.')),
           );
           return;
+        }
+
+        // Debug logging to verify relativePath is populated
+        debugPrint('🎯 PlaylistScreen (RD): Playing with ${entries.length} entries');
+        for (int i = 0; i < (entries.length < 5 ? entries.length : 5); i++) {
+          debugPrint('  Entry[$i]: title="${entries[i].title}", relativePath="${entries[i].relativePath}"');
         }
 
         String initialVideoUrl = '';
@@ -530,6 +569,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         playlistEntries[startIndex] = PlaylistEntry(
           url: initialUrl,
           title: playlistEntries[startIndex].title,
+          relativePath: playlistEntries[startIndex].relativePath,
           provider: playlistEntries[startIndex].provider,
           torboxTorrentId: playlistEntries[startIndex].torboxTorrentId,
           torboxFileId: playlistEntries[startIndex].torboxFileId,
@@ -558,6 +598,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       if (dialogOpen && mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
         dialogOpen = false;
+      }
+
+      // Debug logging to verify relativePath is populated
+      debugPrint('🎯 PlaylistScreen (Torbox): Playing with ${playlistEntries.length} entries');
+      for (int i = 0; i < (playlistEntries.length < 5 ? playlistEntries.length : 5); i++) {
+        debugPrint('  Entry[$i]: title="${playlistEntries[i].title}", relativePath="${playlistEntries[i].relativePath}"');
       }
 
       if (!mounted) return;
@@ -2319,6 +2365,7 @@ _TorboxPlaylistEntriesResult _buildTorboxPlaylistEntries({
         PlaylistEntry(
           url: '',
           title: candidate.displayName,
+          relativePath: candidate.file.name, // Preserves folder structure
           provider: 'torbox',
           torboxTorrentId: torrent.id,
           torboxFileId: candidate.file.id,

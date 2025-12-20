@@ -320,6 +320,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void initState() {
     super.initState();
+
+    // Log playlist entries to trace relativePath
+    if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+      debugPrint('📺 VideoPlayerScreen.initState: Initialized with ${widget.playlist!.length} playlist entries');
+      for (int i = 0; i < widget.playlist!.length && i < 5; i++) {
+        final entry = widget.playlist![i];
+        debugPrint('  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"');
+      }
+    }
+
     if (widget.channelName != null && widget.channelName!.trim().isNotEmpty) {
       _currentChannelName = widget.channelName;
     }
@@ -803,22 +813,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Find the next logical episode index for auto-advance
   int _findNextEpisodeIndex() {
     final seriesPlaylist = _seriesPlaylist;
+
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // For non-series content (movies), advance within the Main group order
+      // Raw mode: sequential navigation through all files
+      if (widget.viewMode == PlaylistViewMode.raw) {
+        if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
+        if (_currentIndex + 1 < widget.playlist!.length) {
+          return _currentIndex + 1;
+        }
+        return -1;
+      }
+
+      // Sorted/collection mode: navigate within Main group only
       if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
       final indices = _getMainGroupIndices(widget.playlist!);
       if (indices.isEmpty) return -1;
-      final pos = indices.indexOf(_currentIndex);
-      if (pos == -1) {
-        // If current not in Main, move to first Main
+
+      final currentPos = indices.indexOf(_currentIndex);
+      if (currentPos == -1) {
         return indices.first;
       }
-      if (pos + 1 < indices.length) {
-        return indices[pos + 1];
+
+      if (currentPos + 1 < indices.length) {
+        return indices[currentPos + 1];
       }
+
       return -1;
     }
 
+    // Series mode: existing logic
     try {
       // Find current episode in the sorted allEpisodes list
       final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
@@ -892,21 +915,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Find the previous logical episode index
   int _findPreviousEpisodeIndex() {
     final seriesPlaylist = _seriesPlaylist;
+
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // For non-series content (movies), move within Main group order
+      // Raw mode: sequential navigation through all files
+      if (widget.viewMode == PlaylistViewMode.raw) {
+        if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
+        if (_currentIndex - 1 >= 0) {
+          return _currentIndex - 1;
+        }
+        return -1;
+      }
+
+      // Sorted/collection mode: navigate within Main group only
       if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
       final indices = _getMainGroupIndices(widget.playlist!);
       if (indices.isEmpty) return -1;
-      final pos = indices.indexOf(_currentIndex);
-      if (pos == -1) {
+
+      final currentPos = indices.indexOf(_currentIndex);
+      if (currentPos == -1) {
         return indices.first;
       }
-      if (pos - 1 >= 0) {
-        return indices[pos - 1];
+
+      if (currentPos - 1 >= 0) {
+        return indices[currentPos - 1];
       }
+
       return -1;
     }
 
+    // Series mode: existing logic
     try {
       // Find current episode in the sorted allEpisodes list
       final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
@@ -2442,6 +2479,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       currentIndex: _currentIndex,
       seriesPlaylist: _seriesPlaylist,
       playlistItemData: _constructPlaylistItemData(),
+      viewMode: widget.viewMode,
       onSelect: (index, {bool allowResume = false}) async {
         _setManualSelectionMode(allowResume: allowResume);
         await _loadPlaylistIndex(index, autoplay: true);

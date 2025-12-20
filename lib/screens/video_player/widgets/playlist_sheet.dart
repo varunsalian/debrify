@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../models/series_playlist.dart';
 import '../../../models/movie_collection.dart';
+import '../../../models/playlist_view_mode.dart';
 import '../../../widgets/series_browser.dart';
 import '../../../widgets/movie_collection_browser.dart';
 import '../models/playlist_entry.dart';
@@ -22,6 +23,7 @@ class PlaylistSheet {
   /// - [seriesPlaylist]: Optional series playlist metadata
   /// - [playlistItemData]: Additional playlist item data
   /// - [onSelect]: Callback when episode/movie is selected (index, allowResume)
+  /// - [viewMode]: Optional view mode to determine collection organization
   static Future<void> show(
     BuildContext context, {
     required List<PlaylistEntry> playlist,
@@ -29,6 +31,7 @@ class PlaylistSheet {
     SeriesPlaylist? seriesPlaylist,
     Map<String, dynamic>? playlistItemData,
     required Future<void> Function(int index, {bool allowResume}) onSelect,
+    PlaylistViewMode? viewMode,
   }) async {
     if (playlist.isEmpty) return;
 
@@ -88,14 +91,29 @@ class PlaylistSheet {
                       }
                     },
                   )
-                : MovieCollectionBrowser(
-                    collection: MovieCollection.fromPlaylistWithMainExtras(
-                      playlist: playlist,
-                      title: playlistItemData?['title'] as String?,
-                    ),
-                    currentIndex: currentIndex,
-                    onSelectIndex: (idx) async {
-                      await onSelect(idx, allowResume: false);
+                : Builder(
+                    builder: (context) {
+                      // Log playlist entries before creating MovieCollection
+                      debugPrint('🔍 PlaylistSheet: Creating ${viewMode == PlaylistViewMode.raw ? "folder" : "main/extras"} collection from ${playlist.length} entries');
+                      for (int i = 0; i < playlist.length && i < 5; i++) {
+                        debugPrint('  Entry[$i]: title="${playlist[i].title}", relativePath="${playlist[i].relativePath}"');
+                      }
+
+                      return MovieCollectionBrowser(
+                        collection: viewMode == PlaylistViewMode.raw
+                            ? MovieCollection.fromFolderStructure(
+                                playlist: playlist,
+                                title: playlistItemData?['title'] as String?,
+                              )
+                            : MovieCollection.fromPlaylistWithMainExtras(
+                                playlist: playlist,
+                                title: playlistItemData?['title'] as String?,
+                              ),
+                        currentIndex: currentIndex,
+                        onSelectIndex: (idx) async {
+                          await onSelect(idx, allowResume: false);
+                        },
+                      );
                     },
                   ),
           ),

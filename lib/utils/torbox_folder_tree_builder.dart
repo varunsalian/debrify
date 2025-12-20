@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/rd_file_node.dart';
 import '../models/torbox_file.dart';
 import '../utils/file_utils.dart';
@@ -14,12 +15,20 @@ class TorboxFolderTreeBuilder {
   ///
   /// Returns a root node containing all folders and files
   static RDFileNode buildTree(List<TorboxFile> files) {
+    // Log input for debugging
+    debugPrint('🔧 TorboxFolderTreeBuilder: Building tree from ${files.length} files');
+
     // Create root node
     final rootNode = RDFileNode.folder(name: 'Root', children: []);
 
     for (int i = 0; i < files.length; i++) {
       final file = files[i];
       final name = file.name;
+
+      // Log first 5 files to trace paths
+      if (i < 5) {
+        debugPrint('  File[$i]: name="$name"');
+      }
 
       if (name.isEmpty) continue;
 
@@ -29,6 +38,11 @@ class TorboxFolderTreeBuilder {
       // 2. "Folder/File.mkv" (file in folder)
       // 3. "TorrentName.../Folder/File.mkv" (file in folder, with torrent name prefix)
       final pathSegments = _parsePathSegments(name);
+
+      // Log parsed segments for first 3 files
+      if (i < 3) {
+        debugPrint('    Parsed segments: $pathSegments');
+      }
 
       if (pathSegments.isEmpty) continue;
 
@@ -60,10 +74,16 @@ class TorboxFolderTreeBuilder {
 
       // Add the file to the current folder
       final fileName = pathSegments.last;
+
+      // Build relative path from segments (without torrent name prefix)
+      // Example: pathSegments = ["Season 1", "Episode 1.mkv"] -> "Season 1/Episode 1.mkv"
+      String relativePath = pathSegments.join('/');
+
       final fileNode = RDFileNode.file(
         name: fileName,
         fileId: file.id,
         path: name, // Store original full path
+        relativePath: relativePath,
         bytes: file.size,
         linkIndex: i, // Use the index in the files array
         selected: true,

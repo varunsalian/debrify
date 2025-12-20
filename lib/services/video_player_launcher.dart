@@ -107,6 +107,15 @@ class VideoPlayerLaunchArgs {
 
 class VideoPlayerLauncher {
   static Future<void> push(BuildContext context, VideoPlayerLaunchArgs args) async {
+    // Log playlist entries to trace relativePath
+    if (args.playlist != null && args.playlist!.isNotEmpty) {
+      debugPrint('🚀 VideoPlayerLauncher.push: Launching with ${args.playlist!.length} entries');
+      for (int i = 0; i < args.playlist!.length && i < 5; i++) {
+        final entry = args.playlist![i];
+        debugPrint('  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"');
+      }
+    }
+
     final isTv = await _isAndroidTv(args.isAndroidTvOverride);
     if (isTv) {
       final launched = await _launchOnAndroidTv(args);
@@ -824,11 +833,16 @@ class _AndroidTvPlaybackPayloadBuilder {
       // Extract PlaylistEntry objects from _LauncherEntry wrappers
       final playlistEntries = launcherEntries.map((e) => e.entry).toList();
 
-      // Create MovieCollection with Main/Extras grouping (40% threshold)
-      final movieCollection = MovieCollection.fromPlaylistWithMainExtras(
-        playlist: playlistEntries,
-        title: args.title,
-      );
+      // Create MovieCollection with Main/Extras grouping (40% threshold) OR folder structure
+      final movieCollection = args.viewMode == PlaylistViewMode.raw
+          ? MovieCollection.fromFolderStructure(
+              playlist: playlistEntries,
+              title: args.title,
+            )
+          : MovieCollection.fromPlaylistWithMainExtras(
+              playlist: playlistEntries,
+              title: args.title,
+            );
 
       // Convert to Android TV collection groups
       collectionGroups = movieCollection.groups
@@ -1068,12 +1082,13 @@ class _AndroidTvPlaybackPayloadBuilder {
     List<PlaylistEntry> entries,
     List<_PerItemState> perItemState,
   ) {
-    // If auto-resume is disabled, use startIndex directly
+    // If auto-resume is disabled, use explicit start index
     if (args.disableAutoResume) {
       debugPrint('AndroidTV: auto-resume disabled for collection, using startIndex=${args.startIndex ?? 0}');
       return args.startIndex ?? 0;
     }
 
+    // Find most recently watched item
     int bestIndex = -1;
     int bestUpdatedAt = -1;
     for (int i = 0; i < entries.length; i++) {
@@ -1086,10 +1101,18 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (bestIndex != -1) {
       return bestIndex;
     }
+
+    // Raw mode: start at first file (index 0)
+    if (args.viewMode == PlaylistViewMode.raw) {
+      return 0;
+    }
+
+    // Sorted/collection mode: start at first Main group file
     final indices = _getMainGroupIndices(entries);
     if (indices.isNotEmpty) {
       return indices.first;
     }
+
     return args.startIndex ?? 0;
   }
 

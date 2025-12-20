@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/rd_file_node.dart';
 import '../utils/file_utils.dart';
 
@@ -7,6 +8,9 @@ class RDFolderTreeBuilder {
   /// Path format: "/folder1/folder2/filename.ext"
   /// Only files with selected == 1 are included in the tree
   static RDFileNode buildTree(List<Map<String, dynamic>> files) {
+    // Log input for debugging
+    debugPrint('🔧 RDFolderTreeBuilder: Building tree from ${files.length} total files');
+
     // Create root node
     final rootNode = RDFileNode.folder(name: 'Root', children: []);
 
@@ -17,14 +21,22 @@ class RDFolderTreeBuilder {
       return selectedValue == 1 || selectedValue == true;
     }).toList();
 
+    debugPrint('🔧 RDFolderTreeBuilder: ${selectedFiles.length} selected files');
+
     // Track linkIndex counter for selected files
     int linkIndexCounter = 0;
 
-    for (final file in selectedFiles) {
+    for (int idx = 0; idx < selectedFiles.length; idx++) {
+      final file = selectedFiles[idx];
       final pathValue = file['path'];
       final path = pathValue != null ? pathValue.toString() : '';
       final fileId = file['id'] as int?;
       final bytes = _parseBytes(file['bytes']);
+
+      // Log first 5 files to trace paths
+      if (idx < 5) {
+        debugPrint('  File[$idx]: path="$path"');
+      }
 
       if (path.isEmpty) {
         continue;
@@ -64,10 +76,16 @@ class RDFolderTreeBuilder {
       // Add the file to the current folder
       // linkIndex matches the order in the API's selected files list
       final fileName = segments.last;
+
+      // Build relative path by removing leading slash
+      // Example: "/Season 1/Episode 1.mkv" -> "Season 1/Episode 1.mkv"
+      String relativePath = path.startsWith('/') ? path.substring(1) : path;
+
       final fileNode = RDFileNode.file(
         name: fileName,
         fileId: fileId ?? 0,
         path: path,
+        relativePath: relativePath,
         bytes: bytes,
         linkIndex: linkIndexCounter++, // Assign index in API order
         selected: true, // All files in tree are selected
