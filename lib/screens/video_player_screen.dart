@@ -36,6 +36,9 @@ import 'video_player/widgets/vertical_hud.dart';
 import 'video_player/widgets/aspect_ratio_hud.dart';
 import 'video_player/widgets/netflix_radio_tile.dart';
 import 'video_player/widgets/controls.dart';
+import 'video_player/widgets/channel_badge.dart';
+import 'video_player/widgets/title_badge.dart';
+import 'video_player/widgets/aspect_ratio_video.dart';
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
@@ -2398,26 +2401,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Build video with custom aspect ratio
   Widget _buildCustomAspectRatioVideo() {
-    final aspectRatio = _getCustomAspectRatio();
-    if (aspectRatio == null) {
-      // No forced aspect ratio; let the Video widget scale internally
-      return mkv.Video(
-        controller: _videoController,
-        controls: null,
-        fit: _currentFit(),
-      );
-    }
-
-    // Forced aspect ratio: center the constrained box and let Video cover inside it
-    return Center(
-      child: AspectRatio(
-        aspectRatio: aspectRatio,
-        child: mkv.Video(
-          controller: _videoController,
-          controls: null,
-          fit: BoxFit.cover,
-        ),
-      ),
+    return AspectRatioVideo(
+      videoController: _videoController,
+      customAspectRatio: _getCustomAspectRatio(),
+      currentFit: _currentFit(),
     );
   }
 
@@ -2527,223 +2514,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  Widget _buildChannelBadge(String badgeText) {
-    // Parse channel number and name from badgeText (format: "CH 05 • HBO MAX" or just "HBO MAX")
-    String? channelNumber;
-    String? channelName;
+  Widget _buildChannelBadge(String badgeText) => ChannelBadge(badgeText: badgeText);
 
-    if (badgeText.contains('•')) {
-      final parts = badgeText.split('•');
-      if (parts.length == 2) {
-        // Remove "CH " prefix if exists and just keep the number
-        final numberPart = parts[0].trim().replaceFirst('CH ', '');
-        channelNumber = numberPart;
-        channelName = parts[1].trim();
-      }
-    } else {
-      // Just channel name, no number
-      channelName = badgeText;
-    }
-
-    return Container(
-      padding: const EdgeInsets.only(left: 14, right: 16, top: 10, bottom: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        // Layered background for glassy blur effect
-        boxShadow: [
-          // Outer glow/shadow
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 12,
-            spreadRadius: 2,
-          ),
-        ],
-        // Multiple gradients stacked to create frosted glass effect
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.black.withOpacity(0.85), // Main frosted glass
-            Colors.black.withOpacity(0.8),
-          ],
-        ),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Subtle left accent line with gradient
-          Container(
-            width: 2,
-            height: 24,
-            margin: const EdgeInsets.only(right: 12),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF66FF00), // Neon green
-                  Color(0xFF4CAF50), // Green
-                  Color(0xFF00BCD4), // Cyan
-                ],
-              ),
-              borderRadius: BorderRadius.all(Radius.circular(1)),
-            ),
-          ),
-          // Channel number (if exists)
-          if (channelNumber != null) ...[
-            Text(
-              channelNumber,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.4,
-                shadows: [
-                  Shadow(
-                    color: Color(0x40000000),
-                    offset: Offset(0, 1),
-                    blurRadius: 3,
-                  ),
-                ],
-              ),
-            ),
-            // Separator dot
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                '•',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.53),
-                  fontSize: 11,
-                ),
-              ),
-            ),
-          ],
-          // Channel name
-          if (channelName != null)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 180),
-              child: Text(
-                channelName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xE6FFFFFF), // 90% opacity white
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  shadows: [
-                    Shadow(
-                      color: Color(0x40000000),
-                      offset: Offset(0, 1),
-                      blurRadius: 2,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTitleBadge(String title) {
-    return Container(
-      padding: const EdgeInsets.only(left: 12, right: 14, top: 8, bottom: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        // Layered background for glassy blur effect
-        boxShadow: [
-          // Outer glow/shadow
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 12,
-            spreadRadius: 2,
-          ),
-        ],
-        // Multiple gradients stacked to create frosted glass effect
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.black.withOpacity(0.85), // Main frosted glass
-            Colors.black.withOpacity(0.8),
-          ],
-        ),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Subtle left accent line with gradient
-          Container(
-            width: 1.5,
-            height: 20,
-            margin: const EdgeInsets.only(right: 10),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF66FF00), // Neon green
-                  Color(0xFF4CAF50), // Green
-                  Color(0xFF00BCD4), // Cyan
-                ],
-              ),
-              borderRadius: BorderRadius.all(Radius.circular(1)),
-            ),
-          ),
-          // Play icon
-          const Text(
-            '▶',
-            style: TextStyle(
-              color: Color(0xFF66FF00),
-              fontSize: 12,
-              height: 1.0,
-              shadows: [
-                Shadow(
-                  color: Color(0x40000000),
-                  offset: Offset(0, 1),
-                  blurRadius: 3,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Video title
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xE6FFFFFF), // 90% opacity white
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-                height: 1.0,
-                shadows: [
-                  Shadow(
-                    color: Color(0x40000000),
-                    offset: Offset(0, 1),
-                    blurRadius: 2,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildTitleBadge(String title) => TitleBadge(title: title);
 
   // Get the custom aspect ratio for specific modes
   double? _getCustomAspectRatio() =>
