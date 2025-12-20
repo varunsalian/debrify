@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
+import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../screens/video_player_screen.dart';
 import '../services/android_native_downloader.dart';
@@ -51,7 +52,7 @@ class VideoPlayerLaunchArgs {
   final bool hideBackButton;
   final bool Function()? isAndroidTvOverride;
   final bool disableAutoResume;
-  final bool? isSeries;
+  final PlaylistViewMode? viewMode;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -74,7 +75,7 @@ class VideoPlayerLaunchArgs {
     this.hideBackButton = false,
     this.isAndroidTvOverride,
     this.disableAutoResume = false,
-    this.isSeries,
+    this.viewMode,
   });
 
   VideoPlayerScreen toWidget() {
@@ -98,7 +99,7 @@ class VideoPlayerLaunchArgs {
       hideOptions: hideOptions,
       hideBackButton: hideBackButton,
       disableAutoResume: disableAutoResume,
-      isSeries: isSeries,
+      viewMode: viewMode,
     );
   }
 }
@@ -171,7 +172,7 @@ class VideoPlayerLauncher {
       // Async TVMaze metadata fetch - don't block initial playback
       // This mirrors mobile video_player_screen.dart behavior
       // Pass sessionId to ensure stale metadata from previous sessions is discarded
-      _fetchAndPushMetadataAsync(result.payload, result.entries, sessionId, args.isSeries);
+      _fetchAndPushMetadataAsync(result.payload, result.entries, sessionId, args.viewMode);
 
       return true;
     } catch (e) {
@@ -187,11 +188,11 @@ class VideoPlayerLauncher {
     _AndroidTvPlaybackPayload payload,
     List<_LauncherEntry> entries,
     String sessionId,
-    bool? forceSeries,
+    PlaylistViewMode? viewMode,
   ) {
     debugPrint('TVMazeAsync: _fetchAndPushMetadataAsync CALLED');
     debugPrint('TVMazeAsync: contentType=${payload.contentType}, title=${payload.title}');
-    debugPrint('TVMazeAsync: entries.length=${entries.length}, forceSeries=$forceSeries');
+    debugPrint('TVMazeAsync: entries.length=${entries.length}, viewMode=$viewMode');
 
     if (payload.contentType != _PlaybackContentType.series) {
       debugPrint('TVMazeAsync: SKIPPED - not series content (contentType=${payload.contentType})');
@@ -214,7 +215,7 @@ class VideoPlayerLauncher {
         final seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           playlistEntries,
           collectionTitle: payload.title,
-          forceSeries: forceSeries, // Pass explicit series flag
+          forceSeries: viewMode?.toForceSeries(), // Convert viewMode to forceSeries
         );
 
         debugPrint('TVMazeAsync: SeriesPlaylist created - isSeries=${seriesPlaylist.isSeries}, seriesTitle=${seriesPlaylist.seriesTitle}');
@@ -935,7 +936,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       final playlist = SeriesPlaylist.fromPlaylistEntries(
         entries,
         collectionTitle: args.title, // Pass collection/torrent title as fallback
-        forceSeries: args.isSeries, // Pass explicit series flag
+        forceSeries: args.viewMode?.toForceSeries(), // Convert viewMode to forceSeries
       );
       // DO NOT await fetchEpisodeInfo() here - TVMaze loading is now async
       // Metadata will be fetched and pushed separately after playback launches

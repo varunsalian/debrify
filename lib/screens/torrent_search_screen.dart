@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import '../models/playlist_view_mode.dart';
 import '../models/torrent.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/torrent_filter_state.dart';
@@ -3199,7 +3200,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 ),
               ],
               startIndex: 0,
-              isSeries: false, // Single file playback
+              viewMode: PlaylistViewMode.sorted, // Single file - not series
             ),
           );
         }
@@ -3312,7 +3313,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         subtitle: subtitle,
         playlist: playlistEntries,
         startIndex: startIndex,
-        isSeries: isSeriesCollection, // Pass detected series flag
+        viewMode: isSeriesCollection ? PlaylistViewMode.series : PlaylistViewMode.sorted,
       ),
     );
   }
@@ -5081,7 +5082,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             videoUrl: streamUrl,
             title: torrent.name,
             subtitle: Formatters.formatFileSize(file.size),
-            isSeries: false, // Single file playback
+            viewMode: PlaylistViewMode.sorted, // Single file - not series
           ),
         );
       } catch (e) {
@@ -5202,7 +5203,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         subtitle: subtitle,
         playlist: playlistEntries,
         startIndex: startIndex,
-        isSeries: isSeriesCollection, // Pass detected series flag
+        viewMode: isSeriesCollection ? PlaylistViewMode.series : PlaylistViewMode.sorted,
       ),
     );
   }
@@ -5928,7 +5929,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           VideoPlayerLaunchArgs(
             videoUrl: videoUrl,
             title: finalTitle,
-            isSeries: false, // Single file playback
+            viewMode: PlaylistViewMode.sorted, // Single file - not series
           ),
         );
       } else {
@@ -6403,7 +6404,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           subtitle: '${entries.length} files',
           playlist: entries.isNotEmpty ? entries : null,
           startIndex: 0,
-          isSeries: isSeries, // Pass detected series flag
+          viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
         ),
       );
     } catch (e) {

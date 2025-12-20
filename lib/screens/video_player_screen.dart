@@ -12,6 +12,7 @@ import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../utils/time_formatters.dart';
 import '../services/episode_info_service.dart';
+import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
@@ -92,8 +93,8 @@ class VideoPlayerScreen extends StatefulWidget {
   final Map<String, String>? httpHeaders;
   // Disable auto-resume - start from the specified startIndex instead of last played
   final bool disableAutoResume;
-  // Explicit series flag - if null, auto-detect from filenames
-  final bool? isSeries;
+  // Explicit view mode - if null, auto-detect from filenames
+  final PlaylistViewMode? viewMode;
 
   const VideoPlayerScreen({
     Key? key,
@@ -117,7 +118,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.hideBackButton = false,
     this.httpHeaders,
     this.disableAutoResume = false,
-    this.isSeries,
+    this.viewMode,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -175,7 +176,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _cachedSeriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           widget.playlist!,
           collectionTitle: widget.title, // Pass video title as fallback
-          forceSeries: widget.isSeries, // Pass explicit series flag
+          forceSeries: widget.viewMode?.toForceSeries(), // Convert viewMode to forceSeries
         );
       } catch (e) {
         return null;

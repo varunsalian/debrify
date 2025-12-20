@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:android_intent_plus/android_intent.dart';
+import '../models/playlist_view_mode.dart';
 import '../models/rd_torrent.dart';
 import '../models/rd_file_node.dart';
 import '../models/debrid_download.dart';
@@ -452,7 +453,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 videoUrl: downloadLink,
                 title: torrent.filename,
                 subtitle: Formatters.formatFileSize(torrent.bytes),
-                isSeries: false, // Single file playback
+                viewMode: PlaylistViewMode.sorted, // Single file - not series
               ),
             );
           }
@@ -494,7 +495,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             videoUrl: download.download,
             title: download.filename,
             subtitle: Formatters.formatFileSize(download.filesize),
-            isSeries: false, // Single file playback
+            viewMode: PlaylistViewMode.sorted, // Single file - not series
           ),
         );
       }
@@ -3320,7 +3321,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           subtitle: '${entries.length} files',
           playlist: entries,
           startIndex: 0,
-          isSeries: isSeries, // Pass detected series flag (already computed at line 3126)
+          viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
         ),
       );
     } catch (e) {
@@ -3934,7 +3935,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 videoUrl: downloadLink,
                 title: torrent.filename,
                 subtitle: 'File ${index + 1}',
-                isSeries: false, // Single file playback
+                viewMode: PlaylistViewMode.sorted, // Single file - not series
               ),
             );
           }
@@ -4977,7 +4978,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           videoUrl: downloadUrl,
           title: file.name,
           subtitle: Formatters.formatFileSize(file.bytes ?? 0),
-          isSeries: false, // Single file playback
+          viewMode: PlaylistViewMode.sorted, // Single file - not series
         ),
       );
     } catch (e) {
@@ -5077,7 +5078,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           subtitle: '${videoFiles.length} videos',
           playlist: playlist,
           startIndex: 0,
-          isSeries: isSeries, // Pass detected series flag
+          viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
         ),
       );
     } catch (e) {

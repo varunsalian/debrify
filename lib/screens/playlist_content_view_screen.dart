@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/playlist_view_mode.dart';
 import '../models/rd_file_node.dart';
 import '../models/series_playlist.dart';
 import '../services/storage_service.dart';
@@ -2147,7 +2148,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         rdTorrentId: rdTorrentId,
         disableAutoResume: true,
-        isSeries: _seriesPlaylist?.isSeries, // Pass detected series flag
+        viewMode: _seriesPlaylist?.isSeries == true ? PlaylistViewMode.series : PlaylistViewMode.sorted,
       ),
     );
   }
@@ -2231,7 +2232,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
-        isSeries: _seriesPlaylist?.isSeries, // Pass detected series flag
+        viewMode: _seriesPlaylist?.isSeries == true ? PlaylistViewMode.series : PlaylistViewMode.sorted,
       ),
     );
   }
@@ -2316,7 +2317,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
-        isSeries: _seriesPlaylist?.isSeries, // Pass detected series flag
+        viewMode: _seriesPlaylist?.isSeries == true ? PlaylistViewMode.series : PlaylistViewMode.sorted,
       ),
     );
   }
