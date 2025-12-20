@@ -20,6 +20,24 @@ import '../widgets/movie_collection_browser.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
+// Video Player Components
+import 'video_player/models/playlist_entry.dart';
+import 'video_player/models/gesture_state.dart';
+import 'video_player/models/hud_state.dart';
+import 'video_player/painters/double_tap_ripple_painter.dart';
+import 'video_player/painters/tv_scanlines_painter.dart';
+import 'video_player/painters/tv_vignette_painter.dart';
+import 'video_player/utils/gesture_helpers.dart';
+import 'video_player/utils/language_mapping.dart';
+import 'video_player/widgets/seek_hud.dart';
+import 'video_player/widgets/vertical_hud.dart';
+import 'video_player/widgets/aspect_ratio_hud.dart';
+import 'video_player/widgets/netflix_radio_tile.dart';
+import 'video_player/widgets/controls.dart';
+
+// Re-export PlaylistEntry for backward compatibility
+export 'video_player/models/playlist_entry.dart';
+
 /// A full-featured video player screen with playlist support and navigation controls.
 /// 
 /// Features:
@@ -91,51 +109,6 @@ class VideoPlayerScreen extends StatefulWidget {
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
-}
-
-class PlaylistEntry {
-  final String url;
-  final String title;
-  final String? relativePath; // Full relative path from torrent root (e.g. "/Season 1/Episode 1.mkv")
-  final String? restrictedLink; // The original restricted link from debrid
-  final String? torrentHash; // SHA1 Hash of the torrent
-  final int? sizeBytes; // Original file size in bytes, when known
-  final String?
-  provider; // Source provider identifier (e.g. realdebrid, torbox, pikpak)
-  final int? torboxTorrentId; // Torbox torrent identifier for lazy resolution
-  final int? torboxFileId; // Torbox file identifier for lazy resolution
-  final String? pikpakFileId; // PikPak file identifier for lazy resolution
-  final String? rdTorrentId; // Real-Debrid torrent ID for lazy resolution
-  final int? rdLinkIndex; // Real-Debrid link index for file in torrent
-  const PlaylistEntry({
-    required this.url,
-    required this.title,
-    this.relativePath,
-    this.restrictedLink,
-    this.torrentHash,
-    this.sizeBytes,
-    this.provider,
-    this.torboxTorrentId,
-    this.torboxFileId,
-    this.pikpakFileId,
-    this.rdTorrentId,
-    this.rdLinkIndex,
-  });
-}
-
-enum _GestureMode { none, seek, volume, brightness }
-
-enum _AspectMode {
-  contain,
-  cover,
-  fitWidth,
-  fitHeight,
-  aspect16_9,
-  aspect4_3,
-  aspect21_9,
-  aspect1_1,
-  aspect3_2,
-  aspect5_4,
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen>
@@ -233,7 +206,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _showTitleBadge = true;
   Timer? _titleBadgeTimer;
 
-  _DoubleTapRipple? _ripple;
+  DoubleTapRipple? _ripple;
   bool _panIgnore = false;
   int _currentIndex = 0;
   Offset? _lastTapLocal;
@@ -262,23 +235,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   StreamSubscription? _completedSub;
 
   // Gesture state
-  _GestureMode _mode = _GestureMode.none;
+  GestureMode _mode = GestureMode.none;
   Offset _gestureStartPosition = Offset.zero;
   Duration _gestureStartVideoPosition = Duration.zero;
   double _gestureStartVolume = 0.0;
   double _gestureStartBrightness = 0.0;
 
   // HUD state
-  final ValueNotifier<_SeekHudState?> _seekHud = ValueNotifier<_SeekHudState?>(
+  final ValueNotifier<SeekHudState?> _seekHud = ValueNotifier<SeekHudState?>(
     null,
   );
-  final ValueNotifier<_VerticalHudState?> _verticalHud =
-      ValueNotifier<_VerticalHudState?>(null);
-  final ValueNotifier<_AspectRatioHudState?> _aspectRatioHud =
-      ValueNotifier<_AspectRatioHudState?>(null);
+  final ValueNotifier<VerticalHudState?> _verticalHud =
+      ValueNotifier<VerticalHudState?>(null);
+  final ValueNotifier<AspectRatioHudState?> _aspectRatioHud =
+      ValueNotifier<AspectRatioHudState?>(null);
 
   // Aspect / speed
-  _AspectMode _aspectMode = _AspectMode.contain;
+  AspectMode _aspectMode = AspectMode.contain;
   double _playbackSpeed = 1.0;
 
   // Orientation
@@ -1892,34 +1865,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // restore aspect
       switch (aspect) {
         case 'cover':
-          _aspectMode = _AspectMode.cover;
+          _aspectMode = AspectMode.cover;
           break;
         case 'fitWidth':
-          _aspectMode = _AspectMode.fitWidth;
+          _aspectMode = AspectMode.fitWidth;
           break;
         case 'fitHeight':
-          _aspectMode = _AspectMode.fitHeight;
+          _aspectMode = AspectMode.fitHeight;
           break;
         case '16:9':
-          _aspectMode = _AspectMode.aspect16_9;
+          _aspectMode = AspectMode.aspect16_9;
           break;
         case '4:3':
-          _aspectMode = _AspectMode.aspect4_3;
+          _aspectMode = AspectMode.aspect4_3;
           break;
         case '21:9':
-          _aspectMode = _AspectMode.aspect21_9;
+          _aspectMode = AspectMode.aspect21_9;
           break;
         case '1:1':
-          _aspectMode = _AspectMode.aspect1_1;
+          _aspectMode = AspectMode.aspect1_1;
           break;
         case '3:2':
-          _aspectMode = _AspectMode.aspect3_2;
+          _aspectMode = AspectMode.aspect3_2;
           break;
         case '5:4':
-          _aspectMode = _AspectMode.aspect5_4;
+          _aspectMode = AspectMode.aspect5_4;
           break;
         default:
-          _aspectMode = _AspectMode.contain;
+          _aspectMode = AspectMode.contain;
       }
       return;
     }
@@ -1951,34 +1924,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // restore aspect
     switch (aspect) {
       case 'cover':
-        _aspectMode = _AspectMode.cover;
+        _aspectMode = AspectMode.cover;
         break;
       case 'fitWidth':
-        _aspectMode = _AspectMode.fitWidth;
+        _aspectMode = AspectMode.fitWidth;
         break;
       case 'fitHeight':
-        _aspectMode = _AspectMode.fitHeight;
+        _aspectMode = AspectMode.fitHeight;
         break;
       case '16:9':
-        _aspectMode = _AspectMode.aspect16_9;
+        _aspectMode = AspectMode.aspect16_9;
         break;
       case '4:3':
-        _aspectMode = _AspectMode.aspect4_3;
+        _aspectMode = AspectMode.aspect4_3;
         break;
       case '21:9':
-        _aspectMode = _AspectMode.aspect21_9;
+        _aspectMode = AspectMode.aspect21_9;
         break;
       case '1:1':
-        _aspectMode = _AspectMode.aspect1_1;
+        _aspectMode = AspectMode.aspect1_1;
         break;
       case '3:2':
-        _aspectMode = _AspectMode.aspect3_2;
+        _aspectMode = AspectMode.aspect3_2;
         break;
       case '5:4':
-        _aspectMode = _AspectMode.aspect5_4;
+        _aspectMode = AspectMode.aspect5_4;
         break;
       default:
-        _aspectMode = _AspectMode.contain;
+        _aspectMode = AspectMode.contain;
     }
   }
 
@@ -2061,25 +2034,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     final aspectStr = () {
       switch (_aspectMode) {
-        case _AspectMode.cover:
+        case AspectMode.cover:
           return 'cover';
-        case _AspectMode.fitWidth:
+        case AspectMode.fitWidth:
           return 'fitWidth';
-        case _AspectMode.fitHeight:
+        case AspectMode.fitHeight:
           return 'fitHeight';
-        case _AspectMode.aspect16_9:
+        case AspectMode.aspect16_9:
           return '16:9';
-        case _AspectMode.aspect4_3:
+        case AspectMode.aspect4_3:
           return '4:3';
-        case _AspectMode.aspect21_9:
+        case AspectMode.aspect21_9:
           return '21:9';
-        case _AspectMode.aspect1_1:
+        case AspectMode.aspect1_1:
           return '1:1';
-        case _AspectMode.aspect3_2:
+        case AspectMode.aspect3_2:
           return '3:2';
-        case _AspectMode.aspect5_4:
+        case AspectMode.aspect5_4:
           return '5:4';
-        case _AspectMode.contain:
+        case AspectMode.contain:
           return 'contain';
       }
     }();
@@ -2265,7 +2238,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (isAndroid && localPos.dx > farRightThreshold) {
       // Double tap on far right for next episode on Android
       if (_hasNextEpisode() || widget.requestMagicNext != null) {
-        _ripple = _DoubleTapRipple(
+        _ripple = DoubleTapRipple(
           center: localPos,
           icon: Icons.skip_next_rounded,
         );
@@ -2288,7 +2261,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? minPos
         : (target > maxPos ? maxPos : target);
     await _player.seek(clamped);
-    _ripple = _DoubleTapRipple(
+    _ripple = DoubleTapRipple(
       center: localPos,
       icon: isLeft ? Icons.replay_10_rounded : Icons.forward_10_rounded,
     );
@@ -2322,7 +2295,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {
       _gestureStartBrightness = 0.5;
     }
-    _mode = _GestureMode.none;
+    _mode = GestureMode.none;
     _verticalHud.value = null;
     _seekHud.value = null;
   }
@@ -2336,16 +2309,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final size = (context.findRenderObject() as RenderBox).size;
 
     // Decide mode on first significant movement
-    if (_mode == _GestureMode.none) {
+    if (_mode == GestureMode.none) {
       if (absDx > 12 && absDx > absDy) {
-        _mode = _GestureMode.seek;
+        _mode = GestureMode.seek;
       } else if (absDy > 12) {
         final isLeftHalf = _gestureStartPosition.dx < size.width / 2;
-        _mode = isLeftHalf ? _GestureMode.brightness : _GestureMode.volume;
+        _mode = isLeftHalf ? GestureMode.brightness : GestureMode.volume;
       }
     }
 
-    if (_mode == _GestureMode.seek) {
+    if (_mode == GestureMode.seek) {
       final duration = _duration;
       if (duration == Duration.zero) return;
       // Map horizontal delta to seconds, proportional to width
@@ -2355,26 +2328,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _gestureStartVideoPosition + Duration(seconds: seekSeconds.round());
       if (newPos < Duration.zero) newPos = Duration.zero;
       if (newPos > duration) newPos = duration;
-      _seekHud.value = _SeekHudState(
+      _seekHud.value = SeekHudState(
         target: newPos,
         base: _position,
         isForward: newPos >= _position,
       );
-    } else if (_mode == _GestureMode.volume) {
+    } else if (_mode == GestureMode.volume) {
       var newVol = (_gestureStartVolume - dy / size.height).clamp(0.0, 1.0);
       _player.setVolume((newVol * 100).clamp(0.0, 100.0));
-      _verticalHud.value = _VerticalHudState(
-        kind: _VerticalKind.volume,
+      _verticalHud.value = VerticalHudState(
+        kind: VerticalKind.volume,
         value: newVol,
       );
-    } else if (_mode == _GestureMode.brightness) {
+    } else if (_mode == GestureMode.brightness) {
       var newBright = (_gestureStartBrightness - dy / size.height).clamp(
         0.0,
         1.0,
       );
       ScreenBrightness().setScreenBrightness(newBright);
-      _verticalHud.value = _VerticalHudState(
-        kind: _VerticalKind.brightness,
+      _verticalHud.value = VerticalHudState(
+        kind: VerticalKind.brightness,
         value: newBright,
       );
     }
@@ -2382,10 +2355,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   void _onPanEnd(DragEndDetails details) {
     if (_panIgnore) return;
-    if (_mode == _GestureMode.seek && _seekHud.value != null) {
+    if (_mode == GestureMode.seek && _seekHud.value != null) {
       _player.seek(_seekHud.value!.target);
     }
-    _mode = _GestureMode.none;
+    _mode = GestureMode.none;
     Future.delayed(const Duration(milliseconds: 250), () {
       if (mounted) {
         _seekHud.value = null;
@@ -2417,58 +2390,58 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _cycleAspectMode() {
-    _AspectMode newMode;
+    AspectMode newMode;
     String modeName;
     IconData modeIcon;
 
     switch (_aspectMode) {
-      case _AspectMode.contain:
-        newMode = _AspectMode.cover;
+      case AspectMode.contain:
+        newMode = AspectMode.cover;
         modeName = 'Cover';
         modeIcon = Icons.crop_free_rounded;
         break;
-      case _AspectMode.cover:
-        newMode = _AspectMode.fitWidth;
+      case AspectMode.cover:
+        newMode = AspectMode.fitWidth;
         modeName = 'Fit Width';
         modeIcon = Icons.fit_screen_rounded;
         break;
-      case _AspectMode.fitWidth:
-        newMode = _AspectMode.fitHeight;
+      case AspectMode.fitWidth:
+        newMode = AspectMode.fitHeight;
         modeName = 'Fit Height';
         modeIcon = Icons.fit_screen_rounded;
         break;
-      case _AspectMode.fitHeight:
-        newMode = _AspectMode.aspect16_9;
+      case AspectMode.fitHeight:
+        newMode = AspectMode.aspect16_9;
         modeName = '16:9';
         modeIcon = Icons.aspect_ratio_rounded;
         break;
-      case _AspectMode.aspect16_9:
-        newMode = _AspectMode.aspect4_3;
+      case AspectMode.aspect16_9:
+        newMode = AspectMode.aspect4_3;
         modeName = '4:3';
         modeIcon = Icons.aspect_ratio_rounded;
         break;
-      case _AspectMode.aspect4_3:
-        newMode = _AspectMode.aspect21_9;
+      case AspectMode.aspect4_3:
+        newMode = AspectMode.aspect21_9;
         modeName = '21:9';
         modeIcon = Icons.aspect_ratio_rounded;
         break;
-      case _AspectMode.aspect21_9:
-        newMode = _AspectMode.aspect1_1;
+      case AspectMode.aspect21_9:
+        newMode = AspectMode.aspect1_1;
         modeName = '1:1';
         modeIcon = Icons.crop_square_rounded;
         break;
-      case _AspectMode.aspect1_1:
-        newMode = _AspectMode.aspect3_2;
+      case AspectMode.aspect1_1:
+        newMode = AspectMode.aspect3_2;
         modeName = '3:2';
         modeIcon = Icons.aspect_ratio_rounded;
         break;
-      case _AspectMode.aspect3_2:
-        newMode = _AspectMode.aspect5_4;
+      case AspectMode.aspect3_2:
+        newMode = AspectMode.aspect5_4;
         modeName = '5:4';
         modeIcon = Icons.aspect_ratio_rounded;
         break;
-      case _AspectMode.aspect5_4:
-        newMode = _AspectMode.contain;
+      case AspectMode.aspect5_4:
+        newMode = AspectMode.contain;
         modeName = 'Contain';
         modeIcon = Icons.crop_free_rounded;
         break;
@@ -2479,7 +2452,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
 
     // Show elegant HUD feedback
-    _aspectRatioHud.value = _AspectRatioHudState(
+    _aspectRatioHud.value = AspectRatioHudState(
       aspectRatio: modeName,
       icon: modeIcon,
     );
@@ -2525,20 +2498,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   BoxFit _currentFit() {
     switch (_aspectMode) {
-      case _AspectMode.contain:
+      case AspectMode.contain:
         return BoxFit.contain;
-      case _AspectMode.cover:
+      case AspectMode.cover:
         return BoxFit.cover;
-      case _AspectMode.fitWidth:
+      case AspectMode.fitWidth:
         return BoxFit.fitWidth;
-      case _AspectMode.fitHeight:
+      case AspectMode.fitHeight:
         return BoxFit.fitHeight;
-      case _AspectMode.aspect16_9:
-      case _AspectMode.aspect4_3:
-      case _AspectMode.aspect21_9:
-      case _AspectMode.aspect1_1:
-      case _AspectMode.aspect3_2:
-      case _AspectMode.aspect5_4:
+      case AspectMode.aspect16_9:
+      case AspectMode.aspect4_3:
+      case AspectMode.aspect21_9:
+      case AspectMode.aspect1_1:
+      case AspectMode.aspect3_2:
+      case AspectMode.aspect5_4:
         return BoxFit.cover; // We'll handle custom aspect ratios in the widget
     }
   }
@@ -2596,7 +2569,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 
                 // Animated scan lines with pattern
                 CustomPaint(
-                  painter: _TvScanlinesPatternPainter(
+                  painter: TvScanlinesPatternPainter(
                     offset: _rainbowController.value,
                   ),
                 ),
@@ -2664,7 +2637,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 
                 // Vignette overlay
                 CustomPaint(
-                  painter: _TvVignettePainter(),
+                  painter: TvVignettePainter(),
                 ),
               ],
             );
@@ -2895,17 +2868,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Get the custom aspect ratio for specific modes
   double? _getCustomAspectRatio() {
     switch (_aspectMode) {
-      case _AspectMode.aspect16_9:
+      case AspectMode.aspect16_9:
         return 16.0 / 9.0;
-      case _AspectMode.aspect4_3:
+      case AspectMode.aspect4_3:
         return 4.0 / 3.0;
-      case _AspectMode.aspect21_9:
+      case AspectMode.aspect21_9:
         return 21.0 / 9.0;
-      case _AspectMode.aspect1_1:
+      case AspectMode.aspect1_1:
         return 1.0;
-      case _AspectMode.aspect3_2:
+      case AspectMode.aspect3_2:
         return 3.0 / 2.0;
-      case _AspectMode.aspect5_4:
+      case AspectMode.aspect5_4:
         return 5.0 / 4.0;
       default:
         return null;
@@ -3312,8 +3285,8 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
               _player.setVolume((newVolume * 100).clamp(0.0, 100.0));
 
               // Show volume HUD
-              _verticalHud.value = _VerticalHudState(
-                kind: _VerticalKind.volume,
+              _verticalHud.value = VerticalHudState(
+                kind: VerticalKind.volume,
                 value: newVolume,
               );
               Future.delayed(const Duration(milliseconds: 250), () {
@@ -3339,8 +3312,8 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
               _player.setVolume((newVolume * 100).clamp(0.0, 100.0));
 
               // Show volume HUD
-              _verticalHud.value = _VerticalHudState(
-                kind: _VerticalKind.volume,
+              _verticalHud.value = VerticalHudState(
+                kind: VerticalKind.volume,
                 value: newVolume,
               );
               Future.delayed(const Duration(milliseconds: 250), () {
@@ -3455,11 +3428,11 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
               if (_ripple != null)
                 IgnorePointer(
                   child: CustomPaint(
-                    painter: _DoubleTapRipplePainter(_ripple!),
+                    painter: DoubleTapRipplePainter(_ripple!),
                   ),
                 ),
               // HUDs
-              ValueListenableBuilder<_SeekHudState?>(
+              ValueListenableBuilder<SeekHudState?>(
                 valueListenable: _seekHud,
                 builder: (context, hud, _) {
                   return IgnorePointer(
@@ -3470,13 +3443,13 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                       child: Center(
                         child: hud == null
                             ? const SizedBox.shrink()
-                            : _SeekHud(hud: hud, format: _format),
+                            : SeekHud(hud: hud, format: _format),
                       ),
                     ),
                   );
                 },
               ),
-              ValueListenableBuilder<_VerticalHudState?>(
+              ValueListenableBuilder<VerticalHudState?>(
                 valueListenable: _verticalHud,
                 builder: (context, hud, _) {
                   return IgnorePointer(
@@ -3490,14 +3463,14 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                           padding: const EdgeInsets.only(right: 24),
                           child: hud == null
                               ? const SizedBox.shrink()
-                              : _VerticalHud(hud: hud),
+                              : VerticalHud(hud: hud),
                         ),
                       ),
                     ),
                   );
                 },
               ),
-              ValueListenableBuilder<_AspectRatioHudState?>(
+              ValueListenableBuilder<AspectRatioHudState?>(
                 valueListenable: _aspectRatioHud,
                 builder: (context, hud, _) {
                   return IgnorePointer(
@@ -3511,7 +3484,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                           padding: const EdgeInsets.only(top: 80, right: 24),
                           child: hud == null
                               ? const SizedBox.shrink()
-                              : _AspectRatioHud(hud: hud),
+                              : AspectRatioHud(hud: hud),
                         ),
                       ),
                     ),
@@ -3531,7 +3504,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                   if (box == null) return;
                   final size = box.size;
                   final pos = _lastTapLocal ?? Offset.zero;
-                  if (_shouldToggleForTap(
+                  if (shouldToggleForTap(
                     pos,
                     size,
                     controlsVisible: _controlsVisible.value,
@@ -3554,7 +3527,7 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
                       duration: const Duration(milliseconds: 150),
                       child: IgnorePointer(
                         ignoring: !visible,
-                        child: _Controls(
+                        child: Controls(
                           title: widget.showVideoTitle && !widget.showChannelName
                               ? _getCurrentEpisodeTitle()
                               : '',
@@ -3698,741 +3671,6 @@ Future<Set<int>> _getFinishedEpisodesForSimplePlaylist() async {
       ),
     );
   }
-}
-
-class _Controls extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final Map<String, dynamic> enhancedMetadata;
-  final Duration duration;
-  final Duration position;
-  final bool isPlaying;
-  final bool isReady;
-  final VoidCallback onPlayPause;
-  final VoidCallback onBack;
-  final VoidCallback onAspect;
-  final VoidCallback onSpeed;
-  final double speed;
-  final _AspectMode aspectMode;
-  final bool isLandscape;
-  final VoidCallback onRotate;
-  final VoidCallback onShowPlaylist;
-  final VoidCallback onShowTracks;
-  final bool hasPlaylist;
-  final VoidCallback onSeekBarChangedStart;
-  final ValueChanged<double> onSeekBarChanged;
-  final VoidCallback onSeekBarChangeEnd;
-  final VoidCallback? onNext;
-  final VoidCallback? onNextChannel;
-  final VoidCallback? onPrevious;
-  final bool hasNext;
-  final bool hasNextChannel;
-  final bool hasPrevious;
-  final bool hideSeekbar;
-  final bool hideOptions;
-  final bool hideBackButton;
-  final VoidCallback onRandom;
-
-  const _Controls({
-    required this.title,
-    required this.subtitle,
-    required this.enhancedMetadata,
-    required this.duration,
-    required this.position,
-    required this.isPlaying,
-    required this.isReady,
-    required this.onPlayPause,
-    required this.onBack,
-    required this.onAspect,
-    required this.onSpeed,
-    required this.speed,
-    required this.aspectMode,
-    required this.isLandscape,
-    required this.onRotate,
-    required this.onShowPlaylist,
-    required this.onShowTracks,
-    required this.hasPlaylist,
-    required this.onSeekBarChangedStart,
-    required this.onSeekBarChanged,
-    required this.onSeekBarChangeEnd,
-    this.onNext,
-    this.onNextChannel,
-    this.onPrevious,
-    this.hasNext = false,
-    this.hasNextChannel = false,
-    this.hasPrevious = false,
-    required this.hideSeekbar,
-    required this.hideOptions,
-    required this.hideBackButton,
-    required this.onRandom,
-  });
-
-  String _getAspectRatioName() {
-    switch (aspectMode) {
-      case _AspectMode.contain:
-        return 'Contain';
-      case _AspectMode.cover:
-        return 'Cover';
-      case _AspectMode.fitWidth:
-        return 'Fit Width';
-      case _AspectMode.fitHeight:
-        return 'Fit Height';
-      case _AspectMode.aspect16_9:
-        return '16:9';
-      case _AspectMode.aspect4_3:
-        return '4:3';
-      case _AspectMode.aspect21_9:
-        return '21:9';
-      case _AspectMode.aspect1_1:
-        return '1:1';
-      case _AspectMode.aspect3_2:
-        return '3:2';
-      case _AspectMode.aspect5_4:
-        return '5:4';
-    }
-  }
-
-  String _format(Duration d) {
-    final sign = d.isNegative ? '-' : '';
-    final abs = d.abs();
-    final h = abs.inHours;
-    final m = abs.inMinutes % 60;
-    final s = abs.inSeconds % 60;
-    if (h > 0) {
-      return '$sign${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '$sign${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-
-  // Simple rating badge for top-right
-  Widget _buildMetadataRow(Map<String, dynamic> metadata) {
-    // Only show rating
-    if (metadata['rating'] == null || metadata['rating'] <= 0) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-          const SizedBox(width: 4),
-          Text(
-            metadata['rating'].toStringAsFixed(1),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final total = duration.inMilliseconds <= 0
-        ? const Duration(seconds: 1)
-        : duration;
-    final progress = (position.inMilliseconds / total.inMilliseconds).clamp(
-      0.0,
-      1.0,
-    );
-
-    return Stack(
-      children: [
-        // Non-interactive gradient overlay
-        Positioned.fill(
-          child: IgnorePointer(
-            ignoring: true,
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0x80000000),
-                    Color(0x26000000),
-                    Color(0x80000000),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        // Metadata overlay at the very top-right
-        if (enhancedMetadata.isNotEmpty)
-          Positioned(
-            top: 20,
-            right: 20,
-            child: _buildMetadataRow(enhancedMetadata),
-          ),
-        // Interactive controls
-        SafeArea(
-          left: true,
-          right: true,
-          top: true,
-          bottom: true,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Netflix-style Top Bar - Back button and centered title when playing
-              Row(
-                children: [
-                  if (!hideBackButton)
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
-                      ),
-                      onPressed: onBack,
-                    ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Main title
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                          ),
-                        ),
-                        if (subtitle != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                        // Enhanced metadata row - removed from center
-                      ],
-                    ),
-                  ),
-                  // Empty space to balance the back button (when visible)
-                  if (!hideBackButton) const SizedBox(width: 48),
-                ],
-              ),
-
-              // Netflix-style Bottom Bar with all controls (conditionally shown)
-              if (!hideOptions)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Progress bar with time indicators
-                      Row(
-                        children: [
-                          if (!hideSeekbar) ...[
-                            Text(
-                              _format(position),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  trackHeight: 4,
-                                  activeTrackColor: const Color(0xFFE50914),
-                                  inactiveTrackColor: Colors.white.withOpacity(
-                                    0.3,
-                                  ),
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 6,
-                                    elevation: 2,
-                                  ),
-                                  thumbColor: const Color(0xFFE50914),
-                                  overlayShape: const RoundSliderOverlayShape(
-                                    overlayRadius: 12,
-                                  ),
-                                ),
-                                child: Slider(
-                                  min: 0,
-                                  max: 1,
-                                  value:
-                                      (position.inMilliseconds /
-                                              (total.inMilliseconds == 0
-                                                  ? 1
-                                                  : total.inMilliseconds))
-                                          .clamp(0.0, 1.0),
-                                  onChangeStart: (_) => onSeekBarChangedStart(),
-                                  onChanged: (v) => onSeekBarChanged(v),
-                                  onChangeEnd: (_) => onSeekBarChangeEnd(),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              _format(duration),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ] else ...[
-                            const SizedBox.shrink(),
-                          ],
-                        ],
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Netflix-style control buttons row - responsive layout
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            // Previous episode button
-                            if (hasPrevious)
-                              _NetflixControlButton(
-                                icon: Icons.skip_previous_rounded,
-                                label: 'Previous',
-                                onPressed: onPrevious!,
-                                isCompact: true,
-                              ),
-
-                            // Play/Pause button
-                            _NetflixControlButton(
-                              icon: isPlaying
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              label: isPlaying ? 'Pause' : 'Play',
-                              onPressed: onPlayPause,
-                              isPrimary: true,
-                              isCompact: true,
-                            ),
-
-                            // Next episode button
-                            if (hasNext)
-                              _NetflixControlButton(
-                                icon: Icons.skip_next_rounded,
-                                label: 'Next',
-                                onPressed: onNext!,
-                                isCompact: true,
-                              ),
-
-                            // Next channel button
-                            if (hasNextChannel && onNextChannel != null)
-                              _NetflixControlButton(
-                                icon: Icons.tv_rounded,
-                                label: 'Next Channel',
-                                onPressed: onNextChannel!,
-                                isCompact: true,
-                              ),
-
-                            // Speed indicator and button
-                            _NetflixControlButton(
-                              icon: Icons.speed_rounded,
-                              label: '${speed}x',
-                              onPressed: onSpeed,
-                              isCompact: true,
-                            ),
-
-                            // Aspect ratio button
-                            _NetflixControlButton(
-                              icon: Icons.aspect_ratio_rounded,
-                              label: _getAspectRatioName(),
-                              onPressed: onAspect,
-                              isCompact: true,
-                            ),
-
-                            // Audio & subtitles button
-                            _NetflixControlButton(
-                              icon: Icons.subtitles_rounded,
-                              label: 'Audio',
-                              onPressed: onShowTracks,
-                              isCompact: true,
-                            ),
-
-                            // Playlist button
-                            if (hasPlaylist)
-                              _NetflixControlButton(
-                                icon: Icons.playlist_play_rounded,
-                                label: 'Episodes',
-                                onPressed: onShowPlaylist,
-                                isCompact: true,
-                              ),
-
-                            // Orientation button
-                            _NetflixControlButton(
-                              icon: Icons.shuffle_rounded,
-                              label: 'Random',
-                              onPressed: onRandom,
-                              isCompact: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SeekHudState {
-  final Duration base;
-  final Duration target;
-  final bool isForward;
-  _SeekHudState({
-    required this.base,
-    required this.target,
-    required this.isForward,
-  });
-}
-
-class _SeekHud extends StatelessWidget {
-  final _SeekHudState hud;
-  final String Function(Duration) format;
-  const _SeekHud({required this.hud, required this.format});
-  @override
-  Widget build(BuildContext context) {
-    final delta = hud.target - hud.base;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            hud.isForward
-                ? Icons.fast_forward_rounded
-                : Icons.fast_rewind_rounded,
-            color: Colors.white,
-            size: 20,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            '${format(hud.target)}  (${delta.isNegative ? '-' : '+'}${format(delta)})',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-enum _VerticalKind { volume, brightness }
-
-class _VerticalHudState {
-  final _VerticalKind kind;
-  final double value; // 0..1
-  _VerticalHudState({required this.kind, required this.value});
-}
-
-class _AspectRatioHudState {
-  final String aspectRatio;
-  final IconData icon;
-  const _AspectRatioHudState({required this.aspectRatio, required this.icon});
-}
-
-class _VerticalHud extends StatelessWidget {
-  final _VerticalHudState hud;
-  const _VerticalHud({required this.hud});
-  @override
-  Widget build(BuildContext context) {
-    final icon = hud.kind == _VerticalKind.volume
-        ? Icons.volume_up_rounded
-        : Icons.brightness_6_rounded;
-    final label = (hud.value * 100).round();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 80,
-            width: 6,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: hud.value.clamp(0.0, 1.0),
-                minHeight: 6,
-                backgroundColor: Colors.white12,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  hud.kind == _VerticalKind.volume
-                      ? Colors.lightBlueAccent
-                      : Colors.amberAccent,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text('$label%', style: const TextStyle(color: Colors.white)),
-        ],
-      ),
-    );
-  }
-}
-
-class _AspectRatioHud extends StatelessWidget {
-  final _AspectRatioHudState hud;
-  const _AspectRatioHud({required this.hud});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(hud.icon, color: Colors.white, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            hud.aspectRatio,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DoubleTapRipple {
-  final Offset center;
-  final IconData icon;
-  _DoubleTapRipple({required this.center, required this.icon});
-}
-
-class _DoubleTapRipplePainter extends CustomPainter {
-  final _DoubleTapRipple ripple;
-  _DoubleTapRipplePainter(this.ripple);
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withOpacity(0.15);
-    canvas.drawCircle(ripple.center, 80, paint);
-    final tp = TextPainter(
-      text: TextSpan(
-        text: String.fromCharCode(ripple.icon.codePoint),
-        style: TextStyle(
-          fontSize: 48,
-          fontFamily: ripple.icon.fontFamily,
-          package: ripple.icon.fontPackage,
-          color: Colors.white,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    tb(Size s) =>
-        Offset(ripple.center.dx - s.width / 2, ripple.center.dy - s.height / 2);
-    tp.layout();
-    tp.paint(canvas, tb(tp.size));
-  }
-
-  @override
-  bool shouldRepaint(covariant _DoubleTapRipplePainter oldDelegate) => true;
-}
-
-class _TvScanlinesPatternPainter extends CustomPainter {
-  final double offset;
-  _TvScanlinesPatternPainter({required this.offset});
-  
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Match Android: oscillate between -20 and +20 pixels
-    final oscillation = math.sin(offset * 2 * math.pi) * 20;
-    
-    // Draw horizontal scan lines with slight white overlay
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.05)
-      ..strokeWidth = 1;
-    
-    // Draw lines every 4 pixels with animated offset
-    for (double y = oscillation; y < size.height + 40; y += 4) {
-      canvas.drawLine(
-        Offset(0, y),
-        Offset(size.width, y),
-        paint,
-      );
-    }
-  }
-  
-  @override
-  bool shouldRepaint(covariant _TvScanlinesPatternPainter oldDelegate) => true;
-}
-
-class _TvVignettePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    // Match Android vignette: 60% radius, transparent center to dark edges
-    final gradient = RadialGradient(
-      center: Alignment.center,
-      radius: 0.6, // Match Android gradientRadius="60%"
-      colors: const [
-        Color(0x00000000), // Transparent center
-        Color(0x66000000), // Lighter black edges (102/255 alpha) so static is visible
-      ],
-      stops: const [0.0, 1.0],
-    );
-    final paint = Paint()..shader = gradient.createShader(rect);
-    canvas.drawRect(rect, paint);
-  }
-  
-  @override
-  bool shouldRepaint(covariant _TvVignettePainter oldDelegate) => false;
-}
-
-class _BloomOverlayPainter extends CustomPainter {
-  final DateTime? startedAt;
-  _BloomOverlayPainter({required this.startedAt});
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (startedAt == null) return;
-    final elapsedMs = DateTime.now()
-        .difference(startedAt!)
-        .inMilliseconds
-        .toDouble();
-    final t = (elapsedMs / 1500.0).clamp(0.0, 1.0);
-    // Ease in-out opacity using a smooth curve
-    final ease = Curves.easeInOut.transform(t);
-    final opacity =
-        (0.0 + 0.18 * (ease < 0.5 ? (ease * 2.0) : (1.0 - (ease - 0.5) * 2.0)))
-            .clamp(0.0, 0.18);
-
-    final rect = Offset.zero & size;
-    // Radial soft white bloom at center
-    final gradient = RadialGradient(
-      center: Alignment.center,
-      radius: 0.9,
-      colors: [
-        Colors.white.withOpacity(opacity),
-        Colors.white.withOpacity(0.0),
-      ],
-      stops: const [0.0, 1.0],
-    );
-    final paint = Paint()
-      ..shader = gradient.createShader(rect)
-      ..blendMode = BlendMode.screen;
-    canvas.drawRect(rect, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _BloomOverlayPainter oldDelegate) => true;
-}
-
-// Helpers for tap gating
-bool _isInTopArea(double dy) => dy < 72.0;
-bool _isInBottomArea(double dy, double height) => dy > height - 72.0;
-bool _isInCenterRegion(Offset pos, Size size) {
-  final center = Offset(size.width / 2, size.height / 2);
-  const radius = 120.0; // protect center play area
-  return (pos - center).distance <= radius;
-}
-
-bool _shouldToggleForTap(
-  Offset pos,
-  Size size, {
-  required bool controlsVisible,
-}) {
-  // If controls are hidden, allow toggling from anywhere (including center)
-  if (!controlsVisible) return true;
-  // If controls are visible, avoid toggling when tapping on bars or center to not fight with buttons
-  if (_isInTopArea(pos.dy) || _isInBottomArea(pos.dy, size.height))
-    return false;
-  if (_isInCenterRegion(pos, size)) return false;
-  return true;
-}
-
-extension on _VideoPlayerScreenState {
-  String _niceLanguage(String? codeOrTitle) {
-    final v = (codeOrTitle ?? '').toLowerCase();
-    const map = {
-      'en': 'English',
-      'eng': 'English',
-      'hi': 'Hindi',
-      'es': 'Spanish',
-      'spa': 'Spanish',
-      'fr': 'French',
-      'fra': 'French',
-      'de': 'German',
-      'ger': 'German',
-      'ru': 'Russian',
-      'zh': 'Chinese',
-      'zho': 'Chinese',
-      'ja': 'Japanese',
-      'ko': 'Korean',
-      'it': 'Italian',
-      'pt': 'Portuguese',
-    };
-    return map[v] ?? '';
-  }
-
-  String _labelForTrack(dynamic t, int index) {
-    final title = (t.title as String?)?.trim();
-    if (title != null &&
-        title.isNotEmpty &&
-        title.toLowerCase() != 'no' &&
-        title.toLowerCase() != 'auto') {
-      final langPretty = _niceLanguage(title);
-      return langPretty.isNotEmpty ? langPretty : title;
-    }
-    final id = (t.id as String?)?.trim();
-    if (id != null &&
-        id.isNotEmpty &&
-        id.toLowerCase() != 'no' &&
-        id.toLowerCase() != 'auto') {
-      final langPretty = _niceLanguage(id);
-      if (langPretty.isNotEmpty) return langPretty;
-    }
-    return 'Track ${index + 1}';
-  }
 
   Future<void> _showTracksSheet(BuildContext context) async {
     final tracks = _player.state.tracks;
@@ -4485,244 +3723,148 @@ extension on _VideoPlayerScreenState {
                             'Audio & Subtitles',
                             style: TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.w700,
                               fontSize: 18,
-                              letterSpacing: 0.5,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                           const Spacer(),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.4),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.2),
-                                width: 1,
-                              ),
-                            ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              onPressed: () => Navigator.of(context).pop(),
-                              style: IconButton.styleFrom(
-                                padding: const EdgeInsets.all(8),
-                                minimumSize: const Size(36, 36),
-                              ),
-                            ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       Expanded(
-                        child: Row(
-                          children: [
-                            // Audio pane
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1A1A1A),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0xFF333333),
-                                    width: 1,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Audio tracks section
+                              if (audios.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.audiotrack_rounded,
+                                          color: Colors.white70, size: 18),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'AUDIO TRACK',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                const SizedBox(height: 12),
+                                ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: audios.length,
+                                  itemBuilder: (context, index) {
+                                    final a = audios[index];
+                                    return NetflixRadioTile(
+                                      value: a.id,
+                                      groupValue: selectedAudio,
+                                      title: LanguageMapper.labelForTrack(a, index),
+                                      onChanged: (v) async {
+                                        if (v == null) return;
+                                        setModalState(() {
+                                          selectedAudio = v;
+                                        });
+                                        await _player.setAudioTrack(a);
+                                        await _persistTrackChoice(v, selectedSub);
+                                      },
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+
+                              // Subtitle tracks section
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Row(
                                   children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: const Color(
-                                              0xFFE50914,
-                                            ).withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.volume_up_rounded,
-                                            color: Color(0xFFE50914),
-                                            size: 16,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Text(
-                                          'Audio',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        itemCount: audios.length + 1,
-                                        itemBuilder: (context, index) {
-                                          if (index == 0) {
-                                            return _NetflixRadioTile(
-                                              value: 'auto',
-                                              groupValue: selectedAudio.isEmpty
-                                                  ? 'auto'
-                                                  : selectedAudio,
-                                              title: 'Auto',
-                                              onChanged: (v) async {
-                                                setModalState(() {
-                                                  selectedAudio = '';
-                                                });
-                                                await _player.setAudioTrack(
-                                                  mk.AudioTrack.auto(),
-                                                );
-                                                await _persistTrackChoice(
-                                                  '',
-                                                  selectedSub,
-                                                );
-                                              },
-                                            );
-                                          }
-                                          final a = audios[index - 1];
-                                          return _NetflixRadioTile(
-                                            value: a.id,
-                                            groupValue: selectedAudio.isEmpty
-                                                ? 'auto'
-                                                : selectedAudio,
-                                            title: _labelForTrack(a, index - 1),
-                                            onChanged: (v) async {
-                                              if (v == null) return;
-                                              setModalState(() {
-                                                selectedAudio = v;
-                                              });
-                                              await _player.setAudioTrack(a);
-                                              await _persistTrackChoice(
-                                                v,
-                                                selectedSub,
-                                              );
-                                            },
-                                          );
-                                        },
+                                    Icon(Icons.subtitles_rounded,
+                                        color: Colors.white70, size: 18),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'SUBTITLES',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            // Subtitles pane
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1A1A1A),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0xFF333333),
-                                    width: 1,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: const Color(
-                                              0xFFE50914,
-                                            ).withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.closed_caption_rounded,
-                                            color: Color(0xFFE50914),
-                                            size: 16,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Text(
-                                          'Subtitles',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        itemCount: subs.length + 1,
-                                        itemBuilder: (context, index) {
-                                          if (index == 0) {
-                                            return _NetflixRadioTile(
-                                              value: '',
-                                              groupValue: selectedSub,
-                                              title: 'Off',
-                                              onChanged: (v) async {
-                                                setModalState(() {
-                                                  selectedSub = '';
-                                                });
-                                                await _player.setSubtitleTrack(
-                                                  mk.SubtitleTrack.no(),
-                                                );
-                                                await _persistTrackChoice(
-                                                  selectedAudio,
-                                                  '',
-                                                );
-                                              },
-                                            );
-                                          }
-                                          final s = subs[index - 1];
-                                          return _NetflixRadioTile(
-                                            value: s.id,
-                                            groupValue: selectedSub,
-                                            title: _labelForTrack(s, index - 1),
-                                            onChanged: (v) async {
-                                              if (v == null) return;
-                                              setModalState(() {
-                                                selectedSub = v;
-                                              });
-                                              await _player.setSubtitleTrack(s);
-                                              await _persistTrackChoice(
-                                                selectedAudio,
-                                                v,
-                                              );
-                                            },
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              const SizedBox(height: 12),
+                              ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: subs.length + 1,
+                                itemBuilder: (context, index) {
+                                  if (index == 0) {
+                                    return NetflixRadioTile(
+                                      value: 'no',
+                                      groupValue: selectedSub,
+                                      title: 'Off',
+                                      onChanged: (v) async {
+                                        if (v == null) return;
+                                        setModalState(() {
+                                          selectedSub = v;
+                                        });
+                                        await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+                                        await _persistTrackChoice(
+                                          selectedAudio,
+                                          v,
+                                        );
+                                      },
+                                    );
+                                  }
+                                  final s = subs[index - 1];
+                                  return NetflixRadioTile(
+                                    value: s.id,
+                                    groupValue: selectedSub,
+                                    title: LanguageMapper.labelForTrack(s, index - 1),
+                                    onChanged: (v) async {
+                                      if (v == null) return;
+                                      setModalState(() {
+                                        selectedSub = v;
+                                      });
+                                      await _player.setSubtitleTrack(s);
+                                      await _persistTrackChoice(
+                                        selectedAudio,
+                                        v,
+                                      );
+                                    },
+                                  );
+                                },
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -4817,158 +3959,5 @@ extension on _VideoPlayerScreenState {
     // Create a simple hash (we could use a proper hash function, but this is sufficient for our needs)
     final hash = nameWithoutExt.hashCode.toString();
     return hash;
-  }
-}
-
-// Netflix-style radio tile widget for track selection
-class _NetflixRadioTile extends StatelessWidget {
-  final String value;
-  final String groupValue;
-  final String title;
-  final ValueChanged<String?> onChanged;
-
-  const _NetflixRadioTile({
-    required this.value,
-    required this.groupValue,
-    required this.title,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = value == groupValue;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isSelected
-            ? const Color(0xFFE50914).withOpacity(0.2)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected
-              ? const Color(0xFFE50914)
-              : Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => onChanged(value),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFFE50914)
-                          : Colors.white.withOpacity(0.5),
-                      width: 2,
-                    ),
-                  ),
-                  child: isSelected
-                      ? Container(
-                          margin: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Color(0xFFE50914),
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: isSelected
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.8),
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// Netflix-style control button widget
-class _NetflixControlButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final bool isPrimary;
-  final bool isCompact;
-
-  const _NetflixControlButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.isPrimary = false,
-    this.isCompact = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.only(right: isCompact ? 8 : 16),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: isCompact ? 8 : 12,
-              vertical: isCompact ? 6 : 8,
-            ),
-            decoration: BoxDecoration(
-              color: isPrimary
-                  ? const Color(0xFFE50914).withOpacity(0.9)
-                  : Colors.black.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isPrimary
-                    ? const Color(0xFFE50914)
-                    : Colors.white.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: Colors.white, size: isCompact ? 16 : 18),
-                if (!isCompact || label.isNotEmpty) ...[
-                  SizedBox(width: isCompact ? 4 : 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: isCompact ? 10 : 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
