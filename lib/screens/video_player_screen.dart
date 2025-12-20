@@ -41,6 +41,10 @@ import 'video_player/widgets/controls.dart';
 import 'video_player/widgets/channel_badge.dart';
 import 'video_player/widgets/title_badge.dart';
 import 'video_player/widgets/aspect_ratio_video.dart';
+import 'video_player/widgets/transition_overlay.dart';
+import 'video_player/widgets/pikpak_retry_overlay.dart';
+import 'video_player/widgets/tracks_sheet.dart';
+import 'video_player/widgets/playlist_sheet.dart';
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
@@ -2412,107 +2416,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Fullscreen transition overlay: retro TV static effect (matches Android TV)
   Widget _buildTransitionOverlay() {
-    return Positioned.fill(
-      child: IgnorePointer(
-        ignoring: true,
-        child: AnimatedBuilder(
-          animation: _rainbowController,
-          builder: (_, __) {
-            // Generate random gray value for TV static (easier on eyes)
-            // Use microseconds for truly random values each frame
-            final random = math.Random(DateTime.now().microsecondsSinceEpoch);
-            // Moderate range: 30-90 for visible but not harsh static
-            final grayValue = 30 + random.nextInt(60); // Random between 30-90
-            final staticColor = Color.fromRGBO(grayValue, grayValue, grayValue, 1.0);
-            
-            // Randomly flicker text (70% chance full opacity, 30% flicker)
-            final textAlpha = random.nextInt(10) > 7 
-                ? (0.7 + random.nextDouble() * 0.3) 
-                : 1.0;
-            
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                // TV Static background - rapidly changing gray color
-                ColoredBox(color: staticColor),
-                
-                // Animated scan lines with pattern
-                CustomPaint(
-                  painter: TvScanlinesPatternPainter(
-                    offset: _rainbowController.value,
-                  ),
-                ),
-                
-                // Center text with retro TV styling
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(48.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Opacity(
-                          opacity: textAlpha,
-                          child: Text(
-                            _tvStaticMessage,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: VideoPlayerColors.retroGreen, // Retro green
-                              fontSize: 36,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 4,
-                              shadows: [
-                                Shadow(
-                                  color: VideoPlayerColors.retroGreenDark,
-                                  offset: const Offset(2, 2),
-                                  blurRadius: 4,
-                                ),
-                                Shadow(
-                                  color: VideoPlayerColors.retroGreen.withOpacity(0.5),
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (_tvStaticSubtext.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          Opacity(
-                            opacity: textAlpha,
-                            child: Text(
-                              _tvStaticSubtext,
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: VideoPlayerColors.retroGreen, // Retro green
-                                fontSize: 16,
-                                fontFamily: 'monospace',
-                                shadows: [
-                                  Shadow(
-                                    color: VideoPlayerColors.retroGreenDark,
-                                    offset: const Offset(1, 1),
-                                    blurRadius: 2,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                
-                // Vignette overlay
-                CustomPaint(
-                  painter: TvVignettePainter(),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+    return TransitionOverlay(
+      rainbowController: _rainbowController,
+      tvStaticMessage: _tvStaticMessage,
+      tvStaticSubtext: _tvStaticSubtext,
     );
   }
 
@@ -2525,79 +2432,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       AspectModeUtils.getAspectRatioValue(_aspectMode);
 
   Future<void> _showPlaylistSheet(BuildContext context) async {
-    if (widget.playlist == null || widget.playlist!.isEmpty) return;
-
-    final seriesPlaylist = _seriesPlaylist;
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: VideoPlayerColors.darkBackground,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          top: false,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [VideoPlayerColors.darkerBackground, Color(0xFF0F0F0F)],
-              ),
-            ),
-            child: seriesPlaylist != null && seriesPlaylist.isSeries
-                ? SeriesBrowser(
-                    seriesPlaylist: seriesPlaylist,
-                    currentEpisodeIndex: _currentIndex,
-                    playlistItem: _constructPlaylistItemData(),
-                    onEpisodeSelected: (season, episode) async {
-                      // Find the original index in the PlaylistEntry array
-                      final originalIndex = seriesPlaylist
-                          .findOriginalIndexBySeasonEpisode(season, episode);
-                      if (originalIndex != -1) {
-                        // Check if this episode has saved progress
-                        final playbackState =
-                            await StorageService.getSeriesPlaybackState(
-                              seriesTitle:
-                                  seriesPlaylist.seriesTitle ??
-                                  'Unknown Series',
-                              season: season,
-                              episode: episode,
-                            );
-
-                        // Mark this as a manual episode selection
-                        // Allow resuming if the episode has saved progress
-                        _setManualSelectionMode(allowResume: playbackState != null);
-                        await _loadPlaylistIndex(originalIndex, autoplay: true);
-                      } else {
-                        // Show error message to user
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Failed to find episode S${season}E${episode}',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                              backgroundColor: VideoPlayerColors.errorRed,
-                              duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                  )
-                : MovieCollectionBrowser(
-                    playlist: widget.playlist ?? const [],
-                    currentIndex: _currentIndex,
-                    onSelectIndex: (idx) async {
-                      _setManualSelectionMode();
-                      await _loadPlaylistIndex(idx, autoplay: true);
-                    },
-                  ),
-          ),
-        );
+    await PlaylistSheet.show(
+      context,
+      playlist: widget.playlist ?? const [],
+      currentIndex: _currentIndex,
+      seriesPlaylist: _seriesPlaylist,
+      playlistItemData: _constructPlaylistItemData(),
+      onSelect: (index, {bool allowResume = false}) async {
+        _setManualSelectionMode(allowResume: allowResume);
+        await _loadPlaylistIndex(index, autoplay: true);
       },
     );
   }
@@ -2990,46 +2833,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               // PikPak retry overlay - non-blocking, positioned at bottom right
               if (_isPikPakRetrying && _pikPakRetryMessage != null)
-                Positioned(
-                  bottom: 80,
-                  right: 20,
-                  child: IgnorePointer(
-                    ignoring: false,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.75),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            _pikPakRetryMessage!,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                PikPakRetryOverlay(message: _pikPakRetryMessage!),
             ],
           ),
         ),
@@ -3038,207 +2842,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _showTracksSheet(BuildContext context) async {
-    final tracks = _player.state.tracks;
-    final audios = tracks.audio
-        .where((a) => a.id.toLowerCase() != 'no')
-        .toList(growable: false);
-    final subs = tracks.subtitle
-        .where(
-          (s) => s.id.toLowerCase() != 'auto' && s.id.toLowerCase() != 'no',
-        )
-        .toList(growable: false);
-    String selectedAudio = _player.state.track.audio.id;
-    String selectedSub = _player.state.track.subtitle.id;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: VideoPlayerColors.darkBackground,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          top: false,
-          child: FractionallySizedBox(
-            heightFactor: 0.7,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-              child: StatefulBuilder(
-                builder: (context, setModalState) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: VideoPlayerColors.netflixRed.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.tune_rounded,
-                              color: Color(0xFFE50914),
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Audio & Subtitles',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, color: Colors.white),
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Audio tracks section
-                              if (audios.isNotEmpty) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Row(
-                                    children: [
-                                      Icon(Icons.audiotrack_rounded,
-                                          color: Colors.white70, size: 18),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'AUDIO TRACK',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                ListView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemCount: audios.length,
-                                  itemBuilder: (context, index) {
-                                    final a = audios[index];
-                                    return NetflixRadioTile(
-                                      value: a.id,
-                                      groupValue: selectedAudio,
-                                      title: LanguageMapper.labelForTrack(a, index),
-                                      onChanged: (v) async {
-                                        if (v == null) return;
-                                        setModalState(() {
-                                          selectedAudio = v;
-                                        });
-                                        await _player.setAudioTrack(a);
-                                        await _persistTrackChoice(v, selectedSub);
-                                      },
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 20),
-                              ],
-
-                              // Subtitle tracks section
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.subtitles_rounded,
-                                        color: Colors.white70, size: 18),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'SUBTITLES',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: subs.length + 1,
-                                itemBuilder: (context, index) {
-                                  if (index == 0) {
-                                    return NetflixRadioTile(
-                                      value: 'no',
-                                      groupValue: selectedSub,
-                                      title: 'Off',
-                                      onChanged: (v) async {
-                                        if (v == null) return;
-                                        setModalState(() {
-                                          selectedSub = v;
-                                        });
-                                        await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-                                        await _persistTrackChoice(
-                                          selectedAudio,
-                                          v,
-                                        );
-                                      },
-                                    );
-                                  }
-                                  final s = subs[index - 1];
-                                  return NetflixRadioTile(
-                                    value: s.id,
-                                    groupValue: selectedSub,
-                                    title: LanguageMapper.labelForTrack(s, index - 1),
-                                    onChanged: (v) async {
-                                      if (v == null) return;
-                                      setModalState(() {
-                                        selectedSub = v;
-                                      });
-                                      await _player.setSubtitleTrack(s);
-                                      await _persistTrackChoice(
-                                        selectedAudio,
-                                        v,
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        );
+    await TracksSheet.show(
+      context,
+      _player,
+      onTrackChanged: (audioId, subtitleId) async {
+        await _persistTrackChoice(audioId, subtitleId);
       },
     );
   }
