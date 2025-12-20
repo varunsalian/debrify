@@ -5,7 +5,6 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import '../models/series_playlist.dart';
-import '../models/rd_file_node.dart';
 import '../screens/video_player_screen.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
@@ -15,7 +14,6 @@ import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../utils/series_parser.dart';
-import '../widgets/view_mode_dropdown.dart';
 
 final Map<String, String> _resolvedStreamCache = <String, String>{};
 
@@ -53,8 +51,6 @@ class VideoPlayerLaunchArgs {
   final bool hideBackButton;
   final bool Function()? isAndroidTvOverride;
   final bool disableAutoResume;
-  final FolderViewMode? viewMode;
-  final RDFileNode? folderTree;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -77,8 +73,6 @@ class VideoPlayerLaunchArgs {
     this.hideBackButton = false,
     this.isAndroidTvOverride,
     this.disableAutoResume = false,
-    this.viewMode,
-    this.folderTree,
   });
 
   VideoPlayerScreen toWidget() {
@@ -102,140 +96,23 @@ class VideoPlayerLaunchArgs {
       hideOptions: hideOptions,
       hideBackButton: hideBackButton,
       disableAutoResume: disableAutoResume,
-      viewMode: viewMode,
-      folderTree: folderTree,
     );
   }
 }
 
 class VideoPlayerLauncher {
   static Future<void> push(BuildContext context, VideoPlayerLaunchArgs args) async {
-    // Apply view mode ordering to playlist BEFORE launching player
-    // This ensures navigation order matches what user sees in UI
-    final reorderedArgs = _applyViewModeOrdering(args);
-
-    final isTv = await _isAndroidTv(reorderedArgs.isAndroidTvOverride);
+    final isTv = await _isAndroidTv(args.isAndroidTvOverride);
     if (isTv) {
-      final launched = await _launchOnAndroidTv(reorderedArgs);
+      final launched = await _launchOnAndroidTv(args);
       if (launched) {
         return;
       }
     }
 
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => reorderedArgs.toWidget()),
+      MaterialPageRoute(builder: (_) => args.toWidget()),
     );
-  }
-
-  /// Apply view mode ordering to playlist entries
-  /// This ensures navigation order matches the selected view mode
-  static VideoPlayerLaunchArgs _applyViewModeOrdering(VideoPlayerLaunchArgs args) {
-    // If no view mode or no playlist, return as-is
-    if (args.viewMode == null || args.playlist == null || args.playlist!.isEmpty) {
-      return args;
-    }
-
-    final viewMode = args.viewMode!;
-    final rawPlaylist = args.playlist!;
-
-    // Apply ordering based on view mode
-    List<PlaylistEntry> reorderedPlaylist;
-    int newStartIndex = args.startIndex ?? 0;
-
-    switch (viewMode) {
-      case FolderViewMode.raw:
-        // Keep original order
-        return args;
-
-      case FolderViewMode.sortedAZ:
-        // Sort alphabetically with numerical handling
-        reorderedPlaylist = List<PlaylistEntry>.from(rawPlaylist);
-        reorderedPlaylist.sort((a, b) {
-          final aNum = _extractLeadingNumber(a.title);
-          final bNum = _extractLeadingNumber(b.title);
-
-          if (aNum != null && bNum != null) return aNum.compareTo(bNum);
-          if (aNum != null) return -1;
-          if (bNum != null) return 1;
-          return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-        });
-        break;
-
-      case FolderViewMode.seriesArrange:
-        // Parse filenames and sort by season/episode
-        final parsed = SeriesParser.parsePlaylist(rawPlaylist.map((e) => e.title).toList());
-
-        // Create list of (originalIndex, parsedInfo) tuples
-        final indexed = <({int originalIndex, PlaylistEntry entry, SeriesInfo info})>[];
-        for (int i = 0; i < rawPlaylist.length; i++) {
-          indexed.add((originalIndex: i, entry: rawPlaylist[i], info: parsed[i]));
-        }
-
-        // Sort by season/episode
-        indexed.sort((a, b) {
-          final aSeason = a.info.season ?? 9999;
-          final bSeason = b.info.season ?? 9999;
-          if (aSeason != bSeason) return aSeason.compareTo(bSeason);
-
-          final aEpisode = a.info.episode ?? 9999;
-          final bEpisode = b.info.episode ?? 9999;
-          if (aEpisode != bEpisode) return aEpisode.compareTo(bEpisode);
-
-          // Fallback to title comparison
-          return a.entry.title.toLowerCase().compareTo(b.entry.title.toLowerCase());
-        });
-
-        reorderedPlaylist = indexed.map((item) => item.entry).toList();
-        break;
-    }
-
-    // Find the new index of the originally selected item
-    if (newStartIndex >= 0 && newStartIndex < rawPlaylist.length) {
-      final originalEntry = rawPlaylist[newStartIndex];
-      newStartIndex = reorderedPlaylist.indexWhere(
-        (entry) => entry.title == originalEntry.title &&
-                   entry.url == originalEntry.url,
-      );
-      if (newStartIndex < 0) newStartIndex = 0; // Fallback if not found
-    }
-
-    debugPrint('VideoPlayerLauncher: Applied viewMode=$viewMode ordering, startIndex ${args.startIndex} -> $newStartIndex');
-
-    // Return new args with reordered playlist and updated start index
-    return VideoPlayerLaunchArgs(
-      videoUrl: args.videoUrl,
-      title: args.title,
-      subtitle: args.subtitle,
-      playlist: reorderedPlaylist,
-      startIndex: newStartIndex,
-      rdTorrentId: args.rdTorrentId,
-      pikpakCollectionId: args.pikpakCollectionId,
-      requestMagicNext: args.requestMagicNext,
-      requestNextChannel: args.requestNextChannel,
-      startFromRandom: args.startFromRandom,
-      randomStartMaxPercent: args.randomStartMaxPercent,
-      hideSeekbar: args.hideSeekbar,
-      showChannelName: args.showChannelName,
-      channelName: args.channelName,
-      channelNumber: args.channelNumber,
-      showVideoTitle: args.showVideoTitle,
-      hideOptions: args.hideOptions,
-      hideBackButton: args.hideBackButton,
-      isAndroidTvOverride: args.isAndroidTvOverride,
-      disableAutoResume: args.disableAutoResume,
-      viewMode: args.viewMode,
-      folderTree: args.folderTree,
-    );
-  }
-
-  /// Extract leading number from filename for numerical sorting
-  static int? _extractLeadingNumber(String filename) {
-    final pattern = RegExp(r'^(\d+)[\s._-]');
-    final match = pattern.firstMatch(filename);
-    if (match != null && match.groupCount >= 1) {
-      return int.tryParse(match.group(1)!);
-    }
-    return null;
   }
 
   static Future<bool> _isAndroidTv(bool Function()? override) async {
@@ -1102,31 +979,17 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (playlist == null || playlist.allEpisodes.isEmpty) {
       return args.startIndex ?? 0;
     }
-
     final lastEpisode = await StorageService.getLastPlayedEpisode(
       seriesTitle: playlist.seriesTitle ?? 'Unknown Series',
     );
-
     if (lastEpisode == null) {
-      // No resume data - determine start based on view mode
-      // In Raw view: start from index 0 (first file in original order)
-      // In Sort/Series view: start from first episode (S01E01)
-      if (args.viewMode == FolderViewMode.raw) {
-        debugPrint('VideoPlayerLauncher: No resume data, Raw view mode - starting from index 0');
-        return 0;
-      }
-
-      // For Sort/Series view modes, start from first episode
       final candidate = playlist.getFirstEpisodeOriginalIndex();
       if (candidate == -1) {
         return args.startIndex ?? 0;
       }
       final maxIndex = playlist.allEpisodes.length - 1;
-      debugPrint('VideoPlayerLauncher: No resume data, viewMode=${args.viewMode} - starting from first episode (index $candidate)');
       return candidate.clamp(0, maxIndex).toInt();
     }
-
-    // Resume from last played episode
     final originalIndex = playlist.findOriginalIndexBySeasonEpisode(
       lastEpisode['season'] as int,
       lastEpisode['episode'] as int,
@@ -1134,8 +997,6 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (originalIndex != -1) {
       return originalIndex;
     }
-
-    // Fallback to first episode
     final fallback = playlist.getFirstEpisodeOriginalIndex();
     if (fallback == -1) {
       return args.startIndex ?? 0;
@@ -1156,7 +1017,6 @@ class _AndroidTvPlaybackPayloadBuilder {
       return args.startIndex ?? 0;
     }
 
-    // Check for most recently played file
     int bestIndex = -1;
     int bestUpdatedAt = -1;
     for (int i = 0; i < entries.length; i++) {
@@ -1169,19 +1029,8 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (bestIndex != -1) {
       return bestIndex;
     }
-
-    // No resume data - determine start based on view mode
-    // In Raw view: start from index 0 (first file in original order)
-    // In Sort/Series view: use intelligent filtering (main group)
-    if (args.viewMode == FolderViewMode.raw) {
-      debugPrint('VideoPlayerLauncher: No resume data for collection, Raw view mode - starting from index 0');
-      return 0;
-    }
-
-    // For Sort/Series view modes, use main group filtering
     final indices = _getMainGroupIndices(entries);
     if (indices.isNotEmpty) {
-      debugPrint('VideoPlayerLauncher: No resume data for collection, viewMode=${args.viewMode} - starting from main group (index ${indices.first})');
       return indices.first;
     }
     return args.startIndex ?? 0;
@@ -1189,8 +1038,7 @@ class _AndroidTvPlaybackPayloadBuilder {
 
   List<_AndroidTvSeriesSeason> _buildSeriesSeasons(SeriesPlaylist? playlist) {
     if (playlist == null) {
-      // Check if we should build folder-based structure
-      return _buildFolderSeasons();
+      return const [];
     }
     final seasons = <_AndroidTvSeriesSeason>[];
     for (final season in playlist.seasons) {
@@ -1210,101 +1058,6 @@ class _AndroidTvPlaybackPayloadBuilder {
         ),
       );
     }
-    return seasons;
-  }
-
-  List<_AndroidTvSeriesSeason> _buildFolderSeasons() {
-    // Only build folder structure for raw/sortedAZ view modes
-    if (args.folderTree == null ||
-        args.viewMode == null ||
-        args.viewMode == FolderViewMode.seriesArrange) {
-      return const [];
-    }
-
-    final entries = _normalizePlaylist();
-    if (entries.isEmpty) return const [];
-
-    // Group files by their parent folder
-    final folderGroups = <String, List<int>>{};
-
-    for (int i = 0; i < entries.length; i++) {
-      final entry = entries[i];
-
-      // Find matching file node
-      try {
-        final folderTree = args.folderTree;
-        if (folderTree == null) {
-          folderGroups.putIfAbsent('Files', () => []).add(i);
-          continue;
-        }
-
-        final allFiles = folderTree.getAllFiles();
-        if (allFiles.isEmpty) {
-          folderGroups.putIfAbsent('Files', () => []).add(i);
-          continue;
-        }
-
-        final fileNode = allFiles.firstWhere(
-          (node) => node.name == entry.title,
-          orElse: () => RDFileNode.file(name: '', fileId: -1, path: '', bytes: 0, linkIndex: -1),
-        );
-
-        if (fileNode.name.isEmpty) continue;
-
-        // Use relativePath if available
-        final pathToUse = fileNode.relativePath ?? fileNode.path;
-        if (pathToUse == null || pathToUse.isEmpty) {
-          // Fallback to root group
-          folderGroups.putIfAbsent('Files', () => []).add(i);
-          continue;
-        }
-
-        // Parse path: "Series Name/Season 1/Episode 1.mkv"
-        final parts = pathToUse.split('/');
-
-        if (parts.length <= 1) {
-          // Flat structure - use root group
-          folderGroups.putIfAbsent('Files', () => []).add(i);
-        } else {
-          // Skip top-level folder, use next level as group
-          final folderName = parts[1];
-          folderGroups.putIfAbsent(folderName, () => []).add(i);
-        }
-      } catch (e) {
-        // On error, add to root group
-        folderGroups.putIfAbsent('Files', () => []).add(i);
-      }
-    }
-
-    // Convert folder groups to "seasons"
-    final seasons = <_AndroidTvSeriesSeason>[];
-    int seasonNum = 1;
-
-    // Sort folder names for consistent ordering
-    final sortedFolders = folderGroups.keys.toList()..sort();
-
-    for (final folderName in sortedFolders) {
-      final indices = folderGroups[folderName]!;
-      final episodes = indices.map((idx) {
-        final entry = entries[idx];
-        return _AndroidTvSeriesEpisode(
-          title: entry.title,
-          season: seasonNum,
-          episode: indices.indexOf(idx) + 1,
-          description: null,
-          artwork: null,
-        );
-      }).toList();
-
-      seasons.add(
-        _AndroidTvSeriesSeason(
-          seasonNumber: seasonNum,
-          episodes: episodes,
-        ),
-      );
-      seasonNum++;
-    }
-
     return seasons;
   }
 
@@ -1356,10 +1109,6 @@ class _AndroidTvPlaybackPayloadBuilder {
       return pikpakKey;
     }
     // Fallback to filename hash
-    // Use relativePath if available to avoid collisions (e.g., Season 1/Episode 1.mkv vs Season 2/Episode 1.mkv)
-    if (entry.relativePath != null && entry.relativePath!.isNotEmpty) {
-      return _generateFilenameHash(entry.relativePath!);
-    }
     final name = entry.title.isNotEmpty ? entry.title : args.title;
     return _generateFilenameHash(name);
   }

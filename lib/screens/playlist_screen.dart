@@ -11,14 +11,10 @@ import '../services/android_native_downloader.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
-import '../utils/rd_folder_tree_builder.dart';
-import '../utils/torbox_folder_tree_builder.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
-import '../models/rd_file_node.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/main_page_bridge.dart';
-import '../widgets/view_mode_dropdown.dart';
 import 'video_player_screen.dart';
 import 'playlist_content_view_screen.dart';
 
@@ -303,10 +299,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         if (entries.first.url.isNotEmpty) initialVideoUrl = entries.first.url;
 
         if (!mounted) return;
-
-        // Load view context
-        final viewContext = await _loadViewContext(item);
-
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
@@ -318,8 +310,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             playlist: entries,
             startIndex: 0,
             rdTorrentId: rdTorrentId,
-            viewMode: viewContext.viewMode,
-            folderTree: viewContext.folderTree,
           ),
         );
       } catch (e) {
@@ -340,10 +330,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Fallback: open single video directly without playlist (for legacy items)
     final String url = (item['url'] as String?) ?? '';
     if (!mounted) return;
-
-    // Load view context
-    final viewContext = await _loadViewContext(item);
-
     // Hide auto-launch overlay before launching player
     MainPageBridge.notifyPlayerLaunching();
     await VideoPlayerLauncher.push(
@@ -352,8 +338,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         videoUrl: url,
         title: title,
         rdTorrentId: rdTorrentId,
-        viewMode: viewContext.viewMode,
-        folderTree: viewContext.folderTree,
       ),
     );
   }
@@ -406,10 +390,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             (item['title'] as String?)?.isNotEmpty == true ? item['title'] as String : fallbackTitle;
 
         if (!mounted) return;
-
-        // Load view context
-        final viewContext = await _loadViewContext(item);
-
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
@@ -418,8 +398,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             videoUrl: streamUrl,
             title: resolvedTitle,
             subtitle: subtitle,
-            viewMode: viewContext.viewMode,
-            folderTree: viewContext.folderTree,
           ),
         );
       } catch (e) {
@@ -566,10 +544,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
 
       if (!mounted) return;
-
-      // Load view context
-      final viewContext = await _loadViewContext(item);
-
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
       await VideoPlayerLauncher.push(
@@ -580,8 +554,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           subtitle: subtitle,
           playlist: playlistEntries,
           startIndex: startIndex,
-          viewMode: viewContext.viewMode,
-          folderTree: viewContext.folderTree,
         ),
       );
     } catch (e) {
@@ -668,10 +640,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
 
         if (!mounted) return;
-
-        // Load view context
-        final viewContext = await _loadViewContext(item);
-
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
         await VideoPlayerLauncher.push(
@@ -691,8 +659,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ],
             startIndex: 0,
             pikpakCollectionId: pikpakFileId,
-            viewMode: viewContext.viewMode,
-            folderTree: viewContext.folderTree,
           ),
         );
       } catch (e) {
@@ -928,9 +894,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           ? (candidates[0].file['id'] as String?)
           : null;
 
-      // Load view context
-      final viewContext = await _loadViewContext(item);
-
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
       await VideoPlayerLauncher.push(
@@ -942,8 +905,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           playlist: playlistEntries,
           startIndex: startIndex,
           pikpakCollectionId: firstFileId,
-          viewMode: viewContext.viewMode,
-          folderTree: viewContext.folderTree,
         ),
       );
     } catch (e) {
@@ -1106,115 +1067,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
 
     return startIndex;
-  }
-
-  /// Load persisted view mode and folder tree for a playlist item
-  Future<({FolderViewMode? viewMode, RDFileNode? folderTree})> _loadViewContext(
-    Map<String, dynamic> item,
-  ) async {
-    try {
-      // Load persisted view mode
-      final savedViewModeStr = await StorageService.getPlaylistItemViewMode(item);
-      FolderViewMode? viewMode;
-      if (savedViewModeStr != null) {
-        switch (savedViewModeStr) {
-          case 'raw':
-            viewMode = FolderViewMode.raw;
-            break;
-          case 'sortedAZ':
-            viewMode = FolderViewMode.sortedAZ;
-            break;
-          case 'seriesArrange':
-            viewMode = FolderViewMode.seriesArrange;
-            break;
-        }
-      }
-
-      // Load folder tree based on provider
-      RDFileNode? folderTree;
-      final provider = item['provider'] as String?;
-
-      if (provider == 'realdebrid') {
-        final rdTorrentId = item['rdTorrentId'] as String?;
-        if (rdTorrentId != null) {
-          final apiKey = await StorageService.getApiKey();
-          if (apiKey != null && apiKey.isNotEmpty) {
-            try {
-              final torrentInfo = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
-              final List<Map<String, dynamic>> allFiles = [];
-              for (final f in torrentInfo['files']) {
-                if (f is Map && f['id'] != null) {
-                  allFiles.add(f.cast<String, dynamic>());
-                }
-              }
-              if (allFiles.isNotEmpty) {
-                folderTree = RDFolderTreeBuilder.buildTree(allFiles);
-              }
-            } catch (e) {
-              debugPrint('Failed to load RealDebrid folder tree: $e');
-            }
-          }
-        }
-      } else if (provider == 'torbox') {
-        final torboxTorrentId = item['torboxTorrentId'] as int?;
-        if (torboxTorrentId != null) {
-          final apiKey = await StorageService.getTorboxApiKey();
-          if (apiKey != null && apiKey.isNotEmpty) {
-            try {
-              final torrent = await TorboxService.getTorrentById(apiKey, torboxTorrentId);
-              if (torrent != null && torrent.files.isNotEmpty) {
-                folderTree = TorboxFolderTreeBuilder.buildTree(torrent.files);
-              }
-            } catch (e) {
-              debugPrint('Failed to load Torbox folder tree: $e');
-            }
-          }
-        }
-      } else if (provider == 'pikpak') {
-        final pikpakFileId = item['pikpakFileId'] as String?;
-        if (pikpakFileId != null) {
-          try {
-            // Build PikPak folder tree - simply use cached files if available
-            // Building full tree would require API calls which might be slow
-            final cachedFiles = item['pikpakFiles'] as List?;
-            if (cachedFiles != null && cachedFiles.isNotEmpty) {
-              final files = cachedFiles.cast<Map<String, dynamic>>();
-              folderTree = _buildPikPakFileTree(files);
-            }
-          } catch (e) {
-            debugPrint('Failed to load PikPak folder tree: $e');
-          }
-        }
-      }
-
-      return (viewMode: viewMode, folderTree: folderTree);
-    } catch (e) {
-      debugPrint('Failed to load view context: $e');
-      return (viewMode: null, folderTree: null);
-    }
-  }
-
-  /// Build file tree from PikPak cached files (flat list)
-  /// Used for quick folder tree building without API calls
-  RDFileNode _buildPikPakFileTree(List<Map<String, dynamic>> files) {
-    final List<RDFileNode> nodes = [];
-
-    for (int i = 0; i < files.length; i++) {
-      final file = files[i];
-      final name = file['name'] as String? ?? 'Unknown';
-      final sizeRaw = file['size'];
-      final size = sizeRaw is int ? sizeRaw : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
-
-      nodes.add(RDFileNode.file(
-        name: name,
-        fileId: i,
-        path: name,
-        bytes: size,
-        linkIndex: i,
-      ));
-    }
-
-    return RDFileNode.folder(name: 'Root', children: nodes);
   }
 
   Future<void> _attemptRecovery(Map<String, dynamic> item) async {
