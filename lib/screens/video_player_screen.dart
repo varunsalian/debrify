@@ -31,6 +31,8 @@ import 'video_player/painters/tv_vignette_painter.dart';
 import 'video_player/utils/gesture_helpers.dart';
 import 'video_player/utils/language_mapping.dart';
 import 'video_player/utils/aspect_mode_utils.dart';
+import 'video_player/constants/timing_constants.dart';
+import 'video_player/constants/color_constants.dart';
 import 'video_player/widgets/seek_hud.dart';
 import 'video_player/widgets/vertical_hud.dart';
 import 'video_player/widgets/aspect_ratio_hud.dart';
@@ -331,7 +333,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Init rainbow animation
     _rainbowController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: VideoPlayerTimingConstants.rainbowAnimationDuration,
     );
     _rainbowOpacity = CurvedAnimation(
       parent: _rainbowController,
@@ -676,7 +678,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _tvStaticSubtext = ''; // Clear subtext until video is ready
     debugPrint('Player: Transition overlay started.');
     // Match Android TV: update every 50ms for smooth static effect
-    _rainbowController.repeat(period: const Duration(milliseconds: 50));
+    _rainbowController.repeat(period: VideoPlayerTimingConstants.rainbowRepeatPeriod);
     if (mounted) setState(() {});
   }
 
@@ -1198,7 +1200,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Only check if we're near the end of the video (within last 30 seconds)
     if (_duration > Duration.zero && _position > Duration.zero) {
       final timeRemaining = _duration - _position;
-      if (timeRemaining <= const Duration(seconds: 30)) {
+      if (timeRemaining <= VideoPlayerTimingConstants.endingThreshold) {
         await _markCurrentEpisodeAsFinished();
       }
     }
@@ -1233,7 +1235,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 style: const TextStyle(color: Colors.white),
               ),
               backgroundColor: Theme.of(context).colorScheme.error,
-              duration: const Duration(seconds: 3),
+              duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
             ),
           );
         }
@@ -1250,7 +1252,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               style: TextStyle(color: Colors.white),
             ),
             backgroundColor: Theme.of(context).colorScheme.error,
-            duration: const Duration(seconds: 3),
+            duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
           ),
         );
       }
@@ -2060,7 +2062,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   void _scheduleAutoHide() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
+    _hideTimer = Timer(VideoPlayerTimingConstants.controlsAutoHideDuration, () {
       if (mounted) {
         _controlsVisible.value = false;
       }
@@ -2090,7 +2092,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showChannelBadge = true;
     });
     // Hide after 4 seconds (matching Android TV behavior)
-    _channelBadgeTimer = Timer(const Duration(seconds: 4), () {
+    _channelBadgeTimer = Timer(VideoPlayerTimingConstants.badgeDisplayDuration, () {
       if (mounted) {
         setState(() {
           _showChannelBadge = false;
@@ -2107,7 +2109,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showTitleBadge = true;
     });
     // Hide after 4 seconds (matching Android TV behavior)
-    _titleBadgeTimer = Timer(const Duration(seconds: 4), () {
+    _titleBadgeTimer = Timer(VideoPlayerTimingConstants.badgeDisplayDuration, () {
       if (mounted) {
         setState(() {
           _showTitleBadge = false;
@@ -2153,7 +2155,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Default seek behavior for left/right taps
     final isLeft = localPos.dx < size.width / 2;
-    final delta = const Duration(seconds: 10);
+    final delta = VideoPlayerTimingConstants.seekDelta;
     final target = _position + (isLeft ? -delta : delta);
     final minPos = Duration.zero;
     final maxPos = _duration;
@@ -2284,7 +2286,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _isManualEpisodeSelection = true;
     _allowResumeForManualSelection = allowResume;
     _manualSelectionResetTimer?.cancel();
-    _manualSelectionResetTimer = Timer(const Duration(seconds: 30), () {
+    _manualSelectionResetTimer = Timer(VideoPlayerTimingConstants.manualSelectionResetDuration, () {
       _isManualEpisodeSelection = false;
       _allowResumeForManualSelection = false;
     });
@@ -2454,19 +2456,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             _tvStaticMessage,
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: const Color(0xFF00FF00), // Retro green
+                              color: VideoPlayerColors.retroGreen, // Retro green
                               fontSize: 36,
                               fontFamily: 'monospace',
                               fontWeight: FontWeight.bold,
                               letterSpacing: 4,
                               shadows: [
                                 Shadow(
-                                  color: const Color(0xFF003300),
+                                  color: VideoPlayerColors.retroGreenDark,
                                   offset: const Offset(2, 2),
                                   blurRadius: 4,
                                 ),
                                 Shadow(
-                                  color: const Color(0xFF00FF00).withOpacity(0.5),
+                                  color: VideoPlayerColors.retroGreen.withOpacity(0.5),
                                   blurRadius: 8,
                                 ),
                               ],
@@ -2483,12 +2485,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: const Color(0xFF00FF00), // Retro green
+                                color: VideoPlayerColors.retroGreen, // Retro green
                                 fontSize: 16,
                                 fontFamily: 'monospace',
                                 shadows: [
                                   Shadow(
-                                    color: const Color(0xFF003300),
+                                    color: VideoPlayerColors.retroGreenDark,
                                     offset: const Offset(1, 1),
                                     blurRadius: 2,
                                   ),
@@ -2529,7 +2531,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     await showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0F0F0F),
+      backgroundColor: VideoPlayerColors.darkBackground,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -2542,7 +2544,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFF1A1A1A), Color(0xFF0F0F0F)],
+                colors: [VideoPlayerColors.darkerBackground, Color(0xFF0F0F0F)],
               ),
             ),
             child: seriesPlaylist != null && seriesPlaylist.isSeries
@@ -2578,8 +2580,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 'Failed to find episode S${season}E${episode}',
                                 style: const TextStyle(color: Colors.white),
                               ),
-                              backgroundColor: const Color(0xFFEF4444),
-                              duration: const Duration(seconds: 3),
+                              backgroundColor: VideoPlayerColors.errorRed,
+                              duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
                             ),
                           );
                         }
@@ -2703,7 +2705,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // DPAD left/right seek 10s
             if (key == LogicalKeyboardKey.arrowLeft ||
                 key == LogicalKeyboardKey.mediaRewind) {
-              final candidate = _position - const Duration(seconds: 10);
+              final candidate = _position - VideoPlayerTimingConstants.seekDelta;
               final newPos = candidate < Duration.zero
                   ? Duration.zero
                   : (candidate > _duration ? _duration : candidate);
@@ -2713,7 +2715,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             }
             if (key == LogicalKeyboardKey.arrowRight ||
                 key == LogicalKeyboardKey.mediaFastForward) {
-              final candidate = _position + const Duration(seconds: 10);
+              final candidate = _position + VideoPlayerTimingConstants.seekDelta;
               final newPos = candidate < Duration.zero
                   ? Duration.zero
                   : (candidate > _duration ? _duration : candidate);
@@ -3051,7 +3053,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0F0F0F),
+      backgroundColor: VideoPlayerColors.darkBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -3072,7 +3074,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE50914).withOpacity(0.2),
+                              color: VideoPlayerColors.netflixRed.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
