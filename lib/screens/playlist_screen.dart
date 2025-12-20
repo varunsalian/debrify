@@ -11,6 +11,7 @@ import '../services/android_native_downloader.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
+import '../models/playlist_view_mode.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../services/pikpak_api_service.dart';
@@ -143,12 +144,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               if (!mounted) return;
               // Hide auto-launch overlay before launching player
               MainPageBridge.notifyPlayerLaunching();
+              // Read saved view mode
+              final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+              final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
               await VideoPlayerLauncher.push(
                 context,
                 VideoPlayerLaunchArgs(
                   videoUrl: downloadLink,
                   title: finalTitle,
                   rdTorrentId: rdTorrentId,
+                  viewMode: viewMode,
                 ),
               );
             } else {
@@ -301,6 +306,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         if (!mounted) return;
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
+        // Read saved view mode
+        final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+        final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -310,6 +318,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             playlist: entries,
             startIndex: 0,
             rdTorrentId: rdTorrentId,
+            viewMode: viewMode,
           ),
         );
       } catch (e) {
@@ -332,12 +341,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     if (!mounted) return;
     // Hide auto-launch overlay before launching player
     MainPageBridge.notifyPlayerLaunching();
+    // Read saved view mode
+    final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+    final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
         videoUrl: url,
         title: title,
         rdTorrentId: rdTorrentId,
+        viewMode: viewMode,
       ),
     );
   }
@@ -392,12 +405,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         if (!mounted) return;
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
+        // Read saved view mode
+        final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+        final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
             videoUrl: streamUrl,
             title: resolvedTitle,
             subtitle: subtitle,
+            viewMode: viewMode,
           ),
         );
       } catch (e) {
@@ -546,6 +563,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       if (!mounted) return;
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
+      // Read saved view mode
+      final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+      final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -554,6 +574,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           subtitle: subtitle,
           playlist: playlistEntries,
           startIndex: startIndex,
+          viewMode: viewMode,
         ),
       );
     } catch (e) {
@@ -642,6 +663,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         if (!mounted) return;
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
+        // Read saved view mode
+        final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+        final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -659,6 +683,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ],
             startIndex: 0,
             pikpakCollectionId: pikpakFileId,
+            viewMode: viewMode,
           ),
         );
       } catch (e) {
@@ -896,6 +921,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
+      // Read saved view mode
+      final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+      final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -905,6 +933,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           playlist: playlistEntries,
           startIndex: startIndex,
           pikpakCollectionId: firstFileId,
+          viewMode: viewMode,
         ),
       );
     } catch (e) {

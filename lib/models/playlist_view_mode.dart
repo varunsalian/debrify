@@ -72,6 +72,26 @@ extension PlaylistViewModeExtension on PlaylistViewMode {
   }
 }
 
+/// Extension for converting storage strings to PlaylistViewMode
+extension PlaylistViewModeStorage on PlaylistViewMode {
+  /// Convert storage string to PlaylistViewMode enum
+  /// Storage values: 'raw', 'sortedAZ', 'seriesArrange'
+  /// Returns null for invalid/null input (triggers auto-detection in player)
+  static PlaylistViewMode? fromStorageString(String? storageString) {
+    if (storageString == null) return null;
+    switch (storageString) {
+      case 'raw':
+        return PlaylistViewMode.raw;
+      case 'sortedAZ':
+        return PlaylistViewMode.sorted;
+      case 'seriesArrange':
+        return PlaylistViewMode.series;
+      default:
+        return null; // Auto-detect
+    }
+  }
+}
+
 /// Helper function to determine viewMode from isSeries boolean
 /// Used for migrating existing code
 PlaylistViewMode? viewModeFromIsSeries(bool? isSeries) {

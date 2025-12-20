@@ -139,6 +139,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
   }
 
+  /// Convert FolderViewMode to PlaylistViewMode for video player
+  PlaylistViewMode _convertToPlaylistViewMode(FolderViewMode mode) {
+    switch (mode) {
+      case FolderViewMode.raw:
+        return PlaylistViewMode.raw;
+      case FolderViewMode.sortedAZ:
+        return PlaylistViewMode.sorted;
+      case FolderViewMode.seriesArrange:
+        return PlaylistViewMode.series;
+    }
+  }
+
   /// Load progress data for all files
   Future<void> _loadProgressData() async {
     try {
@@ -2148,7 +2160,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         rdTorrentId: rdTorrentId,
         disableAutoResume: true,
-        viewMode: _seriesPlaylist?.isSeries == true ? PlaylistViewMode.series : PlaylistViewMode.sorted,
+        viewMode: _convertToPlaylistViewMode(_currentViewMode),
       ),
     );
   }
@@ -2232,7 +2244,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
-        viewMode: _seriesPlaylist?.isSeries == true ? PlaylistViewMode.series : PlaylistViewMode.sorted,
+        viewMode: _convertToPlaylistViewMode(_currentViewMode),
       ),
     );
   }
@@ -2317,7 +2329,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
-        viewMode: _seriesPlaylist?.isSeries == true ? PlaylistViewMode.series : PlaylistViewMode.sorted,
+        viewMode: _convertToPlaylistViewMode(_currentViewMode),
       ),
     );
   }
