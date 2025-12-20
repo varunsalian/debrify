@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../screens/video_player_screen.dart';
 import '../services/storage_service.dart';
+import '../models/rd_file_node.dart';
+import 'view_mode_dropdown.dart';
 
 enum MovieGroup { main, extras }
 
@@ -8,12 +10,16 @@ class MovieCollectionBrowser extends StatefulWidget {
   final List<PlaylistEntry> playlist;
   final int currentIndex;
   final void Function(int index) onSelectIndex;
+  final FolderViewMode? viewMode;
+  final RDFileNode? folderTree;
 
   const MovieCollectionBrowser({
     super.key,
     required this.playlist,
     required this.currentIndex,
     required this.onSelectIndex,
+    this.viewMode,
+    this.folderTree,
   });
 
   @override
@@ -24,6 +30,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
   MovieGroup _group = MovieGroup.main;
   final Map<int, Map<String, dynamic>> _progressByIndex = {};
   int _lastCurrentIndex = -1;
+  String? _selectedFolder; // Currently selected folder for folder view
 
   @override
   void initState() {
@@ -111,13 +118,208 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
     return {MovieGroup.main: main, MovieGroup.extras: extras};
   }
 
+  bool _shouldUseFolderDropdown() {
+    return widget.viewMode != null &&
+           widget.folderTree != null &&
+           (widget.viewMode == FolderViewMode.raw ||
+            widget.viewMode == FolderViewMode.sortedAZ);
+  }
+
+  /// Get folder name from file path
+  String _getFolderName(PlaylistEntry entry) {
+    if (widget.folderTree == null) return 'All Files';
+
+    try {
+      final allFiles = widget.folderTree!.getAllFiles();
+      if (allFiles.isEmpty) return 'All Files';
+
+      final fileNode = allFiles.firstWhere(
+        (node) => node.name == entry.title,
+        orElse: () => RDFileNode.file(name: '', fileId: -1, path: '', bytes: 0, linkIndex: -1),
+      );
+
+      if (fileNode.name.isEmpty) return 'All Files';
+
+      final pathToUse = fileNode.relativePath ?? fileNode.path;
+      if (pathToUse == null || pathToUse.isEmpty) return 'All Files';
+
+      final parts = pathToUse.split('/');
+      if (parts.length <= 1) return 'All Files';
+
+      // Return the folder name (skip top-level torrent name)
+      return parts[1];
+    } catch (e) {
+      return 'All Files';
+    }
+  }
+
+  /// Group playlist indices by folder
+  Map<String, List<int>> _groupByFolder() {
+    final groups = <String, List<int>>{};
+
+    for (int i = 0; i < widget.playlist.length; i++) {
+      final entry = widget.playlist[i];
+      final folderName = _getFolderName(entry);
+      groups.putIfAbsent(folderName, () => []).add(i);
+    }
+
+    return groups;
+  }
+
+  String? _extractFolderPath(PlaylistEntry entry) {
+    if (widget.folderTree == null) {
+      debugPrint('MovieCollectionBrowser: folderTree is null');
+      return null;
+    }
+
+    try {
+      // Find matching file node
+      final allFiles = widget.folderTree!.getAllFiles();
+      debugPrint('MovieCollectionBrowser: Found ${allFiles.length} files in tree');
+      if (allFiles.isEmpty) return null;
+
+      final fileNode = allFiles.firstWhere(
+        (node) => node.name == entry.title,
+        orElse: () => RDFileNode.file(name: '', fileId: -1, path: '', bytes: 0, linkIndex: -1),
+      );
+
+      if (fileNode.name.isEmpty) {
+        debugPrint('MovieCollectionBrowser: File not found in tree: ${entry.title}');
+        return null;
+      }
+
+      // Use relativePath if available
+      final pathToUse = fileNode.relativePath ?? fileNode.path;
+      debugPrint('MovieCollectionBrowser: File "${entry.title}" has path: $pathToUse');
+
+      if (pathToUse == null || pathToUse.isEmpty) return null;
+
+      // Parse path: "Series Name/Season 1/Episode 1.mkv"
+      final parts = pathToUse.split('/');
+
+      if (parts.length <= 1) {
+        debugPrint('MovieCollectionBrowser: Flat structure detected');
+        return null; // Flat structure, use filename
+      }
+
+      // Skip top-level folder (torrent/series name)
+      // Show: "Season 1/Episode 1.mkv"
+      final folderPath = parts.skip(1).join('/');
+      debugPrint('MovieCollectionBrowser: Extracted folder path: $folderPath');
+      return folderPath;
+    } catch (e) {
+      debugPrint('MovieCollectionBrowser: Error extracting folder path: $e');
+      return null;
+    }
+  }
+
+  /// Extract season number from folder name (e.g., "Season 1" -> 1)
+  int? _extractSeasonNumber(String folderName) {
+    final match = RegExp(r'[Ss]eason\s*(\d+)', caseSensitive: false).firstMatch(folderName);
+    if (match != null) {
+      return int.tryParse(match.group(1)!);
+    }
+    return null;
+  }
+
+  Widget _buildFolderDropdown() {
+    final folderGroups = _groupByFolder();
+
+    // Get folders in the correct order based on view mode
+    final List<String> folders;
+    if (widget.viewMode == FolderViewMode.raw) {
+      // Raw view: preserve original order from playlist
+      folders = folderGroups.keys.toList();
+    } else {
+      // Sort A-Z: sort with season number handling (same as playlist content view)
+      folders = folderGroups.keys.toList();
+      folders.sort((a, b) {
+        final aNum = _extractSeasonNumber(a);
+        final bNum = _extractSeasonNumber(b);
+
+        // If both have season numbers, sort numerically
+        if (aNum != null && bNum != null) {
+          return aNum.compareTo(bNum);
+        }
+
+        // If only one has a season number, numbered folders come first
+        if (aNum != null) return -1;
+        if (bNum != null) return 1;
+
+        // Otherwise sort alphabetically (case-insensitive)
+        return a.toLowerCase().compareTo(b.toLowerCase());
+      });
+    }
+
+    // Initialize selected folder if not set
+    if (_selectedFolder == null && folders.isNotEmpty) {
+      // Find folder containing current playing file
+      for (final folder in folders) {
+        if (folderGroups[folder]!.contains(widget.currentIndex)) {
+          _selectedFolder = folder;
+          break;
+        }
+      }
+      _selectedFolder ??= folders.first;
+    }
+
+    return DropdownButton<String>(
+      value: _selectedFolder ?? folders.firstOrNull,
+      dropdownColor: const Color(0xFF1A1A1A),
+      underline: const SizedBox.shrink(),
+      items: folders.map((folder) {
+        final fileCount = folderGroups[folder]!.length;
+        return DropdownMenuItem(
+          value: folder,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 300),
+            child: Text(
+              '$folder ($fileCount files)',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        );
+      }).toList(),
+      onChanged: (folder) {
+        if (folder != null) {
+          setState(() {
+            _selectedFolder = folder;
+          });
+        }
+      },
+      icon: const Icon(Icons.folder, color: Colors.white, size: 18),
+      style: const TextStyle(color: Colors.white, fontSize: 12),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // no auto group switching during build; handled on index change
+    debugPrint('MovieCollectionBrowser: viewMode=${widget.viewMode}, folderTree=${widget.folderTree != null ? "present" : "null"}');
+    final useFolderView = _shouldUseFolderDropdown();
+    debugPrint('MovieCollectionBrowser: useFolderView=$useFolderView');
+
+    // For folder view, show files from selected folder
+    // For Main/Extras view, filter by group
+    final List<int> visible;
     final groups = _groups();
-    final visible = _group == MovieGroup.main ? groups[MovieGroup.main]! : groups[MovieGroup.extras]!;
     final mainCount = groups[MovieGroup.main]!.length;
     final extrasCount = groups[MovieGroup.extras]!.length;
+
+    if (useFolderView) {
+      // Show files from selected folder only
+      final folderGroups = _groupByFolder();
+      if (_selectedFolder != null && folderGroups.containsKey(_selectedFolder)) {
+        visible = folderGroups[_selectedFolder]!;
+      } else {
+        // Fallback: show all files
+        visible = List.generate(widget.playlist.length, (i) => i);
+      }
+    } else {
+      // Show filtered by Main/Extras group
+      visible = _group == MovieGroup.main ? groups[MovieGroup.main]! : groups[MovieGroup.extras]!;
+    }
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
@@ -131,36 +333,39 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
               const SizedBox(width: 8),
               const Text('Movie Files', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
               const Spacer(),
-              PopupMenuButton<MovieGroup>(
-                color: const Color(0xFF1A1A1A),
-                initialValue: _group,
-                onSelected: (v) {
-                  if (_group != v) {
-                    setState(() => _group = v);
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(value: MovieGroup.main, child: Text('Main ($mainCount)', style: const TextStyle(color: Colors.white))),
-                  PopupMenuItem(value: MovieGroup.extras, child: Text('Extras ($extrasCount)', style: const TextStyle(color: Colors.white))),
-                ],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.filter_list, color: Colors.white, size: 18),
-                      const SizedBox(width: 6),
-                      Text(_group == MovieGroup.main ? 'Main ($mainCount)' : 'Extras ($extrasCount)', style: const TextStyle(color: Colors.white, fontSize: 12)),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
-                    ],
+              if (useFolderView)
+                _buildFolderDropdown()
+              else
+                PopupMenuButton<MovieGroup>(
+                  color: const Color(0xFF1A1A1A),
+                  initialValue: _group,
+                  onSelected: (v) {
+                    if (_group != v) {
+                      setState(() => _group = v);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(value: MovieGroup.main, child: Text('Main ($mainCount)', style: const TextStyle(color: Colors.white))),
+                    PopupMenuItem(value: MovieGroup.extras, child: Text('Extras ($extrasCount)', style: const TextStyle(color: Colors.white))),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.filter_list, color: Colors.white, size: 18),
+                        const SizedBox(width: 6),
+                        Text(_group == MovieGroup.main ? 'Main ($mainCount)' : 'Extras ($extrasCount)', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
+                      ],
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -178,6 +383,10 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                 final e = widget.playlist[i];
                 final active = i == widget.currentIndex;
                 final sizeText = e.sizeBytes != null ? _formatBytes(e.sizeBytes!) : '';
+
+                // In folder view, just show filename (folder already shown in dropdown)
+                // In Main/Extras view, show full title
+                final displayTitle = e.title;
 
                 final prog = _progressByIndex[i];
                 final int positionMs = prog?['positionMs'] as int? ?? 0;
@@ -215,7 +424,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                              Text(displayTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
                               const SizedBox(height: 2),
                               Row(
                                 children: [
@@ -302,6 +511,13 @@ String _resumeIdForEntry(PlaylistEntry entry) {
       entry.torboxTorrentId != null &&
       entry.torboxFileId != null) {
     return 'torbox_${entry.torboxTorrentId}_${entry.torboxFileId}';
+  }
+  if (provider == 'pikpak' && entry.pikpakFileId != null) {
+    return 'pikpak_${entry.pikpakFileId}';
+  }
+  // Use relativePath if available to avoid collisions (e.g., Season 1/Episode 1.mkv vs Season 2/Episode 1.mkv)
+  if (entry.relativePath != null && entry.relativePath!.isNotEmpty) {
+    return _filenameHash(entry.relativePath!);
   }
   return _filenameHash(entry.title);
 }

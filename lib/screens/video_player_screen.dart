@@ -12,11 +12,13 @@ import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../services/episode_info_service.dart';
 import '../models/series_playlist.dart';
+import '../models/rd_file_node.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 
 import '../widgets/series_browser.dart';
 import '../widgets/movie_collection_browser.dart';
+import '../widgets/view_mode_dropdown.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -63,6 +65,10 @@ class VideoPlayerScreen extends StatefulWidget {
   final Map<String, String>? httpHeaders;
   // Disable auto-resume - start from the specified startIndex instead of last played
   final bool disableAutoResume;
+  // View mode from playlist screen (for view-aware navigation)
+  final FolderViewMode? viewMode;
+  // Folder tree from playlist screen (for path extraction)
+  final RDFileNode? folderTree;
 
   const VideoPlayerScreen({
     Key? key,
@@ -86,6 +92,8 @@ class VideoPlayerScreen extends StatefulWidget {
     this.hideBackButton = false,
     this.httpHeaders,
     this.disableAutoResume = false,
+    this.viewMode,
+    this.folderTree,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -185,6 +193,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (widget.playlist == null || widget.playlist!.isEmpty) return null;
     if (_cachedSeriesPlaylist == null) {
       try {
+        // IMPORTANT: widget.playlist has already been reordered by VideoPlayerLauncher
+        // based on the viewMode (raw, sortedAZ, or seriesArrange).
+        // SeriesPlaylist.fromPlaylistEntries() will parse this reordered playlist
+        // and create allEpisodes where each episode.originalIndex refers to positions
+        // in widget.playlist (the reordered playlist).
         _cachedSeriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           widget.playlist!,
           collectionTitle: widget.title, // Pass video title as fallback
@@ -380,22 +393,74 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Try to restore the last played episode first
           final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
           if (lastEpisode != null) {
+            final resumedSeason = lastEpisode['season'] as int;
+            final resumedEpisode = lastEpisode['episode'] as int;
+            final resumedOriginalIndex = lastEpisode['originalIndex'] as int;
+
             debugPrint(
-              'VideoPlayer: resume series "${seriesPlaylist.seriesTitle}" at S${lastEpisode['season']}E${lastEpisode['episode']} originalIndex=${lastEpisode['originalIndex']}',
+              'VideoPlayer: resume series "${seriesPlaylist.seriesTitle}" at S${resumedSeason}E${resumedEpisode} originalIndex=${resumedOriginalIndex}',
             );
-            initialIndex = lastEpisode['originalIndex'] as int;
-          } else {
-            // Find the first episode (lowest season, lowest episode)
-            final firstEpisodeIndex = seriesPlaylist
-                .getFirstEpisodeOriginalIndex();
-            if (firstEpisodeIndex != -1) {
-              initialIndex = firstEpisodeIndex;
+
+            // Translate originalIndex to current playlist position
+            // The originalIndex from SeriesPlaylist refers to the position in allEpisodes
+            // We need to find this episode in the current widget.playlist
+            // Since widget.playlist may be reordered by view mode, we must find by matching content
+            int translatedIndex = resumedOriginalIndex;
+
+            if (widget.viewMode != null && widget.viewMode != FolderViewMode.raw) {
+              // View mode reordering is active - translate index
+              debugPrint(
+                'VideoPlayer: viewMode=${widget.viewMode}, translating index for S${resumedSeason}E${resumedEpisode}',
+              );
+
+              // Find the episode in the current playlist by matching season/episode
+              // SeriesPlaylist.allEpisodes contains episodes with originalIndex pointing to widget.playlist
+              final matchingEpisode = seriesPlaylist.allEpisodes.firstWhere(
+                (ep) => ep.seriesInfo.season == resumedSeason &&
+                        ep.seriesInfo.episode == resumedEpisode,
+                orElse: () => seriesPlaylist.allEpisodes.first,
+              );
+
+              translatedIndex = matchingEpisode.originalIndex;
+
+              if (translatedIndex != resumedOriginalIndex) {
+                debugPrint(
+                  'VideoPlayer: INDEX TRANSLATION: $resumedOriginalIndex -> $translatedIndex for S${resumedSeason}E${resumedEpisode}',
+                );
+              } else {
+                debugPrint(
+                  'VideoPlayer: no translation needed, index remains $translatedIndex',
+                );
+              }
             } else {
-              initialIndex = widget.startIndex ?? 0;
+              debugPrint(
+                'VideoPlayer: Raw mode active, using originalIndex=$resumedOriginalIndex directly',
+              );
             }
-            debugPrint(
-              'VideoPlayer: no stored resume for "${seriesPlaylist.seriesTitle}", defaulting to index=$initialIndex',
-            );
+
+            initialIndex = translatedIndex;
+          } else {
+            // No resume data - determine start based on view mode
+            // In Raw view: start from index 0 (first file in original order)
+            // In Sort/Series view: start from first episode (S01E01)
+            if (widget.viewMode == FolderViewMode.raw) {
+              initialIndex = 0;
+              debugPrint(
+                'VideoPlayer: no stored resume for "${seriesPlaylist.seriesTitle}", Raw view mode - starting from index 0',
+              );
+            } else {
+              // Find the first episode (lowest season, lowest episode)
+              final firstEpisodeIndex = seriesPlaylist
+                  .getFirstEpisodeOriginalIndex();
+              if (firstEpisodeIndex != -1) {
+                initialIndex = firstEpisodeIndex;
+              } else {
+                initialIndex = widget.startIndex ?? 0;
+              }
+              debugPrint(
+                'VideoPlayer: no stored resume for "${seriesPlaylist.seriesTitle}", viewMode=${widget.viewMode} - starting from first episode (index=$initialIndex)',
+              );
+            }
           }
         } else {
         // For non-series playlists, try to restore the last played video
@@ -403,6 +468,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 			// Try to find the last played video by checking each playlist entry
 			int lastPlayedIndex = -1;
 			Map<String, dynamic>? lastPlayedState;
+			String? lastPlayedResumeId;
+
+			debugPrint('Resume Collection: scanning ${widget.playlist!.length} entries for playback state');
 
 			for (int i = 0; i < widget.playlist!.length; i++) {
 				final entry = widget.playlist![i];
@@ -418,20 +486,46 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 						updatedAt > (lastPlayedState['updatedAt'] as int? ?? 0)) {
 						lastPlayedState = state;
 						lastPlayedIndex = i;
+						lastPlayedResumeId = resumeId;
 					}
 				}
 			}
 
-			if (lastPlayedIndex != -1) {
-				debugPrint('Resume: restoring playlist index $lastPlayedIndex');
-				initialIndex = lastPlayedIndex;
+			if (lastPlayedIndex != -1 && lastPlayedResumeId != null) {
+				debugPrint('Resume Collection: found last played at index $lastPlayedIndex (resumeId=$lastPlayedResumeId)');
+
+				// Translate index if view mode reordering is active
+				// For collections, we match by resumeId (torrentId+fileId or filename hash)
+				// This is already correct because we scanned the CURRENT widget.playlist
+				int translatedIndex = lastPlayedIndex;
+
+				if (widget.viewMode != null && widget.viewMode != FolderViewMode.raw) {
+					debugPrint(
+						'Resume Collection: viewMode=${widget.viewMode} active, index should already be correct (scanned current playlist)',
+					);
+				} else {
+					debugPrint(
+						'Resume Collection: Raw mode, using found index=$lastPlayedIndex directly',
+					);
+				}
+
+				initialIndex = translatedIndex;
+				debugPrint('Resume Collection: using initialIndex=$initialIndex');
 			} else {
-				debugPrint('Resume: no prior playback state found, using default ordering');
-				// Pick the first item from Main group (by year asc then size desc)
-				final indices = _getMainGroupIndices(widget.playlist!);
-				initialIndex = indices.isNotEmpty
-					? indices.first
-					: (widget.startIndex ?? 0);
+				// No resume data - determine start based on view mode
+				// In Raw view: start from index 0 (first file in original order)
+				// In Sort/Series view: use intelligent filtering (main group)
+				if (widget.viewMode == FolderViewMode.raw) {
+					initialIndex = 0;
+					debugPrint('Resume: no prior playback state, Raw view mode - starting from index 0');
+				} else {
+					// Pick the first item from Main group (by year asc then size desc)
+					final indices = _getMainGroupIndices(widget.playlist!);
+					initialIndex = indices.isNotEmpty
+						? indices.first
+						: (widget.startIndex ?? 0);
+					debugPrint('Resume: no prior playback state, viewMode=${widget.viewMode} - using main group ordering (index=$initialIndex)');
+				}
 			}
 		} else {
 			// Not a series or no series playlist, use the provided startIndex
@@ -630,6 +724,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Get the last played episode for a series
+  /// Returns a map with season, episode, and originalIndex
+  /// Note: originalIndex refers to the position in widget.playlist (already reordered by viewMode)
   Future<Map<String, dynamic>?> _getLastPlayedEpisode(
     SeriesPlaylist seriesPlaylist,
   ) async {
@@ -645,12 +741,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           'VideoPlayer: StorageService returned resume S${season}E$episode for "${seriesPlaylist.seriesTitle}"',
         );
 
-        // Find the original index for this episode
+        // Find the index in the current (reordered) playlist for this episode
+        // SeriesPlaylist was built from widget.playlist (which is already reordered by VideoPlayerLauncher)
+        // So findOriginalIndexBySeasonEpisode returns an index into widget.playlist
         final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(
           season,
           episode,
         );
         if (originalIndex != -1) {
+          debugPrint(
+            'VideoPlayer: found S${season}E$episode at index $originalIndex in current playlist',
+          );
           return {...lastEpisode, 'originalIndex': originalIndex};
         }
         debugPrint(
@@ -1848,6 +1949,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 			return pikpakKey;
 		}
 		// Fallback to filename hash
+		// Use relativePath if available to avoid collisions (e.g., Season 1/Episode 1.mkv vs Season 2/Episode 1.mkv)
+		if (entry.relativePath != null && entry.relativePath!.isNotEmpty) {
+			return _generateFilenameHash(entry.relativePath!);
+		}
 		final name = entry.title.isNotEmpty ? entry.title : widget.title;
 		return _generateFilenameHash(name);
 	}
@@ -2935,7 +3040,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 colors: [Color(0xFF1A1A1A), Color(0xFF0F0F0F)],
               ),
             ),
-            child: seriesPlaylist != null && seriesPlaylist.isSeries
+            child: seriesPlaylist != null &&
+                   seriesPlaylist.isSeries &&
+                   widget.viewMode == FolderViewMode.seriesArrange
                 ? SeriesBrowser(
                     seriesPlaylist: seriesPlaylist,
                     currentEpisodeIndex: _currentIndex,
@@ -3003,6 +3110,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       );
                       await _loadPlaylistIndex(idx, autoplay: true);
                     },
+                    viewMode: widget.viewMode,
+                    folderTree: widget.folderTree,
                   ),
           ),
         );

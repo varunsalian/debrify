@@ -81,11 +81,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Auto-set Series View for detected series (only if no saved preference exists)
       final savedViewMode = await StorageService.getPlaylistItemViewMode(widget.playlistItem);
+      debugPrint('PlaylistContentView: savedViewMode=$savedViewMode, isSeries=${_seriesPlaylist?.isSeries}');
       if (_seriesPlaylist?.isSeries == true && savedViewMode == null) {
         setState(() {
           _currentViewMode = FolderViewMode.seriesArrange;
         });
+        debugPrint('PlaylistContentView: Auto-set to seriesArrange');
       }
+
+      debugPrint('PlaylistContentView: _currentViewMode=$_currentViewMode, _rootContent=${_rootContent != null ? "present" : "null"}');
 
       // THEN apply view mode (can now use _seriesPlaylist.isSeries)
       _applyViewMode(_currentViewMode);
@@ -580,6 +584,77 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     _applyViewMode(_currentViewMode);
   }
 
+  /// Apply view mode ordering to a list of video files (for playlist navigation)
+  /// This ensures navigation order matches what user sees in the UI
+  List<RDFileNode> _applyViewModeToVideoFiles(List<RDFileNode> videoFiles) {
+    switch (_currentViewMode) {
+      case FolderViewMode.raw:
+        // Keep original order
+        return videoFiles;
+
+      case FolderViewMode.sortedAZ:
+        // Apply sorted A-Z ordering (same logic as _applySortedView but for flat list)
+        final sorted = List<RDFileNode>.from(videoFiles);
+        sorted.sort((a, b) {
+          final aNum = _extractLeadingNumber(a.name);
+          final bNum = _extractLeadingNumber(b.name);
+
+          // If both start with numbers, sort numerically
+          if (aNum != null && bNum != null) {
+            return aNum.compareTo(bNum);
+          }
+
+          // If only one starts with a number, numbered files come first
+          if (aNum != null) return -1;
+          if (bNum != null) return 1;
+
+          // Otherwise sort alphabetically
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
+        return sorted;
+
+      case FolderViewMode.seriesArrange:
+        // Use SeriesPlaylist episode ordering (S01E01, S01E02, etc.)
+        if (_seriesPlaylist == null || !_seriesPlaylist!.isSeries) {
+          // Fallback to sorted if not a series (avoid recursion by using sortedAZ directly)
+          final sorted = List<RDFileNode>.from(videoFiles);
+          sorted.sort((a, b) {
+            final aNum = _extractLeadingNumber(a.name);
+            final bNum = _extractLeadingNumber(b.name);
+            if (aNum != null && bNum != null) return aNum.compareTo(bNum);
+            if (aNum != null) return -1;
+            if (bNum != null) return 1;
+            return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          });
+          return sorted;
+        }
+
+        // Map original files to their series episode order
+        final orderedFiles = <RDFileNode>[];
+        for (final episode in _seriesPlaylist!.allEpisodes) {
+          // Find matching file by originalIndex
+          if (episode.originalIndex >= 0 && episode.originalIndex < videoFiles.length) {
+            // Find file in videoFiles by matching filename
+            final matchingFile = videoFiles.firstWhere(
+              (f) => f.name == episode.filename,
+              orElse: () => videoFiles[episode.originalIndex],
+            );
+            orderedFiles.add(matchingFile);
+          }
+        }
+
+        // If we didn't match all files (shouldn't happen), append remaining
+        final addedNames = orderedFiles.map((f) => f.name).toSet();
+        for (final file in videoFiles) {
+          if (!addedNames.contains(file.name)) {
+            orderedFiles.add(file);
+          }
+        }
+
+        return orderedFiles;
+    }
+  }
+
   /// Play a file with full playlist support
   Future<void> _playFile(RDFileNode file) async {
     if (file.isFolder || _rootContent == null) return;
@@ -601,7 +676,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         ),
       );
 
-      // Get all video files from the entire tree
+      // Get all video files from the entire tree (RAW order)
       final allFiles = _rootContent!.getAllFiles();
       final videoFiles = allFiles
           .where((node) => FileUtils.isVideoFile(node.name))
@@ -612,7 +687,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         return;
       }
 
-      // Find the selected file index
+      // Find the selected file index in the RAW list
+      // The launcher will reorder based on view mode and recalculate startIndex
       int startIndex = 0;
       for (int i = 0; i < videoFiles.length; i++) {
         if (videoFiles[i].name == file.name && videoFiles[i].path == file.path) {
@@ -620,6 +696,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           break;
         }
       }
+
+      debugPrint('PlaylistContentView: Passing raw list (${videoFiles.length} files) with startIndex=$startIndex (file: ${file.name}), viewMode=$_currentViewMode will be applied by launcher');
 
       final provider = ((widget.playlistItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
 
@@ -2013,7 +2091,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         ),
       );
 
-      // Get all video files from the entire tree
+      // Get all video files from the entire tree (RAW order)
       final allFiles = _rootContent!.getAllFiles();
       final videoFiles = allFiles
           .where((node) => FileUtils.isVideoFile(node.name))
@@ -2024,19 +2102,26 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         return;
       }
 
-      // Find the selected episode index
+      // Find the selected episode index in the RAW list
+      // The launcher will reorder based on view mode and recalculate startIndex
       int startIndex = 0;
-      if (episode.originalIndex >= 0 && episode.originalIndex < videoFiles.length) {
-        startIndex = episode.originalIndex;
-      } else {
-        // Fallback: try to match by filename
-        for (int i = 0; i < videoFiles.length; i++) {
-          if (videoFiles[i].name == episode.filename) {
-            startIndex = i;
-            break;
-          }
+
+      // First try to match by filename (most reliable)
+      bool found = false;
+      for (int i = 0; i < videoFiles.length; i++) {
+        if (videoFiles[i].name == episode.filename) {
+          startIndex = i;
+          found = true;
+          break;
         }
       }
+
+      // Fallback: use originalIndex if filename matching failed
+      if (!found && episode.originalIndex >= 0 && episode.originalIndex < videoFiles.length) {
+        startIndex = episode.originalIndex;
+      }
+
+      debugPrint('PlaylistContentView: Playing episode "${episode.filename}", passing raw startIndex=$startIndex, viewMode=$_currentViewMode will be applied by launcher');
 
       final provider = ((widget.playlistItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
 
@@ -2137,6 +2222,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     widget.onPlaybackStarted?.call();
     MainPageBridge.notifyPlayerLaunching();
 
+    debugPrint('PlaylistContentView: Launching player with viewMode=$_currentViewMode, folderTree=${_rootContent != null ? "present (${_rootContent!.getAllFiles().length} files)" : "null"}');
+
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -2147,6 +2234,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         rdTorrentId: rdTorrentId,
         disableAutoResume: true,
+        viewMode: _currentViewMode,
+        folderTree: _rootContent,
       ),
     );
   }
@@ -2230,6 +2319,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
+        viewMode: _currentViewMode,
+        folderTree: _rootContent,
       ),
     );
   }
@@ -2314,6 +2405,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
+        viewMode: _currentViewMode,
+        folderTree: _rootContent,
       ),
     );
   }
