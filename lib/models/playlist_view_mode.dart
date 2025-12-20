@@ -2,8 +2,9 @@ import '../utils/series_parser.dart';
 
 /// Defines how a playlist should be displayed and organized in the video player
 enum PlaylistViewMode {
-  /// Display playlist as-is without any sorting or series detection
-  /// Files are shown in their original order
+  /// Display playlist as-is without sorting or series organization
+  /// Files shown in original order as a flat movie collection
+  /// Same as 'sorted' mode but preserves original file order
   raw,
 
   /// Sort files alphabetically but don't organize into series structure
@@ -17,13 +18,13 @@ enum PlaylistViewMode {
 
 extension PlaylistViewModeExtension on PlaylistViewMode {
   /// Convert viewMode to forceSeries parameter for SeriesPlaylist
-  /// - raw: null (auto-detect - no forcing)
-  /// - sorted: false (force non-series - treat as movie collection)
+  /// - raw: false (force non-series - flat movie collection, preserves original order)
+  /// - sorted: false (force non-series - sorted movie collection)
   /// - series: true (force series detection)
   bool? toForceSeries() {
     switch (this) {
       case PlaylistViewMode.raw:
-        return null;
+        return false; // Force non-series (flat movie collection, preserves original order)
       case PlaylistViewMode.sorted:
         return false; // Force non-series (movie collection mode)
       case PlaylistViewMode.series:
