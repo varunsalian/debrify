@@ -3106,83 +3106,92 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ),
                   const Divider(height: 1, color: Color(0xFF1E293B)),
-                  _DebridActionTile(
-                    icon: Icons.open_in_new,
-                    color: const Color(0xFFF59E0B),
-                    title: 'Open in PikPak',
-                    subtitle: pikpakHidden
-                        ? 'Enable PikPak navigation in settings to use this'
-                        : 'View folder in PikPak files tab',
-                    enabled: !pikpakHidden,
-                    autofocus: !pikpakHidden,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      // Navigate to the specific PikPak folder
-                      MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
-                    },
-                  ),
-                  _DebridActionTile(
-                    icon: Icons.play_circle_fill_rounded,
-                    color: const Color(0xFF60A5FA),
-                    title: 'Play now',
-                    subtitle: hasVideo
-                        ? 'Stream instantly from PikPak.'
-                        : 'No video files found.',
-                    enabled: hasVideo,
-                    autofocus: pikpakHidden && hasVideo,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _playPikPakVideos(videoFiles, torrentName);
-                    },
-                  ),
-                  _DebridActionTile(
-                    icon: Icons.download_rounded,
-                    color: const Color(0xFF4ADE80),
-                    title: 'Download to device',
-                    subtitle: 'Grab files from PikPak instantly.',
-                    enabled: true,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _downloadPikPakFiles(fileId, torrentName);
-                    },
-                  ),
-                  _DebridActionTile(
-                    icon: Icons.playlist_add_rounded,
-                    color: const Color(0xFFA855F7),
-                    title: 'Add to playlist',
-                    subtitle: hasVideo
-                        ? 'Save for later viewing.'
-                        : 'Available for video files only.',
-                    enabled: hasVideo,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _addPikPakToPlaylist(videoFiles, torrentName, fileId);
-                    },
-                  ),
-                  _DebridActionTile(
-                    icon: Icons.connected_tv,
-                    color: const Color(0xFF10B981),
-                    title: 'Add to channel',
-                    subtitle: 'Cache this torrent in a Debrify TV channel.',
-                    enabled: true,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      final keyword = _searchController.text.trim();
-                      // Create minimal Torrent from PikPak data
-                      final torrentObj = Torrent(
-                        rowid: 0,
-                        infohash: fileId,
-                        name: torrentName,
-                        sizeBytes: 0,
-                        createdUnix: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                        seeders: 0,
-                        leechers: 0,
-                        completed: 0,
-                        scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                        source: 'pikpak',
-                      );
-                      _addTorrentToChannel(torrentObj, keyword);
-                    },
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _DebridActionTile(
+                            icon: Icons.open_in_new,
+                            color: const Color(0xFFF59E0B),
+                            title: 'Open in PikPak',
+                            subtitle: pikpakHidden
+                                ? 'Enable PikPak navigation in settings to use this'
+                                : 'View folder in PikPak files tab',
+                            enabled: !pikpakHidden,
+                            autofocus: !pikpakHidden,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              // Navigate to the specific PikPak folder
+                              MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.play_circle_fill_rounded,
+                            color: const Color(0xFF60A5FA),
+                            title: 'Play now',
+                            subtitle: hasVideo
+                                ? 'Stream instantly from PikPak.'
+                                : 'No video files found.',
+                            enabled: hasVideo,
+                            autofocus: pikpakHidden && hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _playPikPakVideos(videoFiles, torrentName);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.download_rounded,
+                            color: const Color(0xFF4ADE80),
+                            title: 'Download to device',
+                            subtitle: 'Grab files from PikPak instantly.',
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _downloadPikPakFiles(fileId, torrentName);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.playlist_add_rounded,
+                            color: const Color(0xFFA855F7),
+                            title: 'Add to playlist',
+                            subtitle: hasVideo
+                                ? 'Save for later viewing.'
+                                : 'Available for video files only.',
+                            enabled: hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _addPikPakToPlaylist(videoFiles, torrentName, fileId);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.connected_tv,
+                            color: const Color(0xFF10B981),
+                            title: 'Add to channel',
+                            subtitle: 'Cache this torrent in a Debrify TV channel.',
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              final keyword = _searchController.text.trim();
+                              // Create minimal Torrent from PikPak data
+                              final torrentObj = Torrent(
+                                rowid: 0,
+                                infohash: fileId,
+                                name: torrentName,
+                                sizeBytes: 0,
+                                createdUnix: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                                seeders: 0,
+                                leechers: 0,
+                                completed: 0,
+                                scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                                source: 'pikpak',
+                              );
+                              _addTorrentToChannel(torrentObj, keyword);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextButton(
@@ -4767,83 +4776,92 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ),
                   const Divider(height: 1, color: Color(0xFF1E293B)),
-                  _DebridActionTile(
-                    icon: Icons.open_in_new,
-                    color: const Color(0xFFF59E0B),
-                    title: 'Open in Torbox',
-                    subtitle: torboxHidden
-                        ? 'Enable Torbox navigation in settings to use this'
-                        : 'View this torrent in Torbox tab',
-                    enabled: !torboxHidden,
-                    autofocus: !torboxHidden,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      // Open the torrent in Torbox tab
-                      MainPageBridge.openTorboxFolder?.call(torrent);
-                    },
-                  ),
-                  _DebridActionTile(
-                    icon: Icons.play_circle_fill_rounded,
-                    color: const Color(0xFF60A5FA),
-                    title: 'Play now',
-                    subtitle: hasVideo
-                        ? 'Open instantly in the Torbox player experience.'
-                        : 'Available for torrents with video files.',
-                    enabled: hasVideo,
-                    autofocus: torboxHidden && hasVideo,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _playTorboxTorrent(torrent);
-                    },
-                  ),
-                  _DebridActionTile(
-                    icon: Icons.download_rounded,
-                    color: const Color(0xFF4ADE80),
-                    title: 'Download to device',
-                    subtitle: 'Grab files via Torbox instantly.',
-                    enabled: true,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _showTorboxDownloadOptions(torrent);
-                    },
-                  ),
-                  _DebridActionTile(
-                    icon: Icons.playlist_add_rounded,
-                    color: const Color(0xFFA855F7),
-                    title: 'Add to playlist',
-                    subtitle: hasVideo
-                        ? 'Keep this torrent handy in your Debrify playlist.'
-                        : 'Available for video torrents only.',
-                    enabled: hasVideo,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _addTorboxTorrentToPlaylist(torrent);
-                    },
-                  ),
-                  _DebridActionTile(
-                    icon: Icons.connected_tv,
-                    color: const Color(0xFF10B981),
-                    title: 'Add to channel',
-                    subtitle: 'Cache this torrent in a Debrify TV channel.',
-                    enabled: true,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      final keyword = _searchController.text.trim();
-                      // Convert TorboxTorrent to Torrent for caching
-                      final torrentObj = Torrent(
-                        rowid: 0,
-                        infohash: torrent.hash,
-                        name: torrent.name,
-                        sizeBytes: torrent.size,
-                        createdUnix: torrent.createdAt.millisecondsSinceEpoch ~/ 1000,
-                        seeders: torrent.seeds,
-                        leechers: torrent.peers,
-                        completed: 0,
-                        scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                        source: 'torbox',
-                      );
-                      _addTorrentToChannel(torrentObj, keyword);
-                    },
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _DebridActionTile(
+                            icon: Icons.open_in_new,
+                            color: const Color(0xFFF59E0B),
+                            title: 'Open in Torbox',
+                            subtitle: torboxHidden
+                                ? 'Enable Torbox navigation in settings to use this'
+                                : 'View this torrent in Torbox tab',
+                            enabled: !torboxHidden,
+                            autofocus: !torboxHidden,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              // Open the torrent in Torbox tab
+                              MainPageBridge.openTorboxFolder?.call(torrent);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.play_circle_fill_rounded,
+                            color: const Color(0xFF60A5FA),
+                            title: 'Play now',
+                            subtitle: hasVideo
+                                ? 'Open instantly in the Torbox player experience.'
+                                : 'Available for torrents with video files.',
+                            enabled: hasVideo,
+                            autofocus: torboxHidden && hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _playTorboxTorrent(torrent);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.download_rounded,
+                            color: const Color(0xFF4ADE80),
+                            title: 'Download to device',
+                            subtitle: 'Grab files via Torbox instantly.',
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _showTorboxDownloadOptions(torrent);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.playlist_add_rounded,
+                            color: const Color(0xFFA855F7),
+                            title: 'Add to playlist',
+                            subtitle: hasVideo
+                                ? 'Keep this torrent handy in your Debrify playlist.'
+                                : 'Available for video torrents only.',
+                            enabled: hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _addTorboxTorrentToPlaylist(torrent);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.connected_tv,
+                            color: const Color(0xFF10B981),
+                            title: 'Add to channel',
+                            subtitle: 'Cache this torrent in a Debrify TV channel.',
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              final keyword = _searchController.text.trim();
+                              // Convert TorboxTorrent to Torrent for caching
+                              final torrentObj = Torrent(
+                                rowid: 0,
+                                infohash: torrent.hash,
+                                name: torrent.name,
+                                sizeBytes: torrent.size,
+                                createdUnix: torrent.createdAt.millisecondsSinceEpoch ~/ 1000,
+                                seeders: torrent.seeds,
+                                leechers: torrent.peers,
+                                completed: 0,
+                                scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                                source: 'torbox',
+                              );
+                              _addTorrentToChannel(torrentObj, keyword);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextButton(
@@ -5842,174 +5860,183 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ),
                       const Divider(height: 1, color: Color(0xFF1E293B)),
-                      _DebridActionTile(
-                        icon: Icons.open_in_new,
-                        color: const Color(0xFFF59E0B),
-                        title: 'Open in Real-Debrid',
-                        subtitle: rdHidden
-                            ? 'Enable Real-Debrid navigation in settings to use this'
-                            : isRarArchive
-                                ? 'Not available for RAR archives (not extracted by Real-Debrid)'
-                                : 'View this torrent in Real-Debrid tab',
-                        enabled: !rdHidden && !isRarArchive,
-                        autofocus: !rdHidden && !isRarArchive,
-                        onTap: () {
-                          Navigator.of(ctx).pop();
-                          // Create RDTorrent object and open it in Real-Debrid tab
-                          final rdTorrent = RDTorrent(
-                            id: result['torrentId'].toString(),
-                            filename: torrentName,
-                            hash: '',
-                            bytes: 0,
-                            host: '',
-                            split: 0,
-                            progress: 0,
-                            status: '',
-                            added: DateTime.now().toIso8601String(),
-                            links: links.map((e) => e.toString()).toList(),
-                          );
-                          MainPageBridge.openDebridOptions?.call(rdTorrent);
-                        },
-                      ),
-                      _DebridActionTile(
-                        icon: Icons.play_circle_rounded,
-                        color: const Color(0xFF60A5FA),
-                        title: 'Play now',
-                        subtitle: hasAnyVideo
-                            ? 'Unrestrict and open instantly in the built-in player.'
-                            : 'Available for video torrents only.',
-                        enabled: hasAnyVideo,
-                        autofocus: rdHidden && hasAnyVideo,
-                        onTap: () async {
-                          Navigator.of(ctx).pop();
-                          await _playFromResult(
-                            links: links,
-                            files: files,
-                            updatedInfo: updatedInfo,
-                            torrentName: torrentName,
-                            fileSelection: fileSelection,
-                            torrentId: result['torrentId']?.toString(),
-                          );
-                        },
-                      ),
-                      _DebridActionTile(
-                        icon: Icons.download_rounded,
-                        color: const Color(0xFF4ADE80),
-                        title: 'Download to device',
-                        subtitle: isRarArchive
-                            ? 'Downloads the RAR archive to your device'
-                            : 'Downloads the files to your device',
-                        enabled: true,
-                        onTap: () async {
-                          Navigator.of(ctx).pop();
-                          // RAR archives: always download the single link directly
-                          if (isRarArchive) {
-                            _downloadFile(downloadLink, torrentName);
-                          } else if (hasAnyVideo) {
-                            if (links.length == 1) {
-                              _downloadFile(downloadLink, torrentName);
-                            } else {
-                              // Show file selection dialog for multiple video files
-                              await _showRealDebridFileSelection(
-                                result: result,
-                                torrentName: torrentName,
-                                apiKey: apiKey,
-                              );
-                            }
-                          } else {
-                            if (links.length > 1) {
-                              _showDownloadSelectionDialog(links, torrentName);
-                            } else {
-                              _downloadFile(downloadLink, torrentName);
-                            }
-                          }
-                        },
-                      ),
-                      _DebridActionTile(
-                        icon: Icons.playlist_add_rounded,
-                        color: const Color(0xFFA855F7),
-                        title: 'Add to playlist',
-                        subtitle: hasAnyVideo
-                            ? 'Keep this torrent handy in your Debrify playlist.'
-                            : 'Available for video torrents only.',
-                        enabled: hasAnyVideo,
-                        onTap: () async {
-                          Navigator.of(ctx).pop();
-                          if (!hasAnyVideo) return;
-                          if (links.length == 1) {
-                            String finalTitle = torrentName;
-                            try {
-                              final torrentId = result['torrentId']?.toString();
-                              if (torrentId != null && torrentId.isNotEmpty) {
-                                final torrentInfo =
-                                    await DebridService.getTorrentInfo(
-                                      apiKey,
-                                      torrentId,
-                                    );
-                                final filename = torrentInfo['filename']
-                                    ?.toString();
-                                if (filename != null && filename.isNotEmpty) {
-                                  finalTitle = filename;
-                                }
-                              }
-                            } catch (_) {}
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _DebridActionTile(
+                                icon: Icons.open_in_new,
+                                color: const Color(0xFFF59E0B),
+                                title: 'Open in Real-Debrid',
+                                subtitle: rdHidden
+                                    ? 'Enable Real-Debrid navigation in settings to use this'
+                                    : isRarArchive
+                                        ? 'Not available for RAR archives (not extracted by Real-Debrid)'
+                                        : 'View this torrent in Real-Debrid tab',
+                                enabled: !rdHidden && !isRarArchive,
+                                autofocus: !rdHidden && !isRarArchive,
+                                onTap: () {
+                                  Navigator.of(ctx).pop();
+                                  // Create RDTorrent object and open it in Real-Debrid tab
+                                  final rdTorrent = RDTorrent(
+                                    id: result['torrentId'].toString(),
+                                    filename: torrentName,
+                                    hash: '',
+                                    bytes: 0,
+                                    host: '',
+                                    split: 0,
+                                    progress: 0,
+                                    status: '',
+                                    added: DateTime.now().toIso8601String(),
+                                    links: links.map((e) => e.toString()).toList(),
+                                  );
+                                  MainPageBridge.openDebridOptions?.call(rdTorrent);
+                                },
+                              ),
+                              _DebridActionTile(
+                                icon: Icons.play_circle_rounded,
+                                color: const Color(0xFF60A5FA),
+                                title: 'Play now',
+                                subtitle: hasAnyVideo
+                                    ? 'Unrestrict and open instantly in the built-in player.'
+                                    : 'Available for video torrents only.',
+                                enabled: hasAnyVideo,
+                                autofocus: rdHidden && hasAnyVideo,
+                                onTap: () async {
+                                  Navigator.of(ctx).pop();
+                                  await _playFromResult(
+                                    links: links,
+                                    files: files,
+                                    updatedInfo: updatedInfo,
+                                    torrentName: torrentName,
+                                    fileSelection: fileSelection,
+                                    torrentId: result['torrentId']?.toString(),
+                                  );
+                                },
+                              ),
+                              _DebridActionTile(
+                                icon: Icons.download_rounded,
+                                color: const Color(0xFF4ADE80),
+                                title: 'Download to device',
+                                subtitle: isRarArchive
+                                    ? 'Downloads the RAR archive to your device'
+                                    : 'Downloads the files to your device',
+                                enabled: true,
+                                onTap: () async {
+                                  Navigator.of(ctx).pop();
+                                  // RAR archives: always download the single link directly
+                                  if (isRarArchive) {
+                                    _downloadFile(downloadLink, torrentName);
+                                  } else if (hasAnyVideo) {
+                                    if (links.length == 1) {
+                                      _downloadFile(downloadLink, torrentName);
+                                    } else {
+                                      // Show file selection dialog for multiple video files
+                                      await _showRealDebridFileSelection(
+                                        result: result,
+                                        torrentName: torrentName,
+                                        apiKey: apiKey,
+                                      );
+                                    }
+                                  } else {
+                                    if (links.length > 1) {
+                                      _showDownloadSelectionDialog(links, torrentName);
+                                    } else {
+                                      _downloadFile(downloadLink, torrentName);
+                                    }
+                                  }
+                                },
+                              ),
+                              _DebridActionTile(
+                                icon: Icons.playlist_add_rounded,
+                                color: const Color(0xFFA855F7),
+                                title: 'Add to playlist',
+                                subtitle: hasAnyVideo
+                                    ? 'Keep this torrent handy in your Debrify playlist.'
+                                    : 'Available for video torrents only.',
+                                enabled: hasAnyVideo,
+                                onTap: () async {
+                                  Navigator.of(ctx).pop();
+                                  if (!hasAnyVideo) return;
+                                  if (links.length == 1) {
+                                    String finalTitle = torrentName;
+                                    try {
+                                      final torrentId = result['torrentId']?.toString();
+                                      if (torrentId != null && torrentId.isNotEmpty) {
+                                        final torrentInfo =
+                                            await DebridService.getTorrentInfo(
+                                              apiKey,
+                                              torrentId,
+                                            );
+                                        final filename = torrentInfo['filename']
+                                            ?.toString();
+                                        if (filename != null && filename.isNotEmpty) {
+                                          finalTitle = filename;
+                                        }
+                                      }
+                                    } catch (_) {}
 
-                            final added =
-                                await StorageService.addPlaylistItemRaw({
-                                  'title': finalTitle,
-                                  'url': '',
-                                  'restrictedLink': links[0],
-                                  'rdTorrentId': result['torrentId']
-                                      ?.toString(),
-                                  'kind': 'single',
-                                });
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  added
-                                      ? 'Added to playlist'
-                                      : 'Already in playlist',
-                                ),
+                                    final added =
+                                        await StorageService.addPlaylistItemRaw({
+                                          'title': finalTitle,
+                                          'url': '',
+                                          'restrictedLink': links[0],
+                                          'rdTorrentId': result['torrentId']
+                                              ?.toString(),
+                                          'kind': 'single',
+                                        });
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          added
+                                              ? 'Added to playlist'
+                                              : 'Already in playlist',
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    final torrentId =
+                                        result['torrentId']?.toString() ?? '';
+                                    if (torrentId.isEmpty) return;
+                                    final added =
+                                        await StorageService.addPlaylistItemRaw({
+                                          'title': torrentName,
+                                          'kind': 'collection',
+                                          'rdTorrentId': torrentId,
+                                          'count': links.length,
+                                        });
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          added
+                                              ? 'Added collection to playlist'
+                                              : 'Already in playlist',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
                               ),
-                            );
-                          } else {
-                            final torrentId =
-                                result['torrentId']?.toString() ?? '';
-                            if (torrentId.isEmpty) return;
-                            final added =
-                                await StorageService.addPlaylistItemRaw({
-                                  'title': torrentName,
-                                  'kind': 'collection',
-                                  'rdTorrentId': torrentId,
-                                  'count': links.length,
-                                });
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  added
-                                      ? 'Added collection to playlist'
-                                      : 'Already in playlist',
-                                ),
+                              _DebridActionTile(
+                                icon: Icons.connected_tv,
+                                color: const Color(0xFF10B981),
+                                title: 'Add to channel',
+                                subtitle: 'Cache this torrent in a Debrify TV channel.',
+                                enabled: true,
+                                onTap: () {
+                                  Navigator.of(ctx).pop();
+                                  final keyword = _searchController.text.trim();
+                                  if (index >= 0 && index < _torrents.length) {
+                                    _addTorrentToChannel(_torrents[index], keyword);
+                                  }
+                                },
                               ),
-                            );
-                          }
-                        },
-                      ),
-                      _DebridActionTile(
-                        icon: Icons.connected_tv,
-                        color: const Color(0xFF10B981),
-                        title: 'Add to channel',
-                        subtitle: 'Cache this torrent in a Debrify TV channel.',
-                        enabled: true,
-                        onTap: () {
-                          Navigator.of(ctx).pop();
-                          final keyword = _searchController.text.trim();
-                          if (index >= 0 && index < _torrents.length) {
-                            _addTorrentToChannel(_torrents[index], keyword);
-                          }
-                        },
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       TextButton(

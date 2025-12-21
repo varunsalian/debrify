@@ -35,6 +35,8 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
   List<DebrifyTvChannelRecord> _channels = [];
   bool _isLoading = true;
   bool _isCreating = false;
+  bool _confirmButtonFocused = false;
+  bool _cancelButtonFocused = false;
 
   final List<FocusNode> _itemFocusNodes = [];
   final FocusNode _createButtonFocusNode = FocusNode();
@@ -398,18 +400,59 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
           ),
           const SizedBox(height: 20),
           Focus(
-            focusNode: _nameFieldFocusNode,
             onKeyEvent: (node, event) {
-              if (event is KeyDownEvent &&
-                  event.logicalKey == LogicalKeyboardKey.enter) {
-                _confirmButtonFocusNode.requestFocus();
+              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+              final key = event.logicalKey;
+              final text = _nameController.text;
+              final selection = _nameController.selection;
+              final textLength = text.length;
+              final isTextEmpty = textLength == 0;
+
+              // Check cursor position
+              final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+              final isAtStart = !isSelectionValid ||
+                  (selection.baseOffset == 0 && selection.extentOffset == 0);
+              final isAtEnd = !isSelectionValid ||
+                  (selection.baseOffset == textLength && selection.extentOffset == textLength);
+
+              // Escape: Exit to Cancel button
+              if (key == LogicalKeyboardKey.escape ||
+                  key == LogicalKeyboardKey.goBack) {
+                _cancelButtonFocusNode.requestFocus();
                 return KeyEventResult.handled;
               }
+
+              // Arrow Up: Exit to Cancel button when at start or empty
+              if (key == LogicalKeyboardKey.arrowUp) {
+                if (isTextEmpty || isAtStart) {
+                  _cancelButtonFocusNode.requestFocus();
+                  return KeyEventResult.handled;
+                }
+              }
+
+              // Arrow Down OR Enter: Move to Confirm button when at end or empty
+              if (key == LogicalKeyboardKey.arrowDown ||
+                  key == LogicalKeyboardKey.enter) {
+                if (isTextEmpty || isAtEnd) {
+                  _confirmButtonFocusNode.requestFocus();
+                  return KeyEventResult.handled;
+                }
+              }
+
               return KeyEventResult.ignored;
             },
             child: TextField(
               controller: _nameController,
+              focusNode: _nameFieldFocusNode,
               style: const TextStyle(color: Colors.white),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) {
+                // Move focus to Confirm button when Enter is pressed
+                if (_nameController.text.trim().isNotEmpty) {
+                  _confirmButtonFocusNode.requestFocus();
+                }
+              },
               decoration: InputDecoration(
                 labelText: 'Channel Name',
                 labelStyle: const TextStyle(color: Colors.white60),
@@ -443,6 +486,11 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
             children: [
               Focus(
                 focusNode: _cancelButtonFocusNode,
+                onFocusChange: (focused) {
+                  setState(() {
+                    _cancelButtonFocused = focused;
+                  });
+                },
                 onKeyEvent: (node, event) {
                   if (event is KeyDownEvent &&
                       (event.logicalKey == LogicalKeyboardKey.select ||
@@ -453,17 +501,39 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                   }
                   return KeyEventResult.ignored;
                 },
-                child: TextButton(
-                  onPressed: _cancelCreate,
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Colors.white54),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: _cancelButtonFocused
+                        ? Border.all(color: const Color(0xFF10B981), width: 2)
+                        : null,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TextButton(
+                    onPressed: _cancelCreate,
+                    style: TextButton.styleFrom(
+                      backgroundColor: _cancelButtonFocused
+                          ? const Color(0xFF1F2937)
+                          : Colors.transparent,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.white54),
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Focus(
                 focusNode: _confirmButtonFocusNode,
+                onFocusChange: (focused) {
+                  setState(() {
+                    _confirmButtonFocused = focused;
+                  });
+                },
                 onKeyEvent: (node, event) {
                   if (event is KeyDownEvent &&
                       (event.logicalKey == LogicalKeyboardKey.select ||
@@ -474,26 +544,36 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                   }
                   return KeyEventResult.ignored;
                 },
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _createChannel,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: _confirmButtonFocused
+                        ? Border.all(color: Colors.white, width: 2)
+                        : null,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Create'),
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _createChannel,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _confirmButtonFocused
+                          ? const Color(0xFF059669)
+                          : const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Create'),
+                  ),
                 ),
               ),
             ],
