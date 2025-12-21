@@ -28,6 +28,10 @@ import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import '../widgets/shimmer.dart';
+import '../widgets/channel_picker_dialog.dart';
+import '../services/debrify_tv_repository.dart';
+import '../services/debrify_tv_cache_service.dart';
+import '../models/debrify_tv_cache.dart';
 import '../widgets/advanced_search_sheet.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../services/imdb_lookup_service.dart';
@@ -3155,6 +3159,31 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       _addPikPakToPlaylist(videoFiles, torrentName, fileId);
                     },
                   ),
+                  _DebridActionTile(
+                    icon: Icons.connected_tv,
+                    color: const Color(0xFF10B981),
+                    title: 'Add to channel',
+                    subtitle: 'Cache this torrent in a Debrify TV channel.',
+                    enabled: true,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      final keyword = _searchController.text.trim();
+                      // Create minimal Torrent from PikPak data
+                      final torrentObj = Torrent(
+                        rowid: 0,
+                        infohash: fileId,
+                        name: torrentName,
+                        sizeBytes: 0,
+                        createdUnix: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                        seeders: 0,
+                        leechers: 0,
+                        completed: 0,
+                        scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                        source: 'pikpak',
+                      );
+                      _addTorrentToChannel(torrentObj, keyword);
+                    },
+                  ),
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: () => Navigator.of(ctx).pop(),
@@ -3640,6 +3669,161 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         duration: Duration(seconds: isError ? 4 : 3),
       ),
     );
+  }
+
+  /// Add torrent to a Debrify TV channel
+  Future<void> _addTorrentToChannel(Torrent torrent, String searchKeyword) async {
+    if (!mounted) return;
+
+    // Validate keyword is not empty
+    final normalizedKeyword = searchKeyword.trim().toLowerCase();
+    debugPrint('[AddToChannel] Original keyword: "$searchKeyword", Normalized: "$normalizedKeyword"');
+
+    if (normalizedKeyword.isEmpty) {
+      debugPrint('[AddToChannel] ERROR: Empty keyword, aborting');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot add torrent: search keyword is empty'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Show channel picker dialog
+      final result = await showDialog<ChannelPickerResult>(
+        context: context,
+        builder: (ctx) => ChannelPickerDialog(
+          searchKeyword: searchKeyword,
+        ),
+      );
+
+      if (result == null || !mounted) return;
+
+      debugPrint('[AddToChannel] Selected channel: ${result.channelName} (${result.channelId}), isNew: ${result.isNewChannel}');
+
+      // Fetch channel once to avoid duplicate queries
+      final channel = (await DebrifyTvRepository.instance.fetchAllChannels())
+          .firstWhere(
+            (ch) => ch.channelId == result.channelId,
+            orElse: () => throw Exception('Channel no longer exists'),
+          );
+
+      debugPrint('[AddToChannel] Channel fetched. Current keywords: ${channel.keywords}');
+
+      // Get current cache entry for this channel
+      var cacheEntry = await DebrifyTvCacheService.getEntry(result.channelId);
+      debugPrint('[AddToChannel] Cache entry exists: ${cacheEntry != null}, Torrent count: ${cacheEntry?.torrents.length ?? 0}');
+
+      // If cache entry doesn't exist, create empty one
+      if (cacheEntry == null) {
+        debugPrint('[AddToChannel] Creating new cache entry with warming status');
+        cacheEntry = DebrifyTvChannelCacheEntry.empty(
+          channelId: result.channelId,
+          normalizedKeywords: channel.keywords.map((k) => k.toLowerCase()).toList(),
+          status: DebrifyTvCacheStatus.warming,
+        );
+      }
+
+      // Convert Torrent to CachedTorrent with validated source
+      final cachedTorrent = CachedTorrent.fromTorrent(
+        torrent,
+        keywords: [normalizedKeyword],
+        sources: torrent.source.isNotEmpty ? [torrent.source] : [],
+      );
+      debugPrint('[AddToChannel] Created CachedTorrent: ${torrent.name} (${torrent.infohash}), source: "${torrent.source}"');
+
+      // Check if torrent already exists in cache
+      final existingIndex = cacheEntry.torrents.indexWhere(
+        (t) => t.infohash == cachedTorrent.infohash,
+      );
+      debugPrint('[AddToChannel] Torrent exists in cache: ${existingIndex >= 0} (index: $existingIndex)');
+
+      List<CachedTorrent> updatedTorrents;
+      if (existingIndex >= 0) {
+        // Merge with existing torrent (adds keyword if not present)
+        debugPrint('[AddToChannel] Merging with existing torrent, adding keyword: "$normalizedKeyword"');
+        final merged = cacheEntry.torrents[existingIndex].merge(
+          keywords: [normalizedKeyword],
+        );
+        updatedTorrents = List.from(cacheEntry.torrents);
+        updatedTorrents[existingIndex] = merged;
+      } else {
+        // Add new torrent to the beginning
+        debugPrint('[AddToChannel] Adding new torrent to cache');
+        updatedTorrents = [cachedTorrent, ...cacheEntry.torrents];
+      }
+
+      // Update channel keywords if search keyword is new
+      final channelKeywords = List<String>.from(channel.keywords);
+      debugPrint('[AddToChannel] Checking if keyword exists. Channel keywords: $channelKeywords');
+
+      final keywordExists = channelKeywords.any(
+        (kw) => kw.toLowerCase() == normalizedKeyword,
+      );
+      debugPrint('[AddToChannel] Keyword "$normalizedKeyword" exists: $keywordExists');
+
+      if (!keywordExists) {
+        debugPrint('[AddToChannel] Adding keyword "$searchKeyword" to channel keywords');
+        channelKeywords.add(searchKeyword);
+
+        // Update channel record with new keyword
+        final updatedChannel = channel.copyWith(
+          keywords: channelKeywords,
+          updatedAt: DateTime.now(),
+        );
+        debugPrint('[AddToChannel] Updating channel with new keywords: $channelKeywords');
+        await DebrifyTvRepository.instance.upsertChannel(updatedChannel);
+        debugPrint('[AddToChannel] Channel updated successfully');
+      } else {
+        debugPrint('[AddToChannel] Keyword already exists, skipping channel update');
+      }
+
+      // Update cache entry with new torrents
+      final normalizedChannelKeywords = channelKeywords.map((k) => k.toLowerCase()).toList();
+      debugPrint('[AddToChannel] Preparing cache update. Normalized keywords: $normalizedChannelKeywords, Torrent count: ${updatedTorrents.length}');
+
+      final updatedEntry = cacheEntry.copyWith(
+        torrents: updatedTorrents,
+        normalizedKeywords: normalizedChannelKeywords,
+        status: DebrifyTvCacheStatus.ready,
+      );
+
+      // Save updated cache
+      debugPrint('[AddToChannel] Saving cache entry...');
+      await DebrifyTvCacheService.saveEntry(updatedEntry);
+      debugPrint('[AddToChannel] Cache saved successfully');
+
+      if (!mounted) return;
+
+      final successMessage = existingIndex >= 0
+          ? 'Torrent updated in "${result.channelName}"'
+          : result.isNewChannel
+              ? 'Channel "${result.channelName}" created with torrent!'
+              : 'Torrent added to "${result.channelName}"';
+      debugPrint('[AddToChannel] SUCCESS: $successMessage');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(successMessage),
+          backgroundColor: const Color(0xFF10B981),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[AddToChannel] ERROR: $e');
+      debugPrint('[AddToChannel] Stack trace: ${StackTrace.current}');
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to add torrent to channel: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   /// Recursively extract all video files from a PikPak folder and its subfolders
@@ -4634,6 +4818,31 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _addTorboxTorrentToPlaylist(torrent);
+                    },
+                  ),
+                  _DebridActionTile(
+                    icon: Icons.connected_tv,
+                    color: const Color(0xFF10B981),
+                    title: 'Add to channel',
+                    subtitle: 'Cache this torrent in a Debrify TV channel.',
+                    enabled: true,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      final keyword = _searchController.text.trim();
+                      // Convert TorboxTorrent to Torrent for caching
+                      final torrentObj = Torrent(
+                        rowid: 0,
+                        infohash: torrent.hash,
+                        name: torrent.name,
+                        sizeBytes: torrent.size,
+                        createdUnix: torrent.createdAt.millisecondsSinceEpoch ~/ 1000,
+                        seeders: torrent.seeds,
+                        leechers: torrent.peers,
+                        completed: 0,
+                        scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                        source: 'torbox',
+                      );
+                      _addTorrentToChannel(torrentObj, keyword);
                     },
                   ),
                   const SizedBox(height: 12),
@@ -5785,6 +5994,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 ),
                               ),
                             );
+                          }
+                        },
+                      ),
+                      _DebridActionTile(
+                        icon: Icons.connected_tv,
+                        color: const Color(0xFF10B981),
+                        title: 'Add to channel',
+                        subtitle: 'Cache this torrent in a Debrify TV channel.',
+                        enabled: true,
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          final keyword = _searchController.text.trim();
+                          if (index >= 0 && index < _torrents.length) {
+                            _addTorrentToChannel(_torrents[index], keyword);
                           }
                         },
                       ),

@@ -21,20 +21,26 @@ class DebrifyTvRepository {
       return const [];
     }
 
-    return channels.map((row) {
+    // Load keywords for all channels
+    final List<DebrifyTvChannelRecord> result = [];
+    for (final row in channels) {
       final channelId = row['channel_id'] as String;
-      return DebrifyTvChannelRecord(
+      final keywords = await fetchChannelKeywords(channelId);
+
+      result.add(DebrifyTvChannelRecord(
         channelId: channelId,
         name: row['name'] as String,
-        keywords: const <String>[],
+        keywords: keywords,
         avoidNsfw: (row['avoid_nsfw'] as int? ?? 1) == 1,
         channelNumber: (row['channel_number'] as int? ?? 0),
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int? ?? 0),
         updatedAt:
             DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int? ?? 0),
-      );
-    }).toList();
+      ));
+    }
+
+    return result;
   }
 
   Future<List<String>> fetchChannelKeywords(String channelId) async {
