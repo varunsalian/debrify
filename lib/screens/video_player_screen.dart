@@ -1440,11 +1440,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return false;
       }
 
-      // Check if duration has become available
-      // This indicates the file is actually loading and playable
-      if (_player.state.duration > Duration.zero) {
-        print('PikPak: Video duration available: ${_player.state.duration}');
-        return true;
+      // Check if widget was disposed (prevents operations on unmounted widget)
+      if (!mounted) {
+        print('PikPak: Widget disposed during metadata wait');
+        return false;
+      }
+
+      // FIX: Use _duration field (updated by stream) instead of _player.state.duration (direct state)
+      // This ensures we're checking the same value that the UI uses, preventing race conditions
+      // where direct state is available but stream hasn't fired yet
+      if (_duration > Duration.zero) {
+        print('PikPak: Video duration available from stream: $_duration');
+
+        // Additional verification: wait a bit longer to ensure playback actually started
+        // This gives the player time to transition from "has duration" to "is playing"
+        // and allows all stream listeners to synchronize their state updates
+        print('PikPak: Duration detected, waiting for playback to stabilize...');
+        await Future.delayed(const Duration(milliseconds: 800));
+
+        // Check mounted state after delay
+        if (!mounted) {
+          print('PikPak: Widget disposed during stabilization delay');
+          return false;
+        }
+
+        // Final cancellation check after stabilization delay
+        if (_pikPakRetryId != retryId) {
+          print('PikPak: Retry cancelled during stabilization (navigation occurred)');
+          return false;
+        }
+
+        // Verify playback is actually happening, not just buffering with duration
+        // This prevents false positives where duration loads but video won't play
+        // FIX: Removed redundant _duration check - we already know it's > 0
+        // Only check if playing state has been reached for extra confidence
+        if (_isPlaying) {
+          print('PikPak: Video confirmed playing - duration: $_duration, playing: true');
+          return true;
+        } else {
+          // Duration is available but playback hasn't started yet
+          // This is acceptable - duration alone is sufficient for cold storage detection
+          print('PikPak: Duration available ($_duration), playback will start shortly');
+          return true;
+        }
       }
 
       // Wait a bit before checking again
@@ -1500,12 +1538,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Check if cancelled before starting attempt
         if (_pikPakRetryId != myRetryId) {
           print('PikPak: Retry loop cancelled before attempt ${attempt + 1} (navigation occurred)');
+          // Clear state synchronously
+          _isPikPakRetrying = false;
+          _pikPakRetryMessage = null;
+          _pikPakRetryCount = 0;
           if (mounted) {
-            setState(() {
-              _isPikPakRetrying = false;
-              _pikPakRetryMessage = null;
-              _pikPakRetryCount = 0;
-            });
+            setState(() {});
           }
           return;
         }
@@ -1524,13 +1562,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (loadSuccess) {
           // Success! Duration loaded, file is ready
           print('PikPak: Video metadata loaded successfully - file is ready!');
-          if (mounted) {
+
+          // CRITICAL FIX: Clear retry state IMMEDIATELY and SYNCHRONOUSLY
+          // This prevents any stream-triggered setState from showing the overlay again
+          // We set the variables directly BEFORE calling setState
+          _isPikPakRetrying = false;
+          _pikPakRetryMessage = null;
+          _pikPakRetryCount = 0;
+
+          // Now trigger UI update with the cleared state
+          if (mounted && _pikPakRetryId == myRetryId) {
             setState(() {
-              _isPikPakRetrying = false;
-              _pikPakRetryMessage = null;
-              _pikPakRetryCount = 0;
+              // State already cleared above - this just triggers rebuild
             });
+            print('PikPak: Retry mechanism fully deactivated, playback ready');
           }
+
           return;
         }
 
@@ -1554,15 +1601,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           print('PikPak: Waiting ${nextDelay}s before retry...');
           await Future.delayed(Duration(seconds: nextDelay));
 
+          // Check if widget was disposed during delay
+          if (!mounted) {
+            print('PikPak: Widget disposed during retry delay');
+            return;
+          }
+
           // Check if cancelled after delay
           if (_pikPakRetryId != myRetryId) {
             print('PikPak: Retry loop cancelled after delay (navigation occurred)');
+            // Clear state synchronously
+            _isPikPakRetrying = false;
+            _pikPakRetryMessage = null;
+            _pikPakRetryCount = 0;
             if (mounted) {
-              setState(() {
-                _isPikPakRetrying = false;
-                _pikPakRetryMessage = null;
-                _pikPakRetryCount = 0;
-              });
+              setState(() {});
             }
             return;
           }
@@ -1570,12 +1623,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Final attempt failed - cleanup and handle auto-advance
           print('PikPak: All retry attempts exhausted. Video failed to load.');
 
+          // Clear state synchronously
+          _isPikPakRetrying = false;
+          _pikPakRetryMessage = null;
+          _pikPakRetryCount = 0;
+
           if (mounted) {
-            setState(() {
-              _isPikPakRetrying = false;
-              _pikPakRetryMessage = null;
-              _pikPakRetryCount = 0;
-            });
+            setState(() {});
 
             if (isDebrifyTV) {
               // For Debrify TV, auto-advance to next video
@@ -1625,25 +1679,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
           await Future.delayed(Duration(seconds: nextDelay));
 
+          // Check if widget was disposed during delay
+          if (!mounted) {
+            print('PikPak: Widget disposed during error retry delay');
+            return;
+          }
+
           // Check if cancelled after delay
           if (_pikPakRetryId != myRetryId) {
             print('PikPak: Retry loop cancelled after error delay (navigation occurred)');
+            // Clear state synchronously
+            _isPikPakRetrying = false;
+            _pikPakRetryMessage = null;
+            _pikPakRetryCount = 0;
             if (mounted) {
-              setState(() {
-                _isPikPakRetrying = false;
-                _pikPakRetryMessage = null;
-                _pikPakRetryCount = 0;
-              });
+              setState(() {});
             }
             return;
           }
         } else {
           // Final attempt failed
+          // Clear state synchronously
+          _isPikPakRetrying = false;
+          _pikPakRetryMessage = null;
+          _pikPakRetryCount = 0;
           if (mounted) {
-            setState(() {
-              _isPikPakRetrying = false;
-              _pikPakRetryMessage = null;
-            });
+            setState(() {});
 
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(

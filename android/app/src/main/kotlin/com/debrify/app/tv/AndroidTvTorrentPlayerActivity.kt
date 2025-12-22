@@ -1335,6 +1335,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Check if this retry has been cancelled
         if (pikPakRetryId != retryId) {
             android.util.Log.d("AndroidTvPlayer", "PikPak: Retry cancelled (token mismatch)")
+            // Clear state synchronously before hiding overlay
+            isPikPakRetrying = false
+            pikPakRetryCount = 0
             hidePikPakRetryOverlay()
             return
         }
@@ -1342,6 +1345,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Null safety check for player
         if (player == null) {
             android.util.Log.e("AndroidTvPlayer", "PikPak: Player is null, cannot attempt playback")
+            // Clear state synchronously before hiding overlay
+            isPikPakRetrying = false
+            pikPakRetryCount = 0
             hidePikPakRetryOverlay()
             return
         }
@@ -1398,6 +1404,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val currentPlayer = player
                 if (currentPlayer != null && (currentPlayer.playbackState == Player.STATE_READY || currentPlayer.duration > 0)) {
                     android.util.Log.d("AndroidTvPlayer", "PikPak: Video metadata loaded successfully - file is ready!")
+
+                    // CRITICAL FIX: Clear retry state synchronously before hiding overlay
+                    // This prevents race conditions with any UI update listeners
+                    isPikPakRetrying = false
+                    pikPakRetryCount = 0
                     hidePikPakRetryOverlay()
 
                     // Clean up handler callbacks
@@ -1447,7 +1458,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             // All retries exhausted
             android.util.Log.e("AndroidTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.")
+
+            // Clear state synchronously
             isPikPakRetrying = false
+            pikPakRetryCount = 0
             hidePikPakRetryOverlay()
 
             runOnUiThread {

@@ -1833,6 +1833,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Check if this retry has been cancelled
         if (pikPakRetryId != retryId) {
             android.util.Log.d("TorboxTvPlayer", "PikPak: Retry cancelled (token mismatch)");
+            // Clear state synchronously before hiding overlay
+            isPikPakRetrying = false;
+            pikPakRetryCount = 0;
             hidePikPakRetryOverlay();
             return;
         }
@@ -1840,6 +1843,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Null safety check for player
         if (player == null) {
             android.util.Log.e("TorboxTvPlayer", "PikPak: Player is null, cannot attempt playback");
+            // Clear state synchronously before hiding overlay
+            isPikPakRetrying = false;
+            pikPakRetryCount = 0;
             hidePikPakRetryOverlay();
             return;
         }
@@ -1896,6 +1902,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 final ExoPlayer currentPlayer = player;
                 if (currentPlayer != null && (currentPlayer.getPlaybackState() == Player.STATE_READY || currentPlayer.getDuration() > 0)) {
                     android.util.Log.d("TorboxTvPlayer", "PikPak: Video metadata loaded successfully - file is ready!");
+
+                    // CRITICAL FIX: Clear retry state synchronously before hiding overlay
+                    // This prevents race conditions with any UI update listeners
+                    isPikPakRetrying = false;
+                    pikPakRetryCount = 0;
                     hidePikPakRetryOverlay();
 
                     // Clean up handler callbacks
@@ -1957,7 +1968,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         } else {
             // All retries exhausted
             android.util.Log.e("TorboxTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.");
+
+            // Clear state synchronously
             isPikPakRetrying = false;
+            pikPakRetryCount = 0;
             hidePikPakRetryOverlay();
 
             runOnUiThread(() -> {
