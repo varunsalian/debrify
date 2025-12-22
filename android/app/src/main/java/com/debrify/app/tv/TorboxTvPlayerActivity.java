@@ -412,7 +412,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         applyUiPreferences(initialTitle);
         setupControllerUi();
         setupCustomSeekbar();
-        playMedia(initialUrl, initialTitle);
+        // Pass provider to enable PikPak cold storage retry for first video
+        playMedia(initialUrl, initialTitle, provider);
     }
 
     @OptIn(markerClass = UnstableApi.class)

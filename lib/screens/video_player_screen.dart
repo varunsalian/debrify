@@ -487,12 +487,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Only open the player if we have a valid URL
     if (initialUrl.isNotEmpty) {
-      // For PikPak videos from playlist, use retry logic
+      // For PikPak videos from playlist OR Debrify TV, use retry logic
       final currentEntry = widget.playlist?[_currentIndex];
       final isPikPak = currentEntry?.provider?.toLowerCase() == 'pikpak' || currentEntry?.pikpakFileId != null;
+      // For Debrify TV (no playlist), check if the URL appears to be PikPak (dl-*.mypikpak.com)
+      final isPikPakDebrifyTV = widget.playlist == null && widget.requestMagicNext != null && initialUrl.contains('mypikpak.com');
 
-      if (isPikPak && widget.playlist != null) {
-        _playPikPakVideoWithRetry(initialUrl).then((_) async {
+      if ((isPikPak && widget.playlist != null) || isPikPakDebrifyTV) {
+        _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isPikPakDebrifyTV).then((_) async {
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
           // Random start takes precedence over resume
@@ -1446,11 +1448,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return false;
       }
 
-      // FIX: Use _duration field (updated by stream) instead of _player.state.duration (direct state)
-      // This ensures we're checking the same value that the UI uses, preventing race conditions
-      // where direct state is available but stream hasn't fired yet
-      if (_duration > Duration.zero) {
-        print('PikPak: Video duration available from stream: $_duration');
+      // FIX: Check BOTH _duration field (from stream) AND player.state.duration (direct state)
+      // This ensures we catch the video loading whether the stream has fired or not
+      // For the first video, streams might not fire reliably, so we need the direct state check
+      final streamDuration = _duration;
+      final directDuration = _player.state.duration;
+      final effectiveDuration = streamDuration > Duration.zero ? streamDuration : directDuration;
+
+      if (effectiveDuration > Duration.zero) {
+        print('PikPak: Video duration available (stream: $streamDuration, direct: $directDuration, effective: $effectiveDuration)');
 
         // Additional verification: wait a bit longer to ensure playback actually started
         // This gives the player time to transition from "has duration" to "is playing"
@@ -1472,15 +1478,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Verify playback is actually happening, not just buffering with duration
         // This prevents false positives where duration loads but video won't play
-        // FIX: Removed redundant _duration check - we already know it's > 0
-        // Only check if playing state has been reached for extra confidence
-        if (_isPlaying) {
-          print('PikPak: Video confirmed playing - duration: $_duration, playing: true');
+        // Check both stream state and direct player state for reliability
+        final streamPlaying = _isPlaying;
+        final directPlaying = _player.state.playing;
+
+        if (streamPlaying || directPlaying) {
+          print('PikPak: Video confirmed playing - duration: $effectiveDuration, playing: true (stream: $streamPlaying, direct: $directPlaying)');
           return true;
         } else {
           // Duration is available but playback hasn't started yet
           // This is acceptable - duration alone is sufficient for cold storage detection
-          print('PikPak: Duration available ($_duration), playback will start shortly');
+          print('PikPak: Duration available ($effectiveDuration), playback will start shortly');
           return true;
         }
       }
@@ -1504,7 +1512,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final isPikPak = overrideProvider?.toLowerCase() == 'pikpak' ||
         overridePikPakFileId != null ||
         currentEntry?.provider?.toLowerCase() == 'pikpak' ||
-        currentEntry?.pikpakFileId != null;
+        currentEntry?.pikpakFileId != null ||
+        isDebrifyTV; // Debrify TV PikPak videos are also PikPak
 
     print('PikPak: _playPikPakVideoWithRetry called for index $_currentIndex, isPikPak: $isPikPak, overrideProvider: $overrideProvider, overridePikPakFileId: $overridePikPakFileId, isDebrifyTV: $isDebrifyTV');
 
