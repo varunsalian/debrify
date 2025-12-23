@@ -6274,9 +6274,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           continue;
         }
 
-        // if (prepared.hasMore) {
-        //   _queue.add(next);
-        // }
+        if (prepared.hasMore) {
+          candidatePool.add(next);
+        }
         return {'url': prepared.streamUrl, 'title': prepared.title};
       }
       return null;
