@@ -1826,45 +1826,22 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         isPikPakRetrying = false;
         hidePikPakRetryOverlay();
 
-        // Start first attempt
-        attemptPikPakPlayback(url, title, 0, myRetryId);
-    }
-
-    private void attemptPikPakPlayback(String url, @Nullable String title, int attemptNumber, int retryId) {
-        // Check if this retry has been cancelled
-        if (pikPakRetryId != retryId) {
-            android.util.Log.d("TorboxTvPlayer", "PikPak: Retry cancelled (token mismatch)");
-            // Clear state synchronously before hiding overlay
-            isPikPakRetrying = false;
-            pikPakRetryCount = 0;
-            hidePikPakRetryOverlay();
-            return;
-        }
-
         // Null safety check for player
         if (player == null) {
             android.util.Log.e("TorboxTvPlayer", "PikPak: Player is null, cannot attempt playback");
-            // Clear state synchronously before hiding overlay
-            isPikPakRetrying = false;
-            pikPakRetryCount = 0;
-            hidePikPakRetryOverlay();
             return;
         }
-
-        android.util.Log.d("TorboxTvPlayer", "PikPak: Playback attempt " + (attemptNumber + 1) + "/" + (PIKPAK_MAX_RETRIES + 1));
 
         // Clear previous video's subtitles
         if (subtitleOverlay != null) {
             subtitleOverlay.setCues(java.util.Collections.emptyList());
         }
 
-        // Prepare and play the media using existing player instance
-        // Note: We do NOT recreate the player here to avoid TrackSelector reuse issues
-        // PikPak retry doesn't need player recreation - just retry with same URL
+        // Prepare and play the media ONCE before retry loop
         MediaMetadata metadata = new MediaMetadata.Builder()
                 .setTitle(title != null ? title : "")
                 .build();
-        MediaItem item = new MediaItem.Builder()
+        final MediaItem item = new MediaItem.Builder()
                 .setUri(url)
                 .setMediaMetadata(metadata)
                 .build();
@@ -1873,17 +1850,99 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         player.prepare();
         player.play();
 
-        if (attemptNumber == 0) {
-            playedCount += 1;
-            updateTitle(title);
-        }
+        playedCount += 1;
+        updateTitle(title);
 
-        // Wait for video metadata to load (indicates file is ready)
-        waitForPikPakMetadata(url, title, attemptNumber, retryId);
+        // Start retry loop with attempt 0
+        attemptPikPakPlaybackLoop(url, title, 0, myRetryId, item);
     }
 
-    private void waitForPikPakMetadata(String url, @Nullable String title, int attemptNumber, int retryId) {
+    private void attemptPikPakPlaybackLoop(String url, @Nullable String title, int attemptNumber, int retryId, MediaItem mediaItem) {
+        // Check if this retry has been cancelled
+        if (pikPakRetryId != retryId) {
+            android.util.Log.d("TorboxTvPlayer", "PikPak: Retry cancelled (token mismatch)");
+            isPikPakRetrying = false;
+            pikPakRetryCount = 0;
+            hidePikPakRetryOverlay();
+            return;
+        }
+
+        // Null safety check for player
+        if (player == null) {
+            android.util.Log.e("TorboxTvPlayer", "PikPak: Player is null, cannot continue playback");
+            isPikPakRetrying = false;
+            pikPakRetryCount = 0;
+            hidePikPakRetryOverlay();
+            return;
+        }
+
+        android.util.Log.d("TorboxTvPlayer", "PikPak: Playback attempt " + (attemptNumber + 1) + "/" + (PIKPAK_MAX_RETRIES + 1));
+
+        // Calculate delay for this attempt (0 for first attempt, exponential backoff for subsequent)
+        long delayMs;
+        if (attemptNumber == 0) {
+            delayMs = 0;
+        } else {
+            int calculatedDelay = PIKPAK_BASE_DELAY_MS * (1 << (attemptNumber - 1));
+            delayMs = Math.min(calculatedDelay, PIKPAK_MAX_DELAY_MS);
+        }
+
+        // Monitor during BOTH the timeout period AND the delay period
+        waitForPikPakMetadata(url, title, attemptNumber, retryId, delayMs, success -> {
+            // Check if retry was cancelled during monitoring
+            if (pikPakRetryId != retryId) {
+                android.util.Log.d("TorboxTvPlayer", "PikPak: Retry cancelled during monitoring");
+                return;
+            }
+
+            if (success) {
+                // Video loaded successfully, exit retry loop
+                android.util.Log.d("TorboxTvPlayer", "PikPak: Video loaded successfully, exiting retry loop");
+                return;
+            }
+
+            // Check if this was the last attempt
+            if (attemptNumber >= PIKPAK_MAX_RETRIES) {
+                // All retries exhausted
+                android.util.Log.e("TorboxTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.");
+
+                // Clear state synchronously
+                isPikPakRetrying = false;
+                pikPakRetryCount = 0;
+                hidePikPakRetryOverlay();
+
+                if (!isFinishing()) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(TorboxTvPlayerActivity.this,
+                                "Video failed to load. Skipping to next...",
+                                Toast.LENGTH_SHORT).show();
+
+                        // Auto-advance to next video
+                        pikPakRetryHandler.postDelayed(() -> requestNextStream(), 1500);
+                    });
+                }
+                return;
+            }
+
+            // Video didn't load, need to retry
+            // Update retry UI
+            pikPakRetryCount = attemptNumber + 1;
+            isPikPakRetrying = true;
+            if (!isFinishing()) {
+                showPikPakRetryOverlay("Reactivating video... (Attempt " + (attemptNumber + 2) + "/" + (PIKPAK_MAX_RETRIES + 1) + ")");
+            }
+
+            android.util.Log.d("TorboxTvPlayer", "PikPak: Video didn't load, monitoring for next attempt");
+
+            // Continue to next attempt
+            attemptPikPakPlaybackLoop(url, title, attemptNumber + 1, retryId, mediaItem);
+        });
+    }
+
+    private void waitForPikPakMetadata(String url, @Nullable String title, int attemptNumber, int retryId,
+                                       long additionalMonitoringMs, java.util.function.Consumer<Boolean> onComplete) {
         final long startTime = System.currentTimeMillis();
+        final long totalTimeoutMs = PIKPAK_METADATA_TIMEOUT_MS + additionalMonitoringMs;
 
         final Runnable[] checkRunnable = new Runnable[1];
         checkRunnable[0] = new Runnable() {
@@ -1894,6 +1953,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     android.util.Log.d("TorboxTvPlayer", "PikPak: Metadata check cancelled");
                     // Clean up handler callbacks to prevent memory leaks
                     pikPakRetryHandler.removeCallbacks(this);
+                    onComplete.accept(false);
                     return;
                 }
 
@@ -1904,8 +1964,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 if (currentPlayer != null && (currentPlayer.getPlaybackState() == Player.STATE_READY || currentPlayer.getDuration() > 0)) {
                     android.util.Log.d("TorboxTvPlayer", "PikPak: Video metadata loaded successfully - file is ready!");
 
-                    // CRITICAL FIX: Clear retry state synchronously before hiding overlay
-                    // This prevents race conditions with any UI update listeners
+                    // CRITICAL FIX: Clear retry state IMMEDIATELY when video loads
+                    // This prevents race conditions and ensures UI updates instantly
                     isPikPakRetrying = false;
                     pikPakRetryCount = 0;
                     hidePikPakRetryOverlay();
@@ -1914,8 +1974,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     pikPakRetryHandler.removeCallbacks(this);
 
                     // Ensure subtitles are selected after successful load
-                    // Use self-removing listener to avoid memory leaks
-                    currentPlayer.addListener(new Player.Listener() {
+                    // Use self-removing listener with timeout to prevent memory leaks
+                    final Player.Listener trackListener = new Player.Listener() {
                         @Override
                         public void onTracksChanged(Tracks tracks) {
                             // Null check before removing listener
@@ -1925,16 +1985,26 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                             }
                             ensureDefaultSubtitleSelected();
                         }
-                    });
+                    };
+                    currentPlayer.addListener(trackListener);
+
+                    // Ensure removal after timeout to prevent memory leak
+                    pikPakRetryHandler.postDelayed(() -> {
+                        if (player != null) {
+                            player.removeListener(trackListener);
+                        }
+                    }, 5000);  // Remove after 5 seconds if onTracksChanged hasn't fired
+
+                    onComplete.accept(true);
                     return;
                 }
 
-                // Check timeout
-                if (elapsed >= PIKPAK_METADATA_TIMEOUT_MS) {
-                    android.util.Log.d("TorboxTvPlayer", "PikPak: Timeout waiting for metadata - file likely in cold storage");
+                // Check timeout (now includes additional monitoring period)
+                if (elapsed >= totalTimeoutMs) {
+                    android.util.Log.d("TorboxTvPlayer", "PikPak: Timeout waiting for metadata after " + totalTimeoutMs + "ms - file likely in cold storage");
                     // Clean up handler callbacks before timeout handling
                     pikPakRetryHandler.removeCallbacks(this);
-                    handlePikPakMetadataTimeout(url, title, attemptNumber, retryId);
+                    onComplete.accept(false);
                     return;
                 }
 
@@ -1947,44 +2017,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         pikPakRetryHandler.postDelayed(checkRunnable[0], 500);
     }
 
-    private void handlePikPakMetadataTimeout(String url, @Nullable String title, int attemptNumber, int retryId) {
-        // Check if we have more retries
-        if (attemptNumber < PIKPAK_MAX_RETRIES) {
-            // Calculate exponential backoff delay: 2s, 4s, 8s, 16s, 18s (capped)
-            int delayMs = PIKPAK_BASE_DELAY_MS * (1 << attemptNumber);
-            delayMs = Math.min(delayMs, PIKPAK_MAX_DELAY_MS);
-
-            pikPakRetryCount = attemptNumber + 1;
-            isPikPakRetrying = true;
-            showPikPakRetryOverlay("Reactivating video... (Attempt " + (attemptNumber + 2) + "/" + (PIKPAK_MAX_RETRIES + 1) + ")");
-
-            android.util.Log.d("TorboxTvPlayer", "PikPak: Waiting " + (delayMs / 1000) + "s before retry...");
-
-            pikPakRetryHandler.postDelayed(() -> {
-                // Check if retry was cancelled during delay
-                if (pikPakRetryId == retryId) {
-                    attemptPikPakPlayback(url, title, attemptNumber + 1, retryId);
-                }
-            }, delayMs);
-        } else {
-            // All retries exhausted
-            android.util.Log.e("TorboxTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.");
-
-            // Clear state synchronously
-            isPikPakRetrying = false;
-            pikPakRetryCount = 0;
-            hidePikPakRetryOverlay();
-
-            runOnUiThread(() -> {
-                Toast.makeText(TorboxTvPlayerActivity.this,
-                        "Video failed to load. Skipping to next...",
-                        Toast.LENGTH_SHORT).show();
-
-                // Auto-advance to next video
-                pikPakRetryHandler.postDelayed(() -> requestNextStream(), 1500);
-            });
-        }
-    }
 
     private void showPikPakRetryOverlay(String message) {
         runOnUiThread(() -> {

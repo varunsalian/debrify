@@ -1327,37 +1327,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         isPikPakRetrying = false
         hidePikPakRetryOverlay()
 
-        // Start first attempt
-        attemptPikPakPlayback(item, 0, myRetryId)
-    }
-
-    private fun attemptPikPakPlayback(item: PlaybackItem, attemptNumber: Int, retryId: Int) {
-        // Check if this retry has been cancelled
-        if (pikPakRetryId != retryId) {
-            android.util.Log.d("AndroidTvPlayer", "PikPak: Retry cancelled (token mismatch)")
-            // Clear state synchronously before hiding overlay
-            isPikPakRetrying = false
-            pikPakRetryCount = 0
-            hidePikPakRetryOverlay()
-            return
-        }
-
         // Null safety check for player
         if (player == null) {
             android.util.Log.e("AndroidTvPlayer", "PikPak: Player is null, cannot attempt playback")
-            // Clear state synchronously before hiding overlay
-            isPikPakRetrying = false
-            pikPakRetryCount = 0
-            hidePikPakRetryOverlay()
             return
         }
-
-        android.util.Log.d("AndroidTvPlayer", "PikPak: Playback attempt ${attemptNumber + 1}/${PIKPAK_MAX_RETRIES + 1}")
 
         // Clear previous video's subtitles
         subtitleOverlay.setCues(emptyList())
 
-        // Prepare and play the media
+        // Prepare and play the media ONCE before retry loop
         val metadata = MediaMetadata.Builder()
             .setTitle(item.title)
             .setArtist(item.seasonEpisodeLabel())
@@ -1375,18 +1354,104 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             play()
         }
 
-        if (attemptNumber == 0) {
-            updateTitle(item)
-            playlistAdapter?.setActiveIndex(currentIndex)
-            restartProgressUpdates()
-        }
+        updateTitle(item)
+        playlistAdapter?.setActiveIndex(currentIndex)
+        restartProgressUpdates()
 
-        // Wait for video metadata to load (indicates file is ready)
-        waitForPikPakMetadata(item, attemptNumber, retryId)
+        // Start retry loop with attempt 0
+        attemptPikPakPlaybackLoop(item, 0, myRetryId)
     }
 
-    private fun waitForPikPakMetadata(item: PlaybackItem, attemptNumber: Int, retryId: Int) {
+    private fun attemptPikPakPlaybackLoop(item: PlaybackItem, attemptNumber: Int, retryId: Int) {
+        // Check if this retry has been cancelled
+        if (pikPakRetryId != retryId) {
+            android.util.Log.d("AndroidTvPlayer", "PikPak: Retry cancelled (token mismatch)")
+            isPikPakRetrying = false
+            pikPakRetryCount = 0
+            hidePikPakRetryOverlay()
+            return
+        }
+
+        // Null safety check for player
+        if (player == null) {
+            android.util.Log.e("AndroidTvPlayer", "PikPak: Player is null, cannot continue playback")
+            isPikPakRetrying = false
+            pikPakRetryCount = 0
+            hidePikPakRetryOverlay()
+            return
+        }
+
+        android.util.Log.d("AndroidTvPlayer", "PikPak: Playback attempt ${attemptNumber + 1}/${PIKPAK_MAX_RETRIES + 1}")
+
+        // Calculate delay for this attempt (0 for first attempt, exponential backoff for subsequent)
+        val delayMs = if (attemptNumber == 0) {
+            0L
+        } else {
+            val calculatedDelay = PIKPAK_BASE_DELAY_MS * (1 shl (attemptNumber - 1))
+            calculatedDelay.toLong().coerceAtMost(PIKPAK_MAX_DELAY_MS.toLong())
+        }
+
+        // Monitor during BOTH the timeout period AND the delay period
+        waitForPikPakMetadata(item, attemptNumber, retryId, additionalMonitoringMs = delayMs) { success ->
+            // Check if retry was cancelled during monitoring
+            if (pikPakRetryId != retryId) {
+                android.util.Log.d("AndroidTvPlayer", "PikPak: Retry cancelled during monitoring")
+                return@waitForPikPakMetadata
+            }
+
+            if (success) {
+                // Video loaded successfully, exit retry loop
+                android.util.Log.d("AndroidTvPlayer", "PikPak: Video loaded successfully, exiting retry loop")
+                return@waitForPikPakMetadata
+            }
+
+            // Check if this was the last attempt
+            if (attemptNumber >= PIKPAK_MAX_RETRIES) {
+                // All retries exhausted
+                android.util.Log.e("AndroidTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.")
+
+                // Clear state synchronously
+                isPikPakRetrying = false
+                pikPakRetryCount = 0
+                hidePikPakRetryOverlay()
+
+                if (!isFinishing) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Video failed to load. Skipping to next...", Toast.LENGTH_SHORT).show()
+
+                        // Auto-advance to next video
+                        pikPakRetryHandler.postDelayed({
+                            playNext()
+                        }, 1500)
+                    }
+                }
+                return@waitForPikPakMetadata
+            }
+
+            // Video didn't load, need to retry
+            // Update retry UI
+            pikPakRetryCount = attemptNumber + 1
+            isPikPakRetrying = true
+            if (!isFinishing) {
+                showPikPakRetryOverlay("Reactivating video... (Attempt ${attemptNumber + 2}/${PIKPAK_MAX_RETRIES + 1})")
+            }
+
+            android.util.Log.d("AndroidTvPlayer", "PikPak: Video didn't load, monitoring for next attempt")
+
+            // Continue to next attempt
+            attemptPikPakPlaybackLoop(item, attemptNumber + 1, retryId)
+        }
+    }
+
+    private fun waitForPikPakMetadata(
+        item: PlaybackItem,
+        attemptNumber: Int,
+        retryId: Int,
+        additionalMonitoringMs: Long = 0,
+        onComplete: (Boolean) -> Unit
+    ) {
         val startTime = System.currentTimeMillis()
+        val totalTimeoutMs = PIKPAK_METADATA_TIMEOUT_MS + additionalMonitoringMs
         val checkHandler = Handler(Looper.getMainLooper())
 
         val checkRunnable = object : Runnable {
@@ -1395,6 +1460,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 if (pikPakRetryId != retryId) {
                     android.util.Log.d("AndroidTvPlayer", "PikPak: Metadata check cancelled")
                     checkHandler.removeCallbacks(this)
+                    onComplete(false)
                     return
                 }
 
@@ -1405,8 +1471,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 if (currentPlayer != null && (currentPlayer.playbackState == Player.STATE_READY || currentPlayer.duration > 0)) {
                     android.util.Log.d("AndroidTvPlayer", "PikPak: Video metadata loaded successfully - file is ready!")
 
-                    // CRITICAL FIX: Clear retry state synchronously before hiding overlay
-                    // This prevents race conditions with any UI update listeners
+                    // CRITICAL FIX: Clear retry state IMMEDIATELY when video loads
+                    // This prevents race conditions and ensures UI updates instantly
                     isPikPakRetrying = false
                     pikPakRetryCount = 0
                     hidePikPakRetryOverlay()
@@ -1416,14 +1482,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
                     // Ensure subtitles are selected after successful load
                     ensureDefaultSubtitleSelected()
+
+                    onComplete(true)
                     return
                 }
 
-                // Check timeout
-                if (elapsed >= PIKPAK_METADATA_TIMEOUT_MS) {
-                    android.util.Log.d("AndroidTvPlayer", "PikPak: Timeout waiting for metadata - file likely in cold storage")
+                // Check timeout (now includes additional monitoring period)
+                if (elapsed >= totalTimeoutMs) {
+                    android.util.Log.d("AndroidTvPlayer", "PikPak: Timeout waiting for metadata after ${totalTimeoutMs}ms - file likely in cold storage")
                     checkHandler.removeCallbacks(this)
-                    handlePikPakMetadataTimeout(item, attemptNumber, retryId)
+                    onComplete(false)
                     return
                 }
 
@@ -1436,44 +1504,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         checkHandler.postDelayed(checkRunnable, 500)
     }
 
-    private fun handlePikPakMetadataTimeout(item: PlaybackItem, attemptNumber: Int, retryId: Int) {
-        // Check if we have more retries
-        if (attemptNumber < PIKPAK_MAX_RETRIES) {
-            // Calculate exponential backoff delay: 2s, 4s, 8s, 16s, 18s (capped)
-            var delayMs = PIKPAK_BASE_DELAY_MS * (1 shl attemptNumber)
-            delayMs = delayMs.coerceAtMost(PIKPAK_MAX_DELAY_MS)
-
-            pikPakRetryCount = attemptNumber + 1
-            isPikPakRetrying = true
-            showPikPakRetryOverlay("Reactivating video... (Attempt ${attemptNumber + 2}/${PIKPAK_MAX_RETRIES + 1})")
-
-            android.util.Log.d("AndroidTvPlayer", "PikPak: Waiting ${delayMs / 1000}s before retry...")
-
-            pikPakRetryHandler.postDelayed({
-                // Check if retry was cancelled during delay
-                if (pikPakRetryId == retryId) {
-                    attemptPikPakPlayback(item, attemptNumber + 1, retryId)
-                }
-            }, delayMs.toLong())
-        } else {
-            // All retries exhausted
-            android.util.Log.e("AndroidTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.")
-
-            // Clear state synchronously
-            isPikPakRetrying = false
-            pikPakRetryCount = 0
-            hidePikPakRetryOverlay()
-
-            runOnUiThread {
-                Toast.makeText(this, "Video failed to load. Skipping to next...", Toast.LENGTH_SHORT).show()
-
-                // Auto-advance to next video
-                pikPakRetryHandler.postDelayed({
-                    playNext()
-                }, 1500)
-            }
-        }
-    }
 
     private fun showPikPakRetryOverlay(message: String) {
         runOnUiThread {
