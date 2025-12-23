@@ -18,6 +18,7 @@ import '../models/debrify_tv_channel_record.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
+import '../services/pikpak_api_service.dart';
 import '../services/pikpak_tv_service.dart';
 import '../services/storage_service.dart';
 import '../services/debrify_tv_cache_service.dart';
@@ -256,6 +257,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   String _status = '';
   List<_DebrifyTvChannel> _channels = <_DebrifyTvChannel>[];
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
+  List<Torrent>? _pikpakCandidatePool;
   // These are now loaded from settings dynamically
   int _channelTorrentsCsvMaxResultsSmall = 100;
   int _channelTorrentsCsvMaxResultsLarge = 25;
@@ -5055,10 +5057,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           log('Trying torrent: ${item.name}');
-          final prepared = await PikPakTvService.instance.prepareTorrent(
-            infohash: item.infohash,
-            torrentName: item.name,
-            onLog: (msg) => debugPrint('DebrifyTV/PikPak: $msg'),
+          final prepared = await _preparePikPakTorrent(
+            candidate: item,
+            log: (msg) => debugPrint('DebrifyTV/PikPak: $msg'),
           );
 
           if (_watchCancelled) {
@@ -5070,6 +5071,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             continue;
           }
 
+          // Add back to queue if there are more files in this torrent
+          if (prepared.hasMore) {
+            _queue.add(item);
+            log('Multi-file torrent: added back to queue (${_queue.length} remaining)');
+          }
+
           if (mounted && !_watchCancelled) {
             setState(() {
               _status = _queue.isEmpty
@@ -5079,10 +5086,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           return {
-            'url': prepared['url']!,
-            'title': prepared['title']!,
-            'provider': prepared['provider'] ?? 'pikpak',
-            'pikpakFileId': prepared['pikpakFileId'] ?? '',
+            'url': prepared.streamUrl,
+            'title': prepared.title,
+            'provider': 'pikpak',
+            'pikpakFileId': '',
           };
         }
         if (mounted && !_watchCancelled) {
@@ -5898,10 +5905,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         for (var index = 0; index < filteredTorrents.length; index++) {
           final candidate = filteredTorrents[index];
 
-          final prepared = await PikPakTvService.instance.prepareTorrent(
-            infohash: candidate.infohash,
-            torrentName: candidate.name,
-            onLog: (message) => debugPrint('DebrifyTV/PikPak: $message'),
+          final prepared = await _preparePikPakTorrent(
+            candidate: candidate,
+            log: (message) => debugPrint('DebrifyTV/PikPak: $message'),
           );
 
           if (prepared == null) {
@@ -5918,19 +5924,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               _queue
                 ..clear()
                 ..addAll(remaining);
+              // Add back to queue if there are more files in this torrent
+              if (prepared.hasMore) {
+                _queue.add(candidate);
+              }
             });
             _keywordsController.text = keywords.join(', ');
           }
 
           debugPrint(
-            'DebrifyTV: PikPak channel switch ready with stream ${prepared['title']}',
+            'DebrifyTV: PikPak channel switch ready with stream ${prepared.title}',
           );
           return {
             'channelId': targetChannel.id,
             'channelName': targetChannel.name,
             'channelNumber': targetChannelNumber,
-            'firstUrl': prepared['url']!,
-            'firstTitle': prepared['title']!,
+            'firstUrl': prepared.streamUrl,
+            'firstTitle': prepared.title,
           };
         }
 
@@ -6395,8 +6405,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     _showCachedPlaybackDialog();
 
-    final List<Torrent> candidatePool = List<Torrent>.from(cachedTorrents);
-    candidatePool.shuffle(Random());
+    _pikpakCandidatePool = List<Torrent>.from(cachedTorrents);
+    _pikpakCandidatePool!.shuffle(Random());
 
     if (mounted) {
       setState(() {
@@ -6404,34 +6414,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _isBusy = true;
         _queue
           ..clear()
-          ..addAll(candidatePool);
+          ..addAll(_pikpakCandidatePool!);
       });
     }
 
     Future<Map<String, String>?> requestPikPakNext() async {
-      while (_queue.isNotEmpty) {
+      if (_watchCancelled) return null;
+
+      while (_queue.isNotEmpty && !_watchCancelled) {
         final next = _queue.removeAt(0);
+        if (_watchCancelled) break;
+
         if (next is! Torrent) {
           continue;
         }
 
-        log('Trying torrent: ${next.name}');
-        final prepared = await PikPakTvService.instance.prepareTorrent(
-          infohash: next.infohash,
-          torrentName: next.name,
-          onLog: log,
+        final prepared = await _preparePikPakTorrent(
+          candidate: next,
+          log: log,
         );
 
+        if (_watchCancelled) return null;
+
         if (prepared == null) {
-          log('Torrent not ready, trying next...');
           continue;
         }
 
+        if (prepared.hasMore) {
+          _queue.add(next);
+        }
+
         return {
-          'url': prepared['url']!,
-          'title': prepared['title']!,
-          'provider': prepared['provider'] ?? 'pikpak',
-          'pikpakFileId': prepared['pikpakFileId'] ?? '',
+          'url': prepared.streamUrl,
+          'title': prepared.title,
+          'provider': 'pikpak',
         };
       }
       return null;
@@ -8122,6 +8138,101 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  Future<_PikPakPreparedTorrent?> _preparePikPakTorrent({
+    required Torrent candidate,
+    required void Function(String message) log,
+  }) async {
+    final infohash = _normalizeInfohash(candidate.infohash);
+    if (infohash.isEmpty) {
+      return null;
+    }
+
+    log('⏳ PikPak: preparing ${candidate.name}');
+
+    final prepared = await PikPakTvService.instance.prepareTorrent(
+      infohash: infohash,
+      torrentName: candidate.name,
+      onLog: log,
+    );
+
+    if (prepared == null) {
+      log('⚠️ PikPak torrent not ready ${candidate.name}');
+      return null;
+    }
+
+    // Check if this is a multi-file torrent
+    final allVideoFiles = prepared['allVideoFiles'] as List<dynamic>?;
+
+    if (allVideoFiles == null || allVideoFiles.isEmpty) {
+      // Single file torrent - return directly
+      log('🎬 PikPak: streaming ${prepared['title']}');
+      return _PikPakPreparedTorrent(
+        streamUrl: prepared['url'] as String,
+        title: prepared['title'] as String,
+        hasMore: false,
+      );
+    }
+
+    // Multi-file torrent - filter out seen files
+    final pikpakFolderId = prepared['pikpakFolderId'] as String?;
+    if (pikpakFolderId == null) {
+      log('⚠️ PikPak multi-file torrent missing folder ID');
+      return null;
+    }
+
+    // Filter unseen files
+    final unseenFiles = allVideoFiles.where((file) {
+      final fileId = file['id'] as String?;
+      if (fileId == null || fileId.isEmpty) return false;
+      final trackingKey = '$infohash|$fileId';
+      return !_seenLinkWithTorrentId.contains(trackingKey);
+    }).toList();
+
+    if (unseenFiles.isEmpty) {
+      log('⚠️ PikPak torrent has no unseen files ${candidate.name}');
+      return null;
+    }
+
+    // Shuffle and select next file
+    final random = Random();
+    unseenFiles.shuffle(random);
+    final selectedFile = unseenFiles.removeAt(0);
+    final selectedFileId = selectedFile['id'] as String?;
+    final selectedFileName = selectedFile['name'] as String?;
+
+    if (selectedFileId == null || selectedFileId.isEmpty || selectedFileName == null || selectedFileName.isEmpty) {
+      log('⚠️ Selected file has invalid ID or name');
+      return null;
+    }
+
+    log('🎬 PikPak: selected $selectedFileName (${unseenFiles.length} unseen files)');
+
+    // Get streaming URL for selected file
+    String streamUrl;
+    try {
+      final api = PikPakApiService.instance;
+      final fullFileData = await api.getFileDetails(selectedFileId);
+      final url = api.getStreamingUrl(fullFileData);
+      if (url == null || url.isEmpty) {
+        log('⚠️ No streaming URL for selected file');
+        return null;
+      }
+      streamUrl = url;
+    } catch (e) {
+      log('❌ Failed to get streaming URL: $e');
+      return null;
+    }
+
+    // Mark as seen
+    _seenLinkWithTorrentId.add('$infohash|$selectedFileId');
+
+    return _PikPakPreparedTorrent(
+      streamUrl: streamUrl,
+      title: selectedFileName,
+      hasMore: unseenFiles.isNotEmpty,
+    );
+  }
+
   List<_TorboxPlayableEntry> _buildTorboxPlayableEntries(
     TorboxTorrent torrent,
     String fallbackTitle,
@@ -8392,6 +8503,18 @@ class _TorboxPreparedTorrent {
   final bool hasMore;
 
   _TorboxPreparedTorrent({
+    required this.streamUrl,
+    required this.title,
+    required this.hasMore,
+  });
+}
+
+class _PikPakPreparedTorrent {
+  final String streamUrl;
+  final String title;
+  final bool hasMore;
+
+  _PikPakPreparedTorrent({
     required this.streamUrl,
     required this.title,
     required this.hasMore,

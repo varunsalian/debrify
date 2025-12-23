@@ -35,8 +35,8 @@ class PikPakTvService {
   static const Duration _maxWaitDuration = Duration(seconds: 10);
 
   /// Try to prepare a torrent for streaming.
-  /// Returns {url, title} on success, null if not cached/ready.
-  Future<Map<String, String>?> prepareTorrent({
+  /// Returns {url, title, allVideoFiles, pikpakFolderId} on success, null if not cached/ready.
+  Future<Map<String, dynamic>?> prepareTorrent({
     required String infohash,
     required String torrentName,
     void Function(String)? onLog,
@@ -295,7 +295,7 @@ class PikPakTvService {
   }
 
   /// Poll task status until ready or timeout
-  Future<Map<String, String>?> _pollTaskUntilReady(
+  Future<Map<String, dynamic>?> _pollTaskUntilReady(
     String taskId,
     String fileId,
     String torrentName,
@@ -362,7 +362,7 @@ class PikPakTvService {
   }
 
   /// Query file details and extract streaming URL
-  Future<Map<String, String>?> _queryFileAndExtract(
+  Future<Map<String, dynamic>?> _queryFileAndExtract(
     String fileId,
     String torrentName,
     void Function(String) log,
@@ -384,7 +384,7 @@ class PikPakTvService {
   }
 
   /// Extract streaming URL from file data, handling folders
-  Future<Map<String, String>?> _extractStreamingUrl(
+  Future<Map<String, dynamic>?> _extractStreamingUrl(
     Map<String, dynamic> fileData,
     String fileId,
     String fallbackTitle,
@@ -417,7 +417,8 @@ class PikPakTvService {
   }
 
   /// Find the best video file in a folder
-  Future<Map<String, String>?> _findVideoInFolder(
+  /// Find and return ALL video files in a folder for multi-file support
+  Future<Map<String, dynamic>?> _findVideoInFolder(
     String folderId,
     String fallbackTitle,
     void Function(String) log,
@@ -428,72 +429,90 @@ class PikPakTvService {
 
       log('Found ${files.length} files in folder');
 
-      // Collect all video files with size >= threshold
+      // Collect all video files with size >= threshold (recursively)
       final videoFiles = <Map<String, dynamic>>[];
+      const int maxDepth = 5; // Prevent infinite recursion
 
-      for (final file in files) {
-        final mimeType = (file['mime_type'] ?? '') as String;
-        final name = (file['name'] ?? '') as String;
-        final size = _parseSize(file['size']);
-        final fileKind = file['kind'] as String?;
-
-        // Recursively check subfolders
-        if (fileKind == 'drive#folder') {
-          try {
-            final subResult = await _findVideoInFolder(
-              file['id'] as String,
-              fallbackTitle,
-              log,
-            );
-            if (subResult != null) {
-              return subResult;
-            }
-          } catch (e) {
-            log('Error scanning subfolder ${file['name']}: $e');
-            // Continue checking other files/folders
-          }
-          continue;
+      Future<void> collectVideosRecursively(List<dynamic> fileList, String parentId, {int depth = 0}) async {
+        // Check depth limit to prevent infinite recursion
+        if (depth >= maxDepth) {
+          log('Reached maximum recursion depth ($maxDepth) at folder $parentId');
+          return;
         }
 
-        final isVideo = mimeType.startsWith('video/') ||
-            FileUtils.isVideoFile(name);
+        for (final file in fileList) {
+          final mimeType = (file['mime_type'] ?? '') as String;
+          final name = (file['name'] ?? '') as String;
+          final size = _parseSize(file['size']);
+          final fileKind = file['kind'] as String?;
 
-        if (isVideo && size >= _minVideoSizeBytes) {
-          videoFiles.add(file);
-          log('Found video: $name (${_formatSize(size)})');
+          // Recursively check subfolders
+          if (fileKind == 'drive#folder') {
+            final folderId = file['id'] as String?;
+            if (folderId == null || folderId.isEmpty) {
+              log('Folder missing ID, skipping');
+              continue;
+            }
+            try {
+              final subResult = await _api.listFiles(parentId: folderId);
+              await collectVideosRecursively(subResult.files, folderId, depth: depth + 1);
+            } catch (e) {
+              log('Error scanning subfolder ${file['name']}: $e');
+            }
+            continue;
+          }
+
+          final isVideo = mimeType.startsWith('video/') ||
+              FileUtils.isVideoFile(name);
+
+          if (isVideo && size >= _minVideoSizeBytes) {
+            videoFiles.add(file);
+            log('Found video: $name (${_formatSize(size)})');
+          }
         }
       }
+
+      await collectVideosRecursively(files, folderId, depth: 0);
 
       if (videoFiles.isEmpty) {
         log('No suitable video files found in folder');
         return null;
       }
 
-      // Randomly select a video file from those that meet the size threshold
-      final random = Random();
-      final randomIndex = random.nextInt(videoFiles.length);
-      final selectedFile = videoFiles[randomIndex];
-      final selectedFileId = selectedFile['id'] as String;
-      final selectedSize = _parseSize(selectedFile['size']);
+      log('Total videos found: ${videoFiles.length}');
 
-      log('Randomly selected video ${randomIndex + 1} of ${videoFiles.length}: ${selectedFile['name']} (${_formatSize(selectedSize)})');
+      // Get first file for initial playback
+      final firstFile = videoFiles[0];
+      final firstFileId = firstFile['id'] as String?;
 
-      // Fetch full file details to get streaming URL
-      final fullFileData = await _api.getFileDetails(selectedFileId);
+      if (firstFileId == null || firstFileId.isEmpty) {
+        log('First video file has no ID');
+        return null;
+      }
+
+      // Fetch full file details to get streaming URL for first file
+      final fullFileData = await _api.getFileDetails(firstFileId);
       final streamingUrl = _api.getStreamingUrl(fullFileData);
 
       if (streamingUrl == null || streamingUrl.isEmpty) {
-        log('No streaming URL for selected video');
+        log('No streaming URL for first video');
         return null;
       }
 
       final title = _extractTitle(fullFileData, fallbackTitle);
 
+      // Return extended structure with ALL video files
       return {
         'url': streamingUrl,
         'title': title,
         'provider': 'pikpak',
-        'pikpakFileId': selectedFileId,
+        'pikpakFileId': firstFileId,
+        'pikpakFolderId': folderId,
+        'allVideoFiles': videoFiles.map((f) => {
+          'id': f['id'],
+          'name': f['name'],
+          'size': _parseSize(f['size']),
+        }).toList(),
       };
     } catch (e) {
       log('Error scanning folder: $e');
