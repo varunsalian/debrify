@@ -94,21 +94,38 @@ class PlaylistSheet {
                 : Builder(
                     builder: (context) {
                       // Log playlist entries before creating MovieCollection
-                      debugPrint('🔍 PlaylistSheet: Creating ${viewMode == PlaylistViewMode.raw ? "folder" : "main/extras"} collection from ${playlist.length} entries');
+                      String collectionType = viewMode == PlaylistViewMode.raw
+                          ? "folder"
+                          : (viewMode == PlaylistViewMode.sorted ? "sorted A-Z" : "main/extras");
+                      debugPrint('🔍 PlaylistSheet: Creating $collectionType collection from ${playlist.length} entries');
                       for (int i = 0; i < playlist.length && i < 5; i++) {
                         debugPrint('  Entry[$i]: title="${playlist[i].title}", relativePath="${playlist[i].relativePath}"');
                       }
 
+                      // Create MovieCollection based on view mode:
+                      // - Raw: Preserve folder structure as-is
+                      // - Sorted: Files are already sorted A-Z, create single group
+                      // - Series/Other: Use Main/Extras grouping (40% threshold)
+                      final MovieCollection collection;
+                      if (viewMode == PlaylistViewMode.raw) {
+                        collection = MovieCollection.fromFolderStructure(
+                          playlist: playlist,
+                          title: playlistItemData?['title'] as String?,
+                        );
+                      } else if (viewMode == PlaylistViewMode.sorted) {
+                        collection = MovieCollection.fromSortedPlaylist(
+                          playlist: playlist,
+                          title: playlistItemData?['title'] as String?,
+                        );
+                      } else {
+                        collection = MovieCollection.fromPlaylistWithMainExtras(
+                          playlist: playlist,
+                          title: playlistItemData?['title'] as String?,
+                        );
+                      }
+
                       return MovieCollectionBrowser(
-                        collection: viewMode == PlaylistViewMode.raw
-                            ? MovieCollection.fromFolderStructure(
-                                playlist: playlist,
-                                title: playlistItemData?['title'] as String?,
-                              )
-                            : MovieCollection.fromPlaylistWithMainExtras(
-                                playlist: playlist,
-                                title: playlistItemData?['title'] as String?,
-                              ),
+                        collection: collection,
                         currentIndex: currentIndex,
                         onSelectIndex: (idx) async {
                           await onSelect(idx, allowResume: false);

@@ -142,6 +142,55 @@ class MovieCollection {
     );
   }
 
+  /// Creates a MovieCollection with files sorted alphabetically A-Z within folders
+  /// Preserves folder structure like Raw mode but sorts files within each folder
+  /// Files are already sorted in the playlist parameter (sorting happens in _playFile)
+  /// Used for sortedAZ view mode
+  factory MovieCollection.fromSortedPlaylist({
+    required List<PlaylistEntry> playlist,
+    String? title,
+  }) {
+    debugPrint('🔤 MovieCollection.fromSortedPlaylist: Processing ${playlist.length} entries (pre-sorted)');
+
+    final folderMap = <String, List<int>>{};
+
+    // Group files by their top-level folder (same as Raw mode)
+    for (int i = 0; i < playlist.length; i++) {
+      final entry = playlist[i];
+      final path = entry.relativePath ?? '';
+      final folderName = _extractTopLevelFolder(path);
+
+      if (i < 5) {  // Log first 5 entries
+        debugPrint('  Entry[$i]: title="${entry.title}"');
+        debugPrint('    relativePath: "$path"');
+        debugPrint('    extractedFolder: "$folderName"');
+      }
+
+      folderMap.putIfAbsent(folderName, () => []);
+      folderMap[folderName]!.add(i);  // Files are already sorted in playlist
+    }
+
+    debugPrint('🔤 Extracted ${folderMap.length} folders: ${folderMap.keys.toList()}');
+    for (final entry in folderMap.entries) {
+      debugPrint('  - ${entry.key}: ${entry.value.length} files');
+    }
+
+    // Create collection groups with folder structure preserved
+    // Files within each folder are already sorted (sorted in _playFile before passing here)
+    final groups = folderMap.entries
+        .map((entry) => CollectionGroup(
+              name: entry.key,
+              fileIndices: entry.value,
+            ))
+        .toList();
+
+    return MovieCollection(
+      title: title,
+      groups: groups,
+      allFiles: playlist,
+    );
+  }
+
   /// Extract top-level folder name from relative path
   /// Examples:
   ///   "Season 1/Episode 1.mkv" -> "Season 1"

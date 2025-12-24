@@ -625,6 +625,88 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         return;
       }
 
+      // Apply Sort A-Z sorting if in sortedAZ mode
+      // Use EXACT same sorting logic as UI view mode (_applySortedView)
+      if (_currentViewMode == FolderViewMode.sortedAZ) {
+        // Group files by their folder path (everything before the filename)
+        final folderGroups = <String, List<RDFileNode>>{};
+        for (final node in videoFiles) {
+          // Extract folder path from relativePath (or use path as fallback)
+          final fullPath = (node.relativePath ?? node.path) ?? '';
+          final lastSlashIndex = fullPath.lastIndexOf('/');
+          final folderPath = lastSlashIndex >= 0 ? fullPath.substring(0, lastSlashIndex) : '';
+
+          folderGroups.putIfAbsent(folderPath, () => []);
+          folderGroups[folderPath]!.add(node);
+        }
+
+        // Sort files within each folder group (SAME LOGIC AS UI)
+        for (final group in folderGroups.values) {
+          group.sort((a, b) {
+            final aNum = _extractLeadingNumber(a.name);
+            final bNum = _extractLeadingNumber(b.name);
+
+            // If both start with numbers, sort numerically
+            if (aNum != null && bNum != null) {
+              return aNum.compareTo(bNum);
+            }
+
+            // If only one starts with a number, numbered files come first
+            if (aNum != null) return -1;
+            if (bNum != null) return 1;
+
+            // Otherwise sort alphabetically (case-insensitive)
+            return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          });
+        }
+
+        // Sort folder paths using SAME LOGIC AS UI (_applySortedView sorts folders)
+        // Extract the top-level folder name from each path for sorting
+        final folderPathsList = folderGroups.keys.toList();
+        folderPathsList.sort((a, b) {
+          // Extract the top-level folder name from the path
+          // Handle empty paths (root directory) and nested paths correctly
+          String aFolderName;
+          String bFolderName;
+
+          if (a.isEmpty) {
+            aFolderName = 'Root';
+          } else {
+            final aParts = a.split('/');
+            aFolderName = aParts[0];  // First folder (top-level)
+          }
+
+          if (b.isEmpty) {
+            bFolderName = 'Root';
+          } else {
+            final bParts = b.split('/');
+            bFolderName = bParts[0];  // First folder (top-level)
+          }
+
+          // Use _extractSeasonNumber for numerical awareness (SAME AS UI)
+          final aNum = _extractSeasonNumber(aFolderName);
+          final bNum = _extractSeasonNumber(bFolderName);
+
+          // If both have numbers, sort numerically
+          if (aNum != null && bNum != null) {
+            return aNum.compareTo(bNum);
+          }
+
+          // If only one has a number, numbered folders come first
+          if (aNum != null) return -1;
+          if (bNum != null) return 1;
+
+          // Otherwise sort alphabetically (case-insensitive)
+          return aFolderName.toLowerCase().compareTo(bFolderName.toLowerCase());
+        });
+
+        // Rebuild videoFiles list with sorted folders and sorted files within
+        videoFiles.clear();
+        for (final folderPath in folderPathsList) {
+          videoFiles.addAll(folderGroups[folderPath]!);
+        }
+      }
+
       // Find the selected file index
       int startIndex = 0;
       for (int i = 0; i < videoFiles.length; i++) {

@@ -833,16 +833,31 @@ class _AndroidTvPlaybackPayloadBuilder {
       // Extract PlaylistEntry objects from _LauncherEntry wrappers
       final playlistEntries = launcherEntries.map((e) => e.entry).toList();
 
-      // Create MovieCollection with Main/Extras grouping (40% threshold) OR folder structure
-      final movieCollection = args.viewMode == PlaylistViewMode.raw
-          ? MovieCollection.fromFolderStructure(
-              playlist: playlistEntries,
-              title: args.title,
-            )
-          : MovieCollection.fromPlaylistWithMainExtras(
-              playlist: playlistEntries,
-              title: args.title,
-            );
+      // Create MovieCollection based on view mode:
+      // - Raw: Preserve folder structure as-is
+      // - Sorted: Files are already sorted A-Z in playlist, create single group
+      // - Series/Other: Use Main/Extras grouping (40% threshold)
+      debugPrint('🎬 MovieCollection: viewMode=${args.viewMode}, contentType=$contentType');
+      final MovieCollection movieCollection;
+      if (args.viewMode == PlaylistViewMode.raw) {
+        debugPrint('🎬 Using fromFolderStructure (Raw mode)');
+        movieCollection = MovieCollection.fromFolderStructure(
+          playlist: playlistEntries,
+          title: args.title,
+        );
+      } else if (args.viewMode == PlaylistViewMode.sorted) {
+        debugPrint('🎬 Using fromSortedPlaylist (Sort A-Z mode)');
+        movieCollection = MovieCollection.fromSortedPlaylist(
+          playlist: playlistEntries,
+          title: args.title,
+        );
+      } else {
+        debugPrint('🎬 Using fromPlaylistWithMainExtras (Main/Extras mode) - viewMode is ${args.viewMode}');
+        movieCollection = MovieCollection.fromPlaylistWithMainExtras(
+          playlist: playlistEntries,
+          title: args.title,
+        );
+      }
 
       // Convert to Android TV collection groups
       collectionGroups = movieCollection.groups
