@@ -1612,45 +1612,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     else
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                        sliver: _isTelevision
-                            ? SliverGrid(
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 5,
-                                  childAspectRatio: 0.62,
-                                  crossAxisSpacing: 20,
-                                  mainAxisSpacing: 28,
-                                ),
-                                delegate: SliverChildBuilderDelegate(
-                                  (context, index) {
-                                    final item = filteredItems[index];
-                                    final String title = (item['title'] as String?) ?? 'Video';
-                                    final String? posterUrl = item['posterUrl'] as String?;
-                                    final int? sizeBytes = _asInt(item['sizeBytes']);
-                                    final String? sizeLabel =
-                                        sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
-                                    final String providerLabel = _prettifyProvider(item['provider'] as String?);
-                                    final String kindLabel = _prettifyKind(item['kind'] as String?);
-                                    final String? subtitle = item['seriesTitle'] as String?;
-                                    final metadata = <String>[
-                                      if (providerLabel.isNotEmpty) providerLabel,
-                                      if (kindLabel.isNotEmpty) kindLabel,
-                                      if (sizeLabel != null) sizeLabel,
-                                    ];
-
-                                    return _TvPlaylistCard(
-                                      title: title,
-                                      subtitle: subtitle,
-                                      posterUrl: posterUrl,
-                                      metadata: metadata,
-                                      onPlay: () => _playItem(item),
-                                      onRemove: () => _removeItem(item),
-                                      onView: () => _viewItem(item),
-                                    );
-                                  },
-                                  childCount: filteredItems.length,
-                                ),
-                              )
-                            : SliverList(
+                        sliver: SliverList(
                                 delegate: SliverChildBuilderDelegate(
                                   (context, index) {
                                     final item = filteredItems[index];
@@ -1682,6 +1644,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                         posterUrl: posterUrl,
                                         metadata: metadata,
                                         addedLabel: addedLabel,
+                                        isFirstCard: index == 0,
                                         onPlay: () => _playItem(item),
                                         onRemove: () => _removeItem(item),
                                         onView: () => _viewItem(item),
@@ -1713,6 +1676,7 @@ class _PlaylistCard extends StatefulWidget {
   final VoidCallback onPlay;
   final VoidCallback onRemove;
   final VoidCallback onView;
+  final bool isFirstCard;
 
   const _PlaylistCard({
     required this.title,
@@ -1720,6 +1684,7 @@ class _PlaylistCard extends StatefulWidget {
     this.posterUrl,
     this.metadata = const <String>[],
     this.addedLabel,
+    this.isFirstCard = false,
     required this.onPlay,
     required this.onRemove,
     required this.onView,
@@ -1733,25 +1698,14 @@ class _PlaylistCardState extends State<_PlaylistCard> {
   late final FocusNode _focusNode;
   late final FocusNode _removeFocusNode;
   late final FocusNode _viewFocusNode;
-  bool _focused = false;
-  bool _removeFocused = false;
-  bool _viewFocused = false;
-
-  static const Map<ShortcutActivator, Intent> _activateShortcuts = <ShortcutActivator, Intent>{
-    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-    SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-  };
 
   @override
   void initState() {
     super.initState();
     _focusNode = FocusNode(debugLabel: 'playlist-card-${widget.title}')
       ..addListener(_handleCardFocusChange);
-    _removeFocusNode = FocusNode(debugLabel: 'playlist-card-remove-${widget.title}')
-      ..addListener(_handleRemoveFocusChange);
-    _viewFocusNode = FocusNode(debugLabel: 'playlist-card-view-${widget.title}')
-      ..addListener(_handleViewFocusChange);
+    _removeFocusNode = FocusNode(debugLabel: 'playlist-card-remove-${widget.title}');
+    _viewFocusNode = FocusNode(debugLabel: 'playlist-card-view-${widget.title}');
   }
 
   @override
@@ -1768,18 +1722,13 @@ class _PlaylistCardState extends State<_PlaylistCard> {
   void dispose() {
     _focusNode.removeListener(_handleCardFocusChange);
     _focusNode.dispose();
-    _removeFocusNode.removeListener(_handleRemoveFocusChange);
     _removeFocusNode.dispose();
-    _viewFocusNode.removeListener(_handleViewFocusChange);
     _viewFocusNode.dispose();
     super.dispose();
   }
 
   void _handleCardFocusChange() {
     if (!mounted) return;
-    setState(() {
-      _focused = _focusNode.hasFocus;
-    });
     if (_focusNode.hasFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -1791,20 +1740,6 @@ class _PlaylistCardState extends State<_PlaylistCard> {
         );
       });
     }
-  }
-
-  void _handleRemoveFocusChange() {
-    if (!mounted) return;
-    setState(() {
-      _removeFocused = _removeFocusNode.hasFocus;
-    });
-  }
-
-  void _handleViewFocusChange() {
-    if (!mounted) return;
-    setState(() {
-      _viewFocused = _viewFocusNode.hasFocus;
-    });
   }
 
   Future<void> _handleRemovePressed(BuildContext context) async {
@@ -1852,49 +1787,17 @@ class _PlaylistCardState extends State<_PlaylistCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final highlightColor = theme.colorScheme.primary;
-
-    return FocusableActionDetector(
-      focusNode: _focusNode,
-      shortcuts: _activateShortcuts,
-      actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (intent) {
-            widget.onPlay();
-            return null;
-          },
-        ),
-      },
-      onShowFocusHighlight: (visible) {
-        if (_focused != visible) {
-          setState(() => _focused = visible);
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
+    return Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
-          border: _focused
-              ? Border.all(color: highlightColor, width: 2)
-              : null,
-          boxShadow: _focused
-              ? [
-                  BoxShadow(
-                    color: highlightColor.withValues(alpha: 0.28),
-                    blurRadius: 28,
-                    offset: const Offset(0, 14),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 32,
-                    spreadRadius: -4,
-                    offset: const Offset(0, 24),
-                  ),
-                ],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 32,
+              spreadRadius: -4,
+              offset: const Offset(0, 24),
+            ),
+          ],
         ),
         child: Material(
           color: Colors.transparent,
@@ -1968,27 +1871,16 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      widget.title,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                        height: 1.2,
-                                      ),
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _buildViewButton(context),
-                                  const SizedBox(width: 8),
-                                  _buildRemoveButton(context),
-                                ],
+                              Text(
+                                widget.title,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.2,
+                                ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               if (widget.subtitle != null &&
                                   widget.subtitle!.trim().isNotEmpty) ...[
@@ -2018,20 +1910,52 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                             ],
                           ),
                           const SizedBox(height: 18),
-                          Row(
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
                             children: [
+                              // Play Now Button - Gets initial focus on first card only
+                              Focus(
+                                autofocus: widget.isFirstCard,
+                                child: ElevatedButton.icon(
+                                  focusNode: _focusNode,
+                                  onPressed: widget.onPlay,
+                                  icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                                  label: const Text(
+                                    'Play now',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFE50914),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                              // View Button
                               ElevatedButton.icon(
-                                onPressed: widget.onPlay,
-                                icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                                focusNode: _viewFocusNode,
+                                onPressed: widget.onView,
+                                icon: const Icon(Icons.folder_open, size: 20),
                                 label: const Text(
-                                  'Play now',
+                                  'View',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 15,
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFE50914),
+                                  backgroundColor: Colors.white.withValues(alpha: 0.15),
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 20,
@@ -2043,21 +1967,31 @@ class _PlaylistCardState extends State<_PlaylistCard> {
                                   elevation: 0,
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              if (widget.addedLabel != null &&
-                                  widget.addedLabel!.isNotEmpty)
-                                Expanded(
-                                  child: Text(
-                                    widget.addedLabel!,
-                                    style: TextStyle(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.65),
-                                      fontSize: 13,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                              // Delete Button
+                              ElevatedButton.icon(
+                                focusNode: _removeFocusNode,
+                                onPressed: () => _handleRemovePressed(context),
+                                icon: const Icon(Icons.delete_outline, size: 20),
+                                label: const Text(
+                                  'Delete',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
                                   ),
                                 ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.15),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: 0,
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -2069,7 +2003,6 @@ class _PlaylistCardState extends State<_PlaylistCard> {
             ),
           ),
         ),
-      ),
     );
   }
 
@@ -2113,113 +2046,6 @@ class _PlaylistCardState extends State<_PlaylistCard> {
     );
   }
 
-  Widget _buildRemoveButton(BuildContext context) {
-    final theme = Theme.of(context);
-    final highlightColor = theme.colorScheme.error;
-
-    return FocusableActionDetector(
-      focusNode: _removeFocusNode,
-      shortcuts: _activateShortcuts,
-      actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (intent) {
-            _handleRemovePressed(context);
-            return null;
-          },
-        ),
-      },
-      onShowFocusHighlight: (visible) {
-        if (_removeFocused != visible) {
-          setState(() => _removeFocused = visible);
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          color: _removeFocused
-              ? highlightColor.withValues(alpha: 0.22)
-              : Colors.black.withValues(alpha: 0.32),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: _removeFocused
-                ? highlightColor.withValues(alpha: 0.7)
-                : Colors.white.withValues(alpha: 0.12),
-          ),
-        ),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: () => _handleRemovePressed(context),
-            customBorder: const CircleBorder(),
-            canRequestFocus: false,
-            child: const Padding(
-              padding: EdgeInsets.all(10),
-              child: Icon(
-                Icons.delete_outline_rounded,
-                color: Colors.white70,
-                size: 22,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildViewButton(BuildContext context) {
-    final theme = Theme.of(context);
-    final highlightColor = theme.colorScheme.primary;
-
-    return FocusableActionDetector(
-      focusNode: _viewFocusNode,
-      shortcuts: _activateShortcuts,
-      actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (intent) {
-            widget.onView();
-            return null;
-          },
-        ),
-      },
-      onShowFocusHighlight: (visible) {
-        if (_viewFocused != visible) {
-          setState(() => _viewFocused = visible);
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          color: _viewFocused
-              ? highlightColor.withValues(alpha: 0.22)
-              : Colors.black.withValues(alpha: 0.32),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: _viewFocused
-                ? highlightColor.withValues(alpha: 0.7)
-                : Colors.white.withValues(alpha: 0.12),
-          ),
-        ),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: widget.onView,
-            customBorder: const CircleBorder(),
-            canRequestFocus: false,
-            child: const Padding(
-              padding: EdgeInsets.all(10),
-              child: Icon(
-                Icons.folder_open_rounded,
-                color: Colors.white70,
-                size: 22,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _MetadataTag extends StatelessWidget {
@@ -2560,344 +2386,4 @@ int? _asIntMapValue(dynamic data, String key) {
     if (value is num) return value.toInt();
   }
   return null;
-}
-
-// TV-optimized vertical poster card
-class _TvPlaylistCard extends StatefulWidget {
-  final String title;
-  final String? subtitle;
-  final String? posterUrl;
-  final List<String> metadata;
-  final VoidCallback onPlay;
-  final VoidCallback onRemove;
-  final VoidCallback onView;
-
-  const _TvPlaylistCard({
-    required this.title,
-    this.subtitle,
-    this.posterUrl,
-    this.metadata = const <String>[],
-    required this.onPlay,
-    required this.onRemove,
-    required this.onView,
-  });
-
-  @override
-  State<_TvPlaylistCard> createState() => _TvPlaylistCardState();
-}
-
-class _TvPlaylistCardState extends State<_TvPlaylistCard> {
-  late final FocusNode _focusNode;
-  bool _focused = false;
-  Timer? _longPressTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode = FocusNode(
-      debugLabel: 'tv-playlist-card-${widget.title}',
-      onKeyEvent: _handleKeyEvent,
-    )..addListener(_handleFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TvPlaylistCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.title != oldWidget.title) {
-      _focusNode.debugLabel = 'tv-playlist-card-${widget.title}';
-    }
-  }
-
-  @override
-  void dispose() {
-    _longPressTimer?.cancel();
-    _focusNode.removeListener(_handleFocusChange);
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _handleFocusChange() {
-    if (!mounted) return;
-    setState(() {
-      _focused = _focusNode.hasFocus;
-    });
-    if (_focusNode.hasFocus) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Scrollable.ensureVisible(
-          context,
-          alignment: 0.1,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-        );
-      });
-    }
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    // Handle info/menu button for View
-    if (event.logicalKey == LogicalKeyboardKey.info ||
-        event.logicalKey == LogicalKeyboardKey.contextMenu) {
-      if (event is KeyDownEvent) {
-        widget.onView();
-        return KeyEventResult.handled;
-      }
-    }
-
-    final isActivateKey = event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.space;
-
-    if (!isActivateKey) {
-      return KeyEventResult.ignored;
-    }
-
-    if (event is KeyDownEvent) {
-      // Start long press timer
-      _longPressTimer?.cancel();
-      _longPressTimer = Timer(const Duration(milliseconds: 800), () {
-        // Long press detected - show delete dialog
-        _handleDelete();
-      });
-      return KeyEventResult.handled;
-    } else if (event is KeyUpEvent) {
-      // Cancel timer and play if it was a short press
-      if (_longPressTimer?.isActive == true) {
-        _longPressTimer?.cancel();
-        widget.onPlay();
-      }
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  Future<void> _handleDelete() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        title: const Text(
-          'Remove from playlist?',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          '"${widget.title}" will be removed from your playlist. You can always add it again later.',
-          style: const TextStyle(color: Colors.white70, fontSize: 15),
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white70,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            ),
-            child: const Text('Keep'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFE50914),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            ),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      widget.onRemove();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final highlightColor = theme.colorScheme.primary;
-
-    return Focus(
-      focusNode: _focusNode,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: _focused
-              ? Border.all(color: highlightColor, width: 3)
-              : null,
-          boxShadow: _focused
-              ? [
-                  BoxShadow(
-                    color: highlightColor.withValues(alpha: 0.4),
-                    blurRadius: 24,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-        ),
-        child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onPlay,
-              borderRadius: BorderRadius.circular(12),
-              canRequestFocus: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Poster
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                      child: _buildPoster(),
-                    ),
-                  ),
-                  // Info section
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                widget.title,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.2,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (_focused)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 18,
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                ),
-                              ),
-                          ],
-                        ),
-                        if (widget.subtitle != null && widget.subtitle!.trim().isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.subtitle!,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.65),
-                              fontSize: 13,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        if (widget.metadata.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: widget.metadata.take(2).map(
-                              (label) => Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  label,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ).toList(),
-                          ),
-                        ],
-                        if (_focused) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'OK to play • Long press OK to delete',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.45),
-                              fontSize: 10,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-    );
-  }
-
-  Widget _buildPoster() {
-    if (widget.posterUrl == null || widget.posterUrl!.isEmpty) {
-      return _buildFallbackPoster();
-    }
-
-    return Image.network(
-      widget.posterUrl!,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      errorBuilder: (context, error, stackTrace) => _buildFallbackPoster(),
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return _buildFallbackPoster();
-      },
-    );
-  }
-
-  Widget _buildFallbackPoster() {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFF1D4ED8),
-            Color(0xFF9333EA),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.movie_rounded,
-          size: 48,
-          color: Colors.white.withValues(alpha: 0.5),
-        ),
-      ),
-    );
-  }
 }

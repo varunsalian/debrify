@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/playlist_view_mode.dart';
 import '../models/rd_file_node.dart';
@@ -863,18 +864,36 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: const Color(0xFF1E293B),
-      child: InkWell(
-        onTap: () {
-          if (isFolder) {
-            _navigateIntoFolder(node);
-          } else if (isVideo) {
-            _playFile(node);
-          }
-        },
-        child: Stack(
+    return FocusableActionDetector(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      },
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            if (isFolder) {
+              _navigateIntoFolder(node);
+            } else if (isVideo) {
+              _playFile(node);
+            }
+            return null;
+          },
+        ),
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        color: const Color(0xFF1E293B),
+        child: InkWell(
+          onTap: () {
+            if (isFolder) {
+              _navigateIntoFolder(node);
+            } else if (isVideo) {
+              _playFile(node);
+            }
+          },
+          child: Stack(
           children: [
             Padding(
               padding: const EdgeInsets.all(12),
@@ -966,6 +985,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 ),
               ),
           ],
+        ),
         ),
       ),
     );
@@ -1459,14 +1479,29 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
 
-    return Card(
-      color: const Color(0xFF1E293B),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _playEpisode(episode),
-        child: isMobile
-            ? _buildMobileEpisodeCard(episode, progress, isFinished, hasMetadata, episodeInfo)
-            : _buildDesktopEpisodeCard(episode, progress, isFinished, hasMetadata, episodeInfo),
+    return FocusableActionDetector(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      },
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (intent) {
+            _playEpisode(episode);
+            return null;
+          },
+        ),
+      },
+      child: Card(
+        color: const Color(0xFF1E293B),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _playEpisode(episode),
+          child: isMobile
+              ? _buildMobileEpisodeCard(episode, progress, isFinished, hasMetadata, episodeInfo)
+              : _buildDesktopEpisodeCard(episode, progress, isFinished, hasMetadata, episodeInfo),
+        ),
       ),
     );
   }
