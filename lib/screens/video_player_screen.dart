@@ -11,6 +11,7 @@ import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../utils/time_formatters.dart';
+import '../utils/series_parser.dart';
 import '../services/episode_info_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
@@ -2196,17 +2197,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 				// This allows the playlist screen to display progress indicators
 				debugPrint('💾 Collection Save Check: seriesPlaylist=${seriesPlaylist != null}, seriesTitle="${seriesPlaylist?.seriesTitle}", isSeries=${seriesPlaylist?.isSeries}');
 				if (seriesPlaylist != null && seriesPlaylist.seriesTitle != null) {
-					// Use filename as the key for non-series collections
+					// Parse season/episode from filename for consistent progress tracking across view modes
+					final seriesInfo = SeriesParser.parseFilename(currentEntry.title);
+					final season = seriesInfo.season ?? 0;
+					final episode = seriesInfo.episode ?? (_currentIndex + 1);
+
 					await StorageService.saveSeriesPlaybackState(
 						seriesTitle: seriesPlaylist.seriesTitle!,
-						season: 0, // Use season 0 for non-series collections
-						episode: _currentIndex + 1, // Use 1-based index as episode number
+						season: season, // Parsed from filename, fallback to 0
+						episode: episode, // Parsed from filename, fallback to index
 						positionMs: pos.inMilliseconds,
 						durationMs: dur.inMilliseconds,
 						speed: _playbackSpeed,
 						aspect: aspectStr,
 					);
-					debugPrint('✅ Collection Save: title="${seriesPlaylist.seriesTitle}" index=${_currentIndex} filename="${currentEntry.title}"');
+					debugPrint('✅ Collection Save: title="${seriesPlaylist.seriesTitle}" S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} (index=${_currentIndex}) filename="${currentEntry.title}"');
 				} else {
 					debugPrint('❌ Collection Save SKIPPED: seriesPlaylist is null or has no title');
 				}

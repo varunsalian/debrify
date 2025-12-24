@@ -891,16 +891,20 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Get progress data for a specific file
   Map<String, dynamic>? _getProgressForFile(RDFileNode file) {
-    // Try to parse season/episode from filename for series
+    // ALWAYS try to parse season/episode from filename first (regardless of view mode)
+    // This ensures progress is consistent across Raw and Series Arrange modes
     final seriesInfo = SeriesParser.parseFilename(file.name);
-    if (seriesInfo.isSeries && seriesInfo.season != null && seriesInfo.episode != null) {
+    if (seriesInfo.season != null && seriesInfo.episode != null) {
       final key = '${seriesInfo.season}_${seriesInfo.episode}';
-      return _fileProgressCache[key];
+      final progressData = _fileProgressCache[key];
+      if (progressData != null) {
+        return progressData;
+      }
     }
 
-    // For non-series collections, try using season 0 with index
-    // Find the file index in all video files
-    if (_rootContent != null && _seriesPlaylist != null && !_seriesPlaylist!.isSeries) {
+    // Fallback: For files without parseable season/episode, use sequential indexing
+    // This is for non-series content like movies or special features
+    if (_rootContent != null) {
       final allFiles = _rootContent!.getAllFiles();
       final videoFiles = allFiles
           .where((node) => FileUtils.isVideoFile(node.name))
@@ -911,14 +915,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       if (fileIndex >= 0) {
         final key = '0_${fileIndex + 1}'; // season 0, 1-based episode index
-        final progress = _fileProgressCache[key];
-        if (progress != null) {
-          return progress;
-        }
+        return _fileProgressCache[key];
       }
     }
 
-    // Fallback: try using filename as key
+    // Final fallback: try using filename as key
     return _fileProgressCache[file.name];
   }
 
