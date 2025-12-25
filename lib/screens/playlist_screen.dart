@@ -13,6 +13,7 @@ import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
 import '../utils/rd_folder_tree_builder.dart';
 import '../models/playlist_view_mode.dart';
+import '../models/rd_file_node.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../services/pikpak_api_service.dart';
@@ -244,6 +245,63 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           return;
         }
 
+        // Read saved view mode to determine if sorting is needed
+        final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+
+        // Apply Sort A-Z sorting if in sorted mode
+        if (savedViewModeString == 'sortedAZ') {
+          // Group files by their folder path
+          final folderGroups = <String, List<RDFileNode>>{};
+          for (final node in videoFiles) {
+            final fullPath = (node.relativePath ?? node.path) ?? '';
+            final lastSlashIndex = fullPath.lastIndexOf('/');
+            final folderPath = lastSlashIndex >= 0 ? fullPath.substring(0, lastSlashIndex) : '';
+
+            folderGroups.putIfAbsent(folderPath, () => []);
+            folderGroups[folderPath]!.add(node);
+          }
+
+          // Sort files within each folder group
+          for (final group in folderGroups.values) {
+            group.sort((a, b) {
+              final aNum = _extractLeadingNumber(a.name);
+              final bNum = _extractLeadingNumber(b.name);
+
+              if (aNum != null && bNum != null) {
+                return aNum.compareTo(bNum);
+              }
+              if (aNum != null) return -1;
+              if (bNum != null) return 1;
+
+              return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+            });
+          }
+
+          // Sort folder paths
+          final folderPathsList = folderGroups.keys.toList();
+          folderPathsList.sort((a, b) {
+            String aFolderName = a.isEmpty ? 'Root' : a.split('/')[0];
+            String bFolderName = b.isEmpty ? 'Root' : b.split('/')[0];
+
+            final aNum = _extractSeasonNumber(aFolderName);
+            final bNum = _extractSeasonNumber(bFolderName);
+
+            if (aNum != null && bNum != null) {
+              return aNum.compareTo(bNum);
+            }
+            if (aNum != null) return -1;
+            if (bNum != null) return 1;
+
+            return aFolderName.toLowerCase().compareTo(bFolderName.toLowerCase());
+          });
+
+          // Rebuild videoFiles list with sorted folders and files
+          videoFiles.clear();
+          for (final folderPath in folderPathsList) {
+            videoFiles.addAll(folderGroups[folderPath]!);
+          }
+        }
+
         // Detect first episode index for series
         final filenames = videoFiles.map((f) => f.name).toList();
         final bool isSeries = SeriesParser.isSeriesPlaylist(filenames);
@@ -345,8 +403,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         if (!mounted) return;
         // Hide auto-launch overlay before launching player
         MainPageBridge.notifyPlayerLaunching();
-        // Read saved view mode
-        final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+        // Convert saved view mode string to enum (already read earlier for sorting)
         final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
         await VideoPlayerLauncher.push(
           context,
@@ -546,6 +603,67 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         return;
       }
 
+      // Read saved view mode to determine if sorting is needed
+      final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+
+      // Apply Sort A-Z sorting if in sorted mode
+      if (savedViewModeString == 'sortedAZ') {
+        // Group files by their folder path (name contains full path with slashes)
+        final folderGroups = <String, List<TorboxFile>>{};
+        for (final file in files) {
+          final fullPath = file.name;
+          final lastSlashIndex = fullPath.lastIndexOf('/');
+          final folderPath = lastSlashIndex >= 0 ? fullPath.substring(0, lastSlashIndex) : '';
+
+          folderGroups.putIfAbsent(folderPath, () => []);
+          folderGroups[folderPath]!.add(file);
+        }
+
+        // Sort files within each folder group
+        for (final group in folderGroups.values) {
+          group.sort((a, b) {
+            // Extract filename from full path
+            final aName = a.name.split('/').last;
+            final bName = b.name.split('/').last;
+
+            final aNum = _extractLeadingNumber(aName);
+            final bNum = _extractLeadingNumber(bName);
+
+            if (aNum != null && bNum != null) {
+              return aNum.compareTo(bNum);
+            }
+            if (aNum != null) return -1;
+            if (bNum != null) return 1;
+
+            return aName.toLowerCase().compareTo(bName.toLowerCase());
+          });
+        }
+
+        // Sort folder paths
+        final folderPathsList = folderGroups.keys.toList();
+        folderPathsList.sort((a, b) {
+          String aFolderName = a.isEmpty ? 'Root' : a.split('/')[0];
+          String bFolderName = b.isEmpty ? 'Root' : b.split('/')[0];
+
+          final aNum = _extractSeasonNumber(aFolderName);
+          final bNum = _extractSeasonNumber(bFolderName);
+
+          if (aNum != null && bNum != null) {
+            return aNum.compareTo(bNum);
+          }
+          if (aNum != null) return -1;
+          if (bNum != null) return 1;
+
+          return aFolderName.toLowerCase().compareTo(bFolderName.toLowerCase());
+        });
+
+        // Rebuild files list with sorted folders and files
+        files.clear();
+        for (final folderPath in folderPathsList) {
+          files.addAll(folderGroups[folderPath]!);
+        }
+      }
+
       final entries = _buildTorboxPlaylistEntries(
         torrent: torrent,
         files: files,
@@ -609,8 +727,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       if (!mounted) return;
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
-      // Read saved view mode
-      final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+      // Convert saved view mode string to enum (already read earlier for sorting)
       final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
       await VideoPlayerLauncher.push(
         context,
@@ -851,8 +968,65 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       final bool isSeriesCollection =
           candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
 
-      // Sort entries
-      if (isSeriesCollection) {
+      // Read saved view mode to determine sorting strategy
+      final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+
+      // Sort entries based on view mode
+      if (savedViewModeString == 'sortedAZ') {
+        // Sort A-Z mode: Use folder-based sorting
+        // Group files by folder path (extracted from file name)
+        final folderGroups = <String, List<_PikPakPlaylistCandidate>>{};
+        for (final candidate in candidates) {
+          // Get the full path from the file metadata
+          final fullPath = (candidate.file['name'] as String?) ?? candidate.displayName;
+          final lastSlashIndex = fullPath.lastIndexOf('/');
+          final folderPath = lastSlashIndex >= 0 ? fullPath.substring(0, lastSlashIndex) : '';
+
+          folderGroups.putIfAbsent(folderPath, () => []);
+          folderGroups[folderPath]!.add(candidate);
+        }
+
+        // Sort files within each folder group
+        for (final group in folderGroups.values) {
+          group.sort((a, b) {
+            final aNum = _extractLeadingNumber(a.displayName);
+            final bNum = _extractLeadingNumber(b.displayName);
+
+            if (aNum != null && bNum != null) {
+              return aNum.compareTo(bNum);
+            }
+            if (aNum != null) return -1;
+            if (bNum != null) return 1;
+
+            return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+          });
+        }
+
+        // Sort folder paths
+        final folderPathsList = folderGroups.keys.toList();
+        folderPathsList.sort((a, b) {
+          String aFolderName = a.isEmpty ? 'Root' : a.split('/')[0];
+          String bFolderName = b.isEmpty ? 'Root' : b.split('/')[0];
+
+          final aNum = _extractSeasonNumber(aFolderName);
+          final bNum = _extractSeasonNumber(bFolderName);
+
+          if (aNum != null && bNum != null) {
+            return aNum.compareTo(bNum);
+          }
+          if (aNum != null) return -1;
+          if (bNum != null) return 1;
+
+          return aFolderName.toLowerCase().compareTo(bFolderName.toLowerCase());
+        });
+
+        // Rebuild candidates list with sorted folders and files
+        candidates.clear();
+        for (final folderPath in folderPathsList) {
+          candidates.addAll(folderGroups[folderPath]!);
+        }
+      } else if (isSeriesCollection) {
+        // Series mode: Sort by season/episode
         candidates.sort((a, b) {
           final aInfo = a.info;
           final bInfo = b.info;
@@ -967,8 +1141,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
-      // Read saved view mode
-      final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+      // Convert saved view mode string to enum (already read earlier for sorting)
       final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
       await VideoPlayerLauncher.push(
         context,
@@ -2385,5 +2558,45 @@ int? _asIntMapValue(dynamic data, String key) {
     if (value is String) return int.tryParse(value);
     if (value is num) return value.toInt();
   }
+  return null;
+}
+
+/// Extract number from folder name for numerical sorting
+/// Handles: "1. Introduction", "10. Chapter", "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
+int? _extractSeasonNumber(String folderName) {
+  final patterns = [
+    // Leading numbers: "1. ", "10-", "5_", etc.
+    RegExp(r'^(\d+)[\s._-]'),
+    // Season/Chapter/Episode/Part keywords: "Season 10", "Chapter_12", etc.
+    RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
+    RegExp(r'chapter[\s_-]*(\d+)', caseSensitive: false),
+    RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
+    RegExp(r'part[\s_-]*(\d+)', caseSensitive: false),
+    // Generic word followed by number: "Lesson_5", "Module-3"
+    RegExp(r'^[a-z]+[\s_-]*(\d+)', caseSensitive: false),
+  ];
+
+  final lowerName = folderName.toLowerCase();
+
+  for (final pattern in patterns) {
+    final match = pattern.firstMatch(lowerName);
+    if (match != null && match.groupCount >= 1) {
+      return int.tryParse(match.group(1)!);
+    }
+  }
+
+  return null;
+}
+
+/// Extract leading number from filename for numerical sorting
+/// Handles: "10. Video.mp4", "9 - Title.mkv", "05_Episode.mp4", etc.
+int? _extractLeadingNumber(String filename) {
+  final pattern = RegExp(r'^(\d+)[\s._-]');
+  final match = pattern.firstMatch(filename);
+
+  if (match != null && match.groupCount >= 1) {
+    return int.tryParse(match.group(1)!);
+  }
+
   return null;
 }

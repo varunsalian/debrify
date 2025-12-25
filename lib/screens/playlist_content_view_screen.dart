@@ -1624,11 +1624,16 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             }).toList(),
             onChanged: (value) {
               if (value != null) {
+                // Cancel any pending scroll retry timer before season change
+                _scrollRetryTimer?.cancel();
+
                 setState(() {
                   _selectedSeasonNumber = value;
                   // Reset target episode index when season changes manually
                   // so it recalculates for the new season
                   _targetEpisodeIndex = null;
+                  // Reset scroll scheduled flag to allow auto-scroll in new season
+                  _isScrollScheduled = false;
                 });
               }
             },
