@@ -829,6 +829,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         // Read saved view mode
         final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
         final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+
+        // Extract relativePath from stored metadata for single file too
+        final singleFileRelativePath = hasStoredMetadata
+            ? ((storedFile['_fullPath'] as String?) ?? (storedFile['name'] as String?))
+            : (fileData['name'] as String?);
+
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -839,6 +845,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               PlaylistEntry(
                 url: url,
                 title: resolvedTitle,
+                relativePath: singleFileRelativePath,
                 provider: 'pikpak',
                 pikpakFileId: pikpakFileId,
                 sizeBytes: sizeBytes,
@@ -1092,6 +1099,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
       // Build PlaylistEntry list
       final List<PlaylistEntry> playlistEntries = [];
+      debugPrint('🎯 PlaylistScreen (PikPak): Building ${candidates.length} playlist entries');
       for (int i = 0; i < candidates.length; i++) {
         final candidate = candidates[i];
         final seriesInfo = candidate.info;
@@ -1110,13 +1118,24 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         final fileId = candidate.file['id'] as String?;
         final sizeBytes = _asInt(candidate.file['size']);
 
+        // Extract relativePath from stored PikPak metadata
+        // Priority: _fullPath (includes folder structure) > name (filename only)
+        final relativePath = (candidate.file['_fullPath'] as String?) ??
+                            (candidate.file['name'] as String?);
+
         playlistEntries.add(PlaylistEntry(
           url: i == startIndex ? initialUrl : '',
           title: combinedTitle,
+          relativePath: relativePath,
           provider: 'pikpak',
           pikpakFileId: fileId,
           sizeBytes: sizeBytes,
         ));
+
+        // Debug log for first 5 entries to verify relativePath is populated
+        if (i < 5) {
+          debugPrint('  Entry[$i]: title="$combinedTitle", relativePath="$relativePath"');
+        }
       }
 
       // Calculate subtitle
