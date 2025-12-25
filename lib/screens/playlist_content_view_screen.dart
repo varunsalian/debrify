@@ -1049,6 +1049,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           .where((node) => FileUtils.isVideoFile(node.name))
           .toList();
 
+      // IMPORTANT: Apply sorting if in sortedAZ mode to match the index used when saving progress
+      // When playing in Sort A-Z mode, progress is saved using indices from the sorted list,
+      // so we must apply the same sorting here to look up the correct progress key
+      _applySortedPlaylistOrder(videoFiles);
+
       final fileIndex = videoFiles.indexWhere((node) =>
         node.name == file.name && node.path == file.path);
 
