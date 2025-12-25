@@ -740,11 +740,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
+
+      // Reload progress after returning from video player
+      if (mounted) {
+        await _reloadProgress();
+      }
     } catch (e) {
       print('❌ Error playing file: $e');
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
+
+      // Reload progress even if an error occurred
+      // (user might have watched part of video before error)
+      if (mounted) {
+        await _reloadProgress();
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to play file: $e')),
@@ -1249,6 +1261,38 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     return null; // No specific episode to scroll to
+  }
+
+  /// Reload progress data from storage
+  /// Called when returning from video player to refresh progress indicators
+  Future<void> _reloadProgress() async {
+    if (!mounted) return;
+
+    try {
+      // Get the series/collection title from the playlist item
+      // IMPORTANT: Use same logic as _parseSeriesPlaylist() for consistency
+      final String? seriesTitle = _seriesPlaylist?.seriesTitle ??
+                                   widget.playlistItem['title'] as String?;
+
+      if (seriesTitle != null && seriesTitle.isNotEmpty) {
+        print('🔄 Reloading progress after video playback for: $seriesTitle');
+        final episodeProgress = await StorageService.getEpisodeProgress(
+          seriesTitle: seriesTitle,
+        );
+
+        if (!mounted) return; // Check again after async operation
+
+        print('📊 Reloaded ${episodeProgress.length} episodes with updated progress');
+        print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
+
+        setState(() {
+          _fileProgressCache = episodeProgress;
+        });
+      }
+    } catch (e) {
+      print('❌ Error reloading progress data: $e');
+      // Don't rethrow - this is a non-critical background operation
+    }
   }
 
   /// Parse series playlist from current view nodes
@@ -2403,11 +2447,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
+
+      // Reload progress after returning from video player
+      if (mounted) {
+        await _reloadProgress();
+      }
     } catch (e) {
       print('❌ Error playing episode: $e');
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
+
+      // Reload progress even if an error occurred
+      // (user might have watched part of video before error)
+      if (mounted) {
+        await _reloadProgress();
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: ${e.toString()}')),
