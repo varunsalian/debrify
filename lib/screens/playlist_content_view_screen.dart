@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -62,6 +64,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   int _selectedSeasonNumber = 1;
   bool _isLoadingSeriesMetadata = false;
 
+  // Auto-scroll state
+  final ScrollController _episodeListScrollController = ScrollController();
+  int? _targetEpisodeIndex; // Episode to scroll to after list is built
+  Timer? _scrollRetryTimer; // Timer for scroll retry to prevent memory leaks
+  bool _isScrollScheduled = false; // Flag to prevent duplicate scroll scheduling
+
   @override
   void initState() {
     super.initState();
@@ -99,8 +107,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   @override
   void dispose() {
+    _scrollRetryTimer?.cancel(); // Cancel any pending scroll retry to prevent memory leaks
     _viewModeDropdownFocusNode.dispose();
     _backButtonFocusNode.dispose();
+    _episodeListScrollController.dispose();
     super.dispose();
   }
 
@@ -1100,6 +1110,147 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     );
   }
 
+  /// Determine initial season based on most recently watched episode
+  /// Returns the season number to start with (defaults to 1 if no progress)
+  int _determineInitialSeason() {
+    if (_fileProgressCache.isEmpty) return 1;
+
+    // Find most recently watched episode
+    String? mostRecentKey;
+    int? mostRecentTimestamp;
+
+    for (var entry in _fileProgressCache.entries) {
+      final updatedAt = entry.value['updatedAt'];
+      if (updatedAt != null) {
+        try {
+          // Handle both int (milliseconds) and String formats
+          int timestamp;
+          if (updatedAt is int) {
+            // Assume it's already in milliseconds (most common format)
+            timestamp = updatedAt;
+          } else if (updatedAt is String) {
+            // Try parsing as numeric timestamp first, then as ISO date string
+            final parsed = int.tryParse(updatedAt);
+            if (parsed != null) {
+              // Detect if it's likely seconds (10 digits) vs milliseconds (13 digits)
+              // Unix timestamp in seconds: ~10 digits (e.g., 1735134769)
+              // Unix timestamp in milliseconds: ~13 digits (e.g., 1735134769000)
+              if (parsed < 10000000000) {
+                // Likely seconds, convert to milliseconds
+                timestamp = parsed * 1000;
+              } else {
+                // Already milliseconds
+                timestamp = parsed;
+              }
+            } else {
+              // Parse as ISO date string
+              timestamp = DateTime.parse(updatedAt).millisecondsSinceEpoch;
+            }
+          } else {
+            continue;
+          }
+
+          if (mostRecentTimestamp == null || timestamp > mostRecentTimestamp) {
+            mostRecentTimestamp = timestamp;
+            mostRecentKey = entry.key;
+          }
+        } catch (e) {
+          print('⚠️ Failed to parse updatedAt timestamp: $updatedAt (${e.toString()})');
+        }
+      }
+    }
+
+    if (mostRecentKey != null) {
+      // Extract season from key format "{season}_{episode}"
+      final parts = mostRecentKey.split('_');
+      if (parts.length >= 2) {
+        final seasonNum = int.tryParse(parts[0]);
+        if (seasonNum != null) {
+          print('🎯 Found most recent season: $seasonNum from key: $mostRecentKey');
+          return seasonNum;
+        }
+      }
+    }
+
+    print('📺 No recent progress found, defaulting to Season 1');
+    return 1; // Default to season 1
+  }
+
+  /// Determine initial episode index to scroll to within the selected season
+  /// Returns the episode index (0-based) or null if no specific episode to scroll to
+  int? _determineInitialEpisodeIndex(SeriesSeason season) {
+    if (_fileProgressCache.isEmpty) return null;
+
+    // Find most recently watched episode in this season
+    int? mostRecentTimestamp;
+    int? mostRecentEpisodeNum;
+
+    for (var entry in _fileProgressCache.entries) {
+      final key = entry.key;
+      final parts = key.split('_');
+
+      if (parts.length >= 2) {
+        final seasonNum = int.tryParse(parts[0]);
+        final episodeNum = int.tryParse(parts[1]);
+
+        // Only consider episodes from the current season
+        if (seasonNum == season.seasonNumber && episodeNum != null) {
+          final updatedAt = entry.value['updatedAt'];
+          if (updatedAt != null) {
+            try {
+              // Handle both int (milliseconds) and String formats
+              int timestamp;
+              if (updatedAt is int) {
+                // Assume it's already in milliseconds (most common format)
+                timestamp = updatedAt;
+              } else if (updatedAt is String) {
+                // Try parsing as numeric timestamp first, then as ISO date string
+                final parsed = int.tryParse(updatedAt);
+                if (parsed != null) {
+                  // Detect if it's likely seconds (10 digits) vs milliseconds (13 digits)
+                  // Unix timestamp in seconds: ~10 digits (e.g., 1735134769)
+                  // Unix timestamp in milliseconds: ~13 digits (e.g., 1735134769000)
+                  if (parsed < 10000000000) {
+                    // Likely seconds, convert to milliseconds
+                    timestamp = parsed * 1000;
+                  } else {
+                    // Already milliseconds
+                    timestamp = parsed;
+                  }
+                } else {
+                  // Parse as ISO date string
+                  timestamp = DateTime.parse(updatedAt).millisecondsSinceEpoch;
+                }
+              } else {
+                continue;
+              }
+
+              if (mostRecentTimestamp == null || timestamp > mostRecentTimestamp) {
+                mostRecentTimestamp = timestamp;
+                mostRecentEpisodeNum = episodeNum;
+              }
+            } catch (e) {
+              print('⚠️ Failed to parse updatedAt timestamp: $updatedAt (${e.toString()})');
+            }
+          }
+        }
+      }
+    }
+
+    if (mostRecentEpisodeNum != null) {
+      // Find the episode index in the season's episode list
+      for (int i = 0; i < season.episodes.length; i++) {
+        final episode = season.episodes[i];
+        if (episode.seriesInfo.episode == mostRecentEpisodeNum) {
+          print('🎯 Found most recent episode in season: Episode $mostRecentEpisodeNum at index $i');
+          return i;
+        }
+      }
+    }
+
+    return null; // No specific episode to scroll to
+  }
+
   /// Parse series playlist from current view nodes
   Future<void> _parseSeriesPlaylist() async {
     if (_rootContent == null) return;
@@ -1146,6 +1297,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         print('📊 Loaded ${episodeProgress.length} episodes with progress');
         print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
         _fileProgressCache = episodeProgress;
+
+        // Determine initial season based on most recent viewing history
+        if (_seriesPlaylist!.isSeries && _fileProgressCache.isNotEmpty) {
+          final initialSeason = _determineInitialSeason();
+          print('🎬 Setting initial season to: $initialSeason');
+          _selectedSeasonNumber = initialSeason;
+        }
       }
 
       // Check if we have a saved TVMaze mapping (indicates cached data)
@@ -1424,6 +1582,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               if (value != null) {
                 setState(() {
                   _selectedSeasonNumber = value;
+                  // Reset target episode index when season changes manually
+                  // so it recalculates for the new season
+                  _targetEpisodeIndex = null;
                 });
               }
             },
@@ -1435,7 +1596,26 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build episode list
   Widget _buildEpisodeList(SeriesSeason season) {
+    // Determine which episode to scroll to (if any)
+    // Use _isScrollScheduled flag to prevent duplicate scroll scheduling during rebuilds
+    if (_targetEpisodeIndex == null && !_isScrollScheduled) {
+      _targetEpisodeIndex = _determineInitialEpisodeIndex(season);
+
+      // Schedule auto-scroll after the list is built
+      // IMPORTANT: Always schedule the callback - hasClients will be checked inside
+      if (_targetEpisodeIndex != null) {
+        _isScrollScheduled = true; // Mark as scheduled to prevent duplicates
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _scrollToEpisode(_targetEpisodeIndex!);
+          }
+          _isScrollScheduled = false; // Reset after scroll attempt
+        });
+      }
+    }
+
     return ListView.builder(
+      controller: _episodeListScrollController,
       padding: const EdgeInsets.all(16),
       itemCount: season.episodes.length,
       itemBuilder: (context, index) {
@@ -1445,6 +1625,47 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           child: _buildEpisodeCard(episode),
         );
       },
+    );
+  }
+
+  /// Scroll to a specific episode index with animation
+  void _scrollToEpisode(int episodeIndex, {int retryCount = 0}) {
+    // Cancel any existing retry timer to prevent memory leaks
+    _scrollRetryTimer?.cancel();
+
+    if (!_episodeListScrollController.hasClients) {
+      // Retry up to 3 times with increasing delay
+      if (retryCount < 3) {
+        print('⏳ ScrollController not ready yet, scheduling retry ${retryCount + 1}/3');
+        _scrollRetryTimer = Timer(Duration(milliseconds: 100 * (retryCount + 1)), () {
+          if (mounted) {
+            _scrollToEpisode(episodeIndex, retryCount: retryCount + 1);
+          }
+        });
+      } else {
+        print('❌ Failed to scroll after 3 retries - ScrollController never attached');
+      }
+      return;
+    }
+
+    // Calculate approximate position
+    // Each episode card is roughly 180px (desktop) or 300px (mobile) + 16px padding
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final estimatedItemHeight = isMobile ? 316.0 : 196.0; // card height + padding
+    final targetOffset = episodeIndex * estimatedItemHeight;
+
+    // Ensure we don't scroll beyond the max extent
+    final maxScrollExtent = _episodeListScrollController.position.maxScrollExtent;
+    final finalOffset = targetOffset > maxScrollExtent ? maxScrollExtent : targetOffset;
+
+    print('📜 Auto-scrolling to episode index: $episodeIndex (offset: $finalOffset, max: $maxScrollExtent)');
+
+    // Scroll to the target episode with animation
+    _episodeListScrollController.animateTo(
+      finalOffset,
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.easeInOut,
     );
   }
 
