@@ -818,8 +818,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final seriesPlaylist = _seriesPlaylist;
 
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // Raw mode: sequential navigation through all files
-      if (widget.viewMode == PlaylistViewMode.raw) {
+      // Raw mode OR Sorted mode: sequential navigation through all files
+      // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
+      if (widget.viewMode == PlaylistViewMode.raw || widget.viewMode == PlaylistViewMode.sorted) {
         if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
         if (_currentIndex + 1 < widget.playlist!.length) {
           return _currentIndex + 1;
@@ -827,7 +828,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return -1;
       }
 
-      // Sorted/collection mode: navigate within Main group only
+      // Collection mode (view mode not specified): navigate within Main group only
       if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
       final indices = _getMainGroupIndices(widget.playlist!);
       if (indices.isEmpty) return -1;
@@ -920,8 +921,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final seriesPlaylist = _seriesPlaylist;
 
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // Raw mode: sequential navigation through all files
-      if (widget.viewMode == PlaylistViewMode.raw) {
+      // Raw mode OR Sorted mode: sequential navigation through all files
+      // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
+      if (widget.viewMode == PlaylistViewMode.raw || widget.viewMode == PlaylistViewMode.sorted) {
         if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
         if (_currentIndex - 1 >= 0) {
           return _currentIndex - 1;
@@ -929,7 +931,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return -1;
       }
 
-      // Sorted/collection mode: navigate within Main group only
+      // Collection mode (view mode not specified): navigate within Main group only
       if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
       final indices = _getMainGroupIndices(widget.playlist!);
       if (indices.isEmpty) return -1;
