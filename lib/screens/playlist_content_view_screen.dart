@@ -2550,6 +2550,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             rdTorrentId: rdTorrentId,
             rdLinkIndex: linkIndex,
             sizeBytes: file.bytes,
+            provider: 'realdebrid',
           ));
         } catch (_) {
           entries.add(PlaylistEntry(
@@ -2560,6 +2561,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             rdTorrentId: rdTorrentId,
             rdLinkIndex: linkIndex,
             sizeBytes: file.bytes,
+            provider: 'realdebrid',
           ));
         }
       } else {
@@ -2571,6 +2573,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           rdTorrentId: rdTorrentId,
           rdLinkIndex: linkIndex,
           sizeBytes: file.bytes,
+          provider: 'realdebrid',
         ));
       }
     }
@@ -2636,6 +2639,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               torboxTorrentId: torboxTorrentId,
               torboxFileId: file.fileId,
               sizeBytes: file.bytes,
+              provider: 'torbox',
             ));
           }
         } catch (_) {
@@ -2646,6 +2650,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             torboxTorrentId: torboxTorrentId,
             torboxFileId: file.fileId,
             sizeBytes: file.bytes,
+            provider: 'torbox',
           ));
         }
       } else {
@@ -2656,6 +2661,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           torboxTorrentId: torboxTorrentId,
           torboxFileId: file.fileId,
           sizeBytes: file.bytes,
+          provider: 'torbox',
         ));
       }
     }
@@ -2724,6 +2730,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             relativePath: file.relativePath,
             pikpakFileId: fileId,
             sizeBytes: file.bytes,
+            provider: 'pikpak',
           ));
         } catch (_) {
           entries.add(PlaylistEntry(
@@ -2732,6 +2739,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             relativePath: file.relativePath,
             pikpakFileId: fileId,
             sizeBytes: file.bytes,
+            provider: 'pikpak',
           ));
         }
       } else {
@@ -2741,6 +2749,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           relativePath: file.relativePath,
           pikpakFileId: fileId,
           sizeBytes: file.bytes,
+          provider: 'pikpak',
         ));
       }
     }
