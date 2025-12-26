@@ -133,6 +133,10 @@ class StorageService {
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
+
+  // Torrent Search History
+  static const String _torrentSearchHistoryKey = 'torrent_search_history_v1';
+  static const String _torrentSearchHistoryEnabledKey = 'torrent_search_history_enabled';
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
@@ -1886,6 +1890,76 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_playlistPosterOverridesKey);
     print('✅ Cleared all playlist poster overrides');
+  }
+
+  // ============================================================================
+  // Torrent Search History Methods
+  // ============================================================================
+
+  /// Get torrent search history
+  /// Returns list of maps containing torrent JSON + service + timestamp
+  static Future<List<Map<String, dynamic>>> getTorrentSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_torrentSearchHistoryKey);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error loading torrent search history: $e');
+      return [];
+    }
+  }
+
+  /// Add torrent to search history with deduplication
+  /// Deduplicates by infohash, keeps max 5 items (FIFO)
+  static Future<void> addTorrentToHistory(
+    Map<String, dynamic> torrentJson,
+    String service,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final history = await getTorrentSearchHistory();
+
+    final infohash = torrentJson['infohash'] as String?;
+    if (infohash == null || infohash.isEmpty) return;
+
+    // Remove existing entry with same infohash (deduplicate)
+    history.removeWhere((entry) {
+      final entryTorrent = entry['torrent'] as Map<String, dynamic>?;
+      return entryTorrent?['infohash'] == infohash;
+    });
+
+    // Add new entry at start
+    history.insert(0, {
+      'torrent': torrentJson,
+      'service': service,
+      'clickedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+
+    // Keep only last 5
+    if (history.length > 5) {
+      history.removeRange(5, history.length);
+    }
+
+    await prefs.setString(_torrentSearchHistoryKey, jsonEncode(history));
+  }
+
+  /// Clear all search history
+  static Future<void> clearTorrentSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_torrentSearchHistoryKey);
+  }
+
+  /// Get whether search history tracking is enabled
+  static Future<bool> getTorrentSearchHistoryEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_torrentSearchHistoryEnabledKey) ?? true;
+  }
+
+  /// Set whether search history tracking is enabled
+  static Future<void> setTorrentSearchHistoryEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_torrentSearchHistoryEnabledKey, enabled);
   }
 }
 
