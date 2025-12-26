@@ -138,16 +138,31 @@ class DebrifyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Debrify',
       debugShowCheckedModeBanner: false,
-      // Performance optimizations for TV
+      // Performance optimizations for TV with TV-aware text scaling
       builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            // Respect accessibility font scaling but clamp to max 1.3 for TV layout
-            textScaler: TextScaler.linear(
-              min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
-            ),
-          ),
-          child: child!,
+        // Use FutureBuilder to handle async TV detection
+        return FutureBuilder<bool>(
+          future: AndroidNativeDownloader.isTelevision(),
+          builder: (context, snapshot) {
+            // Default to false if detection fails or is pending
+            final isTv = snapshot.data ?? false;
+
+            // Debug logging to verify TV detection
+            if (snapshot.hasData) {
+              debugPrint('Debrify: TV mode detected: $isTv, text scale: ${isTv ? 1.0 : 1.3}');
+            }
+
+            return MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                // TV: No text scaling (1.0) to prevent zoom issues
+                // Mobile: Respect accessibility but cap at 1.3 for layout consistency
+                textScaler: TextScaler.linear(
+                  isTv ? 1.0 : min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
+                ),
+              ),
+              child: child!,
+            );
+          },
         );
       },
       scrollBehavior: const MaterialScrollBehavior().copyWith(
