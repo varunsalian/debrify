@@ -957,8 +957,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       setState(() {
         _activeAdvancedSelection = null;
       });
-    } else {
-      setState(() {});
     }
   }
 
