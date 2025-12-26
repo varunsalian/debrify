@@ -1732,98 +1732,121 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             children: [
               if (hasSeasonData) ...[
                 // Season dropdown (when API data is available)
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: _seasonInputFocused
-                          ? const Color(0xFF7C3AED)
-                          : Colors.white.withValues(alpha: 0.3),
-                      width: _seasonInputFocused ? 2 : 1,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Focus(
-                    focusNode: _seasonInputFocusNode,
-                    onFocusChange: (focused) {
-                      if (_seasonInputFocused != focused) {
-                        setState(() {
-                          _seasonInputFocused = focused;
-                        });
-                      }
-                    },
-                    onKeyEvent: (node, event) => _handleSeasonDropdownKeyEvent(event),
-                    child: DropdownButton<int?>(
-                      value: _selectedSeason,
-                      hint: Text(
-                        'All Seasons',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.7),
-                        ),
+                SizedBox(
+                  width: 120, // Fixed width matching episode input
+                  height: 44, // Fixed height for consistency
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2D3B5F), // Distinct purple-blue background
+                      border: Border.all(
+                        color: _seasonInputFocused
+                            ? const Color(0xFF7C3AED)
+                            : Colors.white.withValues(alpha: 0.3),
+                        width: _seasonInputFocused ? 2 : 1,
                       ),
-                      onChanged: (int? newValue) {
-                        setState(() {
-                          _selectedSeason = newValue;
-                          _episodeController.clear(); // Clear episode when changing season
-                        });
-                        _createAdvancedSelectionAndSearch();
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Focus(
+                      focusNode: _seasonInputFocusNode,
+                      onFocusChange: (focused) {
+                        if (_seasonInputFocused != focused) {
+                          setState(() {
+                            _seasonInputFocused = focused;
+                          });
+                        }
                       },
-                      items: [
-                        // "All Seasons" option
-                        DropdownMenuItem<int?>(
-                          value: null,
-                          child: Text(
-                            'All Seasons',
-                            style: const TextStyle(fontSize: 12),
+                      onKeyEvent: (node, event) => _handleSeasonDropdownKeyEvent(event),
+                      child: DropdownButton<int?>(
+                        value: _selectedSeason,
+                        hint: Text(
+                          'All Seasons',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.7),
                           ),
                         ),
-                        // Individual seasons
-                        ..._availableSeasons!.map((season) {
-                          return DropdownMenuItem<int?>(
-                            value: season,
+                        onChanged: (int? newValue) {
+                          setState(() {
+                            _selectedSeason = newValue;
+                            _episodeController.clear(); // Clear episode when changing season
+                          });
+                          _createAdvancedSelectionAndSearch();
+                        },
+                        items: [
+                          // "All Seasons" option
+                          DropdownMenuItem<int?>(
+                            value: null,
                             child: Text(
-                              'Season $season',
+                              'All Seasons',
                               style: const TextStyle(fontSize: 12),
                             ),
-                          );
-                        }).toList(),
-                      ],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
+                          ),
+                          // Individual seasons
+                          ..._availableSeasons!.map((season) {
+                            return DropdownMenuItem<int?>(
+                              value: season,
+                              child: Text(
+                                'Season $season',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                        dropdownColor: const Color(0xFF1E293B),
+                        underline: Container(),
+                        isExpanded: true, // Make dropdown fill container width
+                        icon: Icon(
+                          Icons.arrow_drop_down,
+                          color: Colors.white.withValues(alpha: 0.7),
+                          size: 18,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       ),
-                      dropdownColor: const Color(0xFF1E293B),
-                      underline: Container(),
-                      icon: Icon(
-                        Icons.arrow_drop_down,
-                        color: Colors.white.withValues(alpha: 0.7),
-                        size: 18,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                   ),
                 ),
               ] else ...[
                 // Fallback: Season text input (when API data is not available)
                 SizedBox(
-                  width: 70,
+                  width: 120, // Same width as dropdown version
+                  height: 44, // Same height for consistency
                   child: Focus(
                     onKeyEvent: (node, event) => _handleSeasonInputKeyEvent(event),
                     child: TextField(
                       focusNode: _seasonInputFocusNode,
                       controller: _seasonController,
                       keyboardType: TextInputType.number,
-                      style: const TextStyle(fontSize: 13),
+                      style: const TextStyle(fontSize: 12), // Match dropdown font size
                       decoration: InputDecoration(
                         labelText: 'Season',
                         labelStyle: const TextStyle(fontSize: 12),
                         isDense: true,
+                        filled: true, // Add background color
+                        fillColor: const Color(0xFF2D3B5F), // Same purple-blue as dropdown
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF7C3AED),
+                            width: 2,
+                          ),
+                        ),
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
+                          horizontal: 10, // Match dropdown padding
+                          vertical: 10, // Adjusted for same height
                         ),
                       ),
                       onChanged: (_) {
@@ -1836,30 +1859,51 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               const SizedBox(width: 8),
               // Episode input - only show when specific season is selected (not "All Seasons")
               if (!hasSeasonData || _selectedSeason != null)
-                SizedBox(
-                  width: 70,
+                Container(
+                  width: 120, // Same width as season dropdown
+                  height: 44, // Same height for consistency
+                  constraints: const BoxConstraints(
+                    minWidth: 120,
+                    maxWidth: 120,
+                    minHeight: 44,
+                    maxHeight: 44,
+                  ),
                   child: Focus(
                     onKeyEvent: (node, event) => _handleEpisodeInputKeyEvent(event),
                     child: TextField(
                       focusNode: _episodeInputFocusNode,
                       controller: _episodeController,
                       keyboardType: TextInputType.number,
-                      style: const TextStyle(fontSize: 13),
+                      style: const TextStyle(fontSize: 12), // Match dropdown font size
                       decoration: InputDecoration(
-                        labelText: 'Episode',
-                        labelStyle: const TextStyle(fontSize: 12),
-                        hintText: hasSeasonData ? '(optional)' : null,
+                        hintText: hasSeasonData ? 'Episode' : 'Episode',
                         hintStyle: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white.withValues(alpha: 0.4),
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.6),
                         ),
                         isDense: true,
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF7C3AED),
+                            width: 2,
+                          ),
+                        ),
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
+                          horizontal: 10,
+                          vertical: 12,
                         ),
                       ),
                       onChanged: (_) {
