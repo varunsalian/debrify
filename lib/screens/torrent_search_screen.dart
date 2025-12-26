@@ -8863,10 +8863,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // ============================================================================
 
   Widget _buildHistorySection() {
-    if (_searchHistory.isEmpty) {
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        _buildHistoryHeaderRow(),
+        const SizedBox(height: 12),
+        if (_searchHistory.isEmpty)
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -8904,15 +8906,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
             ),
           ),
-        ],
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        _buildHistoryHeaderRow(),
-        const SizedBox(height: 12),
+        if (_searchHistory.isNotEmpty)
         ..._searchHistory.asMap().entries.map((entry) {
           final index = entry.key;
           final historyItem = entry.value;
@@ -8967,7 +8961,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }
