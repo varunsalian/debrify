@@ -1581,6 +1581,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final hasSeasonData = _availableSeasons != null && _availableSeasons!.isNotEmpty;
 
+    // Open custom season picker dialog on Select/Enter/Space
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space) {
+      debugPrint('Season dropdown: Opening custom picker dialog');
+      _showSeasonPickerDialog();
+      return KeyEventResult.handled;
+    }
+
     // Arrow Down -> Episode field (if visible) or first result card
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       // If episode input is visible, navigate to it
@@ -1605,6 +1614,75 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     return KeyEventResult.ignored;
+  }
+
+  // Show custom season picker dialog (TV-compatible)
+  void _showSeasonPickerDialog() {
+    if (_availableSeasons == null || _availableSeasons!.isEmpty) return;
+
+    showDialog<int?>(
+      context: context,
+      builder: (BuildContext context) {
+        return SimpleDialog(
+          title: const Text('Select Season'),
+          backgroundColor: const Color(0xFF1E293B),
+          children: [
+            // "All Seasons" option
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context, null);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                child: Text(
+                  'All Seasons',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: _selectedSeason == null
+                        ? const Color(0xFF7C3AED)
+                        : Colors.white,
+                    fontWeight: _selectedSeason == null
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ),
+            // Individual seasons
+            ..._availableSeasons!.map((season) {
+              return SimpleDialogOption(
+                onPressed: () {
+                  Navigator.pop(context, season);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                  child: Text(
+                    'Season $season',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: _selectedSeason == season
+                          ? const Color(0xFF7C3AED)
+                          : Colors.white,
+                      fontWeight: _selectedSeason == season
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ],
+        );
+      },
+    ).then((selectedValue) {
+      if (selectedValue != _selectedSeason) {
+        setState(() {
+          _selectedSeason = selectedValue;
+          _episodeController.clear();
+        });
+        _createAdvancedSelectionAndSearch();
+      }
+    });
   }
 
   KeyEventResult _handleSeasonInputKeyEvent(KeyEvent event) {
@@ -1783,55 +1861,35 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         }
                       },
                       onKeyEvent: (node, event) => _handleSeasonDropdownKeyEvent(event),
-                      child: DropdownButton<int?>(
-                        value: _selectedSeason,
-                        hint: Text(
-                          'All Seasons',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.7),
-                          ),
-                        ),
-                        onChanged: (int? newValue) {
-                          setState(() {
-                            _selectedSeason = newValue;
-                            _episodeController.clear(); // Clear episode when changing season
-                          });
-                          _createAdvancedSelectionAndSearch();
-                        },
-                        items: [
-                          // "All Seasons" option
-                          DropdownMenuItem<int?>(
-                            value: null,
-                            child: Text(
-                              'All Seasons',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                          // Individual seasons
-                          ..._availableSeasons!.map((season) {
-                            return DropdownMenuItem<int?>(
-                              value: season,
-                              child: Text(
-                                'Season $season',
-                                style: const TextStyle(fontSize: 12),
+                      child: InkWell(
+                        onTap: _showSeasonPickerDialog,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _selectedSeason == null
+                                      ? 'All Seasons'
+                                      : 'Season $_selectedSeason',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _selectedSeason == null
+                                        ? Colors.white.withValues(alpha: 0.7)
+                                        : Colors.white,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            );
-                          }).toList(),
-                        ],
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                              Icon(
+                                Icons.arrow_drop_down,
+                                color: Colors.white.withValues(alpha: 0.7),
+                                size: 18,
+                              ),
+                            ],
+                          ),
                         ),
-                        dropdownColor: const Color(0xFF1E293B),
-                        underline: Container(),
-                        isExpanded: true, // Make dropdown fill container width
-                        icon: Icon(
-                          Icons.arrow_drop_down,
-                          color: Colors.white.withValues(alpha: 0.7),
-                          size: 18,
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       ),
                     ),
                   ),
