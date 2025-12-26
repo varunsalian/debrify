@@ -124,6 +124,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final TextEditingController _seasonController = TextEditingController();
   final TextEditingController _episodeController = TextEditingController();
 
+  // Season dropdown state (for simplified season selector)
+  List<int>? _availableSeasons; // List of season numbers from IMDbbot API, null for movies
+  int? _selectedSeason; // null means "All Seasons" selected
+
   // Sorting options
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
   bool _sortAscending = false;
@@ -616,6 +620,133 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             })
             .toList(growable: false);
         showOnlyCached = true;
+      }
+
+      // Filter by season when season is specified but episode is not
+      // This ensures we only show torrents that include the requested season
+      if (selection != null &&
+          selection.isSeries &&
+          selection.season != null &&
+          selection.episode == null) {
+        final beforeFilterCount = filteredTorrents.length;
+        final requestedSeason = selection.season!;
+
+        // Keep only torrents that include the requested season
+        filteredTorrents = filteredTorrents
+            .where((torrent) {
+              switch (torrent.coverageType) {
+                case 'completeSeries':
+                  // Always include complete series (they include all seasons)
+                  return true;
+
+                case 'multiSeasonPack':
+                  // Include if the requested season is within the range
+                  if (torrent.startSeason != null && torrent.endSeason != null) {
+                    return torrent.startSeason! <= requestedSeason &&
+                           torrent.endSeason! >= requestedSeason;
+                  }
+                  // If season range data is missing, exclude to be safe
+                  return false;
+
+                case 'seasonPack':
+                  // Include only if it matches the requested season exactly
+                  return torrent.seasonNumber == requestedSeason;
+
+                case 'singleEpisode':
+                  // For single episodes, check if they belong to the requested season
+                  // Parse the episode pattern from the name
+                  final name = torrent.name.toUpperCase();
+
+                  // Check various season formats: S04, Season 4, etc.
+                  final seasonPadded = requestedSeason.toString().padLeft(2, '0');
+                  final seasonPatterns = [
+                    'S$seasonPadded',  // S04
+                    'S$requestedSeason', // S4
+                    'SEASON $requestedSeason', // Season 4
+                    'SEASON$requestedSeason',  // Season4
+                    '${requestedSeason}X', // 4x (for 4x01 format)
+                  ];
+
+                  // Check if any pattern matches
+                  for (final pattern in seasonPatterns) {
+                    if (name.contains(pattern)) {
+                      return true;
+                    }
+                  }
+
+                  // If we can't determine the season, exclude the single episode
+                  return false;
+
+                default:
+                  // Unknown coverage type - keep it to avoid over-filtering
+                  return true;
+              }
+            })
+            .toList(growable: false);
+
+        final afterFilterCount = filteredTorrents.length;
+        debugPrint(
+          'TorrentSearchScreen: Season filter applied for Season $requestedSeason - '
+          'filtered from $beforeFilterCount to $afterFilterCount torrents '
+          '(removed ${beforeFilterCount - afterFilterCount} torrents from other seasons)',
+        );
+
+        // Show helpful message if all results were filtered out
+        if (filteredTorrents.isEmpty && beforeFilterCount > 0) {
+          nextErrorMessage =
+              'No torrents found for Season $requestedSeason. Found $beforeFilterCount torrents from other seasons that were filtered out.';
+        }
+      }
+
+      // Filter out season packs when a specific episode is requested
+      // Only apply this filter for TV series searches with episode specified
+      if (selection != null &&
+          selection.isSeries &&
+          selection.episode != null) {
+        final beforeFilterCount = filteredTorrents.length;
+
+        // Build the expected episode pattern (e.g., "S05E01" or "5x1")
+        final season = selection.season!;
+        final episode = selection.episode!;
+        final expectedS = 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}';
+        final expectedSNoZero = 'S${season}E${episode}';
+        final expectedX = '${season}x${episode.toString().padLeft(2, '0')}';
+        final expectedXNoZero = '${season}x${episode}';
+
+        // Keep only single episode torrents that match the requested episode
+        filteredTorrents = filteredTorrents
+            .where((torrent) {
+              // Must be a single episode (not a pack)
+              if (torrent.coverageType != 'singleEpisode') return false;
+
+              // Check if torrent name contains the episode pattern
+              final name = torrent.name.toUpperCase();
+
+              // Check various episode formats: S05E01, S5E1, 5x01, 5x1
+              if (name.contains(expectedS.toUpperCase()) ||
+                  name.contains(expectedSNoZero.toUpperCase()) ||
+                  name.contains(expectedX.toUpperCase()) ||
+                  name.contains(expectedXNoZero.toUpperCase())) {
+                return true;
+              }
+
+              return false;
+            })
+            .toList(growable: false);
+
+        final afterFilterCount = filteredTorrents.length;
+        debugPrint(
+          'TorrentSearchScreen: Episode filter applied for S${selection.season?.toString().padLeft(2, '0')}E${selection.episode?.toString().padLeft(2, '0')} - '
+          'filtered from $beforeFilterCount to $afterFilterCount torrents '
+          '(removed ${beforeFilterCount - afterFilterCount} season/complete series packs)',
+        );
+
+        // Show helpful message if all results were filtered out
+        if (filteredTorrents.isEmpty && beforeFilterCount > 0) {
+          final episodeLabel = 'S${selection.season?.toString().padLeft(2, '0')}E${selection.episode?.toString().padLeft(2, '0')}';
+          nextErrorMessage =
+              'No single episode torrents found for $episodeLabel. Found $beforeFilterCount season/series packs that were filtered out.';
+        }
       }
 
       if (!mounted || requestId != _activeSearchRequestId) {
@@ -1168,8 +1299,35 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         isSeries = false;
       }
 
+      // Extract available seasons from IMDbbot API for series
+      List<int>? availableSeasons;
+      if (isSeries) {
+        try {
+          final main = details['main'];
+          if (main != null && main is Map) {
+            final episodes = main['episodes'];
+            if (episodes != null && episodes is Map) {
+              final seasons = episodes['seasons'];
+              if (seasons != null && seasons is List) {
+                availableSeasons = seasons
+                    .map((s) => (s is Map) ? (s['number'] as int?) : null)
+                    .where((n) => n != null)
+                    .cast<int>()
+                    .toList();
+                debugPrint('TorrentSearchScreen: Extracted ${availableSeasons.length} seasons from IMDbbot API: $availableSeasons');
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('TorrentSearchScreen: Error extracting seasons from API: $e');
+          availableSeasons = null;
+        }
+      }
+
       setState(() {
         _isSeries = isSeries;
+        _availableSeasons = availableSeasons;
+        _selectedSeason = null; // Default to "All Seasons"
         _seasonController.clear();
         _episodeController.clear();
         _isImdbSearching = false;
@@ -1211,18 +1369,39 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     int? episode;
 
     if (_isSeries) {
-      final seasonText = _seasonController.text.trim();
-      final episodeText = _episodeController.text.trim();
+      final bool hasSeasonData = _availableSeasons != null && _availableSeasons!.isNotEmpty;
 
-      if (seasonText.isNotEmpty) {
-        season = int.tryParse(seasonText);
-      }
+      // Use dropdown value if available, otherwise fall back to text input
+      if (hasSeasonData) {
+        // Dropdown mode: use _selectedSeason (null means "All Seasons")
+        season = _selectedSeason;
 
-      if (episodeText.isNotEmpty) {
-        episode = int.tryParse(episodeText);
-      } else if (season != null) {
-        // Default to episode 1 if season is specified
-        episode = 1;
+        // Only parse episode if a specific season is selected
+        if (season != null) {
+          final episodeText = _episodeController.text.trim();
+          if (episodeText.isNotEmpty) {
+            episode = int.tryParse(episodeText);
+          }
+          // Note: Don't default to episode 1 if episode is empty
+          // This allows searching entire season when episode is not specified
+        }
+        // If season is null (All Seasons), both season and episode remain null
+        // This searches the entire series
+      } else {
+        // Text input mode (fallback when API didn't provide season data)
+        final seasonText = _seasonController.text.trim();
+        final episodeText = _episodeController.text.trim();
+
+        if (seasonText.isNotEmpty) {
+          season = int.tryParse(seasonText);
+        }
+
+        if (episodeText.isNotEmpty) {
+          episode = int.tryParse(episodeText);
+        } else if (season != null) {
+          // Default to episode 1 if season is specified in text mode
+          episode = 1;
+        }
       }
     }
 
@@ -1235,7 +1414,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       episode: episode,
     );
 
-    debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}');
+    debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}, season=$season, episode=$episode');
 
     setState(() {
       _activeAdvancedSelection = selection;
@@ -1254,6 +1433,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _selectedImdbTitle = null;
       _activeAdvancedSelection = null;
       _isSeries = false;
+      _availableSeasons = null;
+      _selectedSeason = null;
       _seasonController.clear();
       _episodeController.clear();
       _searchController.clear();
@@ -1360,6 +1541,38 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       setState(() {
         _imdbAutocompleteResults.clear();
       });
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  // Handle D-pad navigation for season dropdown
+  KeyEventResult _handleSeasonDropdownKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final hasSeasonData = _availableSeasons != null && _availableSeasons!.isNotEmpty;
+
+    // Arrow Down -> Episode field (if visible) or first result card
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      // If episode input is visible, navigate to it
+      if (_selectedSeason != null && hasSeasonData) {
+        _episodeInputFocusNode.requestFocus();
+      } else if (_torrents.isNotEmpty && _cardFocusNodes.isNotEmpty) {
+        // Navigate to first result card
+        _cardFocusNodes[0].requestFocus();
+        setState(() {
+          _focusedCardIndex = 0;
+        });
+      }
+      return KeyEventResult.handled;
+    }
+
+    // Arrow Up or Escape/Back -> Search field
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+        event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
       _searchFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
@@ -1506,67 +1719,156 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return const SizedBox.shrink();
     }
 
-    // For series, show S/E inputs directly (type is auto-detected)
+    // For series, show season dropdown and conditional episode input
+    // If we don't have season data from API, fall back to text inputs
+    final bool hasSeasonData = _availableSeasons != null && _availableSeasons!.isNotEmpty;
+
     return Container(
       margin: const EdgeInsets.only(top: 8, bottom: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Season input
-          SizedBox(
-            width: 70,
-            child: Focus(
-              onKeyEvent: (node, event) => _handleSeasonInputKeyEvent(event),
-              child: TextField(
-                focusNode: _seasonInputFocusNode,
-                controller: _seasonController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Season',
-                  labelStyle: const TextStyle(fontSize: 12),
-                  isDense: true,
-                  border: OutlineInputBorder(
+          Row(
+            children: [
+              if (hasSeasonData) ...[
+                // Season dropdown (when API data is available)
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: _seasonInputFocused
+                          ? const Color(0xFF7C3AED)
+                          : Colors.white.withValues(alpha: 0.3),
+                      width: _seasonInputFocused ? 2 : 1,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
+                  child: Focus(
+                    focusNode: _seasonInputFocusNode,
+                    onFocusChange: (focused) {
+                      if (_seasonInputFocused != focused) {
+                        setState(() {
+                          _seasonInputFocused = focused;
+                        });
+                      }
+                    },
+                    onKeyEvent: (node, event) => _handleSeasonDropdownKeyEvent(event),
+                    child: DropdownButton<int?>(
+                      value: _selectedSeason,
+                      hint: Text(
+                        'All Seasons',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      onChanged: (int? newValue) {
+                        setState(() {
+                          _selectedSeason = newValue;
+                          _episodeController.clear(); // Clear episode when changing season
+                        });
+                        _createAdvancedSelectionAndSearch();
+                      },
+                      items: [
+                        // "All Seasons" option
+                        DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text(
+                            'All Seasons',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        // Individual seasons
+                        ..._availableSeasons!.map((season) {
+                          return DropdownMenuItem<int?>(
+                            value: season,
+                            child: Text(
+                              'Season $season',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
+                      dropdownColor: const Color(0xFF1E293B),
+                      underline: Container(),
+                      icon: Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.white.withValues(alpha: 0.7),
+                        size: 18,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
                   ),
                 ),
-                onChanged: (_) {
-                  _createAdvancedSelectionAndSearch();
-                },
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Episode input
-          SizedBox(
-            width: 70,
-            child: Focus(
-              onKeyEvent: (node, event) => _handleEpisodeInputKeyEvent(event),
-              child: TextField(
-                focusNode: _episodeInputFocusNode,
-                controller: _episodeController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Episode',
-                  labelStyle: const TextStyle(fontSize: 12),
-                  isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
+              ] else ...[
+                // Fallback: Season text input (when API data is not available)
+                SizedBox(
+                  width: 70,
+                  child: Focus(
+                    onKeyEvent: (node, event) => _handleSeasonInputKeyEvent(event),
+                    child: TextField(
+                      focusNode: _seasonInputFocusNode,
+                      controller: _seasonController,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'Season',
+                        labelStyle: const TextStyle(fontSize: 12),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                      ),
+                      onChanged: (_) {
+                        _createAdvancedSelectionAndSearch();
+                      },
+                    ),
                   ),
                 ),
-                onChanged: (_) {
-                  _createAdvancedSelectionAndSearch();
-                },
-              ),
-            ),
+              ],
+              const SizedBox(width: 8),
+              // Episode input - only show when specific season is selected (not "All Seasons")
+              if (!hasSeasonData || _selectedSeason != null)
+                SizedBox(
+                  width: 70,
+                  child: Focus(
+                    onKeyEvent: (node, event) => _handleEpisodeInputKeyEvent(event),
+                    child: TextField(
+                      focusNode: _episodeInputFocusNode,
+                      controller: _episodeController,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'Episode',
+                        labelStyle: const TextStyle(fontSize: 12),
+                        hintText: hasSeasonData ? '(optional)' : null,
+                        hintStyle: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.4),
+                        ),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                      ),
+                      onChanged: (_) {
+                        _createAdvancedSelectionAndSearch();
+                      },
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
@@ -1865,18 +2167,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final List<Torrent> sortedTorrents = List<Torrent>.from(baseList);
 
     // Determine if we should apply season pack prioritization
-    // Only apply for TV series searches, not for movies
-    final bool shouldApplyCoveragePriority =
-        _activeAdvancedSelection?.isSeries ?? false;
+    // Only apply for TV series searches when episode is NOT specified
+    // When episode IS specified, we prioritize single episodes instead
+    final bool isSeries = _activeAdvancedSelection?.isSeries ?? false;
+    final bool hasEpisode = _activeAdvancedSelection?.episode != null;
+    final bool shouldApplyCoveragePriority = isSeries && !hasEpisode;
+    final bool shouldPrioritizeSingleEpisode = isSeries && hasEpisode;
 
-    debugPrint('TorrentSearchScreen: Sorting torrents - shouldApplyCoveragePriority=$shouldApplyCoveragePriority, isSeries=${_activeAdvancedSelection?.isSeries}, title=${_activeAdvancedSelection?.title}');
+    debugPrint('TorrentSearchScreen: Sorting torrents - isSeries=$isSeries, hasEpisode=$hasEpisode, '
+        'shouldApplyCoveragePriority=$shouldApplyCoveragePriority, shouldPrioritizeSingleEpisode=$shouldPrioritizeSingleEpisode, '
+        'season=${_activeAdvancedSelection?.season}, episode=${_activeAdvancedSelection?.episode}, title=${_activeAdvancedSelection?.title}');
 
     switch (_sortBy) {
       case 'name':
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type (complete series first) - only for TV series
+          // Primary: coverage type prioritization
           if (shouldApplyCoveragePriority) {
+            // Prefer season packs (lower priority number = higher rank)
             final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          } else if (shouldPrioritizeSingleEpisode) {
+            // Prefer single episodes (higher priority number = higher rank)
+            final coverageComp = b.coveragePriority.compareTo(a.coveragePriority);
             if (coverageComp != 0) return coverageComp;
           }
 
@@ -1889,9 +2201,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'size':
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type - only for TV series
+          // Primary: coverage type prioritization
           if (shouldApplyCoveragePriority) {
+            // Prefer season packs (lower priority number = higher rank)
             final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          } else if (shouldPrioritizeSingleEpisode) {
+            // Prefer single episodes (higher priority number = higher rank)
+            final coverageComp = b.coveragePriority.compareTo(a.coveragePriority);
             if (coverageComp != 0) return coverageComp;
           }
 
@@ -1902,9 +2219,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'seeders':
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type - only for TV series
+          // Primary: coverage type prioritization
           if (shouldApplyCoveragePriority) {
+            // Prefer season packs (lower priority number = higher rank)
             final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          } else if (shouldPrioritizeSingleEpisode) {
+            // Prefer single episodes (higher priority number = higher rank)
+            final coverageComp = b.coveragePriority.compareTo(a.coveragePriority);
             if (coverageComp != 0) return coverageComp;
           }
 
@@ -1915,9 +2237,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'date':
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type - only for TV series
+          // Primary: coverage type prioritization
           if (shouldApplyCoveragePriority) {
+            // Prefer season packs (lower priority number = higher rank)
             final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          } else if (shouldPrioritizeSingleEpisode) {
+            // Prefer single episodes (higher priority number = higher rank)
+            final coverageComp = b.coveragePriority.compareTo(a.coveragePriority);
             if (coverageComp != 0) return coverageComp;
           }
 
@@ -1928,11 +2255,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'relevance':
       default:
-        // Sort by coverage type first - only for TV series, then maintain original order
+        // Sort by coverage type first, then maintain original order
         sortedTorrents.sort((a, b) {
-          // Primary: coverage type (complete series first) - only for TV series
+          // Primary: coverage type prioritization
           if (shouldApplyCoveragePriority) {
+            // Prefer season packs (lower priority number = higher rank)
             final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
+            if (coverageComp != 0) return coverageComp;
+          } else if (shouldPrioritizeSingleEpisode) {
+            // Prefer single episodes (higher priority number = higher rank)
+            final coverageComp = b.coveragePriority.compareTo(a.coveragePriority);
             if (coverageComp != 0) return coverageComp;
           }
 
@@ -8397,6 +8729,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         torboxCacheCheckEnabled: _torboxCacheCheckEnabled,
         isSeries: _isSeries,
         selectedImdbTitle: _selectedImdbTitle,
+        hasSeasonData: _availableSeasons != null && _availableSeasons!.isNotEmpty,
+        selectedSeason: _selectedSeason,
+        seasonInputFocusNode: _seasonInputFocusNode,
         onCardActivated: () => _handleTorrentCardActivated(torrent, index),
         onCopyMagnet: () => _copyMagnetLink(torrent.infohash),
         onAddToDebrid: _addToRealDebrid,
@@ -8775,6 +9110,9 @@ class _TorrentCard extends StatefulWidget {
     required this.torboxCacheCheckEnabled,
     required this.isSeries,
     required this.selectedImdbTitle,
+    required this.hasSeasonData,
+    required this.selectedSeason,
+    required this.seasonInputFocusNode,
     required this.onCardActivated,
     required this.onCopyMagnet,
     required this.onAddToDebrid,
@@ -8801,6 +9139,9 @@ class _TorrentCard extends StatefulWidget {
   final bool torboxCacheCheckEnabled;
   final bool isSeries;
   final ImdbTitleResult? selectedImdbTitle;
+  final bool hasSeasonData;
+  final int? selectedSeason;
+  final FocusNode seasonInputFocusNode;
   final VoidCallback onCardActivated;
   final VoidCallback onCopyMagnet;
   final void Function(String infohash, String name, int index) onAddToDebrid;
@@ -8871,13 +9212,22 @@ class _TorrentCardState extends State<_TorrentCard> {
           widget.onCardActivated();
           return KeyEventResult.handled;
         }
-        // Handle Arrow Up from first card - navigate to Episode input (if series) or Search field
+        // Handle Arrow Up from first card - navigate to Episode input (if visible) or Season dropdown or Search field
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.arrowUp &&
             widget.index == 0) {
-          // If series with selected title, go to Episode input
+          // If series with selected title and episode input is visible, go to Episode input
           if (widget.isSeries && widget.selectedImdbTitle != null) {
-            widget.episodeInputFocusNode.requestFocus();
+            // Episode input is only visible when:
+            // 1. No season data (fallback text input mode) OR
+            // 2. Has season data AND specific season selected (not "All Seasons")
+            final bool episodeInputVisible = !widget.hasSeasonData || widget.selectedSeason != null;
+            if (episodeInputVisible) {
+              widget.episodeInputFocusNode.requestFocus();
+            } else {
+              // Episode not visible, go to season dropdown
+              widget.seasonInputFocusNode.requestFocus();
+            }
           } else {
             widget.searchFocusNode.requestFocus();
           }
