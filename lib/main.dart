@@ -967,14 +967,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
               return; // Do nothing
             }
 
-            // Android Mobile: Exit immediately on back press
-            if (Platform.isAndroid && !_isAndroidTv) {
-              SystemNavigator.pop();
-              return;
-            }
-
-            // Android TV: Double back press to exit
-            if (Platform.isAndroid && _isAndroidTv) {
+            // Android (both mobile and TV): Double back press to exit
+            if (Platform.isAndroid) {
               final currentTime = DateTime.now();
               final backButtonPressedTwice = _lastBackPressTime != null &&
                   currentTime.difference(_lastBackPressTime!) < _backPressDuration;
