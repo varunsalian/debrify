@@ -7926,143 +7926,44 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 160),
-                            curve: Curves.easeOutCubic,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: _searchFocused
-                                  ? Border.all(
-                                      color: const Color(0xFF6366F1),
-                                      width: 1.6,
-                                    )
-                                  : null,
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      (_searchFocused
-                                              ? const Color(0xFF6366F1)
-                                              : const Color(0xFF6366F1))
-                                          .withValues(
-                                            alpha: _searchFocused ? 0.45 : 0.3,
-                                          ),
-                                  blurRadius: _searchFocused ? 16 : 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Shortcuts(
-                              shortcuts: const <ShortcutActivator, Intent>{
-                                SingleActivator(LogicalKeyboardKey.arrowDown):
-                                    NextFocusIntent(),
-                                SingleActivator(LogicalKeyboardKey.arrowUp):
-                                    PreviousFocusIntent(),
-                              },
-                              child: Actions(
-                                actions: <Type, Action<Intent>>{
-                                  NextFocusIntent:
-                                      CallbackAction<NextFocusIntent>(
-                                        onInvoke: (intent) {
-                                          // Custom logic: Check if should navigate to autocomplete or Season box
-                                          if (_imdbAutocompleteResults.isNotEmpty && _autocompleteFocusNodes.isNotEmpty) {
-                                            _autocompleteFocusNodes[0].requestFocus();
-                                            return null;
-                                          }
-                                          if (_isSeries && _selectedImdbTitle != null) {
-                                            _seasonInputFocusNode.requestFocus();
-                                            return null;
-                                          }
-                                          // Default: Let FocusTraversalPolicy handle it
-                                          FocusScope.of(context).nextFocus();
-                                          return null;
-                                        },
-                                      ),
-                                  PreviousFocusIntent:
-                                      CallbackAction<PreviousFocusIntent>(
-                                        onInvoke: (intent) {
-                                          FocusScope.of(
-                                            context,
-                                          ).previousFocus();
-                                          return null;
-                                        },
-                                      ),
-                                },
-                                child: Focus(
-                                  focusNode: _searchFocusNode,
-                                  onFocusChange: (focused) {
-                                    if (_searchFocused != focused) {
-                                      setState(() {
-                                        _searchFocused = focused;
-                                      });
-                                    }
-                                  },
-                                  child: TextField(
-                                    controller: _searchController,
-                                    onSubmitted: (query) {
-                                    // In IMDB mode, don't trigger search on submit
-                                    // unless a selection has been made
-                                    if (_searchMode == SearchMode.keyword) {
-                                      _searchTorrents(query);
-                                    } else if (_searchMode == SearchMode.imdb) {
-                                      // On TV: Trigger autocomplete when Enter is pressed
-                                      if (_isTelevision && _selectedImdbTitle == null) {
-                                        _onImdbSearchTextChanged(query);
-                                      } else if (_selectedImdbTitle != null) {
-                                        // Already has selection, can re-search
-                                        _createAdvancedSelectionAndSearch();
-                                      }
-                                    }
-                                  },
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: InputDecoration(
-                                    hintText: _searchMode == SearchMode.imdb
-                                        ? 'Search IMDB titles...'
-                                        : 'Search all engines...',
-                                    hintStyle: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.5,
-                                      ),
-                                    ),
-                                    prefixIcon: Icon(
-                                      _searchMode == SearchMode.imdb
-                                          ? Icons.auto_awesome_outlined
-                                          : Icons.search_rounded,
-                                      color: _searchMode == SearchMode.imdb
-                                          ? const Color(0xFF7C3AED)
-                                          : const Color(0xFF6366F1),
-                                    ),
-                                    suffixIcon:
-                                        _searchController.text.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(
-                                              Icons.clear_rounded,
-                                              color: Color(0xFFEF4444),
-                                            ),
-                                            onPressed: () {
-                                              _searchController.clear();
-                                              _handleSearchFieldChanged('');
-                                              _searchFocusNode.requestFocus();
-                                            },
-                                          )
-                                        : null,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    filled: true,
-                                    fillColor: Theme.of(
-                                      context,
-                                    ).colorScheme.surfaceContainerHigh,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                  ),
-                                  onChanged: _handleSearchFieldChanged,
-                                  ),
-                                ),
-                              ),
-                            ),
+                          child: _SearchTextField(
+                            controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            searchMode: _searchMode,
+                            isTelevision: _isTelevision,
+                            selectedImdbTitle: _selectedImdbTitle,
+                            hasAutocompleteResults: _imdbAutocompleteResults.isNotEmpty,
+                            hasAutocompleteFocusNodes: _autocompleteFocusNodes.isNotEmpty,
+                            isSeries: _isSeries,
+                            autocompleteFocusNodes: _autocompleteFocusNodes,
+                            seasonInputFocusNode: _seasonInputFocusNode,
+                            onClearPressed: () {
+                              _searchController.clear();
+                              _handleSearchFieldChanged('');
+                              _searchFocusNode.requestFocus();
+                            },
+                            onChanged: _handleSearchFieldChanged,
+                            onSubmitted: (query) {
+                              // In IMDB mode, don't trigger search on submit unless a selection has been made
+                              if (_searchMode == SearchMode.keyword) {
+                                _searchTorrents(query);
+                              } else if (_searchMode == SearchMode.imdb) {
+                                // On TV: Trigger autocomplete when Enter is pressed
+                                if (_isTelevision && _selectedImdbTitle == null) {
+                                  _onImdbSearchTextChanged(query);
+                                } else if (_selectedImdbTitle != null) {
+                                  // Already has selection, can re-search
+                                  _createAdvancedSelectionAndSearch();
+                                }
+                              }
+                            },
+                            onFocusChange: (focused) {
+                              if (_searchFocused != focused) {
+                                setState(() {
+                                  _searchFocused = focused;
+                                });
+                              }
+                            },
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -9963,6 +9864,179 @@ class _DebridActionTileState extends State<_DebridActionTile> {
           ),
         ),
       ),
+      ),
+    );
+  }
+}
+
+// Optimized search TextField widget - extracted to prevent unnecessary parent rebuilds
+class _SearchTextField extends StatefulWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final SearchMode searchMode;
+  final bool isTelevision;
+  final ImdbTitleResult? selectedImdbTitle;
+  final bool hasAutocompleteResults;
+  final bool hasAutocompleteFocusNodes;
+  final bool isSeries;
+  final List<FocusNode> autocompleteFocusNodes;
+  final FocusNode seasonInputFocusNode;
+  final VoidCallback onClearPressed;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+  final ValueChanged<bool> onFocusChange;
+
+  const _SearchTextField({
+    required this.controller,
+    required this.focusNode,
+    required this.searchMode,
+    required this.isTelevision,
+    required this.selectedImdbTitle,
+    required this.hasAutocompleteResults,
+    required this.hasAutocompleteFocusNodes,
+    required this.isSeries,
+    required this.autocompleteFocusNodes,
+    required this.seasonInputFocusNode,
+    required this.onClearPressed,
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.onFocusChange,
+  });
+
+  @override
+  State<_SearchTextField> createState() => _SearchTextFieldState();
+}
+
+class _SearchTextFieldState extends State<_SearchTextField> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChanged);
+    // Removed controller listener - not needed, clear button uses ValueListenableBuilder
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChanged);
+    // Removed controller listener cleanup
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    final focused = widget.focusNode.hasFocus;
+    if (_isFocused != focused) {
+      setState(() {
+        _isFocused = focused;
+      });
+      widget.onFocusChange(focused);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Use regular Container instead of AnimatedContainer to avoid animation overhead on every rebuild
+    // Focus animation is handled by the border property changing
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: _isFocused
+            ? Border.all(
+                color: const Color(0xFF6366F1),
+                width: 1.6,
+              )
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withValues(
+              alpha: _isFocused ? 0.45 : 0.3,
+            ),
+            blurRadius: _isFocused ? 16 : 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Shortcuts(
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+        },
+        child: Actions(
+          actions: <Type, Action<Intent>>{
+            NextFocusIntent: CallbackAction<NextFocusIntent>(
+              onInvoke: (intent) {
+                if (widget.hasAutocompleteResults && widget.hasAutocompleteFocusNodes) {
+                  widget.autocompleteFocusNodes[0].requestFocus();
+                  return null;
+                }
+                if (widget.isSeries && widget.selectedImdbTitle != null) {
+                  widget.seasonInputFocusNode.requestFocus();
+                  return null;
+                }
+                FocusScope.of(context).nextFocus();
+                return null;
+              },
+            ),
+            PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+              onInvoke: (intent) {
+                FocusScope.of(context).previousFocus();
+                return null;
+              },
+            ),
+          },
+          child: Focus(
+            focusNode: widget.focusNode,
+            onFocusChange: (_) {}, // Handled by listener
+            child: TextField(
+              controller: widget.controller,
+              onSubmitted: widget.onSubmitted,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: widget.searchMode == SearchMode.imdb
+                    ? 'Search IMDB titles...'
+                    : 'Search all engines...',
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
+                prefixIcon: Icon(
+                  widget.searchMode == SearchMode.imdb
+                      ? Icons.auto_awesome_outlined
+                      : Icons.search_rounded,
+                  color: widget.searchMode == SearchMode.imdb
+                      ? const Color(0xFF7C3AED)
+                      : const Color(0xFF6366F1),
+                ),
+                // Use ValueListenableBuilder to rebuild only the clear button, not entire TextField
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: widget.controller,
+                  builder: (context, value, child) {
+                    return value.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.clear_rounded,
+                              color: Color(0xFFEF4444),
+                            ),
+                            onPressed: widget.onClearPressed,
+                          )
+                        : const SizedBox.shrink();
+                  },
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+              ),
+              onChanged: widget.onChanged,
+            ),
+          ),
+        ),
       ),
     );
   }
