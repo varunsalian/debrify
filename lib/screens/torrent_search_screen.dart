@@ -121,6 +121,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _imdbControlsCollapsed = false;
   bool _seriesControlsExpanded = false; // Whether to show Movie/Series chips and S/E inputs
   Timer? _imdbSearchDebouncer;
+  int _imdbRequestId = 0; // Track request IDs to prevent race conditions
   final TextEditingController _seasonController = TextEditingController();
   final TextEditingController _episodeController = TextEditingController();
 
@@ -462,6 +463,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _seasonController.dispose();
     _episodeController.dispose();
     _imdbSearchDebouncer?.cancel();
+    _imdbRequestId = 0; // Reset request ID
     for (final node in _autocompleteFocusNodes) {
       node.dispose();
     }
@@ -1198,6 +1200,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Cancel previous timer
     _imdbSearchDebouncer?.cancel();
 
+    // Increment request ID to track the latest request
+    final requestId = ++_imdbRequestId;
+    debugPrint('IMDB search triggered for: "$query" (requestId: $requestId)');
+
     if (query.trim().isEmpty) {
       setState(() {
         _imdbAutocompleteResults.clear();
@@ -1216,23 +1222,38 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    // Show loading state
+    // Don't show loading state immediately to prevent flicker
+    // It will be shown after debounce if search actually happens
     setState(() {
-      _isImdbSearching = true;
       _imdbSearchError = null;
     });
 
-    // Debounce: wait 300ms after user stops typing
-    _imdbSearchDebouncer = Timer(const Duration(milliseconds: 300), () {
-      _performImdbAutocompleteSearch(query.trim());
+    // Debounce: wait 500ms after user stops typing (increased from 300ms)
+    _imdbSearchDebouncer = Timer(const Duration(milliseconds: 500), () {
+      // Only show loading state when we're actually about to search
+      if (mounted) {
+        setState(() {
+          _isImdbSearching = true;
+        });
+      }
+      _performImdbAutocompleteSearch(query.trim(), requestId);
     });
   }
 
-  Future<void> _performImdbAutocompleteSearch(String query) async {
+  Future<void> _performImdbAutocompleteSearch(String query, int requestId) async {
     try {
+      debugPrint('IMDB search started for: "$query" (requestId: $requestId)');
       final results = await ImdbLookupService.searchTitles(query);
 
+      // Check if this is still the latest request
+      if (requestId != _imdbRequestId) {
+        debugPrint('IMDB search discarded (stale): "$query" (requestId: $requestId, current: $_imdbRequestId)');
+        return;
+      }
+
       if (!mounted) return;
+
+      debugPrint('IMDB search completed: "$query" (requestId: $requestId, results: ${results.length})');
 
       // Dispose old focus nodes and create new ones
       for (final node in _autocompleteFocusNodes) {
@@ -1260,7 +1281,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         });
       }
     } catch (e) {
-      debugPrint('IMDB autocomplete error: $e');
+      // Check if this is still the latest request before updating error state
+      if (requestId != _imdbRequestId) {
+        debugPrint('IMDB search error discarded (stale): "$query" (requestId: $requestId, current: $_imdbRequestId)');
+        return;
+      }
+
+      debugPrint('IMDB autocomplete error for "$query" (requestId: $requestId): $e');
       if (!mounted) return;
       setState(() {
         _imdbAutocompleteResults.clear();
