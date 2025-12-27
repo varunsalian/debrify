@@ -734,11 +734,33 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                             ),
                             const SizedBox(height: 12),
                             RadioListTile<String>(
+                              title: const Text('None'),
+                              subtitle: const Text(
+                                'Do nothing - just add the torrent to Real Debrid',
+                              ),
+                              value: 'none',
+                              groupValue: _postTorrentAction,
+                              onChanged: (v) =>
+                                  v == null ? null : _savePostAction(v),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            RadioListTile<String>(
                               title: const Text('Let me choose'),
                               subtitle: const Text(
                                 'Show a quick Play/Download picker after adding a torrent',
                               ),
                               value: 'choose',
+                              groupValue: _postTorrentAction,
+                              onChanged: (v) =>
+                                  v == null ? null : _savePostAction(v),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            RadioListTile<String>(
+                              title: const Text('Open in Real-Debrid'),
+                              subtitle: const Text(
+                                'View the torrent in Real-Debrid tab',
+                              ),
+                              value: 'open',
                               groupValue: _postTorrentAction,
                               onChanged: (v) =>
                                   v == null ? null : _savePostAction(v),
@@ -756,11 +778,33 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                               contentPadding: EdgeInsets.zero,
                             ),
                             RadioListTile<String>(
-                              title: const Text('Download'),
+                              title: const Text('Download to device'),
                               subtitle: const Text(
                                 'If the torrent contains only video files, all videos will download immediately',
                               ),
                               value: 'download',
+                              groupValue: _postTorrentAction,
+                              onChanged: (v) =>
+                                  v == null ? null : _savePostAction(v),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            RadioListTile<String>(
+                              title: const Text('Add to playlist'),
+                              subtitle: const Text(
+                                'Keep this torrent handy in your Debrify playlist',
+                              ),
+                              value: 'playlist',
+                              groupValue: _postTorrentAction,
+                              onChanged: (v) =>
+                                  v == null ? null : _savePostAction(v),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            RadioListTile<String>(
+                              title: const Text('Add to channel'),
+                              subtitle: const Text(
+                                'Cache this torrent in a Debrify TV channel',
+                              ),
+                              value: 'channel',
                               groupValue: _postTorrentAction,
                               onChanged: (v) =>
                                   v == null ? null : _savePostAction(v),

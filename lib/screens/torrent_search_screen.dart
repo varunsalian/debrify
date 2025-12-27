@@ -6347,6 +6347,126 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     switch (postAction) {
+      case 'none':
+        // Show confirmation that torrent was added
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Torrent added to Real Debrid successfully',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        break;
+      case 'open':
+        // Open in Real-Debrid tab
+        if (!rdHidden && !isRarArchive) {
+          final rdTorrent = RDTorrent(
+            id: result['torrentId'].toString(),
+            filename: torrentName,
+            hash: '',
+            bytes: 0,
+            host: '',
+            split: 0,
+            progress: 0,
+            status: '',
+            added: DateTime.now().toIso8601String(),
+            links: links.map((e) => e.toString()).toList(),
+          );
+          MainPageBridge.openDebridOptions?.call(rdTorrent);
+        }
+        break;
+      case 'playlist':
+        // Add to playlist
+        if (hasAnyVideo) {
+          if (links.length == 1) {
+            String finalTitle = torrentName;
+            try {
+              final torrentId = result['torrentId']?.toString();
+              if (torrentId != null && torrentId.isNotEmpty) {
+                final torrentInfo =
+                    await DebridService.getTorrentInfo(
+                      await StorageService.getApiKey() ?? '',
+                      torrentId,
+                    );
+                final filename = torrentInfo['filename']?.toString();
+                if (filename != null && filename.isNotEmpty) {
+                  finalTitle = filename;
+                }
+              }
+            } catch (_) {}
+
+            final added =
+                await StorageService.addPlaylistItemRaw({
+                  'title': finalTitle,
+                  'url': '',
+                  'restrictedLink': links[0],
+                  'rdTorrentId': result['torrentId']?.toString(),
+                  'kind': 'single',
+                });
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  added
+                      ? 'Added to playlist'
+                      : 'Already in playlist',
+                ),
+              ),
+            );
+          } else {
+            final torrentId =
+                result['torrentId']?.toString() ?? '';
+            if (torrentId.isEmpty) return;
+            final added =
+                await StorageService.addPlaylistItemRaw({
+                  'title': torrentName,
+                  'kind': 'collection',
+                  'rdTorrentId': torrentId,
+                  'count': links.length,
+                });
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  added
+                      ? 'Added collection to playlist'
+                      : 'Already in playlist',
+                ),
+              ),
+            );
+          }
+        }
+        break;
+      case 'channel':
+        // Add to channel
+        final keyword = _searchController.text.trim();
+        if (index >= 0 && index < _torrents.length) {
+          await _addTorrentToChannel(_torrents[index], keyword);
+        }
+        break;
       case 'choose':
         await showDialog(
           context: context,
