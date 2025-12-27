@@ -15,6 +15,10 @@ import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
 import '../models/torbox_torrent.dart';
 import '../models/debrify_tv_channel_record.dart';
+import '../models/debrify_tv/channel.dart';
+import '../models/debrify_tv/prepared_torrents.dart';
+import '../models/debrify_tv/cache_results.dart';
+import '../models/debrify_tv/import_results.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
@@ -125,122 +129,6 @@ class DebrifyTVScreen extends StatefulWidget {
   State<DebrifyTVScreen> createState() => _DebrifyTVScreenState();
 }
 
-class _DebrifyTvChannel {
-  final String id;
-  final String name;
-  final List<String> keywords;
-  final bool avoidNsfw; // Per-channel NSFW filter setting
-  final int channelNumber;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-
-  const _DebrifyTvChannel({
-    required this.id,
-    required this.name,
-    required this.keywords,
-    required this.avoidNsfw,
-    required this.channelNumber,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-
-  factory _DebrifyTvChannel.fromJson(Map<String, dynamic> json) {
-    final dynamic keywordsRaw = json['keywords'];
-    final List<String> keywords;
-    if (keywordsRaw is List) {
-      keywords = keywordsRaw
-          .map((e) => (e?.toString() ?? '').trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-    } else if (keywordsRaw is String && keywordsRaw.isNotEmpty) {
-      keywords = keywordsRaw
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-    } else {
-      keywords = const <String>[];
-    }
-    return _DebrifyTvChannel(
-      id: (json['id'] as String?)?.trim().isNotEmpty ?? false
-          ? json['id'] as String
-          : DateTime.now().microsecondsSinceEpoch.toString(),
-      name: (json['name'] as String?)?.trim().isNotEmpty ?? false
-          ? (json['name'] as String).trim()
-          : 'Unnamed Channel',
-      keywords: keywords,
-      avoidNsfw: json['avoidNsfw'] is bool
-          ? json['avoidNsfw'] as bool
-          : true, // Default to enabled for backward compatibility
-      channelNumber: json['channelNumber'] is int
-          ? (json['channelNumber'] as int)
-          : 0,
-      createdAt: json['createdAt'] is int
-          ? DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int)
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] is int
-          ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
-          : DateTime.now(),
-    );
-  }
-
-  factory _DebrifyTvChannel.fromRecord(DebrifyTvChannelRecord record) {
-    return _DebrifyTvChannel(
-      id: record.channelId,
-      name: record.name,
-      keywords: record.keywords,
-      avoidNsfw: record.avoidNsfw,
-      channelNumber: record.channelNumber,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'keywords': keywords,
-      'avoidNsfw': avoidNsfw,
-      'channelNumber': channelNumber,
-      'createdAt': createdAt.millisecondsSinceEpoch,
-      'updatedAt': updatedAt.millisecondsSinceEpoch,
-    };
-  }
-
-  _DebrifyTvChannel copyWith({
-    String? id,
-    String? name,
-    List<String>? keywords,
-    bool? avoidNsfw,
-    int? channelNumber,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) {
-    return _DebrifyTvChannel(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      keywords: keywords ?? this.keywords,
-      avoidNsfw: avoidNsfw ?? this.avoidNsfw,
-      channelNumber: channelNumber ?? this.channelNumber,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  DebrifyTvChannelRecord toRecord() {
-    return DebrifyTvChannelRecord(
-      channelId: id,
-      name: name,
-      keywords: keywords,
-      avoidNsfw: avoidNsfw,
-      channelNumber: channelNumber,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-    );
-  }
-}
-
 class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const String _providerRealDebrid = 'real_debrid';
   static const String _providerTorbox = 'torbox';
@@ -255,7 +143,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   final List<dynamic> _queue = [];
   bool _isBusy = false;
   String _status = '';
-  List<_DebrifyTvChannel> _channels = <_DebrifyTvChannel>[];
+  List<DebrifyTvChannel> _channels = <DebrifyTvChannel>[];
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
   List<Torrent>? _pikpakCandidatePool;
   // These are now loaded from settings dynamically
@@ -809,13 +697,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (!mounted) return;
     setState(() {
       _channels = records
-          .map(_DebrifyTvChannel.fromRecord)
+          .map(DebrifyTvChannel.fromRecord)
           .toList(growable: false);
     });
   }
 
   Future<DebrifyTvChannelCacheEntry> _computeChannelCacheEntry(
-    _DebrifyTvChannel channel,
+    DebrifyTvChannel channel,
     List<String> normalizedKeywords, {
     DebrifyTvChannelCacheEntry? baseline,
     Set<String>? keywordsToSearch,
@@ -952,7 +840,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<_KeywordWarmResult?> _warmKeyword({
+  Future<KeywordWarmResult?> _warmKeyword({
     required String keyword,
     required bool useTorrentsCsv,
     required DynamicEngine? csvEngine,
@@ -1068,7 +956,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         pagesPulled: pagesPulled,
         pirateBayHits: pirateResult.length,
       );
-      return _KeywordWarmResult(
+      return KeywordWarmResult(
         keyword: keyword,
         addedHashes: const <String>{},
         stat: stat,
@@ -1145,7 +1033,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       failureMessage = 'No torrents found for "$keyword" yet.';
     }
 
-    return _KeywordWarmResult(
+    return KeywordWarmResult(
       keyword: keyword,
       addedHashes: keywordHashes,
       stat: stat,
@@ -1258,14 +1146,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     final updated = existing.copyWith(keywords: fetched);
     setState(() {
-      final next = List<_DebrifyTvChannel>.from(_channels);
+      final next = List<DebrifyTvChannel>.from(_channels);
       next[index] = updated;
       _channels = next;
     });
     return fetched;
   }
 
-  Future<_TorboxCacheWindowResult> _fetchTorboxCacheWindow({
+  Future<TorboxCacheWindowResult> _fetchTorboxCacheWindow({
     required List<Torrent> candidates,
     required int startIndex,
     required String apiKey,
@@ -1316,7 +1204,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final bool exhausted = cursor >= candidates.length;
-    return _TorboxCacheWindowResult(
+    return TorboxCacheWindowResult(
       cachedTorrents: hits,
       nextCursor: cursor,
       exhausted: exhausted,
@@ -1573,8 +1461,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return limitReached || keywordList.length >= _maxChannelKeywords;
   }
 
-  Future<_DebrifyTvChannel?> _openChannelDialog({
-    _DebrifyTvChannel? existing,
+  Future<DebrifyTvChannel?> _openChannelDialog({
+    DebrifyTvChannel? existing,
   }) async {
     final nameController = TextEditingController(text: existing?.name ?? '');
     final keywordInputController = TextEditingController();
@@ -1652,9 +1540,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     bool avoidNsfw = existing?.avoidNsfw ?? true;
     String? error;
 
-    _DebrifyTvChannel? result;
+    DebrifyTvChannel? result;
     try {
-      result = await showDialog<_DebrifyTvChannel>(
+      result = await showDialog<DebrifyTvChannel>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) {
@@ -1719,7 +1607,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   return;
                 }
                 final now = DateTime.now();
-                final channel = _DebrifyTvChannel(
+                final channel = DebrifyTvChannel(
                   id:
                       existing?.id ??
                       DateTime.now().microsecondsSinceEpoch.toString(),
@@ -2455,7 +2343,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final lowerExisting = _channels.map((c) => c.name.toLowerCase()).toSet();
     final channelName = _resolveUniqueChannelName(baseName, lowerExisting);
     final now = DateTime.now();
-    final channel = _DebrifyTvChannel(
+    final channel = DebrifyTvChannel(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       name: channelName,
       keywords: keywords,
@@ -2686,17 +2574,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return result;
   }
 
-  Future<_ZipImportPersistenceResult> _persistImportedZipChannels(
+  Future<ZipImportPersistenceResult> _persistImportedZipChannels(
     List<DebrifyTvZipImportedChannel> channels,
   ) async {
     if (channels.isEmpty) {
-      return const _ZipImportPersistenceResult(successes: [], failures: []);
+      return const ZipImportPersistenceResult(successes: [], failures: []);
     }
 
-    final successes = <_ZipImportSuccess>[];
-    final failures = <_ZipImportSaveFailure>[];
+    final successes = <ZipImportSuccess>[];
+    final failures = <ZipImportSaveFailure>[];
 
-    final List<_DebrifyTvChannel> appendedChannels = [];
+    final List<DebrifyTvChannel> appendedChannels = [];
     final Map<String, DebrifyTvChannelCacheEntry> appendedCache = {};
 
     final Set<String> usedNames = _channels
@@ -2706,7 +2594,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     for (final channel in channels) {
       if (channel.normalizedKeywords.length > _maxChannelKeywords) {
         failures.add(
-          _ZipImportSaveFailure(
+          ZipImportSaveFailure(
             sourceName: channel.sourceName,
             channelName: channel.channelName,
             reason:
@@ -2749,7 +2637,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         await DebrifyTvCacheService.saveEntry(entry);
 
         appendedChannels.add(
-          _DebrifyTvChannel(
+          DebrifyTvChannel(
             id: channelId,
             name: uniqueName,
             keywords: const <String>[],
@@ -2762,7 +2650,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         appendedCache[channelId] = entry;
 
         successes.add(
-          _ZipImportSuccess(
+          ZipImportSuccess(
             sourceName: channel.sourceName,
             channelName: uniqueName,
             keywordCount: channel.normalizedKeywords.length,
@@ -2773,7 +2661,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         usedNames.add(uniqueName.toLowerCase());
       } catch (error) {
         failures.add(
-          _ZipImportSaveFailure(
+          ZipImportSaveFailure(
             sourceName: channel.sourceName,
             channelName: uniqueName,
             reason: _formatImportError(error),
@@ -2790,7 +2678,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await _loadChannels();
     }
 
-    return _ZipImportPersistenceResult(
+    return ZipImportPersistenceResult(
       successes: successes,
       failures: failures,
     );
@@ -2798,22 +2686,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<void> _showZipImportSummary(
     DebrifyTvZipImportResult parsed,
-    _ZipImportPersistenceResult persisted,
+    ZipImportPersistenceResult persisted,
   ) async {
     if (!mounted) {
       return;
     }
 
     final bool hasSuccess = persisted.successes.isNotEmpty;
-    final List<_ZipImportFailureDisplay> failureRows = [
+    final List<ZipImportFailureDisplay> failureRows = [
       ...parsed.failures.map(
-        (failure) => _ZipImportFailureDisplay(
+        (failure) => ZipImportFailureDisplay(
           sourceName: failure.entryName,
           reason: failure.reason,
         ),
       ),
       ...persisted.failures.map(
-        (failure) => _ZipImportFailureDisplay(
+        (failure) => ZipImportFailureDisplay(
           sourceName: failure.sourceName.isEmpty
               ? failure.channelName
               : failure.sourceName,
@@ -2937,7 +2825,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return candidate;
   }
 
-  Future<void> _handleEditChannel(_DebrifyTvChannel channel) async {
+  Future<void> _handleEditChannel(DebrifyTvChannel channel) async {
     await _syncProviderAvailability();
 
     // Store current channel's NSFW setting before dialog
@@ -2974,7 +2862,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _handleDeleteChannel(_DebrifyTvChannel channel) async {
+  Future<void> _handleDeleteChannel(DebrifyTvChannel channel) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) {
@@ -3001,7 +2889,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _handleShareChannelAsMagnet(_DebrifyTvChannel channel) async {
+  Future<void> _handleShareChannelAsMagnet(DebrifyTvChannel channel) async {
     if (!mounted) {
       return;
     }
@@ -3114,7 +3002,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  String _generateChannelYaml(_DebrifyTvChannel channel) {
+  String _generateChannelYaml(DebrifyTvChannel channel) {
     // Generate simplified YAML with just channel config (no cached data)
     final buffer = StringBuffer();
     buffer.writeln('channel_name: "${channel.name}"');
@@ -3176,7 +3064,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await DebrifyTvRepository.instance.clearAll();
       await DebrifyTvCacheService.clearAll();
       setState(() {
-        _channels = const <_DebrifyTvChannel>[];
+        _channels = const <DebrifyTvChannel>[];
         _channelCache.clear();
       });
       _showSnack('All channels deleted.', color: Colors.orange);
@@ -3195,7 +3083,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _createOrUpdateChannel(
-    _DebrifyTvChannel channel, {
+    DebrifyTvChannel channel, {
     required bool isEdit,
   }) async {
     final normalizedKeywords = _normalizedKeywords(channel.keywords);
@@ -3376,9 +3264,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       setState(() {
         final index = _channels.indexWhere((c) => c.id == displayChannel.id);
         if (index == -1) {
-          _channels = <_DebrifyTvChannel>[..._channels, displayChannel];
+          _channels = <DebrifyTvChannel>[..._channels, displayChannel];
         } else {
-          final next = List<_DebrifyTvChannel>.from(_channels);
+          final next = List<DebrifyTvChannel>.from(_channels);
           next[index] = displayChannel;
           _channels = next;
         }
@@ -3411,7 +3299,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _watchChannel(_DebrifyTvChannel channel) async {
+  Future<void> _watchChannel(DebrifyTvChannel channel) async {
     debugPrint('🎬 [WATCH] Starting for channel: ${channel.name}');
 
     final keywords = await _getChannelKeywords(channel.id);
@@ -4673,7 +4561,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (candidateCursor >= combinedList.length) {
             return false;
           }
-          final _TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
+          final TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
             candidates: combinedList,
             startIndex: candidateCursor,
             apiKey: apiKey,
@@ -5541,7 +5429,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final int nextIndex = (currentIndex + 1) % _channels.length;
-    final _DebrifyTvChannel targetChannel = _channels[nextIndex];
+    final DebrifyTvChannel targetChannel = _channels[nextIndex];
 
     debugPrint(
       'DebrifyTV: Switching from channel ${currentIndex + 1} to ${nextIndex + 1} (${targetChannel.name})',
@@ -5562,7 +5450,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return null;
     }
 
-    _DebrifyTvChannel? targetChannel;
+    DebrifyTvChannel? targetChannel;
     int discoveredIndex = -1;
     for (var i = 0; i < _channels.length; i++) {
       final channel = _channels[i];
@@ -5596,7 +5484,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<Map<String, dynamic>?> _switchToChannel(
-    _DebrifyTvChannel targetChannel, {
+    DebrifyTvChannel targetChannel, {
     int? fallbackIndex,
     String reason = 'direct',
   }) async {
@@ -5699,7 +5587,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       try {
         while (candidateCursor < torboxCandidates.length &&
             cachedCandidates.isEmpty) {
-          final _TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
+          final TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
             candidates: torboxCandidates,
             startIndex: candidateCursor,
             apiKey: apiKey,
@@ -5966,7 +5854,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return null;
   }
 
-  int _resolveChannelNumber(_DebrifyTvChannel channel) {
+  int _resolveChannelNumber(DebrifyTvChannel channel) {
     if (channel.channelNumber > 0) {
       return channel.channelNumber;
     }
@@ -6171,7 +6059,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (candidateCursor >= candidatePool.length) {
           return false;
         }
-        final _TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
+        final TorboxCacheWindowResult window = await _fetchTorboxCacheWindow(
           candidates: candidatePool,
           startIndex: candidateCursor,
           apiKey: apiKey,
@@ -7010,7 +6898,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   // TV Channel Card (Grid item)
-  Widget _buildTvChannelCard(_DebrifyTvChannel channel) {
+  Widget _buildTvChannelCard(DebrifyTvChannel channel) {
     print('[TV] Building TV channel card for: ${channel.name}');
     return _TvFocusableCard(
       onPressed: () {
@@ -7068,7 +6956,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   // TV Channel Options Menu (Edit/Delete)
-  Future<void> _showTvChannelOptionsMenu(_DebrifyTvChannel channel) async {
+  Future<void> _showTvChannelOptionsMenu(DebrifyTvChannel channel) async {
     print('[TV] _showTvChannelOptionsMenu called for channel: ${channel.name}');
     await showDialog<void>(
       context: context,
@@ -7835,7 +7723,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Widget _buildChannelCard(_DebrifyTvChannel channel) {
+  Widget _buildChannelCard(DebrifyTvChannel channel) {
     final cacheEntry = _channelCache[channel.id];
     final int cachedCount = cacheEntry?.torrents.length ?? 0;
     final String? channelNumberLabel = channel.channelNumber > 0
@@ -8034,7 +7922,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<_TorboxPreparedTorrent?> _prepareTorboxTorrent({
+  Future<TorboxPreparedTorrent?> _prepareTorboxTorrent({
     required Torrent candidate,
     required String apiKey,
     required void Function(String message) log,
@@ -8127,7 +8015,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       log('🎬 Torbox: streaming ${next.title}');
       _seenLinkWithTorrentId.add('${currentTorrent.id}|${next.file.id}');
-      return _TorboxPreparedTorrent(
+      return TorboxPreparedTorrent(
         streamUrl: streamUrl,
         title: next.title,
         hasMore: filteredEntries.isNotEmpty,
@@ -8138,7 +8026,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<_PikPakPreparedTorrent?> _preparePikPakTorrent({
+  Future<PikPakPreparedTorrent?> _preparePikPakTorrent({
     required Torrent candidate,
     required void Function(String message) log,
   }) async {
@@ -8166,7 +8054,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (allVideoFiles == null || allVideoFiles.isEmpty) {
       // Single file torrent - return directly
       log('🎬 PikPak: streaming ${prepared['title']}');
-      return _PikPakPreparedTorrent(
+      return PikPakPreparedTorrent(
         streamUrl: prepared['url'] as String,
         title: prepared['title'] as String,
         hasMore: false,
@@ -8226,20 +8114,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Mark as seen
     _seenLinkWithTorrentId.add('$infohash|$selectedFileId');
 
-    return _PikPakPreparedTorrent(
+    return PikPakPreparedTorrent(
       streamUrl: streamUrl,
       title: selectedFileName,
       hasMore: unseenFiles.isNotEmpty,
     );
   }
 
-  List<_TorboxPlayableEntry> _buildTorboxPlayableEntries(
+  List<TorboxPlayableEntry> _buildTorboxPlayableEntries(
     TorboxTorrent torrent,
     String fallbackTitle,
   ) {
-    final entries = <_TorboxPlayableEntry>[];
-    final seriesCandidates = <_TorboxPlayableEntry>[];
-    final otherCandidates = <_TorboxPlayableEntry>[];
+    final entries = <TorboxPlayableEntry>[];
+    final seriesCandidates = <TorboxPlayableEntry>[];
+    final otherCandidates = <TorboxPlayableEntry>[];
 
     for (final file in torrent.files) {
       if (!_torboxFileLooksLikeVideo(file)) continue;
@@ -8249,7 +8137,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final title = info.isSeries
           ? _formatTorboxSeriesTitle(info, fallbackTitle)
           : (displayName.isNotEmpty ? displayName : fallbackTitle);
-      final entry = _TorboxPlayableEntry(file: file, title: title, info: info);
+      final entry = TorboxPlayableEntry(file: file, title: title, info: info);
       if (info.isSeries && info.season != null && info.episode != null) {
         seriesCandidates.add(entry);
       } else {
@@ -8495,68 +8383,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _inflightInfohashes.remove(infohash);
     }
   }
-}
-
-class _TorboxPreparedTorrent {
-  final String streamUrl;
-  final String title;
-  final bool hasMore;
-
-  _TorboxPreparedTorrent({
-    required this.streamUrl,
-    required this.title,
-    required this.hasMore,
-  });
-}
-
-class _PikPakPreparedTorrent {
-  final String streamUrl;
-  final String title;
-  final bool hasMore;
-
-  _PikPakPreparedTorrent({
-    required this.streamUrl,
-    required this.title,
-    required this.hasMore,
-  });
-}
-
-class _TorboxCacheWindowResult {
-  final List<Torrent> cachedTorrents;
-  final int nextCursor;
-  final bool exhausted;
-
-  const _TorboxCacheWindowResult({
-    required this.cachedTorrents,
-    required this.nextCursor,
-    required this.exhausted,
-  });
-}
-
-class _TorboxPlayableEntry {
-  final TorboxFile file;
-  final String title;
-  final SeriesInfo info;
-
-  _TorboxPlayableEntry({
-    required this.file,
-    required this.title,
-    required this.info,
-  });
-}
-
-class _KeywordWarmResult {
-  final String keyword;
-  final Set<String> addedHashes;
-  final KeywordStat stat;
-  final String? failureMessage;
-
-  const _KeywordWarmResult({
-    required this.keyword,
-    required this.addedHashes,
-    required this.stat,
-    this.failureMessage,
-  });
 }
 
 class _CachedLoadingDialog extends StatefulWidget {
@@ -9215,53 +9041,6 @@ class _RandomStartSliderState extends State<_RandomStartSlider> {
     }
     return KeyEventResult.ignored;
   }
-}
-
-// Helper types for zip import persistence and reporting.
-class _ZipImportPersistenceResult {
-  final List<_ZipImportSuccess> successes;
-  final List<_ZipImportSaveFailure> failures;
-
-  const _ZipImportPersistenceResult({
-    required this.successes,
-    required this.failures,
-  });
-}
-
-class _ZipImportSuccess {
-  final String sourceName;
-  final String channelName;
-  final int keywordCount;
-  final int torrentCount;
-
-  const _ZipImportSuccess({
-    required this.sourceName,
-    required this.channelName,
-    required this.keywordCount,
-    required this.torrentCount,
-  });
-}
-
-class _ZipImportSaveFailure {
-  final String sourceName;
-  final String channelName;
-  final String reason;
-
-  const _ZipImportSaveFailure({
-    required this.sourceName,
-    required this.channelName,
-    required this.reason,
-  });
-}
-
-class _ZipImportFailureDisplay {
-  final String sourceName;
-  final String reason;
-
-  const _ZipImportFailureDisplay({
-    required this.sourceName,
-    required this.reason,
-  });
 }
 
 class _SwitchRow extends StatefulWidget {
