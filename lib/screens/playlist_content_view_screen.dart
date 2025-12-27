@@ -583,6 +583,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     // Sort folder paths using SAME LOGIC AS UI (_applySortedView sorts folders)
     // Extract the top-level folder name from each path for sorting
+    final provider = ((widget.playlistItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
     final folderPathsList = folderGroups.keys.toList();
     folderPathsList.sort((a, b) {
       // Extract the top-level folder name from the path
@@ -594,14 +595,26 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         aFolderName = 'Root';
       } else {
         final aParts = a.split('/');
-        aFolderName = aParts[0];  // First folder (top-level)
+        // For Torbox: skip first folder level (torrent name), use second level
+        // For others: use first folder level
+        if (provider == 'torbox' && aParts.length > 1) {
+          aFolderName = aParts[1];  // Second folder (skip torrent name)
+        } else {
+          aFolderName = aParts[0];  // First folder (top-level)
+        }
       }
 
       if (b.isEmpty) {
         bFolderName = 'Root';
       } else {
         final bParts = b.split('/');
-        bFolderName = bParts[0];  // First folder (top-level)
+        // For Torbox: skip first folder level (torrent name), use second level
+        // For others: use first folder level
+        if (provider == 'torbox' && bParts.length > 1) {
+          bFolderName = bParts[1];  // Second folder (skip torrent name)
+        } else {
+          bFolderName = bParts[0];  // First folder (top-level)
+        }
       }
 
       // Use _extractSeasonNumber for numerical awareness (SAME AS UI)
