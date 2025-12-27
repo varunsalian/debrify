@@ -165,9 +165,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     };
 
     // Expose Torbox post-action handler via bridge for deep links
-    MainPageBridge.handleTorboxResult = (torrent) async {
+    MainPageBridge.handleTorboxResult = (torboxTorrent) async {
       if (!mounted) return;
-      await _showTorboxPostAddOptions(torrent);
+      // For deep link calls, we need to find the original torrent by hash
+      final torrent = _findTorrentByInfohash(torboxTorrent.hash, torboxTorrent.name);
+      await _showTorboxPostAddOptions(torboxTorrent, torrent);
     };
 
     _listAnimationController = AnimationController(
@@ -5123,7 +5125,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       await _saveToHistory(torrent, 'torbox');
 
       if (!mounted) return;
-      await _showTorboxPostAddOptions(torboxTorrent);
+      await _showTorboxPostAddOptions(torboxTorrent, torrent);
     } catch (e) {
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
@@ -5233,9 +5235,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return TorboxService.getTorrentById(apiKey, torrentId, attempts: 5);
   }
 
-  Future<void> _showTorboxPostAddOptions(TorboxTorrent torrent) async {
+  Future<void> _showTorboxPostAddOptions(TorboxTorrent torboxTorrent, Torrent torrent) async {
     if (!mounted) return;
-    final videoFiles = torrent.files.where(_torboxFileLooksLikeVideo).toList();
+    final videoFiles = torboxTorrent.files.where(_torboxFileLooksLikeVideo).toList();
     final hasVideo = videoFiles.isNotEmpty;
 
     // Get the post-torrent action preference
@@ -5243,14 +5245,64 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final torboxHidden = await StorageService.getTorboxHiddenFromNav();
 
     // Check if torrent is video-only for auto-download handling
-    final isVideoOnly = torrent.files.isNotEmpty &&
-        torrent.files.every((file) => _torboxFileLooksLikeVideo(file));
+    final isVideoOnly = torboxTorrent.files.isNotEmpty &&
+        torboxTorrent.files.every((file) => _torboxFileLooksLikeVideo(file));
 
     // Handle automatic actions based on preference
     switch (postAction) {
+      case 'none':
+        // Show confirmation that torrent was added
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Torrent added to Torbox successfully',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        return;
+      case 'open':
+        // Open in Torbox tab
+        if (!torboxHidden) {
+          MainPageBridge.openTorboxFolder?.call(torboxTorrent);
+        }
+        return;
+      case 'playlist':
+        // Add to playlist
+        if (hasVideo) {
+          _addTorboxTorrentToPlaylist(torboxTorrent);
+        }
+        return;
+      case 'channel':
+        // Add to channel
+        final keyword = _searchController.text.trim();
+        await _addTorrentToChannel(torrent, keyword);
+        return;
       case 'play':
         if (hasVideo) {
-          _playTorboxTorrent(torrent);
+          _playTorboxTorrent(torboxTorrent);
           return;
         }
         // Fall through to 'choose' if no video
@@ -5258,7 +5310,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       case 'download':
         if (isVideoOnly) {
           // Auto-download all videos without dialog
-          _showTorboxDownloadOptions(torrent);
+          _showTorboxDownloadOptions(torboxTorrent);
           return;
         }
         // Fall through to 'choose' if not video-only
@@ -5320,7 +5372,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                torrent.name,
+                                torboxTorrent.name,
                                 maxLines: 5,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -5370,7 +5422,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             onTap: () {
                               Navigator.of(ctx).pop();
                               // Open the torrent in Torbox tab
-                              MainPageBridge.openTorboxFolder?.call(torrent);
+                              MainPageBridge.openTorboxFolder?.call(torboxTorrent);
                             },
                           ),
                           _DebridActionTile(
@@ -5384,7 +5436,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             autofocus: torboxHidden && hasVideo,
                             onTap: () {
                               Navigator.of(ctx).pop();
-                              _playTorboxTorrent(torrent);
+                              _playTorboxTorrent(torboxTorrent);
                             },
                           ),
                           _DebridActionTile(
@@ -5395,7 +5447,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
-                              _showTorboxDownloadOptions(torrent);
+                              _showTorboxDownloadOptions(torboxTorrent);
                             },
                           ),
                           _DebridActionTile(
@@ -5408,7 +5460,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: hasVideo,
                             onTap: () {
                               Navigator.of(ctx).pop();
-                              _addTorboxTorrentToPlaylist(torrent);
+                              _addTorboxTorrentToPlaylist(torboxTorrent);
                             },
                           ),
                           _DebridActionTile(
@@ -5420,20 +5472,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             onTap: () {
                               Navigator.of(ctx).pop();
                               final keyword = _searchController.text.trim();
-                              // Convert TorboxTorrent to Torrent for caching
-                              final torrentObj = Torrent(
-                                rowid: 0,
-                                infohash: torrent.hash,
-                                name: torrent.name,
-                                sizeBytes: torrent.size,
-                                createdUnix: torrent.createdAt.millisecondsSinceEpoch ~/ 1000,
-                                seeders: torrent.seeds,
-                                leechers: torrent.peers,
-                                completed: 0,
-                                scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                                source: 'torbox',
-                              );
-                              _addTorrentToChannel(torrentObj, keyword);
+                              // Use the torrent parameter directly since it's already the correct Torrent type
+                              _addTorrentToChannel(torrent, keyword);
                             },
                           ),
                         ],
