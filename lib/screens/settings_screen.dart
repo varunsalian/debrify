@@ -4,6 +4,7 @@ import '../services/account_service.dart';
 import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
+import '../services/pikpak_api_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../widgets/shimmer.dart';
 import 'settings/debrify_tv_settings_page.dart';
@@ -31,6 +32,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _torboxConnected = false;
   String _torboxStatus = 'Not connected';
   String _torboxCaption = 'Tap to connect';
+
+  bool _pikpakConnected = false;
+  String _pikpakStatus = 'Not connected';
+  String _pikpakCaption = 'Tap to connect';
 
   @override
   void initState() {
@@ -101,6 +106,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     }
 
+    bool pikpakConnected = false;
+    String pikpakStatus = 'Not connected';
+    String pikpakCaption = 'Tap to connect';
+
+    final pikpakAuth = await PikPakApiService.instance.isAuthenticated();
+    if (pikpakAuth) {
+      pikpakConnected = true;
+      pikpakStatus = 'Active';
+      pikpakCaption = 'Logged in';
+    }
+
     if (!mounted) return;
 
     setState(() {
@@ -110,6 +126,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _torboxConnected = torConnected;
       _torboxStatus = torStatus;
       _torboxCaption = torCaption;
+      _pikpakConnected = pikpakConnected;
+      _pikpakStatus = pikpakStatus;
+      _pikpakCaption = pikpakCaption;
       _loading = false;
     });
   }
@@ -137,6 +156,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           caption: _torboxCaption,
           icon: Icons.flash_on_rounded,
           onTap: _openTorboxSettings,
+        ),
+        pikpak: _ConnectionInfo(
+          title: 'PikPak',
+          connected: _pikpakConnected,
+          status: _pikpakStatus,
+          caption: _pikpakCaption,
+          icon: Icons.cloud_circle_rounded,
+          onTap: _openPikPakSettings,
         ),
       ),
       onOpenTorrentSettings: _openTorrentSettings,
@@ -353,21 +380,8 @@ class _SettingsLayout extends StatelessWidget {
         children: [
           _SettingsHeader(theme: theme),
           const SizedBox(height: 24),
-          // Connections section with cards + PikPak tile
+          // Connections section with cards
           connections,
-          const SizedBox(height: 12),
-          _SettingsSection(
-            title: '',
-            children: [
-              _SettingsTile(
-                icon: Icons.cloud_circle_rounded,
-                title: 'PikPak',
-                subtitle: 'Cloud storage integration',
-                onTap: onOpenPikPakSettings,
-                tag: 'Experimental',
-              ),
-            ],
-          ),
           const SizedBox(height: 24),
           // Search section
           _SettingsSection(
@@ -506,8 +520,13 @@ class _SettingsHeader extends StatelessWidget {
 class _ConnectionsSummary extends StatelessWidget {
   final _ConnectionInfo realDebrid;
   final _ConnectionInfo torbox;
+  final _ConnectionInfo pikpak;
 
-  const _ConnectionsSummary({required this.realDebrid, required this.torbox});
+  const _ConnectionsSummary({
+    required this.realDebrid,
+    required this.torbox,
+    required this.pikpak,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -540,6 +559,10 @@ class _ConnectionsSummary extends StatelessWidget {
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(info: torbox),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(info: pikpak),
                 ),
               ],
             );

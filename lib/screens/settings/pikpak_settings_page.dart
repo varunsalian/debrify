@@ -232,7 +232,6 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   Future<void> _logout() async {
     try {
       await PikPakApiService.instance.logout();
-      await StorageService.setPikPakEnabled(false);
 
       // Clear folder restriction on logout
       await StorageService.clearPikPakRestrictedFolder();
