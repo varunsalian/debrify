@@ -2379,11 +2379,18 @@ _TorboxPlaylistEntriesResult _buildTorboxPlaylistEntries({
 
   final playlistEntries = <PlaylistEntry>[];
   for (final candidate in candidates) {
+      // Strip first folder level (torrent name) from path
+      String relativePath = candidate.file.name;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+
       playlistEntries.add(
         PlaylistEntry(
           url: '',
           title: candidate.displayName,
-          relativePath: candidate.file.name, // Preserves folder structure
+          relativePath: relativePath, // Now excludes torrent name folder
           provider: 'torbox',
           torboxTorrentId: torrent.id,
           torboxFileId: candidate.file.id,

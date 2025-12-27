@@ -2786,16 +2786,22 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   String? _cleanTorboxPath(String? path) {
     if (path == null) return null;
 
-    // Check if there's a "..." separator (torrent name prefix)
+    // Step 1: Remove "TorrentName..." prefix
+    String cleanedPath = path;
     if (path.contains('.../')) {
       final parts = path.split('.../');
       if (parts.length > 1) {
-        // Return everything after the first "..."
-        return parts.skip(1).join('.../');
+        cleanedPath = parts.skip(1).join('.../');
       }
     }
 
-    // If no "..." separator, return as-is
-    return path;
+    // Step 2: Strip first-level folder for Torbox files
+    // Example: "Chapter_1-Introduction/1. Introduction.mp4" -> "1. Introduction.mp4"
+    final firstSlash = cleanedPath.indexOf('/');
+    if (firstSlash > 0) {
+      cleanedPath = cleanedPath.substring(firstSlash + 1);
+    }
+
+    return cleanedPath;
   }
 }

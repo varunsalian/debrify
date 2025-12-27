@@ -559,10 +559,19 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         isSeriesCollection: isSeriesCollection,
         fallback: displayName,
       );
+
+      // Strip first folder level (torrent name) from path
+      String relativePath = candidate.file.name;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+
       playlistEntries.add(
         PlaylistEntry(
           url: i == startIndex ? initialUrl : '',
           title: combinedTitle,
+          relativePath: relativePath, // Now excludes torrent name folder
           provider: 'torbox',
           torboxTorrentId: torrent.id,
           torboxFileId: candidate.file.id,
@@ -3361,10 +3370,19 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         isSeriesCollection: isSeriesCollection,
         fallback: displayName,
       );
+
+      // Strip first folder level (torrent name) from path
+      String relativePath = candidate.file.name;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+
       playlistEntries.add(
         PlaylistEntry(
           url: i == startIndex ? initialUrl : '',
           title: combinedTitle,
+          relativePath: relativePath, // Now excludes torrent name folder
           provider: 'torbox',
           torboxTorrentId: _currentTorrent!.id,
           torboxFileId: candidate.file.id,
