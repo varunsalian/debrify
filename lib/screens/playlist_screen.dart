@@ -642,8 +642,31 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         // Sort folder paths
         final folderPathsList = folderGroups.keys.toList();
         folderPathsList.sort((a, b) {
-          String aFolderName = a.isEmpty ? 'Root' : a.split('/')[0];
-          String bFolderName = b.isEmpty ? 'Root' : b.split('/')[0];
+          String aFolderName;
+          String bFolderName;
+
+          // For Torbox: skip first folder level (torrent name), use second level
+          if (a.isEmpty) {
+            aFolderName = 'Root';
+          } else {
+            final aParts = a.split('/');
+            if (aParts.length > 1) {
+              aFolderName = aParts[1];  // Skip torrent name, use actual chapter folder
+            } else {
+              aFolderName = aParts[0];  // Fallback if single folder
+            }
+          }
+
+          if (b.isEmpty) {
+            bFolderName = 'Root';
+          } else {
+            final bParts = b.split('/');
+            if (bParts.length > 1) {
+              bFolderName = bParts[1];  // Skip torrent name, use actual chapter folder
+            } else {
+              bFolderName = bParts[0];  // Fallback if single folder
+            }
+          }
 
           final aNum = _extractSeasonNumber(aFolderName);
           final bNum = _extractSeasonNumber(bFolderName);
@@ -2340,8 +2363,8 @@ _TorboxPlaylistEntriesResult _buildTorboxPlaylistEntries({
     ));
   }
 
-  // Skip sorting in raw mode to preserve natural API order
-  if (viewMode != 'raw') {
+  // Skip sorting in raw and sortedAZ modes to preserve their custom ordering
+  if (viewMode != 'raw' && viewMode != 'sortedAZ') {
     candidates.sort((a, b) {
       final aInfo = a.info;
       final bInfo = b.info;
