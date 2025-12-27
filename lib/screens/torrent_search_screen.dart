@@ -2825,6 +2825,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   fileId!,
                   taskId,
                   torrentName,
+                  torrent,
                   dialogContext,
                   setDialogState,
                   startTime,
@@ -3411,6 +3412,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String fileId,
     String? taskId,
     String torrentName,
+    Torrent torrent,
     BuildContext dialogContext,
     StateSetter setDialogState,
     DateTime startTime,
@@ -3560,7 +3562,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             return;
           }
 
-          await _showPikPakPostAddOptions(torrentName, fileId, videoFiles);
+          await _showPikPakPostAddOptions(torrentName, fileId, videoFiles, torrent);
           return;
         }
 
@@ -3582,6 +3584,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String torrentName,
     String fileId,
     List<Map<String, dynamic>> videoFiles,
+    Torrent torrent,
   ) async {
     if (!mounted) return;
 
@@ -3589,16 +3592,80 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final postAction = await StorageService.getPikPakPostTorrentAction();
     final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
 
-    // Handle automatic actions
+    // For PikPak, we only extract video files, so if we have videos, we can enable video-only actions
+    // Note: PikPak filtering already ensures only video files are in videoFiles list
+    final isVideoOnly = videoFiles.isNotEmpty;
+
+    // Handle automatic actions based on preference
     switch (postAction) {
+      case 'none':
+        // Show confirmation that torrent was added
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Torrent added to PikPak successfully',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        return;
+      case 'open':
+        // Open in PikPak tab
+        if (!pikpakHidden) {
+          MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
+        }
+        return;
+      case 'playlist':
+        // Add to playlist
+        if (hasVideo) {
+          _addPikPakToPlaylist(videoFiles, torrentName, fileId);
+        }
+        return;
+      case 'channel':
+        // Add to channel
+        final keyword = _searchController.text.trim();
+        await _addTorrentToChannel(torrent, keyword);
+        return;
       case 'play':
         if (hasVideo) {
           _playPikPakVideos(videoFiles, torrentName);
           return;
         }
+        // Fall through to 'choose' if no video
+        break;
+      case 'download':
+        if (isVideoOnly) {
+          // Auto-download all videos without dialog
+          _downloadPikPakFiles(fileId, torrentName);
+          return;
+        }
+        // Fall through to 'choose' if not video-only
         break;
       case 'choose':
       default:
+        // Show the dialog
         break;
     }
 
@@ -3744,20 +3811,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             onTap: () {
                               Navigator.of(ctx).pop();
                               final keyword = _searchController.text.trim();
-                              // Create minimal Torrent from PikPak data
-                              final torrentObj = Torrent(
-                                rowid: 0,
-                                infohash: fileId,
-                                name: torrentName,
-                                sizeBytes: 0,
-                                createdUnix: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                                seeders: 0,
-                                leechers: 0,
-                                completed: 0,
-                                scrapedDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                                source: 'pikpak',
-                              );
-                              _addTorrentToChannel(torrentObj, keyword);
+                              _addTorrentToChannel(torrent, keyword);
                             },
                           ),
                         ],
