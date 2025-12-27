@@ -42,6 +42,15 @@ import '../utils/series_parser.dart';
 import '../utils/nsfw_filter.dart';
 import 'video_player_screen.dart';
 import '../main.dart';
+import 'debrify_tv/widgets/gradient_spinner.dart';
+import 'debrify_tv/widgets/focus_highlight_wrapper.dart';
+import 'debrify_tv/widgets/info_tile.dart';
+import 'debrify_tv/widgets/stats_tile.dart';
+import 'debrify_tv/widgets/random_start_slider.dart';
+import 'debrify_tv/widgets/switch_row.dart';
+import 'debrify_tv/widgets/tv_compact_button.dart';
+import 'debrify_tv/widgets/tv_focusable_button.dart';
+import 'debrify_tv/widgets/tv_focusable_card.dart';
 
 const int _randomStartPercentDefault = 20;
 const int _randomStartPercentMin = 10;
@@ -1798,7 +1807,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 12),
-                        _SwitchRow(
+                        SwitchRow(
                           title: 'Avoid NSFW content',
                           subtitle:
                               'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
@@ -6697,7 +6706,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             child: Row(
               children: [
                 // Quick Play button
-                _TvCompactButton(
+                TvCompactButton(
                   onPressed: _isBusy ? null : _showQuickPlayDialog,
                   icon: Icons.play_arrow_rounded,
                   label: 'Quick Play',
@@ -6705,7 +6714,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 ),
                 const SizedBox(width: 12),
                 // Import button
-                _TvCompactButton(
+                TvCompactButton(
                   onPressed: _isBusy ? null : _handleImportChannels,
                   icon: Icons.cloud_download_rounded,
                   label: 'Import',
@@ -6713,7 +6722,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 ),
                 const SizedBox(width: 12),
                 // Add Channel button
-                _TvCompactButton(
+                TvCompactButton(
                   onPressed: _isBusy ? null : _handleAddChannel,
                   icon: Icons.add_rounded,
                   label: 'Add',
@@ -6721,7 +6730,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 ),
                 const SizedBox(width: 12),
                 // Delete All button
-                _TvCompactButton(
+                TvCompactButton(
                   onPressed: _isBusy || _channels.isEmpty
                       ? null
                       : _handleDeleteAllChannels,
@@ -6731,7 +6740,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 ),
                 const Spacer(),
                 // Search button
-                _TvCompactButton(
+                TvCompactButton(
                   onPressed: () {
                     setState(() {
                       _showSearchBar = !_showSearchBar;
@@ -6753,7 +6762,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 ),
                 const SizedBox(width: 12),
                 // Settings button
-                _TvCompactButton(
+                TvCompactButton(
                   onPressed: _showGlobalSettingsDialog,
                   icon: Icons.settings_rounded,
                   label: null, // Icon only for settings
@@ -6885,7 +6894,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             style: TextStyle(fontSize: 16, color: Colors.white54),
           ),
           const SizedBox(height: 32),
-          _TvFocusableButton(
+          TvFocusableButton(
             onPressed: _handleAddChannel,
             icon: Icons.add_rounded,
             label: 'Add Channel',
@@ -6900,7 +6909,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   // TV Channel Card (Grid item)
   Widget _buildTvChannelCard(DebrifyTvChannel channel) {
     print('[TV] Building TV channel card for: ${channel.name}');
-    return _TvFocusableCard(
+    return TvFocusableCard(
       onPressed: () {
         print('[TV] Card onPressed for channel: ${channel.name}');
         _watchChannel(channel);
@@ -6973,7 +6982,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Edit button
-              _TvFocusableButton(
+              TvFocusableButton(
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
                   _handleEditChannel(channel);
@@ -6984,7 +6993,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ),
               const SizedBox(height: 16),
               // Share as Magnet Link button
-              _TvFocusableButton(
+              TvFocusableButton(
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
                   _handleShareChannelAsMagnet(channel);
@@ -6995,7 +7004,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ),
               const SizedBox(height: 16),
               // Delete button
-              _TvFocusableButton(
+              TvFocusableButton(
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
                   _handleDeleteChannel(channel);
@@ -7013,7 +7022,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV "Add Channel" Card
   Widget _buildTvAddChannelCard() {
-    return _TvFocusableCard(
+    return TvFocusableCard(
       onPressed: _handleAddChannel,
       child: SizedBox(
         height: double.infinity, // Ensures consistent height
@@ -7176,7 +7185,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             const SizedBox(height: 8),
             _providerChoiceChips(scope, dialogSetState: dialogSetState),
             const SizedBox(height: 16),
-            _SwitchRow(
+            SwitchRow(
               title: 'Start from random timestamp',
               subtitle: 'Each Debrify TV video starts at a random point',
               value: startRandom,
@@ -7184,7 +7193,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
             if (startRandom) ...[
               const SizedBox(height: 8),
-              _RandomStartSlider(
+              RandomStartSlider(
                 value: randomStartPercent,
                 isAndroidTv: _isAndroidTv,
                 onChanged: (next) => setRandomStartPercent(next),
@@ -7198,7 +7207,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             // These are now hardcoded to false (visible by default)
             if (includeNsfwToggle && isQuickScope) ...[
               const SizedBox(height: 8),
-              _SwitchRow(
+              SwitchRow(
                 title: 'Avoid NSFW content',
                 subtitle:
                     'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
@@ -7848,7 +7857,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
 
     if (_isAndroidTv) {
-      interactive = _FocusHighlightWrapper(
+      interactive = FocusHighlightWrapper(
         enabled: true,
         borderRadius: BorderRadius.circular(20),
         debugLabel: 'debrify-tv-channel-card-${channel.id}',
@@ -8456,7 +8465,7 @@ class _CachedLoadingDialogState extends State<_CachedLoadingDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _GradientSpinner(),
+            GradientSpinner(),
             const SizedBox(height: 18),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 260),
@@ -8559,7 +8568,7 @@ class _ChannelCreationDialogState extends State<_ChannelCreationDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _GradientSpinner(),
+            GradientSpinner(),
             const SizedBox(height: 18),
             Text(
               'Building "${widget.channelName}"',
@@ -8593,926 +8602,6 @@ class _ChannelCreationDialogState extends State<_ChannelCreationDialog> {
                 textAlign: TextAlign.center,
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GradientSpinner extends StatefulWidget {
-  @override
-  State<_GradientSpinner> createState() => _GradientSpinnerState();
-}
-
-class _GradientSpinnerState extends State<_GradientSpinner>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 56,
-      height: 56,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return Transform.rotate(
-            angle: _controller.value * 6.28318,
-            child: child,
-          );
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const SweepGradient(
-              colors: [
-                Color(0x00FFFFFF),
-                Color(0xFFE50914),
-                Color(0xFFB71C1C),
-                Color(0x00FFFFFF),
-              ],
-              stops: [0.15, 0.45, 0.85, 1.0],
-            ),
-          ),
-          child: Center(
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white70,
-                  size: 22,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FocusHighlightWrapper extends StatefulWidget {
-  final Widget child;
-  final BorderRadius borderRadius;
-  final bool enabled;
-  final String debugLabel;
-
-  const _FocusHighlightWrapper({
-    required this.child,
-    required this.borderRadius,
-    required this.debugLabel,
-    this.enabled = false,
-  });
-
-  @override
-  State<_FocusHighlightWrapper> createState() => _FocusHighlightWrapperState();
-}
-
-class _FocusHighlightWrapperState extends State<_FocusHighlightWrapper> {
-  late final FocusNode _focusNode;
-  bool _hasFocusedDescendant = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode = FocusNode(
-      debugLabel: widget.debugLabel,
-      canRequestFocus: false,
-      skipTraversal: true,
-    )..addListener(_handleFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _FocusHighlightWrapper oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.debugLabel != oldWidget.debugLabel) {
-      _focusNode.debugLabel = widget.debugLabel;
-    }
-    if (!widget.enabled && _hasFocusedDescendant) {
-      setState(() {
-        _hasFocusedDescendant = false;
-      });
-    }
-  }
-
-  void _handleFocusChange() {
-    final next = _focusNode.hasFocus;
-    if (next != _hasFocusedDescendant) {
-      setState(() {
-        _hasFocusedDescendant = next;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _focusNode.removeListener(_handleFocusChange);
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.enabled) {
-      return widget.child;
-    }
-    final highlightColor = Theme.of(context).colorScheme.primary;
-    return Focus(
-      focusNode: _focusNode,
-      canRequestFocus: false,
-      skipTraversal: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          borderRadius: widget.borderRadius,
-          border: Border.all(
-            color: _hasFocusedDescendant ? highlightColor : Colors.transparent,
-            width: 2,
-          ),
-          boxShadow: _hasFocusedDescendant
-              ? [
-                  BoxShadow(
-                    color: highlightColor.withValues(alpha: 0.35),
-                    blurRadius: 26,
-                    offset: const Offset(0, 12),
-                  ),
-                ]
-              : null,
-        ),
-        child: widget.child,
-      ),
-    );
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  const _InfoTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white12, width: 1),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: Colors.white, size: 18),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatsTile extends StatelessWidget {
-  final int queue;
-  final DateTime? lastSearchedAt;
-  const _StatsTile({required this.queue, required this.lastSearchedAt});
-  @override
-  Widget build(BuildContext context) {
-    final last = lastSearchedAt == null
-        ? '—'
-        : '${lastSearchedAt!.hour.toString().padLeft(2, '0')}:${lastSearchedAt!.minute.toString().padLeft(2, '0')}';
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12, width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white10,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.insights_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Search snapshot',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Queue prepared: $queue • Last search: $last',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RandomStartSlider extends StatefulWidget {
-  final int value;
-  final ValueChanged<int> onChanged;
-  final ValueChanged<int>? onChangeEnd;
-  final bool isAndroidTv;
-
-  const _RandomStartSlider({
-    required this.value,
-    required this.isAndroidTv,
-    required this.onChanged,
-    this.onChangeEnd,
-  });
-
-  @override
-  State<_RandomStartSlider> createState() => _RandomStartSliderState();
-}
-
-class _RandomStartSliderState extends State<_RandomStartSlider> {
-  FocusNode? _focusNode;
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.isAndroidTv) {
-      _focusNode = FocusNode(
-        debugLabel: 'RandomStartSlider',
-        onKeyEvent: _handleKeyEvent,
-      );
-      _focusNode!.addListener(_handleFocusChange);
-    }
-  }
-
-  void _handleFocusChange() {
-    if (mounted) {
-      setState(() {
-        _isFocused = _focusNode?.hasFocus ?? false;
-      });
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _RandomStartSlider oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isAndroidTv && _focusNode == null) {
-      _focusNode = FocusNode(
-        debugLabel: 'RandomStartSlider',
-        onKeyEvent: _handleKeyEvent,
-      );
-      _focusNode!.addListener(_handleFocusChange);
-    } else if (!widget.isAndroidTv && _focusNode != null) {
-      _focusNode!.removeListener(_handleFocusChange);
-      _focusNode!.dispose();
-      _focusNode = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    _focusNode?.removeListener(_handleFocusChange);
-    _focusNode?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textStyle = theme.textTheme.bodyMedium?.copyWith(
-      color: Colors.white70,
-      fontWeight: FontWeight.w600,
-    );
-    final helperStyle = theme.textTheme.bodySmall?.copyWith(
-      color: Colors.white60,
-    );
-    final divisions = (_randomStartPercentMax - _randomStartPercentMin) ~/ 5;
-
-    Widget sliderColumn = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Random start within first ${widget.value}%', style: textStyle),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackShape: const RoundedRectSliderTrackShape(),
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
-          ),
-          child: Slider(
-            value: widget.value.toDouble(),
-            focusNode: widget.isAndroidTv ? _focusNode : null,
-            min: _randomStartPercentMin.toDouble(),
-            max: _randomStartPercentMax.toDouble(),
-            divisions: divisions == 0 ? null : divisions,
-            label: '${widget.value}%',
-            onChanged: (raw) {
-              final next = _clampRandomStartPercent(raw.round());
-              widget.onChanged(next);
-            },
-            onChangeEnd: widget.onChangeEnd == null
-                ? null
-                : (raw) => widget.onChangeEnd!(
-                    _clampRandomStartPercent(raw.round()),
-                  ),
-          ),
-        ),
-        Text(
-          'Videos will jump to a random moment inside the first ${widget.value}% of playback.',
-          style: helperStyle,
-        ),
-      ],
-    );
-
-    // Wrap in focus indicator container for TV
-    if (widget.isAndroidTv) {
-      return AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _isFocused ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _isFocused ? Colors.white : Colors.white12,
-            width: _isFocused ? 2 : 1,
-          ),
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        child: sliderColumn,
-      );
-    }
-
-    return sliderColumn;
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (node.context != null) {
-        FocusScope.of(node.context!).nextFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (node.context != null) {
-        FocusScope.of(node.context!).previousFocus();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-}
-
-class _SwitchRow extends StatefulWidget {
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  const _SwitchRow({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  State<_SwitchRow> createState() => _SwitchRowState();
-}
-
-class _SwitchRowState extends State<_SwitchRow> {
-  bool _isFocused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      onFocusChange: (focused) {
-        setState(() {
-          _isFocused = focused;
-        });
-      },
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter ||
-              event.logicalKey == LogicalKeyboardKey.space) {
-            widget.onChanged(!widget.value);
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: _isFocused ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _isFocused ? Colors.white : Colors.white12,
-            width: _isFocused ? 2 : 1,
-          ),
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        child: SwitchListTile(
-          title: Text(
-            widget.title,
-            style: const TextStyle(color: Colors.white),
-          ),
-          subtitle: Text(
-            widget.subtitle,
-            style: const TextStyle(color: Colors.white70),
-          ),
-          value: widget.value,
-          onChanged: widget.onChanged,
-          activeColor: const Color(0xFFE50914),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 0,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// TV-optimized Compact Button for top bar
-class _TvCompactButton extends StatefulWidget {
-  final VoidCallback? onPressed;
-  final IconData icon;
-  final String? label;
-  final Color backgroundColor;
-
-  const _TvCompactButton({
-    required this.onPressed,
-    required this.icon,
-    required this.label,
-    required this.backgroundColor,
-  });
-
-  @override
-  State<_TvCompactButton> createState() => _TvCompactButtonState();
-}
-
-class _TvCompactButtonState extends State<_TvCompactButton> {
-  bool _isFocused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDisabled = widget.onPressed == null;
-
-    return Focus(
-      onFocusChange: (focused) {
-        setState(() {
-          _isFocused = focused;
-        });
-      },
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          // Handle both select and enter keys
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
-            widget.onPressed?.call();
-            return KeyEventResult.handled;
-          }
-          // Also handle context menu button as a secondary action
-          if (event.logicalKey == LogicalKeyboardKey.contextMenu &&
-              widget.label == null) {
-            // Only for settings button
-            widget.onPressed?.call();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _isFocused ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            height: 36,
-            padding: EdgeInsets.symmetric(
-              horizontal: widget.label != null ? 12 : 10,
-              vertical: 6,
-            ),
-            decoration: BoxDecoration(
-              color: isDisabled
-                  ? Colors.grey.withOpacity(0.3)
-                  : widget.backgroundColor.withOpacity(_isFocused ? 1.0 : 0.8),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: _isFocused
-                    ? Colors.white
-                    : (isDisabled
-                          ? Colors.grey.withOpacity(0.2)
-                          : Colors.white24),
-                width: _isFocused ? 2 : 1,
-              ),
-              boxShadow: _isFocused
-                  ? [
-                      BoxShadow(
-                        color: widget.backgroundColor.withOpacity(0.3),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  widget.icon,
-                  color: isDisabled ? Colors.grey : Colors.white,
-                  size: 16,
-                ),
-                if (widget.label != null) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    widget.label!,
-                    style: TextStyle(
-                      color: isDisabled ? Colors.grey : Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// TV-optimized Focusable Button
-class _TvFocusableButton extends StatefulWidget {
-  final VoidCallback? onPressed;
-  final IconData icon;
-  final String label;
-  final Color backgroundColor;
-  final double? width;
-
-  const _TvFocusableButton({
-    required this.onPressed,
-    required this.icon,
-    required this.label,
-    required this.backgroundColor,
-    this.width,
-  });
-
-  @override
-  State<_TvFocusableButton> createState() => _TvFocusableButtonState();
-}
-
-class _TvFocusableButtonState extends State<_TvFocusableButton> {
-  bool _isFocused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      onFocusChange: (focused) {
-        setState(() {
-          _isFocused = focused;
-        });
-      },
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
-          widget.onPressed?.call();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: AnimatedScale(
-        scale: _isFocused ? 1.1 : 1.0,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        child: Container(
-          width: widget.width,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: _isFocused
-                ? [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.3),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : null,
-            border: _isFocused
-                ? Border.all(color: Colors.white, width: 3)
-                : null,
-          ),
-          child: FilledButton.icon(
-            onPressed: widget.onPressed,
-            icon: Icon(widget.icon, size: 20),
-            label: Text(
-              widget.label,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: widget.backgroundColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// TV-optimized Focusable Card
-class _TvFocusableCard extends StatefulWidget {
-  final VoidCallback onPressed;
-  final VoidCallback? onLongPress;
-  final Widget child;
-  final bool showLongPressHint;
-
-  const _TvFocusableCard({
-    required this.onPressed,
-    required this.child,
-    this.onLongPress,
-    this.showLongPressHint = false,
-  });
-
-  @override
-  State<_TvFocusableCard> createState() => _TvFocusableCardState();
-}
-
-class _TvFocusableCardState extends State<_TvFocusableCard> {
-  bool _isFocused = false;
-  Timer? _longPressTimer;
-  bool _longPressTriggered = false;
-  DateTime? _lastLongPressTime;
-
-  @override
-  void dispose() {
-    _longPressTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      onFocusChange: (focused) {
-        print('[TvFocusableCard] Focus changed: $focused');
-        setState(() {
-          _isFocused = focused;
-        });
-        if (!focused) {
-          _longPressTimer?.cancel();
-          _longPressTriggered = false;
-        }
-      },
-      onKeyEvent: (node, event) {
-        // Handle Select/Enter button press
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
-          if (event is KeyDownEvent) {
-            print(
-              '[TvFocusableCard] Select/Enter key DOWN - starting long press timer',
-            );
-            _longPressTriggered = false;
-
-            // Start timer for long press (800ms)
-            _longPressTimer?.cancel();
-            _longPressTimer = Timer(const Duration(milliseconds: 800), () {
-              print(
-                '[TvFocusableCard] Long press detected! Triggering onLongPress',
-              );
-              _longPressTriggered = true;
-              _lastLongPressTime = DateTime.now();
-              if (widget.onLongPress != null) {
-                widget.onLongPress!();
-              }
-            });
-
-            return KeyEventResult.handled;
-          } else if (event is KeyUpEvent) {
-            print('[TvFocusableCard] Select/Enter key UP');
-            _longPressTimer?.cancel();
-
-            // Check if we recently triggered a long press (within last 500ms)
-            final timeSinceLongPress = _lastLongPressTime != null
-                ? DateTime.now().difference(_lastLongPressTime!).inMilliseconds
-                : 999999;
-
-            // If not a long press and not immediately after closing dialog, trigger regular press
-            if (!_longPressTriggered && timeSinceLongPress > 500) {
-              print('[TvFocusableCard] Short press - triggering onPressed');
-              widget.onPressed();
-            } else if (timeSinceLongPress <= 500) {
-              print(
-                '[TvFocusableCard] Ignoring key up - too soon after long press dialog',
-              );
-            }
-            _longPressTriggered = false;
-
-            return KeyEventResult.handled;
-          }
-        }
-
-        if (event is KeyDownEvent) {
-          print(
-            '[TvFocusableCard] Other key pressed: ${event.logicalKey.keyLabel} (${event.logicalKey.keyId})',
-          );
-        }
-
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: () {
-          print('[TvFocusableCard] GestureDetector onTap triggered');
-          widget.onPressed();
-        },
-        onLongPress: widget.onLongPress != null
-            ? () {
-                print(
-                  '[TvFocusableCard] GestureDetector onLongPress triggered!',
-                );
-                widget.onLongPress!();
-              }
-            : null,
-        child: Stack(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: double.infinity,
-              height: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: _isFocused
-                      ? [const Color(0xFF2A2A2A), const Color(0xFF1A1A1A)]
-                      : [const Color(0xFF1A1A1A), const Color(0xFF0F0F0F)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _isFocused ? Colors.white : Colors.white12,
-                  width: _isFocused ? 3 : 1,
-                ),
-                boxShadow: _isFocused
-                    ? [
-                        BoxShadow(
-                          color: Colors.white.withOpacity(0.2),
-                          blurRadius: 24,
-                          spreadRadius: 0,
-                        ),
-                      ]
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 8,
-                          spreadRadius: 0,
-                        ),
-                      ],
-              ),
-              child: widget.child,
-            ),
-            // Long press hint (bottom-right when focused)
-            if (_isFocused &&
-                widget.showLongPressHint &&
-                widget.onLongPress != null)
-              Positioned(
-                bottom: 8,
-                right: 8,
-                child: AnimatedOpacity(
-                  opacity: _isFocused ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.more_vert_rounded,
-                          size: 14,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Long press for options',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
