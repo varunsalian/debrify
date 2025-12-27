@@ -37,7 +37,8 @@ class PlaylistContentViewScreen extends StatefulWidget {
   });
 
   @override
-  State<PlaylistContentViewScreen> createState() => _PlaylistContentViewScreenState();
+  State<PlaylistContentViewScreen> createState() =>
+      _PlaylistContentViewScreenState();
 }
 
 class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
@@ -47,14 +48,19 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   // Current navigation state
   List<String> _folderPath = []; // Path segments for breadcrumbs
   RDFileNode? _rootContent; // Root content tree
-  List<RDFileNode>? _currentViewNodes; // Current folder's visible nodes (after view mode transformation)
+  List<RDFileNode>?
+  _currentViewNodes; // Current folder's visible nodes (after view mode transformation)
 
   // View mode state
   FolderViewMode _currentViewMode = FolderViewMode.raw;
 
   // Focus management for TV navigation
-  final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'playlist-view-mode-dropdown');
-  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'playlist-back-button');
+  final FocusNode _viewModeDropdownFocusNode = FocusNode(
+    debugLabel: 'playlist-view-mode-dropdown',
+  );
+  final FocusNode _backButtonFocusNode = FocusNode(
+    debugLabel: 'playlist-back-button',
+  );
 
   // Progress tracking cache
   Map<String, Map<String, dynamic>> _fileProgressCache = {};
@@ -68,7 +74,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   final ScrollController _episodeListScrollController = ScrollController();
   int? _targetEpisodeIndex; // Episode to scroll to after list is built
   Timer? _scrollRetryTimer; // Timer for scroll retry to prevent memory leaks
-  bool _isScrollScheduled = false; // Flag to prevent duplicate scroll scheduling
+  bool _isScrollScheduled =
+      false; // Flag to prevent duplicate scroll scheduling
 
   @override
   void initState() {
@@ -90,7 +97,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       await _parseSeriesPlaylist();
 
       // Auto-set Series View for detected series (only if no saved preference exists)
-      final savedViewMode = await StorageService.getPlaylistItemViewMode(widget.playlistItem);
+      final savedViewMode = await StorageService.getPlaylistItemViewMode(
+        widget.playlistItem,
+      );
       if (_seriesPlaylist?.isSeries == true && savedViewMode == null) {
         setState(() {
           _currentViewMode = FolderViewMode.seriesArrange;
@@ -107,7 +116,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   @override
   void dispose() {
-    _scrollRetryTimer?.cancel(); // Cancel any pending scroll retry to prevent memory leaks
+    _scrollRetryTimer
+        ?.cancel(); // Cancel any pending scroll retry to prevent memory leaks
     _viewModeDropdownFocusNode.dispose();
     _backButtonFocusNode.dispose();
     _episodeListScrollController.dispose();
@@ -116,7 +126,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Load saved view mode for this playlist item
   Future<void> _loadSavedViewMode() async {
-    final savedModeString = await StorageService.getPlaylistItemViewMode(widget.playlistItem);
+    final savedModeString = await StorageService.getPlaylistItemViewMode(
+      widget.playlistItem,
+    );
     if (savedModeString != null && mounted) {
       setState(() {
         _currentViewMode = _viewModeFromString(savedModeString);
@@ -212,7 +224,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     });
 
     try {
-      final provider = (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
+      final provider =
+          (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
 
       if (provider == 'torbox') {
         await _loadTorboxContent();
@@ -258,7 +271,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     // Use existing RDFolderTreeBuilder utility
-    _rootContent = RDFolderTreeBuilder.buildTree(allFiles.cast<Map<String, dynamic>>());
+    _rootContent = RDFolderTreeBuilder.buildTree(
+      allFiles.cast<Map<String, dynamic>>(),
+    );
   }
 
   /// Load Torbox content
@@ -273,7 +288,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('Please set your Torbox API key in Settings');
     }
 
-    final cachedTorrent = await TorboxService.getTorrentById(apiKey, torboxTorrentId);
+    final cachedTorrent = await TorboxService.getTorrentById(
+      apiKey,
+      torboxTorrentId,
+    );
     if (cachedTorrent == null) {
       throw Exception('Torrent not found');
     }
@@ -302,20 +320,28 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         final files = cachedFiles.cast<Map<String, dynamic>>();
         _rootContent = _buildPikPakFileTree(files);
       } else {
-        throw Exception('No PikPak file data found. Please remove and re-add this item to playlist.');
+        throw Exception(
+          'No PikPak file data found. Please remove and re-add this item to playlist.',
+        );
       }
     }
   }
 
   /// Build folder tree from PikPak by fetching folder structure
   /// This properly preserves the folder hierarchy
-  Future<RDFileNode> _buildPikPakFolderTree(String folderId, {int depth = 0, String currentPath = ''}) async {
+  Future<RDFileNode> _buildPikPakFolderTree(
+    String folderId, {
+    int depth = 0,
+    String currentPath = '',
+  }) async {
     final pikpak = PikPakApiService.instance;
 
     // Prevent infinite recursion or excessively deep folder structures
     const int maxDepth = 4;
     if (depth > maxDepth) {
-      throw Exception('Folder hierarchy too deep (max $maxDepth levels). Please reorganize your folders.');
+      throw Exception(
+        'Folder hierarchy too deep (max $maxDepth levels). Please reorganize your folders.',
+      );
     }
 
     // Fetch files in this folder (non-recursive)
@@ -335,16 +361,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         if (fileId != null) {
           // Build path for subfolder
           final subPath = currentPath.isEmpty ? name : '$currentPath/$name';
-          final subTree = await _buildPikPakFolderTree(fileId, depth: depth + 1, currentPath: subPath);
-          children.add(RDFileNode.folder(
-            name: name,
-            children: subTree.children,
-          ));
+          final subTree = await _buildPikPakFolderTree(
+            fileId,
+            depth: depth + 1,
+            currentPath: subPath,
+          );
+          children.add(
+            RDFileNode.folder(name: name, children: subTree.children),
+          );
         }
       } else {
         // Add file node
         final sizeRaw = file['size'];
-        final size = sizeRaw is int ? sizeRaw : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
+        final size = sizeRaw is int
+            ? sizeRaw
+            : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
 
         // Store the PikPak file metadata in the node's path field (we'll parse it later)
         // Format: "pikpak://fileId|fileName"
@@ -353,14 +384,16 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Build relative path for series parsing
         final relPath = currentPath.isEmpty ? name : '$currentPath/$name';
 
-        children.add(RDFileNode.file(
-          name: name,
-          fileId: fileIndex,
-          path: pikpakUrl, // Store PikPak file ID and name here
-          relativePath: relPath, // Store clean path for series parsing
-          bytes: size,
-          linkIndex: fileIndex,
-        ));
+        children.add(
+          RDFileNode.file(
+            name: name,
+            fileId: fileIndex,
+            path: pikpakUrl, // Store PikPak file ID and name here
+            relativePath: relPath, // Store clean path for series parsing
+            bytes: size,
+            linkIndex: fileIndex,
+          ),
+        );
         fileIndex++;
       }
     }
@@ -382,7 +415,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // PikPak returns size as String, need to parse it
       final sizeRaw = file['size'];
-      final size = sizeRaw is int ? sizeRaw : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
+      final size = sizeRaw is int
+          ? sizeRaw
+          : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
 
       if (kind == 'drive#folder') {
         // Skip folders in flat view since we don't have hierarchy
@@ -391,13 +426,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Add file node with pikpak:// URL for playback
         final pikpakUrl = 'pikpak://$fileId|$name';
 
-        nodes.add(RDFileNode.file(
-          name: name,
-          fileId: i,
-          path: pikpakUrl, // Store PikPak file ID for playback
-          bytes: size,
-          linkIndex: i,
-        ));
+        nodes.add(
+          RDFileNode.file(
+            name: name,
+            fileId: i,
+            path: pikpakUrl, // Store PikPak file ID for playback
+            bytes: size,
+            linkIndex: i,
+          ),
+        );
       }
     }
 
@@ -422,7 +459,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           );
         } catch (e) {
           // Folder not found - reset to root
-          print('Warning: Folder "$segment" not found in current view, resetting to root');
+          print(
+            'Warning: Folder "$segment" not found in current view, resetting to root',
+          );
           _folderPath.clear();
           currentFolder = _rootContent!;
           break;
@@ -448,7 +487,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     });
 
     // Save view mode preference
-    StorageService.savePlaylistItemViewMode(widget.playlistItem, _viewModeToString(mode));
+    StorageService.savePlaylistItemViewMode(
+      widget.playlistItem,
+      _viewModeToString(mode),
+    );
   }
 
   /// Apply sorted A-Z view
@@ -555,7 +597,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Extract folder path from relativePath (or use path as fallback)
       final fullPath = (node.relativePath ?? node.path) ?? '';
       final lastSlashIndex = fullPath.lastIndexOf('/');
-      final folderPath = lastSlashIndex >= 0 ? fullPath.substring(0, lastSlashIndex) : '';
+      final folderPath = lastSlashIndex >= 0
+          ? fullPath.substring(0, lastSlashIndex)
+          : '';
 
       folderGroups.putIfAbsent(folderPath, () => []);
       folderGroups[folderPath]!.add(node);
@@ -583,7 +627,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     // Sort folder paths using SAME LOGIC AS UI (_applySortedView sorts folders)
     // Extract the top-level folder name from each path for sorting
-    final provider = ((widget.playlistItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
+    final provider =
+        ((widget.playlistItem['provider'] as String?) ?? 'realdebrid')
+            .toLowerCase();
     final folderPathsList = folderGroups.keys.toList();
     folderPathsList.sort((a, b) {
       // Extract the top-level folder name from the path
@@ -598,9 +644,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // For Torbox: skip first folder level (torrent name), use second level
         // For others: use first folder level
         if (provider == 'torbox' && aParts.length > 1) {
-          aFolderName = aParts[1];  // Second folder (skip torrent name)
+          aFolderName = aParts[1]; // Second folder (skip torrent name)
         } else {
-          aFolderName = aParts[0];  // First folder (top-level)
+          aFolderName = aParts[0]; // First folder (top-level)
         }
       }
 
@@ -611,9 +657,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // For Torbox: skip first folder level (torrent name), use second level
         // For others: use first folder level
         if (provider == 'torbox' && bParts.length > 1) {
-          bFolderName = bParts[1];  // Second folder (skip torrent name)
+          bFolderName = bParts[1]; // Second folder (skip torrent name)
         } else {
-          bFolderName = bParts[0];  // First folder (top-level)
+          bFolderName = bParts[0]; // First folder (top-level)
         }
       }
 
@@ -643,8 +689,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Apply series arrange view (creates virtual season folders)
   List<RDFileNode> _applySeriesArrangeView(List<RDFileNode> nodes) {
-    final videoFiles = nodes.where((n) => !n.isFolder && FileUtils.isVideoFile(n.name)).toList();
-    final otherNodes = nodes.where((n) => n.isFolder || !FileUtils.isVideoFile(n.name)).toList();
+    final videoFiles = nodes
+        .where((n) => !n.isFolder && FileUtils.isVideoFile(n.name))
+        .toList();
+    final otherNodes = nodes
+        .where((n) => n.isFolder || !FileUtils.isVideoFile(n.name))
+        .toList();
 
     if (videoFiles.length < 3) {
       // Not enough files for series detection, fallback to sorted
@@ -675,15 +725,16 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final List<RDFileNode> seasonFolders = [];
     for (final seasonNum in seasonMap.keys.toList()..sort()) {
       final seasonFiles = seasonMap[seasonNum]!;
-      seasonFolders.add(RDFileNode.folder(
-        name: seasonNum == 0 ? 'Season 0 - Specials' : 'Season $seasonNum',
-        children: seasonFiles,
-      ));
+      seasonFolders.add(
+        RDFileNode.folder(
+          name: seasonNum == 0 ? 'Season 0 - Specials' : 'Season $seasonNum',
+          children: seasonFiles,
+        ),
+      );
     }
 
     return [...otherNodes, ...seasonFolders];
   }
-
 
   /// Navigate into a folder
   void _navigateIntoFolder(RDFileNode folder) {
@@ -725,7 +776,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
-              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+              Text(
+                'Preparing playlist…',
+                style: TextStyle(color: Colors.white),
+              ),
             ],
           ),
         ),
@@ -749,13 +803,16 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Find the selected file index
       int startIndex = 0;
       for (int i = 0; i < videoFiles.length; i++) {
-        if (videoFiles[i].name == file.name && videoFiles[i].path == file.path) {
+        if (videoFiles[i].name == file.name &&
+            videoFiles[i].path == file.path) {
           startIndex = i;
           break;
         }
       }
 
-      final provider = ((widget.playlistItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
+      final provider =
+          ((widget.playlistItem['provider'] as String?) ?? 'realdebrid')
+              .toLowerCase();
 
       if (provider == 'realdebrid') {
         await _playRealDebridPlaylist(videoFiles, startIndex);
@@ -786,9 +843,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to play file: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to play file: $e')));
       }
     }
   }
@@ -803,17 +860,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           focusNode: _backButtonFocusNode,
           icon: const Icon(Icons.arrow_back),
           onPressed: _navigateUp,
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 16)),
-            if (_folderPath.isNotEmpty)
-              Text(
-                _folderPath.join(' > '),
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
-              ),
-          ],
         ),
         actions: [
           IconButton(
@@ -834,9 +880,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             ),
 
           // Content area
-          Expanded(
-            child: _buildContent(),
-          ),
+          Expanded(child: _buildContent()),
         ],
       ),
     );
@@ -944,98 +988,105 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             }
           },
           child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  // Icon
-                  Icon(
-                    isFolder
-                        ? Icons.folder
-                        : isVideo
-                            ? Icons.play_circle_outline
-                            : Icons.insert_drive_file,
-                    color: isFolder ? Colors.amber : Colors.blue,
-                    size: 32,
-                  ),
-                  const SizedBox(width: 12),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    // Icon
+                    Icon(
+                      isFolder
+                          ? Icons.folder
+                          : isVideo
+                          ? Icons.play_circle_outline
+                          : Icons.insert_drive_file,
+                      color: isFolder ? Colors.amber : Colors.blue,
+                      size: 32,
+                    ),
+                    const SizedBox(width: 12),
 
-                  // File info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          node.name,
+                    // File info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            node.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            isFolder
+                                ? '${node.fileCount} files • ${Formatters.formatFileSize(node.totalBytes)}'
+                                : Formatters.formatFileSize(node.bytes ?? 0),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Arrow for folders or progress indicator for videos
+                    if (isFolder)
+                      const Icon(Icons.chevron_right, color: Colors.white54)
+                    else if (isVideo && progress > 0.0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isFinished
+                              ? const Color(0xFF059669)
+                              : Colors.blue,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isFinished ? 'DONE' : '${(progress * 100).round()}%',
                           style: const TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          isFolder
-                              ? '${node.fileCount} files • ${Formatters.formatFileSize(node.totalBytes)}'
-                              : Formatters.formatFileSize(node.bytes ?? 0),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-
-                  // Arrow for folders or progress indicator for videos
-                  if (isFolder)
-                    const Icon(Icons.chevron_right, color: Colors.white54)
-                  else if (isVideo && progress > 0.0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isFinished ? const Color(0xFF059669) : Colors.blue,
-                        borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(
-                        isFinished ? 'DONE' : '${(progress * 100).round()}%',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
 
-            // Progress bar overlay for videos
-            if (isVideo && progress > 0.0)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.3),
-                  ),
-                  child: FractionallySizedBox(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: progress,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isFinished ? const Color(0xFF059669) : Colors.blue,
+              // Progress bar overlay for videos
+              if (isVideo && progress > 0.0)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.3),
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: progress,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isFinished
+                              ? const Color(0xFF059669)
+                              : Colors.blue,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -1067,8 +1118,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // so we must apply the same sorting here to look up the correct progress key
       _applySortedPlaylistOrder(videoFiles);
 
-      final fileIndex = videoFiles.indexWhere((node) =>
-        node.name == file.name && node.path == file.path);
+      final fileIndex = videoFiles.indexWhere(
+        (node) => node.name == file.name && node.path == file.path,
+      );
 
       if (fileIndex >= 0) {
         final key = '0_${fileIndex + 1}'; // season 0, 1-based episode index
@@ -1144,13 +1196,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         _buildSeasonSelector(),
 
         // Loading indicator for metadata
-        if (_isLoadingSeriesMetadata)
-          const LinearProgressIndicator(),
+        if (_isLoadingSeriesMetadata) const LinearProgressIndicator(),
 
         // Episode list
-        Expanded(
-          child: _buildEpisodeList(season),
-        ),
+        Expanded(child: _buildEpisodeList(season)),
       ],
     );
   }
@@ -1200,7 +1249,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             mostRecentKey = entry.key;
           }
         } catch (e) {
-          print('⚠️ Failed to parse updatedAt timestamp: $updatedAt (${e.toString()})');
+          print(
+            '⚠️ Failed to parse updatedAt timestamp: $updatedAt (${e.toString()})',
+          );
         }
       }
     }
@@ -1211,7 +1262,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (parts.length >= 2) {
         final seasonNum = int.tryParse(parts[0]);
         if (seasonNum != null) {
-          print('🎯 Found most recent season: $seasonNum from key: $mostRecentKey');
+          print(
+            '🎯 Found most recent season: $seasonNum from key: $mostRecentKey',
+          );
           return seasonNum;
         }
       }
@@ -1270,12 +1323,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 continue;
               }
 
-              if (mostRecentTimestamp == null || timestamp > mostRecentTimestamp) {
+              if (mostRecentTimestamp == null ||
+                  timestamp > mostRecentTimestamp) {
                 mostRecentTimestamp = timestamp;
                 mostRecentEpisodeNum = episodeNum;
               }
             } catch (e) {
-              print('⚠️ Failed to parse updatedAt timestamp: $updatedAt (${e.toString()})');
+              print(
+                '⚠️ Failed to parse updatedAt timestamp: $updatedAt (${e.toString()})',
+              );
             }
           }
         }
@@ -1287,7 +1343,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       for (int i = 0; i < season.episodes.length; i++) {
         final episode = season.episodes[i];
         if (episode.seriesInfo.episode == mostRecentEpisodeNum) {
-          print('🎯 Found most recent episode in season: Episode $mostRecentEpisodeNum at index $i');
+          print(
+            '🎯 Found most recent episode in season: Episode $mostRecentEpisodeNum at index $i',
+          );
           return i;
         }
       }
@@ -1304,8 +1362,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     try {
       // Get the series/collection title from the playlist item
       // IMPORTANT: Use same logic as _parseSeriesPlaylist() for consistency
-      final String? seriesTitle = _seriesPlaylist?.seriesTitle ??
-                                   widget.playlistItem['title'] as String?;
+      final String? seriesTitle =
+          _seriesPlaylist?.seriesTitle ??
+          widget.playlistItem['title'] as String?;
 
       if (seriesTitle != null && seriesTitle.isNotEmpty) {
         print('🔄 Reloading progress after video playback for: $seriesTitle');
@@ -1315,7 +1374,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
         if (!mounted) return; // Check again after async operation
 
-        print('📊 Reloaded ${episodeProgress.length} episodes with updated progress');
+        print(
+          '📊 Reloaded ${episodeProgress.length} episodes with updated progress',
+        );
         print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
 
         setState(() {
@@ -1344,16 +1405,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       // Create PlaylistEntry objects from video files
-      final entries = videoFiles.map((f) => PlaylistEntry(
-        url: '',  // Not needed for parsing
-        title: f.name,
-        relativePath: f.relativePath ?? f.path, // Use relativePath if available, fallback to path
-      )).toList();
+      final entries = videoFiles
+          .map(
+            (f) => PlaylistEntry(
+              url: '', // Not needed for parsing
+              title: f.name,
+              relativePath:
+                  f.relativePath ??
+                  f.path, // Use relativePath if available, fallback to path
+            ),
+          )
+          .toList();
 
       // Get series/collection title from playlist item
       // Try 'seriesTitle' first (if previously extracted), fallback to 'title' (raw torrent name)
-      final String? collectionTitle = widget.playlistItem['seriesTitle'] as String? ??
-                                       widget.playlistItem['title'] as String?;
+      final String? collectionTitle =
+          widget.playlistItem['seriesTitle'] as String? ??
+          widget.playlistItem['title'] as String?;
 
       _seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
         entries,
@@ -1362,8 +1430,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Reload progress with the clean extracted series/collection title!
       // This works for both series and movie collections
-      final String? titleForProgress = _seriesPlaylist!.seriesTitle ??
-                                        widget.playlistItem['title'] as String?;
+      final String? titleForProgress =
+          _seriesPlaylist!.seriesTitle ??
+          widget.playlistItem['title'] as String?;
 
       if (titleForProgress != null && titleForProgress.isNotEmpty) {
         print('🔄 Reloading progress with clean title: $titleForProgress');
@@ -1387,9 +1456,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Only show loading indicator if data needs to be fetched
       bool showLoading = true;
       if (widget.playlistItem != null) {
-        final mapping = await StorageService.getTVMazeSeriesMapping(widget.playlistItem!);
+        final mapping = await StorageService.getTVMazeSeriesMapping(
+          widget.playlistItem!,
+        );
         if (mapping != null) {
-          showLoading = false;  // Data should be cached, skip loading indicator
+          showLoading = false; // Data should be cached, skip loading indicator
         }
       }
 
@@ -1401,20 +1472,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Fetch TVMaze metadata asynchronously
       if (_seriesPlaylist!.isSeries) {
-        _seriesPlaylist!.fetchEpisodeInfo(playlistItem: widget.playlistItem).then((_) {
-          if (mounted) {
-            setState(() {
-              _isLoadingSeriesMetadata = false;
+        _seriesPlaylist!
+            .fetchEpisodeInfo(playlistItem: widget.playlistItem)
+            .then((_) {
+              if (mounted) {
+                setState(() {
+                  _isLoadingSeriesMetadata = false;
+                });
+              }
+            })
+            .catchError((e) {
+              print('Failed to fetch episode metadata: $e');
+              if (mounted) {
+                setState(() {
+                  _isLoadingSeriesMetadata = false;
+                });
+              }
             });
-          }
-        }).catchError((e) {
-          print('Failed to fetch episode metadata: $e');
-          if (mounted) {
-            setState(() {
-              _isLoadingSeriesMetadata = false;
-            });
-          }
-        });
       }
     } catch (e) {
       print('Failed to parse series playlist: $e');
@@ -1430,14 +1504,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final selectedShow = await showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => TVMazeSearchDialog(
-        initialQuery: _seriesPlaylist?.seriesTitle ?? '',
-      ),
+      builder: (context) =>
+          TVMazeSearchDialog(initialQuery: _seriesPlaylist?.seriesTitle ?? ''),
     );
 
     if (selectedShow != null && mounted) {
       // 1. Get OLD mapping (before it's overwritten)
-      final oldMapping = await StorageService.getTVMazeSeriesMapping(widget.playlistItem);
+      final oldMapping = await StorageService.getTVMazeSeriesMapping(
+        widget.playlistItem,
+      );
       final oldShowId = oldMapping?['tvmazeShowId'] as int?;
 
       // 2. Clear old show ID cache if it exists
@@ -1448,7 +1523,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       // 3. Clear series name cache (existing logic)
-      await EpisodeInfoService.clearSeriesCache(_seriesPlaylist?.seriesTitle ?? '');
+      await EpisodeInfoService.clearSeriesCache(
+        _seriesPlaylist?.seriesTitle ?? '',
+      );
       await TVMazeService.clearSeriesCache(_seriesPlaylist?.seriesTitle ?? '');
 
       // 4. Save new mapping
@@ -1465,7 +1542,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Metadata fixed! Using "${selectedShow['name']}" from TVMaze'),
+            content: Text(
+              'Metadata fixed! Using "${selectedShow['name']}" from TVMaze',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -1477,20 +1556,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           _isLoadingSeriesMetadata = true;
         });
 
-        _seriesPlaylist!.fetchEpisodeInfo(playlistItem: widget.playlistItem).then((_) {
-          if (mounted) {
-            setState(() {
-              _isLoadingSeriesMetadata = false;
+        _seriesPlaylist!
+            .fetchEpisodeInfo(playlistItem: widget.playlistItem)
+            .then((_) {
+              if (mounted) {
+                setState(() {
+                  _isLoadingSeriesMetadata = false;
+                });
+              }
+            })
+            .catchError((e) {
+              print('Failed to refresh episode metadata: $e');
+              if (mounted) {
+                setState(() {
+                  _isLoadingSeriesMetadata = false;
+                });
+              }
             });
-          }
-        }).catchError((e) {
-          print('Failed to refresh episode metadata: $e');
-          if (mounted) {
-            setState(() {
-              _isLoadingSeriesMetadata = false;
-            });
-          }
-        });
       }
     }
   }
@@ -1523,7 +1605,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       );
 
       // Also update the in-memory playlist item for immediate UI update
-      final provider = (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
+      final provider =
+          (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
       bool updated = false;
 
       if (provider.toLowerCase() == 'realdebrid') {
@@ -1551,7 +1634,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           }
         }
       } else if (provider.toLowerCase() == 'pikpak') {
-        final pikpakCollectionId = widget.playlistItem['pikpakCollectionId'] as String?;
+        final pikpakCollectionId =
+            widget.playlistItem['pikpakCollectionId'] as String?;
         if (pikpakCollectionId != null) {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
@@ -1561,9 +1645,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       if (updated) {
-        print('✅ Successfully updated playlist poster in memory and persistent storage');
+        print(
+          '✅ Successfully updated playlist poster in memory and persistent storage',
+        );
       } else {
-        print('⚠️ Updated persistent storage but in-memory update failed - poster will still persist on restart');
+        print(
+          '⚠️ Updated persistent storage but in-memory update failed - poster will still persist on restart',
+        );
       }
     } catch (e) {
       print('❌ Error updating playlist poster: $e');
@@ -1577,7 +1665,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         border: Border(
           bottom: BorderSide(
             color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
@@ -1587,59 +1677,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.video_library, size: 20, color: Colors.white70),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _seriesPlaylist!.seriesTitle ?? 'Series',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Fix Metadata button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _showFixMetadataDialog,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.orange.withValues(alpha: 0.5),
-                    width: 1,
-                  ),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.build,
-                      color: Colors.orange,
-                      size: 14,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Fix Metadata',
-                      style: TextStyle(
-                        color: Colors.orange,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
           DropdownButton<int>(
             value: _selectedSeasonNumber,
             dropdownColor: const Color(0xFF1E293B),
@@ -1670,6 +1707,41 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 });
               }
             },
+          ),
+          const Spacer(),
+          // Fix Metadata button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _showFixMetadataDialog,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.build, color: Colors.orange, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      'Fix Metadata',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1718,14 +1790,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     if (!_episodeListScrollController.hasClients) {
       // Retry up to 3 times with increasing delay
       if (retryCount < 3) {
-        print('⏳ ScrollController not ready yet, scheduling retry ${retryCount + 1}/3');
-        _scrollRetryTimer = Timer(Duration(milliseconds: 100 * (retryCount + 1)), () {
-          if (mounted) {
-            _scrollToEpisode(episodeIndex, retryCount: retryCount + 1);
-          }
-        });
+        print(
+          '⏳ ScrollController not ready yet, scheduling retry ${retryCount + 1}/3',
+        );
+        _scrollRetryTimer = Timer(
+          Duration(milliseconds: 100 * (retryCount + 1)),
+          () {
+            if (mounted) {
+              _scrollToEpisode(episodeIndex, retryCount: retryCount + 1);
+            }
+          },
+        );
       } else {
-        print('❌ Failed to scroll after 3 retries - ScrollController never attached');
+        print(
+          '❌ Failed to scroll after 3 retries - ScrollController never attached',
+        );
       }
       return;
     }
@@ -1734,14 +1813,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Each episode card is roughly 180px (desktop) or 300px (mobile) + 16px padding
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
-    final estimatedItemHeight = isMobile ? 316.0 : 196.0; // card height + padding
+    final estimatedItemHeight = isMobile
+        ? 316.0
+        : 196.0; // card height + padding
     final targetOffset = episodeIndex * estimatedItemHeight;
 
     // Ensure we don't scroll beyond the max extent
-    final maxScrollExtent = _episodeListScrollController.position.maxScrollExtent;
-    final finalOffset = targetOffset > maxScrollExtent ? maxScrollExtent : targetOffset;
+    final maxScrollExtent =
+        _episodeListScrollController.position.maxScrollExtent;
+    final finalOffset = targetOffset > maxScrollExtent
+        ? maxScrollExtent
+        : targetOffset;
 
-    print('📜 Auto-scrolling to episode index: $episodeIndex (offset: $finalOffset, max: $maxScrollExtent)');
+    print(
+      '📜 Auto-scrolling to episode index: $episodeIndex (offset: $finalOffset, max: $maxScrollExtent)',
+    );
 
     // Scroll to the target episode with animation
     _episodeListScrollController.animateTo(
@@ -1756,9 +1842,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Get progress for this episode
     double progress = 0.0;
     bool isFinished = false;
-    if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+    if (episode.seriesInfo.season != null &&
+        episode.seriesInfo.episode != null) {
       final key = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
-      print('🔍 Looking for progress with key: $key for ${episode.displayTitle}');
+      print(
+        '🔍 Looking for progress with key: $key for ${episode.displayTitle}',
+      );
       print('💾 Available keys in cache: ${_fileProgressCache.keys.toList()}');
       final progressData = _fileProgressCache[key];
       if (progressData != null) {
@@ -1768,7 +1857,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         if (durationMs > 0) {
           progress = positionMs / durationMs;
           isFinished = progress >= 0.9 || (durationMs - positionMs) < 120000;
-          print('📈 Progress: ${(progress * 100).round()}%, Finished: $isFinished');
+          print(
+            '📈 Progress: ${(progress * 100).round()}%, Finished: $isFinished',
+          );
         }
       } else {
         print('❌ No progress data found for key: $key');
@@ -1802,8 +1893,20 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         child: InkWell(
           onTap: () => _playEpisode(episode),
           child: isMobile
-              ? _buildMobileEpisodeCard(episode, progress, isFinished, hasMetadata, episodeInfo)
-              : _buildDesktopEpisodeCard(episode, progress, isFinished, hasMetadata, episodeInfo),
+              ? _buildMobileEpisodeCard(
+                  episode,
+                  progress,
+                  isFinished,
+                  hasMetadata,
+                  episodeInfo,
+                )
+              : _buildDesktopEpisodeCard(
+                  episode,
+                  progress,
+                  isFinished,
+                  hasMetadata,
+                  episodeInfo,
+                ),
         ),
       ),
     );
@@ -1859,7 +1962,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 top: 8,
                 left: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(6),
@@ -1885,7 +1991,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   top: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF5C518),
                       borderRadius: BorderRadius.circular(6),
@@ -1914,7 +2023,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   bottom: 8,
                   left: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: isFinished
                           ? const Color(0xFF059669)
@@ -1932,7 +2044,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          isFinished ? Icons.check_circle : Icons.play_circle_filled,
+                          isFinished
+                              ? Icons.check_circle
+                              : Icons.play_circle_filled,
                           color: Colors.white,
                           size: 14,
                         ),
@@ -1979,7 +2093,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   if (progress > 0.0) ...[
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: isFinished
                             ? const Color(0xFF059669).withValues(alpha: 0.2)
@@ -2037,7 +2154,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 Row(
                   children: [
                     if (episodeInfo!.runtime != null) ...[
-                      const Icon(Icons.schedule, size: 14, color: Colors.white60),
+                      const Icon(
+                        Icons.schedule,
+                        size: 14,
+                        color: Colors.white60,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         '${episodeInfo.runtime} min',
@@ -2047,10 +2168,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         ),
                       ),
                     ],
-                    if (episodeInfo.runtime != null && episodeInfo.airDate != null)
-                      const Text('  •  ', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    if (episodeInfo.runtime != null &&
+                        episodeInfo.airDate != null)
+                      const Text(
+                        '  •  ',
+                        style: TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
                     if (episodeInfo.airDate != null) ...[
-                      const Icon(Icons.calendar_today, size: 14, color: Colors.white60),
+                      const Icon(
+                        Icons.calendar_today,
+                        size: 14,
+                        color: Colors.white60,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         episodeInfo.airDate!,
@@ -2152,7 +2281,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       top: 8,
                       left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(6),
@@ -2178,7 +2310,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         top: 8,
                         right: 8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF5C518),
                             borderRadius: BorderRadius.circular(6),
@@ -2186,7 +2321,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.star, color: Colors.black, size: 14),
+                              const Icon(
+                                Icons.star,
+                                color: Colors.black,
+                                size: 14,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 episodeInfo!.rating!.toStringAsFixed(1),
@@ -2207,7 +2346,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         bottom: 8,
                         left: 8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: isFinished
                                 ? const Color(0xFF059669)
@@ -2225,7 +2367,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                isFinished ? Icons.check_circle : Icons.play_circle_filled,
+                                isFinished
+                                    ? Icons.check_circle
+                                    : Icons.play_circle_filled,
                                 color: Colors.white,
                                 size: 14,
                               ),
@@ -2273,11 +2417,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                           if (progress > 0.0) ...[
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: isFinished
-                                    ? const Color(0xFF059669).withValues(alpha: 0.2)
-                                    : const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                    ? const Color(
+                                        0xFF059669,
+                                      ).withValues(alpha: 0.2)
+                                    : const Color(
+                                        0xFF6366F1,
+                                      ).withValues(alpha: 0.2),
                                 border: Border.all(
                                   color: isFinished
                                       ? const Color(0xFF059669)
@@ -2331,7 +2482,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         Row(
                           children: [
                             if (episodeInfo!.runtime != null) ...[
-                              const Icon(Icons.schedule, size: 14, color: Colors.white60),
+                              const Icon(
+                                Icons.schedule,
+                                size: 14,
+                                color: Colors.white60,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 '${episodeInfo!.runtime} min',
@@ -2341,10 +2496,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                                 ),
                               ),
                             ],
-                            if (episodeInfo!.runtime != null && episodeInfo!.airDate != null)
-                              const Text('  •  ', style: TextStyle(color: Colors.white60)),
+                            if (episodeInfo!.runtime != null &&
+                                episodeInfo!.airDate != null)
+                              const Text(
+                                '  •  ',
+                                style: TextStyle(color: Colors.white60),
+                              ),
                             if (episodeInfo!.airDate != null) ...[
-                              const Icon(Icons.calendar_today, size: 14, color: Colors.white60),
+                              const Icon(
+                                Icons.calendar_today,
+                                size: 14,
+                                color: Colors.white60,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 episodeInfo!.airDate!,
@@ -2407,18 +2570,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.video_library,
-              color: Colors.white38,
-              size: 48,
-            ),
+            const Icon(Icons.video_library, color: Colors.white38, size: 48),
             const SizedBox(height: 8),
             Text(
               episode.seasonEpisodeString,
-              style: const TextStyle(
-                color: Colors.white38,
-                fontSize: 12,
-              ),
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
             ),
           ],
         ),
@@ -2441,7 +2597,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
-              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+              Text(
+                'Preparing playlist…',
+                style: TextStyle(color: Colors.white),
+              ),
             ],
           ),
         ),
@@ -2477,7 +2636,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         }
       } else {
         // Raw/Series/Collection modes: originalIndex is still correct
-        if (episode.originalIndex >= 0 && episode.originalIndex < videoFiles.length) {
+        if (episode.originalIndex >= 0 &&
+            episode.originalIndex < videoFiles.length) {
           startIndex = episode.originalIndex;
         } else {
           // Fallback: try to match by filename
@@ -2490,7 +2650,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         }
       }
 
-      final provider = ((widget.playlistItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
+      final provider =
+          ((widget.playlistItem['provider'] as String?) ?? 'realdebrid')
+              .toLowerCase();
 
       if (provider == 'realdebrid') {
         await _playRealDebridPlaylist(videoFiles, startIndex);
@@ -2521,15 +2683,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     }
   }
 
   /// Play Real-Debrid playlist
-  Future<void> _playRealDebridPlaylist(List<RDFileNode> videoFiles, int startIndex) async {
+  Future<void> _playRealDebridPlaylist(
+    List<RDFileNode> videoFiles,
+    int startIndex,
+  ) async {
     final String? apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Please set your Real-Debrid API key in Settings');
@@ -2554,19 +2719,39 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (i == startIndex) {
         // Unrestrict the first file
         try {
-          final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[linkIndex]);
+          final unrestrictResult = await DebridService.unrestrictLink(
+            apiKey,
+            links[linkIndex],
+          );
           final url = unrestrictResult['download']?.toString() ?? '';
-          entries.add(PlaylistEntry(
-            url: url,
-            title: file.name,
-            relativePath: file.relativePath ?? file.path,
-            rdTorrentId: rdTorrentId,
-            rdLinkIndex: linkIndex,
-            sizeBytes: file.bytes,
-            provider: 'realdebrid',
-          ));
+          entries.add(
+            PlaylistEntry(
+              url: url,
+              title: file.name,
+              relativePath: file.relativePath ?? file.path,
+              rdTorrentId: rdTorrentId,
+              rdLinkIndex: linkIndex,
+              sizeBytes: file.bytes,
+              provider: 'realdebrid',
+            ),
+          );
         } catch (_) {
-          entries.add(PlaylistEntry(
+          entries.add(
+            PlaylistEntry(
+              url: '',
+              title: file.name,
+              relativePath: file.relativePath ?? file.path,
+              restrictedLink: links[linkIndex],
+              rdTorrentId: rdTorrentId,
+              rdLinkIndex: linkIndex,
+              sizeBytes: file.bytes,
+              provider: 'realdebrid',
+            ),
+          );
+        }
+      } else {
+        entries.add(
+          PlaylistEntry(
             url: '',
             title: file.name,
             relativePath: file.relativePath ?? file.path,
@@ -2575,19 +2760,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             rdLinkIndex: linkIndex,
             sizeBytes: file.bytes,
             provider: 'realdebrid',
-          ));
-        }
-      } else {
-        entries.add(PlaylistEntry(
-          url: '',
-          title: file.name,
-          relativePath: file.relativePath ?? file.path,
-          restrictedLink: links[linkIndex],
-          rdTorrentId: rdTorrentId,
-          rdLinkIndex: linkIndex,
-          sizeBytes: file.bytes,
-          provider: 'realdebrid',
-        ));
+          ),
+        );
       }
     }
 
@@ -2596,7 +2770,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle = _seriesPlaylist?.seriesTitle ?? widget.playlistItem['title'] as String? ?? 'Series';
+    final String seriesTitle =
+        _seriesPlaylist?.seriesTitle ??
+        widget.playlistItem['title'] as String? ??
+        'Series';
 
     if (!mounted) return;
 
@@ -2620,7 +2797,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   /// Play Torbox playlist
-  Future<void> _playTorboxPlaylist(List<RDFileNode> videoFiles, int startIndex) async {
+  Future<void> _playTorboxPlaylist(
+    List<RDFileNode> videoFiles,
+    int startIndex,
+  ) async {
     final String? apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Please set your Torbox API key in Settings');
@@ -2645,18 +2825,34 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               torrentId: torboxTorrentId,
               fileId: file.fileId!,
             );
-            entries.add(PlaylistEntry(
-              url: url,
+            entries.add(
+              PlaylistEntry(
+                url: url,
+                title: file.name,
+                relativePath: _cleanTorboxPath(file.path),
+                torboxTorrentId: torboxTorrentId,
+                torboxFileId: file.fileId,
+                sizeBytes: file.bytes,
+                provider: 'torbox',
+              ),
+            );
+          }
+        } catch (_) {
+          entries.add(
+            PlaylistEntry(
+              url: '',
               title: file.name,
               relativePath: _cleanTorboxPath(file.path),
               torboxTorrentId: torboxTorrentId,
               torboxFileId: file.fileId,
               sizeBytes: file.bytes,
               provider: 'torbox',
-            ));
-          }
-        } catch (_) {
-          entries.add(PlaylistEntry(
+            ),
+          );
+        }
+      } else {
+        entries.add(
+          PlaylistEntry(
             url: '',
             title: file.name,
             relativePath: _cleanTorboxPath(file.path),
@@ -2664,18 +2860,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             torboxFileId: file.fileId,
             sizeBytes: file.bytes,
             provider: 'torbox',
-          ));
-        }
-      } else {
-        entries.add(PlaylistEntry(
-          url: '',
-          title: file.name,
-          relativePath: _cleanTorboxPath(file.path),
-          torboxTorrentId: torboxTorrentId,
-          torboxFileId: file.fileId,
-          sizeBytes: file.bytes,
-          provider: 'torbox',
-        ));
+          ),
+        );
       }
     }
 
@@ -2684,7 +2870,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle = _seriesPlaylist?.seriesTitle ?? widget.playlistItem['title'] as String? ?? 'Series';
+    final String seriesTitle =
+        _seriesPlaylist?.seriesTitle ??
+        widget.playlistItem['title'] as String? ??
+        'Series';
 
     if (!mounted) return;
 
@@ -2707,7 +2896,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   /// Play PikPak playlist
-  Future<void> _playPikPakPlaylist(List<RDFileNode> videoFiles, int startIndex) async {
+  Future<void> _playPikPakPlaylist(
+    List<RDFileNode> videoFiles,
+    int startIndex,
+  ) async {
     final pikpak = PikPakApiService.instance;
 
     if (!await pikpak.isAuthenticated()) {
@@ -2737,33 +2929,39 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         try {
           final fileData = await pikpak.getFileDetails(fileId);
           final streamingUrl = pikpak.getStreamingUrl(fileData);
-          entries.add(PlaylistEntry(
-            url: streamingUrl ?? '',
-            title: file.name,
-            relativePath: file.relativePath,
-            pikpakFileId: fileId,
-            sizeBytes: file.bytes,
-            provider: 'pikpak',
-          ));
+          entries.add(
+            PlaylistEntry(
+              url: streamingUrl ?? '',
+              title: file.name,
+              relativePath: file.relativePath,
+              pikpakFileId: fileId,
+              sizeBytes: file.bytes,
+              provider: 'pikpak',
+            ),
+          );
         } catch (_) {
-          entries.add(PlaylistEntry(
+          entries.add(
+            PlaylistEntry(
+              url: '',
+              title: file.name,
+              relativePath: file.relativePath,
+              pikpakFileId: fileId,
+              sizeBytes: file.bytes,
+              provider: 'pikpak',
+            ),
+          );
+        }
+      } else {
+        entries.add(
+          PlaylistEntry(
             url: '',
             title: file.name,
             relativePath: file.relativePath,
             pikpakFileId: fileId,
             sizeBytes: file.bytes,
             provider: 'pikpak',
-          ));
-        }
-      } else {
-        entries.add(PlaylistEntry(
-          url: '',
-          title: file.name,
-          relativePath: file.relativePath,
-          pikpakFileId: fileId,
-          sizeBytes: file.bytes,
-          provider: 'pikpak',
-        ));
+          ),
+        );
       }
     }
 
@@ -2772,7 +2970,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle = _seriesPlaylist?.seriesTitle ?? widget.playlistItem['title'] as String? ?? 'Series';
+    final String seriesTitle =
+        _seriesPlaylist?.seriesTitle ??
+        widget.playlistItem['title'] as String? ??
+        'Series';
 
     if (!mounted) return;
 
