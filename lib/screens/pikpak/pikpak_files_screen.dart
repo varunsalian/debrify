@@ -2033,7 +2033,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
     final added = await StorageService.addPlaylistItemRaw({
       'provider': 'pikpak',
-      'title': file['name'] ?? 'Video',
+      'title': FileUtils.cleanPlaylistTitle(file['name'] ?? 'Video'),
       'kind': 'single',
       'pikpakFileId': file['id'],
       // Store full metadata for instant playback
@@ -2126,7 +2126,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         final file = videoFiles.first;
         final added = await StorageService.addPlaylistItemRaw({
           'provider': 'pikpak',
-          'title': file['name'] ?? folderName,
+          'title': FileUtils.cleanPlaylistTitle(file['name'] ?? folderName),
           'kind': 'single',
           'pikpakFileId': file['id'],
           'pikpakFile': {
@@ -2158,7 +2158,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
         final added = await StorageService.addPlaylistItemRaw({
           'provider': 'pikpak',
-          'title': folderName,
+          'title': FileUtils.cleanPlaylistTitle(folderName),
           'kind': 'collection',
           'pikpakFileId': folderId, // Store the folder ID for folder structure
           'pikpakFiles':

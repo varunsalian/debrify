@@ -163,7 +163,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           : FileUtils.getFileName(file.name);
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'torbox',
-        'title': displayName.isNotEmpty ? displayName : torrent.name,
+        'title': FileUtils.cleanPlaylistTitle(displayName.isNotEmpty ? displayName : torrent.name),
         'kind': 'single',
         'torboxTorrentId': torrent.id,
         'torboxFileId': file.id,
@@ -183,7 +183,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     final ids = videoFiles.map((file) => file.id).toList();
     final added = await StorageService.addPlaylistItemRaw({
       'provider': 'torbox',
-      'title': torrent.name,
+      'title': FileUtils.cleanPlaylistTitle(torrent.name),
       'kind': 'collection',
       'torboxTorrentId': torrent.id,
       'torboxFileIds': ids,
@@ -3002,7 +3002,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       final ids = torboxFiles.map((f) => f.id).toList();
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'torbox',
-        'title': node.name,
+        'title': FileUtils.cleanPlaylistTitle(node.name),
         'kind': 'collection',
         'torboxTorrentId': _currentTorrent!.id,
         'torboxFileIds': ids,
@@ -3020,7 +3020,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         final torboxFile = _currentTorrent!.files[node.linkIndex];
         final added = await StorageService.addPlaylistItemRaw({
           'provider': 'torbox',
-          'title': node.name,
+          'title': FileUtils.cleanPlaylistTitle(node.name),
           'kind': 'single',
           'torboxTorrentId': _currentTorrent!.id,
           'torboxFileId': torboxFile.id,

@@ -66,11 +66,21 @@ class FileUtils {
 
   static String getVideoFormatWarning(String fileName) {
     final extension = _getFileExtension(fileName).toLowerCase();
-    
+
     if (_problematicFormats.contains(extension)) {
       return 'This format (${extension.toUpperCase()}) may not play properly on mobile devices.';
     }
-    
+
     return '';
+  }
+
+  /// Clean title for playlist display by removing everything after the first slash
+  /// This prevents weird display like "Series/Season 1/S01E01.mkv" showing as full path
+  /// Example: "Impractical Jokers (2011) S01-S11/Series/Season 1/S01E01.mkv"
+  /// becomes "Impractical Jokers (2011) S01-S11"
+  static String cleanPlaylistTitle(String title) {
+    final slashIndex = title.indexOf('/');
+    if (slashIndex == -1) return title;
+    return title.substring(0, slashIndex).trim();
   }
 } 

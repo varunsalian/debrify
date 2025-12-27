@@ -2738,7 +2738,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
         if (FileUtils.isVideoMimeType(mimeType)) {
           final ok = await StorageService.addPlaylistItemRaw({
-            'title': torrent.filename,
+            'title': FileUtils.cleanPlaylistTitle(torrent.filename),
             'url': '',
             'restrictedLink': torrent.links[0],
             'rdTorrentId': torrent.id,
@@ -2762,7 +2762,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
     } else {
       final ok = await StorageService.addPlaylistItemRaw({
-        'title': torrent.filename,
+        'title': FileUtils.cleanPlaylistTitle(torrent.filename),
         'kind': 'collection',
         'rdTorrentId': torrent.id,
         'count': torrent.links.length,
@@ -3978,7 +3978,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Check if it's actually a video using MIME type
       if (FileUtils.isVideoMimeType(mimeType)) {
         final item = {
-          'title': torrent.filename,
+          'title': FileUtils.cleanPlaylistTitle(torrent.filename),
           'url': '',
           'restrictedLink': torrent.links[index],
           'rdTorrentId': torrent.id,
@@ -5355,7 +5355,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     try {
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'rd',
-        'title': file.name,
+        'title': FileUtils.cleanPlaylistTitle(file.name),
         'kind': 'single',
         'rdTorrentId': _currentTorrentId,
         'rdLinkIndex': file.linkIndex,
@@ -5387,7 +5387,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Add as a collection to playlist
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'rd',
-        'title': folder.name,
+        'title': FileUtils.cleanPlaylistTitle(folder.name),
         'kind': 'collection',
         'rdTorrentId': _currentTorrentId,
         'rdFileNodes': videoFiles.map((f) => f.toJson()).toList(),

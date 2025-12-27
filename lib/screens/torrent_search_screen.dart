@@ -4024,7 +4024,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final file = videoFiles.first;
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'pikpak',
-        'title': file['name'] ?? torrentName,
+        'title': FileUtils.cleanPlaylistTitle(file['name'] ?? torrentName),
         'kind': 'single',
         'pikpakFileId': file['id'],
         // Store full metadata for instant playback
@@ -4049,7 +4049,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'pikpak',
-        'title': torrentName,
+        'title': FileUtils.cleanPlaylistTitle(torrentName),
         'kind': 'collection',
         'pikpakFileId': folderId,       // Store the folder ID for folder structure preservation
         'pikpakFiles': filesMetadata,  // NEW: Full metadata for instant playback
@@ -5563,7 +5563,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final displayName = _torboxDisplayName(file);
       final added = await StorageService.addPlaylistItemRaw({
         'provider': 'torbox',
-        'title': displayName.isNotEmpty ? displayName : torrent.name,
+        'title': FileUtils.cleanPlaylistTitle(displayName.isNotEmpty ? displayName : torrent.name),
         'kind': 'single',
         'torboxTorrentId': torrent.id,
         'torboxFileId': file.id,
@@ -5580,7 +5580,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final fileIds = videoFiles.map((file) => file.id).toList();
     final added = await StorageService.addPlaylistItemRaw({
       'provider': 'torbox',
-      'title': torrent.name,
+      'title': FileUtils.cleanPlaylistTitle(torrent.name),
       'kind': 'collection',
       'torboxTorrentId': torrent.id,
       'torboxFileIds': fileIds,
@@ -6514,7 +6514,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
             final added =
                 await StorageService.addPlaylistItemRaw({
-                  'title': finalTitle,
+                  'title': FileUtils.cleanPlaylistTitle(finalTitle),
                   'url': '',
                   'restrictedLink': links[0],
                   'rdTorrentId': result['torrentId']?.toString(),
@@ -6536,7 +6536,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             if (torrentId.isEmpty) return;
             final added =
                 await StorageService.addPlaylistItemRaw({
-                  'title': torrentName,
+                  'title': FileUtils.cleanPlaylistTitle(torrentName),
                   'kind': 'collection',
                   'rdTorrentId': torrentId,
                   'count': links.length,
@@ -6770,7 +6770,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
                                     final added =
                                         await StorageService.addPlaylistItemRaw({
-                                          'title': finalTitle,
+                                          'title': FileUtils.cleanPlaylistTitle(finalTitle),
                                           'url': '',
                                           'restrictedLink': links[0],
                                           'rdTorrentId': result['torrentId']
@@ -6793,7 +6793,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     if (torrentId.isEmpty) return;
                                     final added =
                                         await StorageService.addPlaylistItemRaw({
-                                          'title': torrentName,
+                                          'title': FileUtils.cleanPlaylistTitle(torrentName),
                                           'kind': 'collection',
                                           'rdTorrentId': torrentId,
                                           'count': links.length,
