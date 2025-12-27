@@ -667,6 +667,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       final entries = _buildTorboxPlaylistEntries(
         torrent: torrent,
         files: files,
+        viewMode: savedViewModeString,
       );
       final playlistEntries = entries.playlistEntries;
       final startIndex = entries.startIndex;
@@ -2306,6 +2307,7 @@ class _TorboxPlaylistEntriesResult {
 _TorboxPlaylistEntriesResult _buildTorboxPlaylistEntries({
   required TorboxTorrent torrent,
   required List<TorboxFile> files,
+  String? viewMode,
 }) {
   final filenames = files
       .map(
@@ -2338,28 +2340,31 @@ _TorboxPlaylistEntriesResult _buildTorboxPlaylistEntries({
     ));
   }
 
-  candidates.sort((a, b) {
-    final aInfo = a.info;
-    final bInfo = b.info;
+  // Skip sorting in raw mode to preserve natural API order
+  if (viewMode != 'raw') {
+    candidates.sort((a, b) {
+      final aInfo = a.info;
+      final bInfo = b.info;
 
-    final aIsSeries =
-        aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
-    final bIsSeries =
-        bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
+      final aIsSeries =
+          aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
+      final bIsSeries =
+          bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
 
-    if (aIsSeries && bIsSeries) {
-      final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
-      if (seasonCompare != 0) return seasonCompare;
+      if (aIsSeries && bIsSeries) {
+        final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+        if (seasonCompare != 0) return seasonCompare;
 
-      final episodeCompare =
-          (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
-      if (episodeCompare != 0) return episodeCompare;
-    } else if (aIsSeries != bIsSeries) {
-      return aIsSeries ? -1 : 1;
-    }
+        final episodeCompare =
+            (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+        if (episodeCompare != 0) return episodeCompare;
+      } else if (aIsSeries != bIsSeries) {
+        return aIsSeries ? -1 : 1;
+      }
 
-    return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
-  });
+      return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    });
+  }
 
   int startIndex = 0;
   if (isSeriesCollection) {
