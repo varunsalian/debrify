@@ -408,7 +408,7 @@ class _SettingsLayout extends StatelessWidget {
               _SettingsTile(
                 icon: Icons.rocket_launch_rounded,
                 title: 'Startup',
-                subtitle: 'Auto-launch Debrify TV on app start',
+                subtitle: 'Decide what happens on app launch',
                 onTap: onOpenStartupSettings,
               ),
             ],
