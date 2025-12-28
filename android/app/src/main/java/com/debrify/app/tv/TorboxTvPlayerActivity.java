@@ -3322,6 +3322,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return true;
         }
 
+        // If controls menu is visible and back is pressed, hide the menu first
+        if (controlsMenuVisible && keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
+            hideControlsMenu();
+            return true;
+        }
+
         boolean focusInControls = isFocusInControlsOverlay();
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
