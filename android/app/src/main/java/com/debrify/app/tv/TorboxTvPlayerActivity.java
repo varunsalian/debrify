@@ -115,6 +115,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private TextView channelNumberView;
     private TextView channelNameView;
     private Runnable broadcastLowerThirdFadeOutRunnable;
+    private TextView qualityWatermark;
     private View controlsOverlay;
     private TextView debrifyTimeDisplay;
     private View debrifyProgressLine;
@@ -306,6 +307,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         titleBadgeText = findViewById(R.id.player_title_badge_text);
         channelNumberView = findViewById(R.id.player_channel_number);
         channelNameView = findViewById(R.id.player_channel_name);
+        qualityWatermark = findViewById(R.id.player_quality_watermark);
         nextOverlay = findViewById(R.id.player_next_overlay);
         nextText = findViewById(R.id.player_next_text);
         nextSubtext = findViewById(R.id.player_next_subtext);
@@ -401,6 +403,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         runOnUiThread(() -> {
             updateChannelBadge(currentChannelName);
             updateTitleBadge(initialTitle);
+            updateQualityBadge(initialTitle);
         });
 
         setupBackPressHandler();
@@ -1832,6 +1835,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Don't show the old centered title anymore, only use the new badge
         // showTitleTemporarily(title);
         updateTitleBadge(title);
+        updateQualityBadge(title);
     }
 
     /**
@@ -3725,5 +3729,62 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         broadcastLowerThird.animate().cancel();
         broadcastLowerThird.setVisibility(View.GONE);
+    }
+
+    /**
+     * Extract quality tier from filename/title
+     * Returns: "4K", "FHD", "HD", "SD", or null
+     */
+    private String extractQuality(String title) {
+        if (title == null || title.isEmpty()) {
+            return null;
+        }
+
+        String upperTitle = title.toUpperCase();
+
+        // Check for 4K/UHD (2160p)
+        if (upperTitle.contains("2160P") || upperTitle.contains("4K") || upperTitle.contains("UHD")) {
+            return "4K";
+        }
+
+        // Check for 1080p (Full HD)
+        if (upperTitle.contains("1080P") || upperTitle.contains("FHD") || upperTitle.contains("FULL HD")) {
+            return "FHD";
+        }
+
+        // Check for 720p (HD)
+        if (upperTitle.contains("720P") || upperTitle.matches(".*\\bHD\\b.*")) {
+            return "HD";
+        }
+
+        // Check for SD (480p and below)
+        if (upperTitle.contains("480P") || upperTitle.contains("360P") || upperTitle.contains("SD")) {
+            return "SD";
+        }
+
+        // Default to null if no quality info found
+        return null;
+    }
+
+    /**
+     * Update quality watermark - simple, static, subtle
+     */
+    private void updateQualityBadge(String title) {
+        if (qualityWatermark == null) {
+            return;
+        }
+
+        // Extract quality only (no codec)
+        String quality = extractQuality(title);
+
+        // If no quality info found, hide watermark
+        if (quality == null) {
+            qualityWatermark.setVisibility(View.GONE);
+            return;
+        }
+
+        // Set quality text and show (no animation, just static)
+        qualityWatermark.setText(quality);
+        qualityWatermark.setVisibility(View.VISIBLE);
     }
 }

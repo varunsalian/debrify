@@ -537,4 +537,19 @@
     <!-- Seek Feedback Overlay -->
     <include layout="@layout/view_seek_feedback" />
 
+    <!-- Quality Watermark (Bottom-Right) - Subtle, minimal -->
+    <TextView
+        android:id="@+id/player_quality_watermark"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="12dp"
+        android:text="4K"
+        android:textColor="#99FFFFFF"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif"
+        android:includeFontPadding="false"
+        android:visibility="gone" />
+
 </FrameLayout>
