@@ -192,9 +192,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View seekbarHandle;
     private TextView seekbarCurrentTime;
     private TextView seekbarTotalTime;
+    private TextView seekbarSpeedIndicator;
     private long seekbarPosition = 0;
     private long videoDuration = 0;
     private boolean seekbarVisible = false;
+    private float currentSeekSpeed = 1.0f;
     private int playbackSpeedIndex = 2; // Default to 1.0x
     private final float[] playbackSpeeds = new float[] {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
     private final String[] playbackSpeedLabels = new String[] {"0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x"};
@@ -344,6 +346,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         seekbarHandle = findViewById(R.id.seekbar_handle);
         seekbarCurrentTime = findViewById(R.id.seekbar_current_time);
         seekbarTotalTime = findViewById(R.id.seekbar_total_time);
+        seekbarSpeedIndicator = findViewById(R.id.seekbar_speed_indicator);
 
         Intent intent = getIntent();
         
@@ -1049,6 +1052,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             hideControlsMenu();
         }
 
+        // Reset seek speed indicator
+        currentSeekSpeed = 1.0f;
+        seekbarSpeedIndicator.setVisibility(View.GONE);
+
         // Update UI
         updateSeekbarUI();
 
@@ -1074,6 +1081,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         seekbarVisible = false;
+        seekbarSpeedIndicator.setVisibility(View.GONE);
         final boolean reopenMenu = reopenControlsMenuAfterSeek;
         final boolean resumePlayback = resumePlaybackOnSeekbarClose;
 
@@ -1354,28 +1362,48 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         return null;
     }
 
-    private void seekForward() {
+    private long getAcceleratedSeekStep(int repeatCount) {
+        final long baseStep = 10_000L;          // 10 seconds
+        final long acceleration = 2_000L;       // 2 seconds per repeat
+        final long maxStep = 120_000L;          // 2 minutes cap
+
+        long calculatedStep = baseStep + (repeatCount * acceleration);
+        return Math.min(calculatedStep, maxStep);
+    }
+
+    private void seekForward(long stepMs) {
         if (player == null) {
             return;
         }
-        seekbarPosition = Math.min(seekbarPosition + SEEK_STEP_MS, videoDuration);
-        player.seekTo(seekbarPosition);
+        seekbarPosition = Math.min(seekbarPosition + stepMs, videoDuration);
+        updateSeekSpeed(stepMs);
         updateSeekbarUI();
 
         // NO visual feedback here - this is only called during long-press seekbar mode
         // Visual feedback should only appear for quick single presses (handled in seekBy method)
     }
 
-    private void seekBackward() {
+    private void seekBackward(long stepMs) {
         if (player == null) {
             return;
         }
-        seekbarPosition = Math.max(seekbarPosition - SEEK_STEP_MS, 0);
-        player.seekTo(seekbarPosition);
+        seekbarPosition = Math.max(seekbarPosition - stepMs, 0);
+        updateSeekSpeed(stepMs);
         updateSeekbarUI();
 
         // NO visual feedback here - this is only called during long-press seekbar mode
         // Visual feedback should only appear for quick single presses (handled in seekBy method)
+    }
+
+    private void updateSeekSpeed(long stepMs) {
+        currentSeekSpeed = stepMs / 10_000f;  // Base is 10s = 1x
+
+        if (currentSeekSpeed > 1.0f) {
+            seekbarSpeedIndicator.setText(String.format(Locale.US, "→ %.1fx", currentSeekSpeed));
+            seekbarSpeedIndicator.setVisibility(View.VISIBLE);
+        } else {
+            seekbarSpeedIndicator.setVisibility(View.GONE);
+        }
     }
 
     private String formatTime(long timeMs) {
@@ -3306,10 +3334,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (seekbarVisible) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    seekBackward();
+                    long step = getAcceleratedSeekStep(event.getRepeatCount());
+                    seekBackward(step);
                     return true;
                 } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    seekForward();
+                    long step = getAcceleratedSeekStep(event.getRepeatCount());
+                    seekForward(step);
                     return true;
                 } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                     confirmSeekPosition();
