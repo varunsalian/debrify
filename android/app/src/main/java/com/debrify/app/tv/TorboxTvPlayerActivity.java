@@ -126,7 +126,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private AppCompatButton aspectButton;
     private AppCompatButton nightModeButton;
     private AppCompatButton speedButton;
-    private int nightModeIndex = 0;  // Off by default
+    private int nightModeIndex = 2;  // Medium by default
     private LoudnessEnhancer loudnessEnhancer = null;
     private AppCompatButton guideButton;
     private AppCompatButton channelNextButton;
@@ -217,7 +217,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private static final long BACK_PRESS_INTERVAL_MS = 2000; // 2 seconds
     private final Handler channelOverlayHandler = new Handler(Looper.getMainLooper());
     private ArrayList<Bundle> magnetQueue = new ArrayList<>();
-    private int resizeModeIndex = 0;
+    private int resizeModeIndex = 1;  // Fill by default
     private final int[] resizeModes = new int[] {
             AspectRatioFrameLayout.RESIZE_MODE_FIT,
             AspectRatioFrameLayout.RESIZE_MODE_FILL,
@@ -431,6 +431,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         trackSelector = new DefaultTrackSelector(this, new AdaptiveTrackSelection.Factory());
         trackSelector.setParameters(trackSelector.buildUponParameters()
                 .setPreferredAudioLanguage("en")
+                .setPreferredTextLanguage("en")
+                .setPreferredAudioMimeType("audio/opus")
                 .build());
 
         LoadControl loadControl = buildLoadControl(bandwidthMeter.getBitrateEstimate());

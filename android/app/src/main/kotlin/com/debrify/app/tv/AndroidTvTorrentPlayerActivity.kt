@@ -100,9 +100,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var seekbarVisible = false
     private var seekbarPosition: Long = 0
     private var videoDuration: Long = 0
-    private var resizeModeIndex = 0
+    private var resizeModeIndex = 1  // Fill by default
     private var playbackSpeedIndex = 2  // 1.0x
-    private var nightModeIndex = 0  // Off by default
+    private var nightModeIndex = 2  // Medium by default
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var playlistMode: PlaylistMode = PlaylistMode.NONE
     private var playlistAdapter: PlaylistOverlayAdapter? = null
@@ -396,6 +396,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         trackSelector = DefaultTrackSelector(this)
         trackSelector?.parameters = trackSelector?.buildUponParameters()
             ?.setPreferredAudioLanguage("en")
+            ?.setPreferredTextLanguage("en")
+            ?.setPreferredAudioMimeType("audio/opus")
             ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             ?.build()!!
 
