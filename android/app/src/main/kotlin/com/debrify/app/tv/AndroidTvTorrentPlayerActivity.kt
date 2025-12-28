@@ -1725,6 +1725,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Hide subtitles when controls menu is shown
         subtitleOverlay.visibility = View.GONE
 
+        // Show title when controls menu is shown (matches TorboxTv behavior)
+        titleHandler.removeCallbacks(hideTitleRunnable)
+        titleContainer.animate().cancel()
+        if (titleView.text?.isNotEmpty() == true) {
+            titleContainer.visibility = View.VISIBLE
+            titleContainer.alpha = 1f
+        }
+
         overlay.animate().cancel()
 
         if (!controlsMenuVisible) {
@@ -1771,6 +1779,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         cancelScheduledHideControlsMenu()
         controlsMenuVisible = false
+
+        // Hide title when controls hide
+        titleHandler.removeCallbacks(hideTitleRunnable)
+        titleContainer.animate()
+            .alpha(0f)
+            .setDuration(250)
+            .withEndAction {
+                titleContainer.visibility = View.GONE
+            }
+            .start()
+
         overlay.animate()
             .alpha(0f)
             .translationY(20f)  // Slide down slightly for premium effect
