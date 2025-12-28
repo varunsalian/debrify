@@ -360,13 +360,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
         return;
       }
 
-      // If no folders but no error, focus New Folder button
-      if (_errorMessage == null && _rootFolders.isEmpty) {
-        _newFolderButtonFocusNode.requestFocus();
-        return;
-      }
-
-      // Otherwise focus New Folder button as fallback
+      // If no folders, focus New Folder button (now at bottom left)
       _newFolderButtonFocusNode.requestFocus();
     });
   }
@@ -412,6 +406,8 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
             shortcuts: const <ShortcutActivator, Intent>{
               SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(TraversalDirection.down),
               SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(TraversalDirection.up),
+              SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(TraversalDirection.left),
+              SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(TraversalDirection.right),
               SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
               SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
               SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
@@ -469,43 +465,17 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Current location and New Folder button
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _lastFocusedFolder == null
-                                ? 'Creating in: Root'
-                                : 'Creating in: ${_lastFocusedFolder!.name}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                              fontStyle: FontStyle.italic,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FocusTraversalOrder(
-                          order: const NumericFocusOrder(1),
-                          child: Focus(
-                            focusNode: _newFolderButtonFocusNode,
-                            child: FilledButton.tonalIcon(
-                              onPressed: _showNewFolderDialog,
-                              icon: const Icon(Icons.create_new_folder, size: 16),
-                              label: const Text('New Folder'),
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                    // Current location indicator
+                    Text(
+                      _lastFocusedFolder == null
+                          ? 'Creating in: Root'
+                          : 'Creating in: ${_lastFocusedFolder!.name}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 12),
 
@@ -572,44 +542,135 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
 
                     // Action buttons
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        // New Folder button on the left
                         FocusTraversalOrder(
                           order: const NumericFocusOrder(1000),
                           child: Focus(
-                            focusNode: _cancelButtonFocusNode,
-                            child: TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancel'),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: FocusTraversalOrder(
-                            order: const NumericFocusOrder(1001),
-                            child: Focus(
-                              focusNode: _confirmButtonFocusNode,
-                              child: FilledButton.icon(
-                                onPressed: _selectedFolderId != null
-                                    ? () {
-                                        Navigator.pop(context, {
-                                          'folderId': _selectedFolderId,
-                                          'folderName': _selectedFolderName,
-                                        });
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.check, size: 18),
-                                label: Text(
-                                  _selectedFolderId != null
-                                      ? 'Restrict to "${_truncateFolderName(_selectedFolderName ?? '')}"'
-                                      : 'Select a folder',
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
+                            focusNode: _newFolderButtonFocusNode,
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+                              // DPAD Right: Move to Cancel button
+                              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                _cancelButtonFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+
+                              // DPAD Up: Move to last folder item
+                              if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                final flatFolders = _getFlattenedFolders();
+                                if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
+                                  _folderFocusNodes[flatFolders.length - 1].requestFocus();
+                                  return KeyEventResult.handled;
+                                }
+                              }
+
+                              return KeyEventResult.ignored;
+                            },
+                            child: FilledButton.tonalIcon(
+                              onPressed: _showNewFolderDialog,
+                              icon: const Icon(Icons.create_new_folder, size: 18),
+                              label: const Text('New Folder'),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
                                 ),
                               ),
                             ),
                           ),
+                        ),
+
+                        // Cancel and Confirm buttons on the right
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FocusTraversalOrder(
+                              order: const NumericFocusOrder(1001),
+                              child: Focus(
+                                focusNode: _cancelButtonFocusNode,
+                                onKeyEvent: (node, event) {
+                                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+                                  // DPAD Left: Move to New Folder button
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                    _newFolderButtonFocusNode.requestFocus();
+                                    return KeyEventResult.handled;
+                                  }
+
+                                  // DPAD Right: Move to Confirm button
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                    _confirmButtonFocusNode.requestFocus();
+                                    return KeyEventResult.handled;
+                                  }
+
+                                  // DPAD Up: Move to last folder item
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                    final flatFolders = _getFlattenedFolders();
+                                    if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
+                                      _folderFocusNodes[flatFolders.length - 1].requestFocus();
+                                      return KeyEventResult.handled;
+                                    }
+                                  }
+
+                                  return KeyEventResult.ignored;
+                                },
+                                child: TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: FocusTraversalOrder(
+                                order: const NumericFocusOrder(1002),
+                                child: Focus(
+                                  focusNode: _confirmButtonFocusNode,
+                                  onKeyEvent: (node, event) {
+                                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+                                    // DPAD Left: Move to Cancel button
+                                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                      _cancelButtonFocusNode.requestFocus();
+                                      return KeyEventResult.handled;
+                                    }
+
+                                    // DPAD Up: Move to last folder item
+                                    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                      final flatFolders = _getFlattenedFolders();
+                                      if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
+                                        _folderFocusNodes[flatFolders.length - 1].requestFocus();
+                                        return KeyEventResult.handled;
+                                      }
+                                    }
+
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: FilledButton.icon(
+                                    onPressed: _selectedFolderId != null
+                                        ? () {
+                                            Navigator.pop(context, {
+                                              'folderId': _selectedFolderId,
+                                              'folderName': _selectedFolderName,
+                                            });
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.check, size: 18),
+                                    label: Text(
+                                      _selectedFolderId != null
+                                          ? 'Restrict to "${_truncateFolderName(_selectedFolderName ?? '')}"'
+                                          : 'Select a folder',
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -733,6 +794,16 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
                 folder.isExpanded = false;
               });
               _ensureFocusNodes();
+              return KeyEventResult.handled;
+            }
+          }
+
+          // Arrow Down: Move to New Folder button if this is the last folder item
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            final flatFolders = _getFlattenedFolders();
+            if (index == flatFolders.length - 1) {
+              // This is the last folder item, move to New Folder button
+              _newFolderButtonFocusNode.requestFocus();
               return KeyEventResult.handled;
             }
           }
