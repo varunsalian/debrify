@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:developer' show Timeline, Flow;
 import 'package:flutter/services.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/torrent.dart';
@@ -65,18 +66,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _episodeInputFocusNode = FocusNode();
   List<FocusNode> _autocompleteFocusNodes = [];
 
-  // Focus states stored as regular bools for efficiency
-  bool _searchFocused = false;
-  bool _providerAccordionFocused = false;
-  bool _advancedButtonFocused = false;
-  bool _sortDirectionFocused = false;
-  bool _filterButtonFocused = false;
-  bool _clearFiltersButtonFocused = false;
-  bool _modeSelectorFocused = false;
-  bool _selectionChipFocused = false;
-  bool _expandControlsFocused = false;
-  bool _seasonInputFocused = false;
-  bool _episodeInputFocused = false;
+  // Focus states using ValueNotifier to avoid full screen rebuilds
+  final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _providerAccordionFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _advancedButtonFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _sortDirectionFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _filterButtonFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _clearFiltersButtonFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _modeSelectorFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _selectionChipFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _expandControlsFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _seasonInputFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _episodeInputFocused = ValueNotifier<bool>(false);
 
   List<Torrent> _torrents = [];
   List<Torrent> _allTorrents = [];
@@ -140,8 +141,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _historyTrackingEnabled = true;
   final FocusNode _historyDisableSwitchFocusNode = FocusNode();
   final FocusNode _historyClearButtonFocusNode = FocusNode();
-  bool _historyDisableSwitchFocused = false;
-  bool _historyClearButtonFocused = false;
+  final ValueNotifier<bool> _historyDisableSwitchFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _historyClearButtonFocused = ValueNotifier<bool>(false);
   final List<FocusNode> _historyCardFocusNodes = [];
 
   late AnimationController _listAnimationController;
@@ -553,7 +554,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _filterButtonFocusNode.dispose();
     _clearFiltersButtonFocusNode.dispose();
 
-    // Focus states are now regular bools - no disposal needed
+    // Dispose ValueNotifiers
+    _searchFocused.dispose();
+    _providerAccordionFocused.dispose();
+    _advancedButtonFocused.dispose();
+    _sortDirectionFocused.dispose();
+    _filterButtonFocused.dispose();
+    _clearFiltersButtonFocused.dispose();
+    _modeSelectorFocused.dispose();
+    _selectionChipFocused.dispose();
+    _expandControlsFocused.dispose();
+    _seasonInputFocused.dispose();
+    _episodeInputFocused.dispose();
+    _historyDisableSwitchFocused.dispose();
+    _historyClearButtonFocused.dispose();
 
     // Dispose IMDB Smart Search Mode resources
     _modeSelectorFocusNode.dispose();
@@ -1092,11 +1106,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return Focus(
       focusNode: _advancedButtonFocusNode,
       onFocusChange: (focused) {
-        if (_advancedButtonFocused != focused) {
-          setState(() {
-            _advancedButtonFocused = focused;
-          });
-        }
+        _advancedButtonFocused.value = focused; // No setState needed!
       },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
@@ -1111,12 +1121,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         message: selection == null
             ? 'Search via IMDb + Torrentio'
             : 'Advanced Torrentio search active',
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: _advancedButtonFocused
-                ? Border.all(color: Colors.white, width: 2)
-                : null,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: _advancedButtonFocused,
+          builder: (context, isFocused, child) => Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: isFocused
+                  ? Border.all(color: Colors.white, width: 2)
+                  : null,
+            ),
+            child: child,
           ),
           child: TextButton.icon(
             onPressed: selection == null
@@ -1148,11 +1162,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return Focus(
       focusNode: _modeSelectorFocusNode,
       onFocusChange: (focused) {
-        if (_modeSelectorFocused != focused) {
-          setState(() {
-            _modeSelectorFocused = focused;
-          });
-        }
+        _modeSelectorFocused.value = focused; // No setState needed!
       },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
@@ -1164,12 +1174,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
         return KeyEventResult.ignored;
       },
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          border: _modeSelectorFocused
-              ? Border.all(color: Colors.white, width: 2)
-              : null,
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _modeSelectorFocused,
+        builder: (context, isFocused, child) => Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: isFocused
+                ? Border.all(color: Colors.white, width: 2)
+                : null,
+          ),
+          child: child,
         ),
         child: PopupMenuButton<SearchMode>(
           onSelected: (mode) {
@@ -1946,25 +1960,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 SizedBox(
                   width: 120, // Fixed width matching episode input
                   height: 44, // Fixed height for consistency
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2D3B5F), // Distinct purple-blue background
-                      border: Border.all(
-                        color: _seasonInputFocused
-                            ? const Color(0xFF7C3AED)
-                            : Colors.white.withValues(alpha: 0.3),
-                        width: _seasonInputFocused ? 2 : 1,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: _seasonInputFocused,
+                    builder: (context, isFocused, child) => Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2D3B5F), // Distinct purple-blue background
+                        border: Border.all(
+                          color: isFocused
+                              ? const Color(0xFF7C3AED)
+                              : Colors.white.withValues(alpha: 0.3),
+                          width: isFocused ? 2 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      borderRadius: BorderRadius.circular(8),
+                      child: child,
                     ),
                     child: Focus(
                       focusNode: _seasonInputFocusNode,
                       onFocusChange: (focused) {
-                        if (_seasonInputFocused != focused) {
-                          setState(() {
-                            _seasonInputFocused = focused;
-                          });
-                        }
+                        _seasonInputFocused.value = focused; // No setState needed!
                       },
                       onKeyEvent: (node, event) => _handleSeasonDropdownKeyEvent(event),
                       child: InkWell(
@@ -2111,27 +2125,27 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildProvidersAccordion(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B).withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _providerAccordionFocused
-              ? const Color(0xFF3B82F6).withValues(alpha: 0.6)
-              : const Color(0xFF3B82F6).withValues(alpha: 0.2),
-          width: _providerAccordionFocused ? 2 : 1,
+    return ValueListenableBuilder<bool>(
+      valueListenable: _providerAccordionFocused,
+      builder: (context, isFocused, child) => Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isFocused
+                ? const Color(0xFF3B82F6).withValues(alpha: 0.6)
+                : const Color(0xFF3B82F6).withValues(alpha: 0.2),
+            width: isFocused ? 2 : 1,
+          ),
         ),
+        child: child,
       ),
       child: Column(
         children: [
           FocusableActionDetector(
             focusNode: _providerAccordionFocusNode,
             onShowFocusHighlight: (focused) {
-              if (_providerAccordionFocused != focused) {
-                setState(() {
-                  _providerAccordionFocused = focused;
-                });
-              }
+              _providerAccordionFocused.value = focused; // No setState needed!
             },
             shortcuts: _activateShortcuts,
             actions: <Type, Action<Intent>>{
@@ -2147,14 +2161,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               canRequestFocus: false,
               onTap: () =>
                   setState(() => _showProvidersPanel = !_showProvidersPanel),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: _providerAccordionFocused
-                      ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
-                      : Colors.transparent,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _providerAccordionFocused,
+                builder: (context, isFocused, child) => Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: isFocused
+                        ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                        : Colors.transparent,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: child,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     Icon(
@@ -2391,13 +2409,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void _sortTorrents({
     List<Torrent>? nextBase,
     Map<String, _TorrentMetadata>? metadataOverride,
+    bool reuseMetadata = false, // Skip expensive metadata rebuilding when only sort changes
   }) {
+    Timeline.startSync('TorrentSearchScreen.sortTorrents');
     final List<Torrent> baseList = nextBase ?? _allTorrents;
     final Map<String, _TorrentMetadata> metadata =
         metadataOverride ??
-        (nextBase != null
-            ? _buildTorrentMetadataMap(baseList)
-            : _torrentMetadata);
+        (reuseMetadata
+            ? _torrentMetadata // Reuse existing parsed metadata
+            : (nextBase != null
+                ? _buildTorrentMetadataMap(baseList)
+                : _torrentMetadata));
 
     final List<Torrent> sortedTorrents = List<Torrent>.from(baseList);
 
@@ -2535,6 +2557,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
       });
     }
+    Timeline.finishSync();
   }
 
   List<Torrent> _applyFiltersToList(
@@ -8290,11 +8313,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               }
                             },
                             onFocusChange: (focused) {
-                              if (_searchFocused != focused) {
-                                setState(() {
-                                  _searchFocused = focused;
-                                });
-                              }
+                              _searchFocused.value = focused; // No setState needed!
                             },
                           ),
                         ),
@@ -8690,7 +8709,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             setState(() {
                                               _sortBy = newValue;
                                             });
-                                            _sortTorrents();
+                                            _sortTorrents(reuseMetadata: true); // Reuse parsed metadata
                                           }
                                         },
                                         items: const [
@@ -8750,11 +8769,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     Focus(
                                       focusNode: _sortDirectionFocusNode,
                                       onFocusChange: (focused) {
-                                        if (_sortDirectionFocused != focused) {
-                                          setState(() {
-                                            _sortDirectionFocused = focused;
-                                          });
-                                        }
+                                        _sortDirectionFocused.value = focused; // No setState needed!
                                       },
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent &&
@@ -8763,24 +8778,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           setState(() {
                                             _sortAscending = !_sortAscending;
                                           });
-                                          _sortTorrents();
+                                          _sortTorrents(reuseMetadata: true); // Reuse parsed metadata
                                           return KeyEventResult.handled;
                                         }
                                         return KeyEventResult.ignored;
                                       },
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(4),
-                                          border: _sortDirectionFocused
-                                              ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                              : null,
+                                      child: ValueListenableBuilder<bool>(
+                                        valueListenable: _sortDirectionFocused,
+                                        builder: (context, isFocused, child) => Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: isFocused
+                                                ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                                : null,
+                                          ),
+                                          child: child,
                                         ),
                                         child: IconButton(
                                           onPressed: () {
                                             setState(() {
                                               _sortAscending = !_sortAscending;
                                             });
-                                            _sortTorrents();
+                                            _sortTorrents(reuseMetadata: true); // Reuse parsed metadata
                                           },
                                           icon: Icon(
                                             _sortAscending
@@ -8802,11 +8821,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     Focus(
                                       focusNode: _filterButtonFocusNode,
                                       onFocusChange: (focused) {
-                                        if (_filterButtonFocused != focused) {
-                                          setState(() {
-                                            _filterButtonFocused = focused;
-                                          });
-                                        }
+                                        _filterButtonFocused.value = focused; // No setState needed!
                                       },
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent &&
@@ -8819,12 +8834,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         }
                                         return KeyEventResult.ignored;
                                       },
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(4),
-                                          border: _filterButtonFocused
-                                              ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                              : null,
+                                      child: ValueListenableBuilder<bool>(
+                                        valueListenable: _filterButtonFocused,
+                                        builder: (context, isFocused, child) => Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: isFocused
+                                                ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                                : null,
+                                          ),
+                                          child: child,
                                         ),
                                         child: IconButton(
                                           onPressed:
@@ -8905,11 +8924,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         Focus(
                                           focusNode: _clearFiltersButtonFocusNode,
                                           onFocusChange: (focused) {
-                                            if (_clearFiltersButtonFocused != focused) {
-                                              setState(() {
-                                                _clearFiltersButtonFocused = focused;
-                                              });
-                                            }
+                                            _clearFiltersButtonFocused.value = focused; // No setState needed!
                                           },
                                           onKeyEvent: (node, event) {
                                             if (event is KeyDownEvent &&
@@ -8920,12 +8935,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             }
                                             return KeyEventResult.ignored;
                                           },
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: _clearFiltersButtonFocused
-                                                  ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                                  : null,
+                                          child: ValueListenableBuilder<bool>(
+                                            valueListenable: _clearFiltersButtonFocused,
+                                            builder: (context, isFocused, child) => Container(
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: isFocused
+                                                    ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                                    : null,
+                                              ),
+                                              child: child,
                                             ),
                                             child: TextButton(
                                               onPressed: _clearAllFilters,
@@ -9265,9 +9284,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           Focus(
             focusNode: _historyDisableSwitchFocusNode,
             onFocusChange: (focused) {
-              setState(() {
-                _historyDisableSwitchFocused = focused;
-              });
+              _historyDisableSwitchFocused.value = focused; // No setState needed!
             },
             onKeyEvent: (node, event) {
               if (event is KeyDownEvent &&
@@ -9279,12 +9296,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               }
               return KeyEventResult.ignored;
             },
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: _historyDisableSwitchFocused
-                    ? Border.all(color: Colors.white, width: 2)
-                    : null,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _historyDisableSwitchFocused,
+              builder: (context, isFocused, child) => Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: isFocused
+                      ? Border.all(color: Colors.white, width: 2)
+                      : null,
+                ),
+                child: child,
               ),
               child: Transform.scale(
                 scale: 0.75,
@@ -9303,9 +9324,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           Focus(
             focusNode: _historyClearButtonFocusNode,
             onFocusChange: (focused) {
-              setState(() {
-                _historyClearButtonFocused = focused;
-              });
+              _historyClearButtonFocused.value = focused; // No setState needed!
             },
             onKeyEvent: (node, event) {
               if (event is KeyDownEvent &&
@@ -9319,19 +9338,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             child: InkWell(
               onTap: _clearHistory,
               borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _historyClearButtonFocused
-                      ? const Color(0xFFEF4444).withValues(alpha: 0.2)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _historyClearButtonFocused
-                        ? const Color(0xFFEF4444)
-                        : const Color(0xFFEF4444).withValues(alpha: 0.3),
-                    width: _historyClearButtonFocused ? 2 : 1,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _historyClearButtonFocused,
+                builder: (context, isFocused, child) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isFocused
+                        ? const Color(0xFFEF4444).withValues(alpha: 0.2)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isFocused
+                          ? const Color(0xFFEF4444)
+                          : const Color(0xFFEF4444).withValues(alpha: 0.3),
+                      width: isFocused ? 2 : 1,
+                    ),
                   ),
+                  child: child,
                 ),
                 child: Row(
                   children: [
