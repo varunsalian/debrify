@@ -913,6 +913,325 @@ class SeriesParser {
     );
   }
 
+  /// Conservative series parser optimized for streaming contexts (Magic TV).
+  ///
+  /// This variant is MORE STRICT about identifying series to reduce false positives
+  /// where movies are incorrectly tagged as TV series. Key improvements:
+  ///
+  /// - Rejects patterns where numbers follow years (e.g., "2009.1080p")
+  /// - Excludes multi-part movie indicators (CD1, Disc2, Part 1)
+  /// - Validates season/episode numbers are in reasonable ranges
+  /// - Detects movie sequels with Roman numerals (II, III, IV)
+  /// - Requires stronger evidence before marking content as series
+  ///
+  /// Use this for Magic TV and other streaming/browsing contexts where
+  /// conservative classification is preferred. Use the standard parseFilename()
+  /// for playlist management and progress tracking.
+  static SeriesInfo parseFilenameConservative(String filename, {int? fileSize}) {
+    // Remove file extension
+    final nameWithoutExt = _removeExtension(filename);
+    final lowerName = nameWithoutExt.toLowerCase();
+
+    // PHASE 1: PRE-FILTERING - Detect strong movie indicators
+    bool isLikelyMovie = false;
+    String? movieReason;
+
+    // Check for existing movie patterns
+    for (final pattern in MOVIE_EPISODE_PATTERNS) {
+      if (lowerName.contains(pattern)) {
+        debugPrint('SeriesParser (Conservative): Movie pattern detected: $pattern');
+        isLikelyMovie = true;
+        movieReason = 'movie episode pattern';
+        break;
+      }
+    }
+
+    // Check for multi-part movie indicators (CD/Disc/Part)
+    if (!isLikelyMovie) {
+      final multiPartPattern = RegExp(
+        r'\b(?:CD|Disc|Disk|DVD|Part)[\s\._-]?(?:\d+|One|Two|Three|I{1,3}|IV|V)\b',
+        caseSensitive: false,
+      );
+      if (multiPartPattern.hasMatch(nameWithoutExt)) {
+        debugPrint('SeriesParser (Conservative): Multi-part movie detected');
+        isLikelyMovie = true;
+        movieReason = 'multi-part indicator';
+      }
+    }
+
+    // Check for Roman numeral sequels (II, III, IV, etc.)
+    if (!isLikelyMovie) {
+      final romanNumeralPattern = RegExp(
+        r'\b(?:II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b(?!\s*[Ee]pisode)',
+        caseSensitive: false,
+      );
+      if (romanNumeralPattern.hasMatch(nameWithoutExt)) {
+        debugPrint('SeriesParser (Conservative): Roman numeral sequel detected');
+        isLikelyMovie = true;
+        movieReason = 'roman numeral sequel';
+      }
+    }
+
+    // Check for year followed by quality pattern (common in movies)
+    if (!isLikelyMovie) {
+      final yearQualityPattern = RegExp(
+        r'(?:19|20)\d{2}[\s\._-]*(?:\d{3,4}p|720|1080|2160|BluRay|WEBRip|BRRip)',
+        caseSensitive: false,
+      );
+      if (yearQualityPattern.hasMatch(nameWithoutExt)) {
+        debugPrint('SeriesParser (Conservative): Year-quality pattern detected (movie)');
+        isLikelyMovie = true;
+        movieReason = 'year-quality pattern';
+      }
+    }
+
+    // Check for sample files
+    bool isSample = false;
+    for (final keyword in SAMPLE_KEYWORDS) {
+      if (lowerName.contains(keyword)) {
+        debugPrint('SeriesParser (Conservative): Sample file detected');
+        isSample = true;
+        isLikelyMovie = true;
+        movieReason = 'sample file';
+        break;
+      }
+    }
+
+    // PHASE 2: EPISODE PATTERN MATCHING (only if not likely a movie)
+    int? season;
+    int? episode;
+    bool isAnime = false;
+    bool isBracketNotation = false;
+    String? episodeTitle;
+    bool foundValidPattern = false;
+
+    if (!isLikelyMovie) {
+      // Try standard patterns with strict validation
+      for (final pattern in _seasonEpisodePatterns) {
+        final match = pattern.firstMatch(nameWithoutExt);
+        if (match != null) {
+          // Check if this looks like a resolution pattern
+          if (match.groupCount >= 2 &&
+              _looksLikeResolutionMatch(
+                nameWithoutExt,
+                match,
+                seasonGroupIndex: 1,
+                episodeGroupIndex: 2,
+              )) {
+            continue;
+          }
+
+          if (match.groupCount >= 2) {
+            final potentialSeason = int.tryParse(match.group(1) ?? '');
+            final potentialEpisode = int.tryParse(match.group(2) ?? '');
+
+            // CONSERVATIVE VALIDATION: Reject unreasonable numbers
+            // Reject if season > 50 (unless explicit S##E## format)
+            // Reject if episode > 500
+            if (potentialSeason != null && potentialSeason > 50) {
+              // Check if this is explicit S##E## format
+              final isExplicitFormat = nameWithoutExt.contains(RegExp(r'[Ss]\d+[Ee]\d+'));
+              if (!isExplicitFormat) {
+                debugPrint('SeriesParser (Conservative): Rejected season=$potentialSeason (too high)');
+                continue;
+              }
+            }
+            if (potentialEpisode != null && potentialEpisode > 500) {
+              debugPrint('SeriesParser (Conservative): Rejected episode=$potentialEpisode (too high)');
+              continue;
+            }
+
+            // Additional check: If pattern is just digits.digits, check for year context
+            if (pattern == _seasonEpisodePatterns[5]) { // The (\d{1,2})\.(\d{1,3}) pattern
+              // Check if there's a 4-digit year before this pattern
+              final yearBeforePattern = RegExp(r'(?:19|20)\d{2}[\s\._-]*$');
+              final textBeforeMatch = nameWithoutExt.substring(0, match.start);
+              if (yearBeforePattern.hasMatch(textBeforeMatch)) {
+                debugPrint('SeriesParser (Conservative): Rejected pattern after year (likely quality)');
+                continue;
+              }
+            }
+
+            season = potentialSeason;
+            episode = potentialEpisode;
+            foundValidPattern = true;
+
+            // Handle bracket notation
+            if (pattern == _seasonEpisodePatterns[0]) {
+              isBracketNotation = true;
+              final bracketEnd = match.end;
+              String? extractedTitle;
+              if (bracketEnd < nameWithoutExt.length) {
+                final afterBracket = nameWithoutExt.substring(bracketEnd).trim();
+                if (afterBracket.isNotEmpty) {
+                  extractedTitle = afterBracket.replaceAll(RegExp(r'[._]'), ' ').trim();
+                  extractedTitle = extractedTitle.replaceAll(RegExp(r'\s+'), ' ');
+                  if (extractedTitle.isEmpty) {
+                    extractedTitle = null;
+                  }
+                }
+              }
+
+              if (match.groupCount >= 3 && match.group(3) != null) {
+                final endEpisode = int.tryParse(match.group(3) ?? '');
+                if (endEpisode != null) {
+                  if (extractedTitle != null) {
+                    episodeTitle = '$extractedTitle (Episodes $episode-$endEpisode)';
+                  } else {
+                    episodeTitle = 'Episodes $episode-$endEpisode';
+                  }
+                } else {
+                  episodeTitle = extractedTitle;
+                }
+              } else {
+                episodeTitle = extractedTitle;
+              }
+            }
+          } else if (match.groupCount >= 1) {
+            // For patterns like "Episode 2" or "E02"
+            episode = int.tryParse(match.group(1) ?? '');
+            if (episode != null && episode <= 500) {
+              final seasonMatch = RegExp(r'[Ss](\d{1,2})').firstMatch(nameWithoutExt);
+              if (seasonMatch != null) {
+                season = int.tryParse(seasonMatch.group(1) ?? '');
+                foundValidPattern = true;
+              }
+            }
+          }
+
+          if (foundValidPattern && (season != null || episode != null)) {
+            break;
+          }
+        }
+      }
+
+      // Try anime patterns if no standard pattern found
+      if (!foundValidPattern && season == null && episode == null) {
+        for (final pattern in _animePatterns) {
+          final match = pattern.firstMatch(nameWithoutExt);
+          if (match != null && match.groupCount >= 1) {
+            episode = int.tryParse(match.group(1) ?? '');
+            if (episode != null && episode <= 999) {
+              season = 1; // Default to season 1 for anime
+              isAnime = true;
+              foundValidPattern = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // PHASE 3: SPECIAL CONTENT DETECTION
+    bool isSpecialContent = false;
+    if (!isSample && foundValidPattern) {
+      isSpecialContent = _isSpecialContent(lowerName);
+      if (isSpecialContent) {
+        if (season == null && episode == null) {
+          season = 0;
+          episode = 1;
+        }
+      }
+    }
+
+    // PHASE 4: SERIES CLASSIFICATION WITH CONSERVATIVE LOGIC
+    // Only mark as series if we have STRONG evidence AND no movie indicators
+    final isSeries = foundValidPattern &&
+                     (season != null || episode != null) &&
+                     !isLikelyMovie;
+
+    double confidence = 50.0;
+    if (isSeries) {
+      if (season != null && episode != null) {
+        // High confidence only for explicit patterns
+        confidence = isAnime ? 85.0 : 90.0;
+      } else {
+        confidence = 70.0;
+      }
+    } else if (isLikelyMovie) {
+      confidence = 10.0; // Very low confidence for series
+    }
+
+    // PHASE 5: TITLE EXTRACTION
+    String? title;
+
+    if (isBracketNotation) {
+      title = null; // Use collection title as fallback
+    } else {
+      for (final pattern in _titlePatterns) {
+        final match = pattern.firstMatch(nameWithoutExt);
+        if (match != null) {
+          if (match.groupCount >= 3 &&
+              _looksLikeResolutionMatch(
+                nameWithoutExt,
+                match,
+                seasonGroupIndex: 2,
+                episodeGroupIndex: 3,
+              )) {
+            continue;
+          }
+          title = match.group(1)?.trim();
+          break;
+        }
+      }
+
+      if (title == null && isSeries) {
+        title = null; // Use collection title
+      }
+    }
+
+    // Extract title before "Season" keyword
+    if (title != null && title.contains('Season')) {
+      final seasonIndex = title.indexOf('Season');
+      if (seasonIndex > 0) {
+        title = title.substring(0, seasonIndex).trim();
+      }
+    }
+
+    // For non-series, extract title before year
+    if (title == null && !isSeries) {
+      final yearMatch = _yearPattern.firstMatch(nameWithoutExt);
+      if (yearMatch != null) {
+        final yearIndex = nameWithoutExt.indexOf(yearMatch.group(0)!);
+        if (yearIndex > 0) {
+          title = nameWithoutExt.substring(0, yearIndex).trim();
+        }
+      }
+    }
+
+    // Clean up title
+    if (title != null) {
+      title = title.replaceAll(RegExp(r'[._]'), ' ').trim();
+      title = title.replaceAll(RegExp(r'\s+'), ' ');
+    }
+
+    // Extract metadata
+    final year = _extractYear(nameWithoutExt);
+    final quality = _extractQuality(nameWithoutExt);
+    final audioCodec = _extractAudioCodec(nameWithoutExt);
+    final videoCodec = _extractVideoCodec(nameWithoutExt);
+    final group = _extractGroup(nameWithoutExt);
+
+    if (isLikelyMovie && movieReason != null) {
+      debugPrint('SeriesParser (Conservative): Classified as MOVIE ($movieReason): $filename');
+    }
+
+    return SeriesInfo(
+      title: title,
+      season: season,
+      episode: episode,
+      episodeTitle: episodeTitle,
+      year: year,
+      quality: quality,
+      audioCodec: audioCodec,
+      videoCodec: videoCodec,
+      group: group,
+      isSeries: isSeries,
+      confidence: confidence,
+      fileSize: fileSize,
+    );
+  }
+
   static String _removeExtension(String filename) {
     final lastDot = filename.lastIndexOf('.');
     if (lastDot > 0) {

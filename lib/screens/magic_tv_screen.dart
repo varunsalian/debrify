@@ -39,6 +39,7 @@ import '../services/community/community_channels_service.dart';
 import '../services/main_page_bridge.dart';
 import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
+import '../utils/series_parser.dart';
 import 'video_player_screen.dart';
 import '../main.dart';
 import 'debrify_tv/widgets/gradient_spinner.dart';
@@ -8137,24 +8138,58 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     String fallbackTitle,
   ) {
     final entries = <TorboxPlayableEntry>[];
+    final seriesCandidates = <TorboxPlayableEntry>[];
+    final otherCandidates = <TorboxPlayableEntry>[];
 
     for (final file in torrent.files) {
       if (!_torboxFileLooksLikeVideo(file)) continue;
       if (file.size < _torboxMinVideoSizeBytes) continue;
 
       final displayName = _torboxDisplayName(file);
-      final title = displayName.isNotEmpty ? displayName : fallbackTitle;
+      final info = SeriesParser.parseFilenameConservative(displayName);
+      final title = info.isSeries
+          ? _formatTorboxSeriesTitle(info, fallbackTitle)
+          : (displayName.isNotEmpty ? displayName : fallbackTitle);
+      final entry = TorboxPlayableEntry(file: file, title: title, info: info);
 
-      entries.add(TorboxPlayableEntry(file: file, title: title));
+      if (info.isSeries && info.season != null && info.episode != null) {
+        seriesCandidates.add(entry);
+      } else {
+        otherCandidates.add(entry);
+      }
     }
 
-    // Simple alphabetical sort
-    entries.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    // Sort series candidates by season and episode
+    seriesCandidates.sort((a, b) {
+      final seasonCompare = (a.info.season ?? 0).compareTo(b.info.season ?? 0);
+      if (seasonCompare != 0) return seasonCompare;
+      return (a.info.episode ?? 0).compareTo(b.info.episode ?? 0);
+    });
 
-    // Shuffle for randomization
+    // Sort other candidates alphabetically
+    otherCandidates.sort(
+      (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+    );
+
+    entries
+      ..addAll(seriesCandidates)
+      ..addAll(otherCandidates);
     entries.shuffle(Random());
-
     return entries;
+  }
+
+  String _formatTorboxSeriesTitle(SeriesInfo info, String fallback) {
+    final season = info.season?.toString().padLeft(2, '0');
+    final episode = info.episode?.toString().padLeft(2, '0');
+    final descriptor = info.episodeTitle?.trim().isNotEmpty == true
+        ? info.episodeTitle!.trim()
+        : (info.title?.trim().isNotEmpty == true
+              ? info.title!.trim()
+              : fallback);
+    if (season != null && episode != null) {
+      return 'S${season}E${episode} · $descriptor';
+    }
+    return fallback;
   }
 
   bool _torboxFileLooksLikeVideo(TorboxFile file) {
