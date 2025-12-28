@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Professional broadcast-style lower-third background -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Main dark background with gradient for depth -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="#E6000000"
+                android:endColor="#F2000000"
+                android:type="linear" />
+        </shape>
+    </item>
+
+    <!-- Subtle bottom border for definition -->
+    <item android:top="0dp" android:bottom="0dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#33FFFFFF" />
+            <size android:height="1dp" />
+        </shape>
+    </item>
+
+</layer-list>
