@@ -66,7 +66,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:layout_marginTop="24dp"
         android:orientation="horizontal"
         android:background="@drawable/broadcast_lower_third_bg"
         android:elevation="16dp"

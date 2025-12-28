@@ -1,7 +1,6 @@
 import '../torrent.dart';
 import '../torbox_file.dart';
 import '../debrify_tv_cache.dart';
-import '../../utils/series_parser.dart';
 
 /// Result of checking a window of torrents for Torbox cache availability.
 ///
@@ -21,17 +20,14 @@ class TorboxCacheWindowResult {
 
 /// Represents a playable file entry from a Torbox torrent.
 ///
-/// Contains the file metadata, display title, and series information
-/// parsed from the filename.
+/// Contains the file metadata and display title.
 class TorboxPlayableEntry {
   final TorboxFile file;
   final String title;
-  final SeriesInfo info;
 
   TorboxPlayableEntry({
     required this.file,
     required this.title,
-    required this.info,
   });
 }
 

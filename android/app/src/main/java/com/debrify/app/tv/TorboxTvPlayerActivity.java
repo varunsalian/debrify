@@ -577,6 +577,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (controlsOverlay != null) {
             controlsOverlay.setVisibility(View.GONE);
             controlsOverlay.setAlpha(0f);
+            // Ensure broadcast lower-third starts hidden
+            if (broadcastLowerThird != null) {
+                broadcastLowerThird.setVisibility(View.GONE);
+            }
         }
 
         if (buttonsRow != null) {
@@ -849,6 +853,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             // Already hidden, just make sure state is consistent
             controlsOverlay.setVisibility(View.GONE);
             controlsOverlay.setAlpha(0f);
+            // Ensure broadcast lower-third is also hidden
+            hideBroadcastLowerThird();
             cancelScheduledHideControlsMenu();
             return;
         }
@@ -859,6 +865,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Stop updating the progress bar
         stopProgressBarUpdates();
 
+        // Hide broadcast lower-third IMMEDIATELY (synchronous)
+        hideBroadcastLowerThird();
+
         controlsOverlay.animate()
                 .alpha(0f)
                 .setDuration(140L)
@@ -867,6 +876,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         controlsOverlay.setVisibility(View.GONE);
                         controlsOverlay.setAlpha(0f);
                         setControlsMenuChildrenVisible(false);
+                        // Redundant safety call (already called above)
+                        hideBroadcastLowerThird();
                         // Show subtitles when controls menu is hidden
                         if (subtitleOverlay != null) {
                             subtitleOverlay.setVisibility(View.VISIBLE);
@@ -3575,8 +3586,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             channelNameView.setText("");
         }
 
-        // Show with slide-in animation
-        showChannelBadgeWithAnimation();
+        // Update content only - visibility controlled by menu
+        // If menu is visible, ensure broadcast lower-third is shown
+        if (controlsMenuVisible) {
+            showChannelBadgeWithAnimation();
+        }
     }
 
     private void showChannelBadgeWithAnimation() {
@@ -3623,8 +3637,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Enable marquee scrolling for long titles
         titleBadgeText.setSelected(true);
 
-        // Show with slide-in animation
-        showTitleBadgeWithAnimation();
+        // Update content only - visibility controlled by menu
+        // If menu is visible, ensure broadcast lower-third is shown
+        if (controlsMenuVisible) {
+            showTitleBadgeWithAnimation();
+        }
     }
 
     private void showTitleBadgeWithAnimation() {
@@ -3650,45 +3667,16 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Cancel any pending fade-out
         if (broadcastLowerThirdFadeOutRunnable != null) {
             broadcastLowerThird.removeCallbacks(broadcastLowerThirdFadeOutRunnable);
+            broadcastLowerThirdFadeOutRunnable = null;
         }
 
-        // Make visible first
-        broadcastLowerThird.setVisibility(View.VISIBLE);
+        // Only show if controls menu is visible AND controls overlay is actually visible
+        if (controlsMenuVisible && controlsOverlay != null
+                && controlsOverlay.getVisibility() == View.VISIBLE) {
+            broadcastLowerThird.setVisibility(View.VISIBLE);
+        }
 
-        // Post animation to ensure view is measured and has width
-        broadcastLowerThird.post(new Runnable() {
-            @Override
-            public void run() {
-                if (broadcastLowerThird == null) {
-                    return;
-                }
-
-                // Get actual width, or use screen width as fallback
-                int slideDistance = broadcastLowerThird.getWidth();
-                if (slideDistance == 0) {
-                    slideDistance = getResources().getDisplayMetrics().widthPixels;
-                }
-
-                // Start from off-screen right
-                broadcastLowerThird.setTranslationX(slideDistance);
-
-                // Slide in from right with broadcast-style timing
-                broadcastLowerThird.animate()
-                        .translationX(0f)
-                        .setDuration(600)
-                        .setInterpolator(new android.view.animation.DecelerateInterpolator(1.8f))
-                        .start();
-            }
-        });
-
-        // Schedule auto-fade to match controls timeout
-        broadcastLowerThirdFadeOutRunnable = new Runnable() {
-            @Override
-            public void run() {
-                fadeOutBroadcastLowerThird();
-            }
-        };
-        broadcastLowerThird.postDelayed(broadcastLowerThirdFadeOutRunnable, CONTROLS_AUTO_HIDE_DELAY_MS);
+        // NO independent auto-hide timer - synchronized with menu visibility
     }
 
     private void fadeOutBroadcastLowerThird() {
@@ -3696,26 +3684,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
 
-        // Get width for slide-out distance (use screen width as fallback)
-        int slideDistance = broadcastLowerThird.getWidth();
-        if (slideDistance == 0) {
-            slideDistance = getResources().getDisplayMetrics().widthPixels;
-        }
-
-        // Slide out to the right (broadcast-style wipe out)
-        broadcastLowerThird.animate()
-                .translationX(slideDistance)
-                .setDuration(400)
-                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.5f))
-                .withEndAction(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (broadcastLowerThird != null) {
-                            broadcastLowerThird.setVisibility(View.GONE);
-                        }
-                    }
-                })
-                .start();
+        // Just hide instantly - no animation
+        broadcastLowerThird.setVisibility(View.GONE);
     }
 
     private void hideBroadcastLowerThird() {
@@ -3726,6 +3696,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Cancel any pending animations/callbacks
         if (broadcastLowerThirdFadeOutRunnable != null) {
             broadcastLowerThird.removeCallbacks(broadcastLowerThirdFadeOutRunnable);
+            broadcastLowerThirdFadeOutRunnable = null;
         }
         broadcastLowerThird.animate().cancel();
         broadcastLowerThird.setVisibility(View.GONE);
