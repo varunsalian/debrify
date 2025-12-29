@@ -18,6 +18,7 @@ import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/main_page_bridge.dart';
+import '../widgets/horizontal_playlist_row.dart';
 import 'video_player_screen.dart';
 import 'playlist_content_view_screen.dart';
 
@@ -29,28 +30,28 @@ class PlaylistScreen extends StatefulWidget {
 }
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
-  late Future<List<Map<String, dynamic>>> _loader;
+  late Future<void> _initFuture;
+  List<Map<String, dynamic>> _allItems = [];
+  Map<String, Map<String, dynamic>> _progressMap = {};
+
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
+  late final FocusNode _keyboardFocusNode;
   String _searchTerm = '';
-  bool _searchFocused = false;
-  bool _isTelevision = false;
   bool _searchVisible = false;
 
   @override
   void initState() {
     super.initState();
-    _loader = _syncAndLoadPlaylist();
+    _initFuture = _init();
     _searchController = TextEditingController();
-    _searchController.addListener(_handleSearchChanged);
-    _searchFocusNode = FocusNode(debugLabel: 'playlist-search')
-      ..addListener(() {
-        if (!mounted) return;
-        setState(() {
-          _searchFocused = _searchFocusNode.hasFocus;
-        });
+    _searchController.addListener(() {
+      setState(() {
+        _searchTerm = _searchController.text;
       });
-    _detectTelevision();
+    });
+    _searchFocusNode = FocusNode();
+    _keyboardFocusNode = FocusNode();
 
     // Register playlist item playback handler
     MainPageBridge.playPlaylistItem = _playItem;
@@ -64,56 +65,110 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     });
   }
 
-  Future<void> _detectTelevision() async {
-    final isTv = await AndroidNativeDownloader.isTelevision();
-    if (mounted) {
-      setState(() {
-        _isTelevision = isTv;
-      });
-    }
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _keyboardFocusNode.dispose();
+    super.dispose();
   }
 
-  Future<List<Map<String, dynamic>>> _syncAndLoadPlaylist() async {
-    // Load playlist data
+  Future<void> _init() async {
+    await _loadData();
+  }
+
+  Future<void> _loadData() async {
     final items = await StorageService.getPlaylistItemsRaw();
 
     // Apply poster overrides for items that have saved custom posters
     for (var item in items) {
       final posterOverride = await StorageService.getPlaylistPosterOverride(item);
       if (posterOverride != null && posterOverride.isNotEmpty) {
-        // Override the poster URL with the saved custom poster
         item['posterUrl'] = posterOverride;
       }
     }
 
-    return items;
+    // TODO: Load progress data - requires building from series playback state
+    final progressMap = <String, Map<String, dynamic>>{};
+
+    if (!mounted) return;
+    setState(() {
+      _allItems = items;
+      _progressMap = progressMap;
+    });
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _loader = _syncAndLoadPlaylist();
-    });
+    await _loadData();
   }
 
-  void _handleSearchChanged() {
-    setState(() {
-      _searchTerm = _searchController.text;
-    });
+  // Section filter: Continue Watching (5-95% progress, played in last 14 days)
+  List<Map<String, dynamic>> get _continueWatching {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final fourteenDaysAgo = now - (14 * 24 * 60 * 60 * 1000);
+
+    return _allItems.where((item) {
+      final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+      final progress = _progressMap[dedupeKey];
+      if (progress == null) return false;
+
+      final positionMs = progress['positionMs'] as int? ?? 0;
+      final durationMs = progress['durationMs'] as int? ?? 0;
+      final updatedAt = progress['updatedAt'] as int? ?? 0;
+
+      if (durationMs <= 0 || updatedAt < fourteenDaysAgo) return false;
+
+      final percent = positionMs / durationMs;
+      return percent >= 0.05 && percent <= 0.95;
+    }).toList()
+      ..sort((a, b) {
+        final aKey = StorageService.computePlaylistDedupeKey(a);
+        final bKey = StorageService.computePlaylistDedupeKey(b);
+        final aTime = _progressMap[aKey]?['updatedAt'] as int? ?? 0;
+        final bTime = _progressMap[bKey]?['updatedAt'] as int? ?? 0;
+        return bTime.compareTo(aTime);
+      });
   }
 
-  @override
-  void dispose() {
-    _searchController.removeListener(_handleSearchChanged);
-    _searchController.dispose();
-    _searchFocusNode.dispose();
+  // Section filter: Recently Added (added or played in last 14 days)
+  List<Map<String, dynamic>> get _recentlyAdded {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final fourteenDaysAgo = now - (14 * 24 * 60 * 60 * 1000);
 
-    // Unregister playlist item playback handler
-    MainPageBridge.playPlaylistItem = null;
+    return _allItems.where((item) {
+      final addedAt = item['addedAt'] as int? ?? 0;
+      final lastPlayed = item['lastPlayedAt'] as int? ?? 0;
+      // Show if added recently OR played recently (but not in Continue Watching)
+      return addedAt >= fourteenDaysAgo || lastPlayed >= fourteenDaysAgo;
+    }).toList()
+      ..sort((a, b) {
+        // Sort by most recent activity (either added or played)
+        final aAdded = a['addedAt'] as int? ?? 0;
+        final bAdded = b['addedAt'] as int? ?? 0;
+        final aPlayed = a['lastPlayedAt'] as int? ?? 0;
+        final bPlayed = b['lastPlayedAt'] as int? ?? 0;
+        final aTime = aAdded > aPlayed ? aAdded : aPlayed;
+        final bTime = bAdded > bPlayed ? bAdded : bPlayed;
+        return bTime.compareTo(aTime);
+      });
+  }
 
-    super.dispose();
+  // Apply search filter to items
+  List<Map<String, dynamic>> _applySearchFilter(List<Map<String, dynamic>> items) {
+    final query = _searchTerm.trim().toLowerCase();
+    if (query.isEmpty) return items;
+
+    return items.where((item) {
+      final title = ((item['title'] as String?) ?? '').toLowerCase();
+      final series = ((item['seriesTitle'] as String?) ?? '').toLowerCase();
+      return '$title $series'.contains(query);
+    }).toList();
   }
 
   Future<void> _playItem(Map<String, dynamic> item) async {
+    // Track when user plays this item
+    await StorageService.updatePlaylistItemLastPlayed(item);
+
     final String title = (item['title'] as String?) ?? 'Video';
     final String provider =
         ((item['provider'] as String?) ?? 'realdebrid').toLowerCase();
@@ -510,6 +565,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             videoUrl: streamUrl,
             title: resolvedTitle,
             subtitle: subtitle,
+            torboxTorrentId: torrentId.toString(),
             viewMode: viewMode,
           ),
         );
@@ -761,6 +817,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           subtitle: subtitle,
           playlist: playlistEntries,
           startIndex: startIndex,
+          torboxTorrentId: torrentId.toString(),
           viewMode: viewMode,
         ),
       );
@@ -1468,511 +1525,37 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
-  /// View playlist item contents
   Future<void> _viewItem(Map<String, dynamic> item) async {
-    if (!mounted) return;
-
-    // Import the screen
-    final screen = await Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) {
-          // Dynamically import to avoid circular dependencies
-          return PlaylistContentViewScreen(
-            playlistItem: item,
-            onPlaybackStarted: () {
-              // Hide auto-launch overlay if active
-              MainPageBridge.notifyPlayerLaunching();
-            },
-          );
-        },
+        builder: (context) => PlaylistContentViewScreen(
+          playlistItem: item,
+          onPlaybackStarted: () => Navigator.of(context).pop(),
+        ),
       ),
     );
 
-    // Refresh playlist in case anything changed
-    if (mounted) {
-      await _refresh();
-    }
-  }
-
-  Future<void> _removeItem(Map<String, dynamic> item) async {
-    final key = StorageService.computePlaylistDedupeKey(item);
-    await StorageService.removePlaylistItemByKey(key);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Removed from playlist')),
-    );
+    // Refresh data when returning from view screen
+    // This ensures poster updates are reflected immediately
     await _refresh();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0B1120),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF020617)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: _refresh,
-            color: const Color(0xFFE50914),
-            backgroundColor: const Color(0xFF0F172A),
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _loader,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final items = (snapshot.data ?? const <Map<String, dynamic>>[]).toList();
-
-                if (items.isEmpty) {
-                  return CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(
-                      parent: BouncingScrollPhysics(),
-                    ),
-                    slivers: [
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.white.withValues(alpha: 0.05),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.08),
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.queue_music_rounded,
-                                  size: 48,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              const Text(
-                                'Nothing queued up yet',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Add shows or movies from Debrid or Let me choose and they will appear here ready to stream.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white.withValues(alpha: 0.65),
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }
-
-                items.sort((a, b) {
-                  final bAdded = _asInt(b['addedAt']) ?? 0;
-                  final aAdded = _asInt(a['addedAt']) ?? 0;
-                  return bAdded.compareTo(aAdded);
-                });
-
-                final query = _searchTerm.trim().toLowerCase();
-                final filteredItems = query.isEmpty
-                    ? items
-                    : items.where((item) {
-                        final title = ((item['title'] as String?) ?? '').toLowerCase();
-                        final series = ((item['seriesTitle'] as String?) ?? '').toLowerCase();
-                        final combined = '$title $series'.trim();
-                        return combined.contains(query);
-                      }).toList();
-
-                final totalCount = items.length;
-                final shownCount = filteredItems.length;
-                final bool isFiltering = query.isNotEmpty;
-                final headerSubtitle = isFiltering
-                    ? 'Showing $shownCount of $totalCount saved ${totalCount == 1 ? 'item' : 'items'}'
-                    : '$totalCount saved ${totalCount == 1 ? 'item' : 'items'} ready to play';
-
-                return FocusTraversalGroup(
-                  policy: OrderedTraversalPolicy(),
-                  child: CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(
-                      parent: BouncingScrollPhysics(),
-                    ),
-                    slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Your Playlist',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    headerSubtitle,
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.7),
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (_isTelevision && _searchTerm.isEmpty && !_searchVisible)
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.search_rounded,
-                                  color: Colors.white70,
-                                  size: 28,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _searchVisible = true;
-                                  });
-                                  // Request focus after the widget is visible
-                                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                                    _searchFocusNode.requestFocus();
-                                  });
-                                },
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (!_isTelevision || _searchVisible)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Shortcuts(
-                            shortcuts: const <ShortcutActivator, Intent>{
-                              SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-                              SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-                            },
-                            child: Actions(
-                              actions: <Type, Action<Intent>>{
-                                NextFocusIntent: CallbackAction<NextFocusIntent>(
-                                  onInvoke: (intent) {
-                                    FocusScope.of(context).nextFocus();
-                                    return null;
-                                  },
-                                ),
-                                PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-                                  onInvoke: (intent) {
-                                    FocusScope.of(context).previousFocus();
-                                    return null;
-                                  },
-                                ),
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 160),
-                                curve: Curves.easeOutCubic,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: _searchFocused
-                                        ? const Color(0xFFE50914)
-                                        : Colors.transparent,
-                                    width: 1.6,
-                                  ),
-                                  boxShadow: _searchFocused
-                                      ? [
-                                          BoxShadow(
-                                            color: const Color(0xFFE50914).withValues(alpha: 0.25),
-                                            blurRadius: 18,
-                                            offset: const Offset(0, 8),
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                child: TextField(
-                                  focusNode: _searchFocusNode,
-                                  controller: _searchController,
-                                  textInputAction: TextInputAction.search,
-                                  onSubmitted: (_) {
-                                    if (_isTelevision && _searchTerm.isEmpty) {
-                                      setState(() {
-                                        _searchVisible = false;
-                                      });
-                                      FocusScope.of(context).unfocus();
-                                    }
-                                  },
-                                  decoration: InputDecoration(
-                                    hintText: 'Search playlist...',
-                                    hintStyle: const TextStyle(color: Colors.white54),
-                                    prefixIcon: const Icon(
-                                      Icons.search_rounded,
-                                      color: Colors.white60,
-                                    ),
-                                    suffixIcon: _searchTerm.isEmpty
-                                        ? (_isTelevision
-                                            ? IconButton(
-                                                icon: const Icon(Icons.close_rounded, color: Colors.white60),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    _searchVisible = false;
-                                                  });
-                                                  FocusScope.of(context).unfocus();
-                                                },
-                                              )
-                                            : null)
-                                        : IconButton(
-                                            icon: const Icon(Icons.close_rounded, color: Colors.white60),
-                                            onPressed: () {
-                                              _searchController.clear();
-                                              if (_isTelevision) {
-                                                setState(() {
-                                                  _searchVisible = false;
-                                                });
-                                                FocusScope.of(context).unfocus();
-                                              } else {
-                                                _searchFocusNode.requestFocus();
-                                              }
-                                            },
-                                          ),
-                                    filled: true,
-                                    fillColor: Colors.white.withValues(alpha: 0.08),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                  ),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                    if (filteredItems.isEmpty)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.white.withValues(alpha: 0.05),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.08),
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.search_off_rounded,
-                                  size: 44,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              const Text(
-                                'No matches found',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Try a different title or clear your search to see everything again.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white.withValues(alpha: 0.65),
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              if (isFiltering) ...[
-                                const SizedBox(height: 16),
-                                TextButton(
-                                  onPressed: () => _searchController.clear(),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: const Color(0xFFE50914),
-                                  ),
-                                  child: const Text('Clear search'),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                        sliver: SliverList(
-                                delegate: SliverChildBuilderDelegate(
-                                  (context, index) {
-                                    final item = filteredItems[index];
-                                    final String title = (item['title'] as String?) ?? 'Video';
-                                    final String? posterUrl = item['posterUrl'] as String?;
-                                    final int? sizeBytes = _asInt(item['sizeBytes']);
-                                    final String? sizeLabel =
-                                        sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
-                                    final int? addedAt = _asInt(item['addedAt']);
-                                    final String? addedLabel = (addedAt != null && addedAt > 0)
-                                        ? 'Added ${Formatters.formatDate(addedAt)}'
-                                        : null;
-                                    final String providerLabel = _prettifyProvider(item['provider'] as String?);
-                                    final String kindLabel = _prettifyKind(item['kind'] as String?);
-                                    final String? subtitle = item['seriesTitle'] as String?;
-                                    final metadata = <String>[
-                                      if (providerLabel.isNotEmpty) providerLabel,
-                                      if (kindLabel.isNotEmpty) kindLabel,
-                                      if (sizeLabel != null) sizeLabel,
-                                    ];
-
-                                    return Padding(
-                                      padding: EdgeInsets.only(
-                                        bottom: index == filteredItems.length - 1 ? 0 : 20,
-                                      ),
-                                      child: _PlaylistCard(
-                                        title: title,
-                                        subtitle: subtitle,
-                                        posterUrl: posterUrl,
-                                        metadata: metadata,
-                                        addedLabel: addedLabel,
-                                        isFirstCard: index == 0,
-                                        onPlay: () => _playItem(item),
-                                        onRemove: () => _removeItem(item),
-                                        onView: () => _viewItem(item),
-                                      ),
-                                    );
-                                  },
-                                  childCount: filteredItems.length,
-                                ),
-                              ),
-                      ),
-                  ],
-                ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaylistCard extends StatefulWidget {
-  final String title;
-  final String? subtitle;
-  final String? posterUrl;
-  final List<String> metadata;
-  final String? addedLabel;
-  final VoidCallback onPlay;
-  final VoidCallback onRemove;
-  final VoidCallback onView;
-  final bool isFirstCard;
-
-  const _PlaylistCard({
-    required this.title,
-    this.subtitle,
-    this.posterUrl,
-    this.metadata = const <String>[],
-    this.addedLabel,
-    this.isFirstCard = false,
-    required this.onPlay,
-    required this.onRemove,
-    required this.onView,
-  });
-
-  @override
-  State<_PlaylistCard> createState() => _PlaylistCardState();
-}
-
-class _PlaylistCardState extends State<_PlaylistCard> {
-  late final FocusNode _focusNode;
-  late final FocusNode _removeFocusNode;
-  late final FocusNode _viewFocusNode;
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode = FocusNode(debugLabel: 'playlist-card-${widget.title}')
-      ..addListener(_handleCardFocusChange);
-    _removeFocusNode = FocusNode(debugLabel: 'playlist-card-remove-${widget.title}');
-    _viewFocusNode = FocusNode(debugLabel: 'playlist-card-view-${widget.title}');
-  }
-
-  @override
-  void didUpdateWidget(covariant _PlaylistCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.title != oldWidget.title) {
-      _focusNode.debugLabel = 'playlist-card-${widget.title}';
-      _removeFocusNode.debugLabel = 'playlist-card-remove-${widget.title}';
-      _viewFocusNode.debugLabel = 'playlist-card-view-${widget.title}';
-    }
-  }
-
-  @override
-  void dispose() {
-    _focusNode.removeListener(_handleCardFocusChange);
-    _focusNode.dispose();
-    _removeFocusNode.dispose();
-    _viewFocusNode.dispose();
-    super.dispose();
-  }
-
-  void _handleCardFocusChange() {
-    if (!mounted) return;
-    if (_focusNode.hasFocus) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Scrollable.ensureVisible(
-          context,
-          alignment: 0.05,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-        );
-      });
-    }
-  }
-
-  Future<void> _handleRemovePressed(BuildContext context) async {
+  Future<void> _removeItem(Map<String, dynamic> item) async {
+    // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF0F172A),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          side: BorderSide(color: Colors.white.withOpacity(0.08)),
         ),
         title: const Text(
           'Remove from playlist?',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
         content: Text(
-          '“${widget.title}” will be removed from your playlist. You can always add it again later.',
+          '"${item['title'] ?? 'This item'}" will be removed from your playlist. You can always add it again later.',
           style: const TextStyle(color: Colors.white70, fontSize: 15),
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1996,300 +1579,232 @@ class _PlaylistCardState extends State<_PlaylistCard> {
         ],
       ),
     );
+
     if (confirmed == true) {
-      widget.onRemove();
+      final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+      await StorageService.removePlaylistItemByKey(dedupeKey);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Removed from playlist')),
+      );
+      await _refresh();
     }
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searchVisible = !_searchVisible;
+      if (_searchVisible) {
+        _searchFocusNode.requestFocus();
+      } else {
+        _searchController.clear();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 32,
-              spreadRadius: -4,
-              offset: const Offset(0, 24),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: widget.onPlay,
-            borderRadius: BorderRadius.circular(24),
-            canRequestFocus: false,
-            splashColor: Colors.white.withValues(alpha: 0.08),
-            highlightColor: Colors.white.withValues(alpha: 0.04),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 190),
-              child: Ink(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF1F2937),
-                      Color(0xFF0F172A),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.08),
+    return RawKeyboardListener(
+      focusNode: _keyboardFocusNode,
+      onKey: (event) {
+        if (event is RawKeyDownEvent) {
+          // Show search on alphanumeric key
+          if (!_searchVisible && event.character != null && event.character!.isNotEmpty) {
+            final char = event.character!;
+            if (RegExp(r'[a-zA-Z0-9]').hasMatch(char)) {
+              setState(() {
+                _searchVisible = true;
+                _searchController.text = char;
+                _searchFocusNode.requestFocus();
+              });
+            }
+          }
+          // Hide search on Escape
+          if (event.logicalKey == LogicalKeyboardKey.escape && _searchVisible) {
+            _toggleSearch();
+          }
+        }
+      },
+      child: Scaffold(
+          backgroundColor: const Color(0xFF0F172A),
+          body: Stack(
+            children: [
+              // Main content
+              Column(
+                children: [
+                // App bar
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        IconButton(
+                          icon: Icon(
+                            _searchVisible ? Icons.close : Icons.search,
+                            color: Colors.white.withOpacity(0.9),
+                            size: 28,
+                          ),
+                          onPressed: _toggleSearch,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: _buildPosterLayer(),
-                    ),
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(24),
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomLeft,
-                            end: Alignment.topRight,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.65),
-                              Colors.black.withValues(alpha: 0.35),
-                            ],
+                const SizedBox(height: 16),
+
+                // Content
+                Expanded(
+                  child: FutureBuilder<void>(
+                    future: _initFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation(Color(0xFFE50914)),
                           ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: -60,
-                      right: -40,
-                      child: Container(
-                        width: 140,
-                        height: 140,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              const Color(0xFFE50914).withValues(alpha: 0.45),
-                              const Color(0xFF9333EA).withValues(alpha: 0.25),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
+                        );
+                      }
+
+                      if (_allItems.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              Icon(
+                                Icons.video_library_outlined,
+                                size: 80,
+                                color: Colors.white.withOpacity(0.2),
+                              ),
+                              const SizedBox(height: 16),
                               Text(
-                                widget.title,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.2,
+                                'No items in playlist',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                              if (widget.subtitle != null &&
-                                  widget.subtitle!.trim().isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  widget.subtitle!,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.72),
-                                    fontSize: 15,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                              if (widget.metadata.isNotEmpty) ...[
-                                const SizedBox(height: 16),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 10,
-                                  children: widget.metadata
-                                      .map(
-                                        (label) => _MetadataTag(label: label),
-                                      )
-                                      .toList(),
-                                ),
-                              ],
                             ],
                           ),
-                          const SizedBox(height: 18),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
+                        );
+                      }
+
+                      final continueWatching = _applySearchFilter(_continueWatching);
+                      final recentlyAdded = _applySearchFilter(_recentlyAdded);
+                      final allItems = _applySearchFilter(_allItems);
+
+                      return RefreshIndicator(
+                        onRefresh: _refresh,
+                        backgroundColor: const Color(0xFF1E293B),
+                        color: const Color(0xFFE50914),
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Play Now Button - Gets initial focus on first card only
-                              Focus(
-                                autofocus: widget.isFirstCard,
-                                child: ElevatedButton.icon(
-                                  focusNode: _focusNode,
-                                  onPressed: widget.onPlay,
-                                  icon: const Icon(Icons.play_arrow_rounded, size: 24),
-                                  label: const Text(
-                                    'Play now',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFFE50914),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 12,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    elevation: 0,
-                                  ),
+                              // Continue Watching section
+                              if (continueWatching.isNotEmpty) ...[
+                                HorizontalPlaylistRow(
+                                  sectionTitle: 'Continue Watching',
+                                  items: continueWatching.take(20).toList(),
+                                  progressMap: _progressMap,
+                                  onItemPlay: _playItem,
+                                  onItemView: _viewItem,
+                                  onItemDelete: _removeItem,
                                 ),
+                                const SizedBox(height: 32),
+                              ],
+
+                              // Recently Added section
+                              if (recentlyAdded.isNotEmpty) ...[
+                                HorizontalPlaylistRow(
+                                  sectionTitle: 'Recently Added',
+                                  items: recentlyAdded.take(20).toList(),
+                                  progressMap: _progressMap,
+                                  onItemPlay: _playItem,
+                                  onItemView: _viewItem,
+                                  onItemDelete: _removeItem,
+                                ),
+                                const SizedBox(height: 32),
+                              ],
+
+                              // All section
+                              HorizontalPlaylistRow(
+                                sectionTitle: 'All',
+                                items: allItems,
+                                progressMap: _progressMap,
+                                onItemPlay: _playItem,
+                                onItemView: _viewItem,
+                                onItemDelete: _removeItem,
                               ),
-                              // View Button
-                              ElevatedButton.icon(
-                                focusNode: _viewFocusNode,
-                                onPressed: widget.onView,
-                                icon: const Icon(Icons.folder_open, size: 20),
-                                label: const Text(
-                                  'View',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white.withValues(alpha: 0.15),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  elevation: 0,
-                                ),
-                              ),
-                              // Delete Button
-                              ElevatedButton.icon(
-                                focusNode: _removeFocusNode,
-                                onPressed: () => _handleRemovePressed(context),
-                                icon: const Icon(Icons.delete_outline, size: 20),
-                                label: const Text(
-                                  'Delete',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white.withValues(alpha: 0.15),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  elevation: 0,
-                                ),
-                              ),
+                              const SizedBox(height: 32),
                             ],
                           ),
-                        ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            // Search overlay
+            if (_searchVisible)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  child: Container(
+                    margin: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.1),
                       ),
                     ),
-                  ],
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.search,
+                          color: Colors.white.withOpacity(0.6),
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Search playlist...',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withOpacity(0.4),
+                              ),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-        ),
-    );
-  }
-
-  Widget _buildPosterLayer() {
-    final radius = BorderRadius.circular(24);
-    if (widget.posterUrl == null || widget.posterUrl!.isEmpty) {
-      return ClipRRect(
-        borderRadius: radius,
-        child: _buildFallbackBackground(),
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: radius,
-      child: Image.network(
-        widget.posterUrl!,
-        fit: BoxFit.cover,
-        color: Colors.black.withValues(alpha: 0.35),
-        colorBlendMode: BlendMode.darken,
-        errorBuilder: (context, error, stackTrace) => _buildFallbackBackground(),
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return _buildFallbackBackground();
-        },
-      ),
-    );
-  }
-
-  Widget _buildFallbackBackground() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFF1D4ED8),
-            Color(0xFF9333EA),
           ],
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-        ),
-      ),
-    );
-  }
-
-}
-
-class _MetadataTag extends StatelessWidget {
-  final String label;
-
-  const _MetadataTag({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12.5,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0.2,
         ),
       ),
     );
   }
 }
+
+
 
 class _TorboxPlaylistCandidate {
   final TorboxFile file;

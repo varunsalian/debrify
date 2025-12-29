@@ -1166,6 +1166,32 @@ class StorageService {
     await savePlaylistItemsRaw(items);
   }
 
+  /// Update lastPlayedAt timestamp for a playlist item
+  /// Call this when user starts playing a playlist item
+  static Future<void> updatePlaylistItemLastPlayed(
+    Map<String, dynamic> item,
+  ) async {
+    final items = await getPlaylistItemsRaw();
+    final dedupeKey = computePlaylistDedupeKey(item);
+    final index = items.indexWhere(
+      (e) => computePlaylistDedupeKey(e) == dedupeKey,
+    );
+
+    if (index != -1) {
+      items[index]['lastPlayedAt'] = DateTime.now().millisecondsSinceEpoch;
+      await savePlaylistItemsRaw(items);
+      debugPrint(
+        'StorageService: Updated lastPlayedAt for "${items[index]['title']}"',
+      );
+    }
+  }
+
+  /// Get lastPlayedAt timestamp for a playlist item
+  /// Returns null if item has never been played
+  static int? getPlaylistItemLastPlayed(Map<String, dynamic> item) {
+    return item['lastPlayedAt'] as int?;
+  }
+
   static Future<void> clearPlaylist() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_playlistKey);
@@ -1176,9 +1202,18 @@ class StorageService {
   static Future<bool> updatePlaylistItemPoster(
     String posterUrl, {
     String? rdTorrentId,
+    String? torboxTorrentId,
     String? pikpakCollectionId,
   }) async {
+    print('🎨 updatePlaylistItemPoster called with:');
+    print('  posterUrl: $posterUrl');
+    print('  rdTorrentId: $rdTorrentId');
+    print('  torboxTorrentId: $torboxTorrentId');
+    print('  pikpakCollectionId: $pikpakCollectionId');
+
     final items = await getPlaylistItemsRaw();
+    print('  Total playlist items: ${items.length}');
+
     int itemIndex = -1;
 
     // Search by rdTorrentId if provided (RealDebrid)
@@ -1186,6 +1221,26 @@ class StorageService {
       itemIndex = items.indexWhere(
         (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
       );
+      if (itemIndex != -1) {
+        print('  ✅ Found item by rdTorrentId at index $itemIndex');
+      }
+    }
+
+    // Search by torboxTorrentId if provided and not found yet (Torbox)
+    if (itemIndex == -1 &&
+        torboxTorrentId != null &&
+        torboxTorrentId.isNotEmpty) {
+      print('  Searching for torboxTorrentId: $torboxTorrentId');
+      for (int i = 0; i < items.length; i++) {
+        final item = items[i];
+        final torboxId = item['torboxTorrentId'];
+        print('    Item[$i] torboxTorrentId: $torboxId (type: ${torboxId.runtimeType})');
+        if (torboxId != null && torboxId.toString() == torboxTorrentId.toString()) {
+          itemIndex = i;
+          print('  ✅ Found item by torboxTorrentId at index $itemIndex');
+          break;
+        }
+      }
     }
 
     // Search by pikpakCollectionId if provided and not found yet (PikPak)
@@ -1210,12 +1265,20 @@ class StorageService {
 
         return false;
       });
+      if (itemIndex != -1) {
+        print('  ✅ Found item by pikpakCollectionId at index $itemIndex');
+      }
     }
 
-    if (itemIndex == -1) return false;
+    if (itemIndex == -1) {
+      print('  ❌ Item not found in playlist!');
+      return false;
+    }
 
+    print('  💾 Saving poster to item at index $itemIndex');
     items[itemIndex]['posterUrl'] = posterUrl;
     await savePlaylistItemsRaw(items);
+    print('  ✅ Poster saved successfully!');
     return true;
   }
 

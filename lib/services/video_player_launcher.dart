@@ -11,6 +11,7 @@ import '../screens/video_player_screen.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
+import '../services/episode_info_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
@@ -39,6 +40,7 @@ class VideoPlayerLaunchArgs {
   final List<PlaylistEntry>? playlist;
   final int? startIndex;
   final String? rdTorrentId;
+  final String? torboxTorrentId;
   final String? pikpakCollectionId;
   final Future<Map<String, String>?> Function()? requestMagicNext;
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
@@ -62,6 +64,7 @@ class VideoPlayerLaunchArgs {
     this.playlist,
     this.startIndex,
     this.rdTorrentId,
+    this.torboxTorrentId,
     this.pikpakCollectionId,
     this.requestMagicNext,
     this.requestNextChannel,
@@ -87,6 +90,7 @@ class VideoPlayerLaunchArgs {
       playlist: playlist,
       startIndex: startIndex,
       rdTorrentId: rdTorrentId,
+      torboxTorrentId: torboxTorrentId,
       pikpakCollectionId: pikpakCollectionId,
       requestMagicNext: requestMagicNext,
       requestNextChannel: requestNextChannel,
@@ -182,7 +186,15 @@ class VideoPlayerLauncher {
       // Async TVMaze metadata fetch - don't block initial playback
       // This mirrors mobile video_player_screen.dart behavior
       // Pass sessionId to ensure stale metadata from previous sessions is discarded
-      _fetchAndPushMetadataAsync(result.payload, result.entries, sessionId, args.viewMode);
+      _fetchAndPushMetadataAsync(
+        result.payload,
+        result.entries,
+        sessionId,
+        args.viewMode,
+        rdTorrentId: args.rdTorrentId,
+        torboxTorrentId: args.torboxTorrentId,
+        pikpakCollectionId: args.pikpakCollectionId,
+      );
 
       return true;
     } catch (e) {
@@ -198,8 +210,11 @@ class VideoPlayerLauncher {
     _AndroidTvPlaybackPayload payload,
     List<_LauncherEntry> entries,
     String sessionId,
-    PlaylistViewMode? viewMode,
-  ) {
+    PlaylistViewMode? viewMode, {
+    String? rdTorrentId,
+    String? torboxTorrentId,
+    String? pikpakCollectionId,
+  }) {
     debugPrint('TVMazeAsync: _fetchAndPushMetadataAsync CALLED');
     debugPrint('TVMazeAsync: contentType=${payload.contentType}, title=${payload.title}');
     debugPrint('TVMazeAsync: entries.length=${entries.length}, viewMode=$viewMode');
@@ -239,6 +254,14 @@ class VideoPlayerLauncher {
         debugPrint('TVMazeAsync: Calling fetchEpisodeInfo()...');
         await seriesPlaylist.fetchEpisodeInfo();
         debugPrint('TVMazeAsync: fetchEpisodeInfo() completed');
+
+        // Save series poster to playlist item (if we have series info)
+        await _saveSeriesPosterToPlaylist(
+          seriesPlaylist,
+          rdTorrentId: rdTorrentId,
+          torboxTorrentId: torboxTorrentId,
+          pikpakCollectionId: pikpakCollectionId,
+        );
 
         // Build metadata updates for each item
         final metadataUpdates = <Map<String, dynamic>>[];
@@ -289,6 +312,96 @@ class VideoPlayerLauncher {
         debugPrint('TVMazeAsync: Stack - $stack');
       }
     }();
+  }
+
+  /// Save series poster URL to playlist item (Android TV flow)
+  static Future<void> _saveSeriesPosterToPlaylist(
+    SeriesPlaylist seriesPlaylist, {
+    String? rdTorrentId,
+    String? torboxTorrentId,
+    String? pikpakCollectionId,
+  }) async {
+    debugPrint('🎬 _saveSeriesPosterToPlaylist (Android TV) called');
+    debugPrint('  seriesTitle: ${seriesPlaylist.seriesTitle}');
+
+    if (seriesPlaylist.seriesTitle == null) {
+      debugPrint('  ⚠️ No series title, skipping poster save');
+      return;
+    }
+
+    debugPrint('  rdTorrentId: $rdTorrentId');
+    debugPrint('  torboxTorrentId: $torboxTorrentId');
+    debugPrint('  pikpakCollectionId: $pikpakCollectionId');
+
+    // Need at least one identifier to save poster
+    if ((rdTorrentId == null || rdTorrentId.isEmpty) &&
+        (torboxTorrentId == null || torboxTorrentId.isEmpty) &&
+        (pikpakCollectionId == null || pikpakCollectionId.isEmpty)) {
+      debugPrint('  ⚠️ No valid identifier found, skipping poster save');
+      return;
+    }
+
+    // Try to get series info to extract poster URL
+    try {
+      debugPrint('  Fetching series info from TVMaze...');
+      final seriesInfo = await EpisodeInfoService.getSeriesInfo(
+        seriesPlaylist.seriesTitle!,
+      );
+
+      if (seriesInfo != null && seriesInfo['image'] != null) {
+        final posterUrl =
+            seriesInfo['image']['original'] ?? seriesInfo['image']['medium'];
+        debugPrint('  Poster URL from TVMaze: $posterUrl');
+
+        if (posterUrl != null && posterUrl.isNotEmpty) {
+          // Find the playlist item by ID
+          debugPrint('  Looking for playlist item...');
+          final items = await StorageService.getPlaylistItemsRaw();
+          Map<String, dynamic>? targetItem;
+
+          for (final item in items) {
+            bool matches = false;
+
+            if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
+              matches = (item['rdTorrentId'] as String?) == rdTorrentId;
+            } else if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
+              final torboxId = item['torboxTorrentId'];
+              matches = torboxId != null && torboxId.toString() == torboxTorrentId.toString();
+            } else if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
+              final pikpakFileId = item['pikpakFileId'] as String?;
+              final pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
+              matches = pikpakFileId == pikpakCollectionId ||
+                        (pikpakFileIds != null && pikpakFileIds.isNotEmpty &&
+                         pikpakFileIds[0].toString() == pikpakCollectionId);
+            }
+
+            if (matches) {
+              targetItem = item;
+              debugPrint('  ✅ Found playlist item');
+              break;
+            }
+          }
+
+          if (targetItem != null) {
+            debugPrint('  Saving poster override...');
+            await StorageService.savePlaylistPosterOverride(
+              playlistItem: targetItem,
+              posterUrl: posterUrl,
+            );
+            debugPrint('  ✅ Poster save SUCCESS');
+          } else {
+            debugPrint('  ❌ Playlist item not found');
+          }
+        } else {
+          debugPrint('  ⚠️ No poster URL found in series info');
+        }
+      } else {
+        debugPrint('  ⚠️ No series info or image found from TVMaze');
+      }
+    } catch (e) {
+      debugPrint('  ❌ Error saving poster: $e');
+      // Silently fail - poster is optional
+    }
   }
 
   static Future<void> _handleProgressUpdate(
