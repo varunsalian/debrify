@@ -667,6 +667,56 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     }
   }
 
+  void _copyTorboxZipLink(TorboxTorrent torrent) {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('API key not available'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    final zipLink = TorboxService.createZipPermalink(key, torrent.id);
+    Clipboard.setData(ClipboardData(text: zipLink));
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.check,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'ZIP download link copied to clipboard!',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _confirmDeleteTorrent(TorboxTorrent torrent) async {
     final key = _apiKey;
     if (key == null || key.isEmpty) {
@@ -4122,6 +4172,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       _navigateIntoTorrent(torrent);
                     } else if (value == 'download') {
                       _showDownloadOptionsDialog(torrent);
+                    } else if (value == 'copy_zip_link') {
+                      _copyTorboxZipLink(torrent);
                     } else if (value == 'add_to_playlist') {
                       _handleAddToPlaylist(torrent);
                     } else if (value == 'delete') {
@@ -4146,6 +4198,16 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                           Icon(Icons.download, size: 18, color: Colors.green),
                           SizedBox(width: 12),
                           Text('Download to device'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'copy_zip_link',
+                      child: Row(
+                        children: [
+                          Icon(Icons.link, size: 18, color: Color(0xFFEC4899)),
+                          SizedBox(width: 12),
+                          Text('Copy Download Link (Zip)'),
                         ],
                       ),
                     ),

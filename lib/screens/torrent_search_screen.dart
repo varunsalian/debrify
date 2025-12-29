@@ -5320,6 +5320,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Get the post-torrent action preference
     final postAction = await StorageService.getTorboxPostTorrentAction();
     final torboxHidden = await StorageService.getTorboxHiddenFromNav();
+    final apiKey = await StorageService.getTorboxApiKey();
 
     // Check if torrent is video-only for auto-download handling
     final isVideoOnly = torboxTorrent.files.isNotEmpty &&
@@ -5525,6 +5526,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             onTap: () {
                               Navigator.of(ctx).pop();
                               _showTorboxDownloadOptions(torboxTorrent);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.link,
+                            color: const Color(0xFFEC4899),
+                            title: 'Copy Download Link (Zip)',
+                            subtitle: 'Copy ZIP download link to clipboard',
+                            enabled: apiKey != null && apiKey.isNotEmpty,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              if (apiKey != null && apiKey.isNotEmpty) {
+                                _copyTorboxZipLink(torboxTorrent, apiKey);
+                              }
                             },
                           ),
                           _DebridActionTile(
@@ -6151,6 +6165,45 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         backgroundColor: isError
             ? const Color(0xFFEF4444)
             : const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _copyTorboxZipLink(TorboxTorrent torrent, String apiKey) {
+    final zipLink = TorboxService.createZipPermalink(apiKey, torrent.id);
+    Clipboard.setData(ClipboardData(text: zipLink));
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.check,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'ZIP download link copied to clipboard!',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E293B),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
