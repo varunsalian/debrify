@@ -34,24 +34,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   List<Map<String, dynamic>> _allItems = [];
   Map<String, Map<String, dynamic>> _progressMap = {};
 
-  late final TextEditingController _searchController;
-  late final FocusNode _searchFocusNode;
-  late final FocusNode _keyboardFocusNode;
-  String _searchTerm = '';
-  bool _searchVisible = false;
+  // Track focus state for restoration after operations
+  int? _targetFocusIndex;
+  bool _shouldRestoreFocus = false;
+
+  // Prevent concurrent deletion operations
+  bool _isDeletionInProgress = false;
 
   @override
   void initState() {
     super.initState();
     _initFuture = _init();
-    _searchController = TextEditingController();
-    _searchController.addListener(() {
-      setState(() {
-        _searchTerm = _searchController.text;
-      });
-    });
-    _searchFocusNode = FocusNode();
-    _keyboardFocusNode = FocusNode();
 
     // Register playlist item playback handler
     MainPageBridge.playPlaylistItem = _playItem;
@@ -67,9 +60,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   @override
   void dispose() {
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _keyboardFocusNode.dispose();
     super.dispose();
   }
 
@@ -102,34 +92,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     await _loadData();
   }
 
-  // Section filter: Continue Watching (>0% and <100% progress, played in last 14 days)
-  List<Map<String, dynamic>> get _continueWatching {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final fourteenDaysAgo = now - (14 * 24 * 60 * 60 * 1000);
-
-    return _allItems.where((item) {
-      final dedupeKey = StorageService.computePlaylistDedupeKey(item);
-      final progress = _progressMap[dedupeKey];
-      if (progress == null) return false;
-
-      final positionMs = progress['positionMs'] as int? ?? 0;
-      final durationMs = progress['durationMs'] as int? ?? 0;
-      final updatedAt = progress['updatedAt'] as int? ?? 0;
-
-      if (durationMs <= 0 || updatedAt < fourteenDaysAgo) return false;
-
-      final percent = positionMs / durationMs;
-      return percent > 0 && percent < 1.0;
-    }).toList()
-      ..sort((a, b) {
-        final aKey = StorageService.computePlaylistDedupeKey(a);
-        final bKey = StorageService.computePlaylistDedupeKey(b);
-        final aTime = _progressMap[aKey]?['updatedAt'] as int? ?? 0;
-        final bTime = _progressMap[bKey]?['updatedAt'] as int? ?? 0;
-        return bTime.compareTo(aTime);
-      });
-  }
-
   // Section getter: All items sorted by addedAt (most recent first)
   List<Map<String, dynamic>> get _allItemsSorted {
     return _allItems.toList()
@@ -140,17 +102,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       });
   }
 
-  // Apply search filter to items
-  List<Map<String, dynamic>> _applySearchFilter(List<Map<String, dynamic>> items) {
-    final query = _searchTerm.trim().toLowerCase();
-    if (query.isEmpty) return items;
-
-    return items.where((item) {
-      final title = ((item['title'] as String?) ?? '').toLowerCase();
-      final series = ((item['seriesTitle'] as String?) ?? '').toLowerCase();
-      return '$title $series'.contains(query);
-    }).toList();
-  }
 
   Future<void> _playItem(Map<String, dynamic> item) async {
     // Track when user plays this item
@@ -1528,6 +1479,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _removeItem(Map<String, dynamic> item) async {
+    // Prevent concurrent deletions
+    if (_isDeletionInProgress) return;
+
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1568,13 +1522,58 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     );
 
     if (confirmed == true) {
-      final dedupeKey = StorageService.computePlaylistDedupeKey(item);
-      await StorageService.removePlaylistItemByKey(dedupeKey);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Removed from playlist')),
-      );
-      await _refresh();
+      // Set deletion lock
+      setState(() {
+        _isDeletionInProgress = true;
+      });
+
+      try {
+        // Find the index of the item being deleted for focus restoration
+        final currentIndex = _allItems.indexWhere(
+          (playlistItem) => StorageService.computePlaylistDedupeKey(playlistItem) ==
+                           StorageService.computePlaylistDedupeKey(item)
+        );
+
+        final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+        await StorageService.removePlaylistItemByKey(dedupeKey);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Removed from playlist')),
+        );
+
+        // Set focus restoration flags BEFORE refresh
+        // Only restore focus if there will be items remaining after deletion
+        if (_allItems.length > 1 && currentIndex >= 0) {
+          setState(() {
+            // Calculate target index based on position of deleted item
+            // If deleting last item, focus on new last item (length - 2)
+            // Otherwise, focus stays at same index (which now contains next item)
+            if (currentIndex >= _allItems.length - 1) {
+              // Deleting the last item - focus previous item
+              _targetFocusIndex = _allItems.length - 2;
+            } else {
+              // Deleting item in middle or start - focus stays at same index
+              _targetFocusIndex = currentIndex;
+            }
+            _shouldRestoreFocus = true;
+          });
+        } else {
+          // If this is the last item, don't try to restore focus
+          setState(() {
+            _shouldRestoreFocus = false;
+            _targetFocusIndex = null;
+          });
+        }
+
+        await _refresh();
+      } finally {
+        // Always release deletion lock
+        if (mounted) {
+          setState(() {
+            _isDeletionInProgress = false;
+          });
+        }
+      }
     }
   }
 
@@ -1629,314 +1628,98 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
-  void _toggleSearch() {
-    setState(() {
-      _searchVisible = !_searchVisible;
-      if (_searchVisible) {
-        _searchFocusNode.requestFocus();
-      } else {
-        _searchController.clear();
-      }
-    });
-  }
-
-  Widget _buildHeroHeader(int totalItems) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    // Only show hero header on larger screens (desktop/tablet)
-    if (screenWidth <= 600) {
-      return const SizedBox.shrink();
-    }
-
-    // Calculate total size
-    int totalBytes = 0;
-    for (final item in _allItems) {
-      final sizeBytes = item['sizeBytes'] as int?;
-      if (sizeBytes != null) {
-        totalBytes += sizeBytes;
-      }
-    }
-    final totalGB = (totalBytes / (1024 * 1024 * 1024)).toStringAsFixed(1);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'My Playlist',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -1,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE50914).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFFE50914).withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.video_library,
-                      color: Color(0xFFE50914),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$totalItems ${totalItems == 1 ? 'item' : 'items'}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.storage,
-                      color: Colors.white.withValues(alpha: 0.7),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$totalGB GB',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    return RawKeyboardListener(
-      focusNode: _keyboardFocusNode,
-      onKey: (event) {
-        if (event is RawKeyDownEvent) {
-          // Show search on alphanumeric key
-          if (!_searchVisible && event.character != null && event.character!.isNotEmpty) {
-            final char = event.character!;
-            if (RegExp(r'[a-zA-Z0-9]').hasMatch(char)) {
-              setState(() {
-                _searchVisible = true;
-                _searchController.text = char;
-                _searchFocusNode.requestFocus();
-              });
-            }
-          }
-          // Hide search on Escape
-          if (event.logicalKey == LogicalKeyboardKey.escape && _searchVisible) {
-            _toggleSearch();
-          }
-        }
-      },
-      child: Scaffold(
+    return Scaffold(
           backgroundColor: const Color(0xFF0F172A),
           body: Stack(
             children: [
               // Main content
               Column(
                 children: [
-                // App bar
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                    child: Row(
-                      children: [
-                        const Spacer(),
-                        IconButton(
-                          icon: Icon(
-                            _searchVisible ? Icons.close : Icons.search,
-                            color: Colors.white.withOpacity(0.9),
-                            size: 28,
-                          ),
-                          onPressed: _toggleSearch,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
+                  // Content
+                  Expanded(
+                    child: FutureBuilder<void>(
+                      future: _initFuture,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation(Color(0xFFE50914)),
+                            ),
+                          );
+                        }
 
-                // Content
-                Expanded(
-                  child: FutureBuilder<void>(
-                    future: _initFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation(Color(0xFFE50914)),
-                          ),
-                        );
-                      }
-
-                      if (_allItems.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.video_library_outlined,
-                                size: 80,
-                                color: Colors.white.withOpacity(0.2),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No items in playlist',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
+                        if (_allItems.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.video_library_outlined,
+                                  size: 80,
+                                  color: Colors.white.withOpacity(0.2),
                                 ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No items in playlist',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.5),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
 
-                      final continueWatching = _applySearchFilter(_continueWatching);
-                      final allItems = _applySearchFilter(_allItemsSorted);
+                        final allItems = _allItemsSorted;
 
-                      return RefreshIndicator(
-                        onRefresh: _refresh,
-                        backgroundColor: const Color(0xFF1E293B),
-                        color: const Color(0xFFE50914),
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Hero header for desktop/tablet
-                              _buildHeroHeader(allItems.length),
-                              const SizedBox(height: 24),
-
-                              // Continue Watching section
-                              if (continueWatching.isNotEmpty) ...[
+                        return RefreshIndicator(
+                          onRefresh: _refresh,
+                          backgroundColor: const Color(0xFF1E293B),
+                          color: const Color(0xFFE50914),
+                          child: SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Only show All items, no sections
                                 AdaptivePlaylistSection(
-                                  sectionTitle: 'Continue Watching',
-                                  items: continueWatching.take(5).toList(),
+                                  sectionTitle: '', // No section title
+                                  items: allItems,
                                   progressMap: _progressMap,
                                   onItemPlay: _playItem,
                                   onItemView: _viewItem,
                                   onItemDelete: _removeItem,
                                   onItemClearProgress: _clearPlaylistProgress,
+                                  shouldAutofocusFirst: true, // Always autofocus first item
+                                  targetFocusIndex: _shouldRestoreFocus ? _targetFocusIndex : null,
+                                  shouldRestoreFocus: _shouldRestoreFocus,
+                                  onFocusRestored: () {
+                                    setState(() {
+                                      _shouldRestoreFocus = false;
+                                      _targetFocusIndex = null;
+                                    });
+                                  },
                                 ),
                                 const SizedBox(height: 32),
                               ],
-
-                              // All section
-                              AdaptivePlaylistSection(
-                                sectionTitle: 'All',
-                                items: allItems,
-                                progressMap: _progressMap,
-                                onItemPlay: _playItem,
-                                onItemView: _viewItem,
-                                onItemDelete: _removeItem,
-                                onItemClearProgress: _clearPlaylistProgress,
-                              ),
-                              const SizedBox(height: 32),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-
-            // Search overlay
-            if (_searchVisible)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  child: Container(
-                    margin: const EdgeInsets.all(24),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.search,
-                          color: Colors.white.withOpacity(0.6),
-                          size: 24,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'Search playlist...',
-                              hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.4),
-                              ),
-                              border: InputBorder.none,
                             ),
                           ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
-                ),
+                ],
               ),
-          ],
-        ),
-      ),
+            ],
+          ),
     );
   }
 }
-
 
 
 class _TorboxPlaylistCandidate {

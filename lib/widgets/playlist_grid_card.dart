@@ -10,6 +10,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 /// - Provider badge
 /// - Progress indicator for in-progress items
 /// - Hover effects on desktop
+/// - DPAD navigation support with proper focus handling
 class PlaylistGridCard extends StatefulWidget {
   final Map<String, dynamic> item;
   final Map<String, dynamic>? progressData;
@@ -17,6 +18,8 @@ class PlaylistGridCard extends StatefulWidget {
   final VoidCallback onView;
   final VoidCallback onDelete;
   final VoidCallback? onClearProgress;
+  final bool autofocus;
+  final void Function(bool focused)? onFocusChanged;
 
   const PlaylistGridCard({
     super.key,
@@ -26,6 +29,8 @@ class PlaylistGridCard extends StatefulWidget {
     required this.onView,
     required this.onDelete,
     this.onClearProgress,
+    this.autofocus = false,
+    this.onFocusChanged,
   });
 
   @override
@@ -160,13 +165,30 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: Focus(
-        onFocusChange: (focused) => setState(() => _isFocused = focused),
+        autofocus: widget.autofocus,
+        onFocusChange: (focused) {
+          setState(() => _isFocused = focused);
+          // Notify parent about focus change for scroll management
+          widget.onFocusChanged?.call(focused);
+        },
         onKeyEvent: (node, event) {
           if (event is KeyDownEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter) {
+            final key = event.logicalKey;
+
+            // Handle selection (Enter/Select)
+            if (key == LogicalKeyboardKey.select ||
+                key == LogicalKeyboardKey.enter) {
               _showActionMenu(context);
               return KeyEventResult.handled;
+            }
+
+            // Allow arrow keys to propagate for grid navigation
+            // Don't handle them here - let GridView's focus traversal handle it
+            if (key == LogicalKeyboardKey.arrowUp ||
+                key == LogicalKeyboardKey.arrowDown ||
+                key == LogicalKeyboardKey.arrowLeft ||
+                key == LogicalKeyboardKey.arrowRight) {
+              return KeyEventResult.ignored;
             }
           }
           return KeyEventResult.ignored;
