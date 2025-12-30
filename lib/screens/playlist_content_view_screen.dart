@@ -1856,7 +1856,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         final durationMs = progressData['durationMs'] as int? ?? 0;
         if (durationMs > 0) {
           progress = positionMs / durationMs;
-          isFinished = progress >= 0.9 || (durationMs - positionMs) < 120000;
+          // Check if finished based on progress OR if it's marked as finished explicitly
+          // Dummy data has durationMs = 1 to indicate manually marked as watched
+          isFinished = progress >= 0.9 ||
+                       (durationMs - positionMs) < 120000 ||
+                       (positionMs == 0 && durationMs == 1);
           print(
             '📈 Progress: ${(progress * 100).round()}%, Finished: $isFinished',
           );
@@ -1941,6 +1945,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               else
                 _buildThumbnailPlaceholder(episode),
 
+              // Apply semi-transparent overlay for watched episodes
+              if (isFinished)
+                Container(
+                  color: Colors.black.withValues(alpha: 0.6),
+                ),
+
               // Play button overlay
               Center(
                 child: Container(
@@ -1985,11 +1995,48 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 ),
               ),
 
-              // Top right: IMDB rating badge
+              // Top right: Mark as watched button
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: () => _toggleWatchedState(episode),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isFinished
+                        ? const Color(0xFF4CAF50)
+                        : Colors.white.withValues(alpha: 0.3),
+                      border: Border.all(
+                        color: isFinished
+                          ? const Color(0xFF4CAF50)
+                          : Colors.white.withValues(alpha: 0.8),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      isFinished ? Icons.check : Icons.circle_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+
+              // IMDB rating badge (moved to accommodate watched button)
               if (hasMetadata && episodeInfo!.rating != null)
                 Positioned(
                   top: 8,
-                  right: 8,
+                  right: 52, // Positioned to the left of the watched button
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -2260,6 +2307,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     else
                       _buildThumbnailPlaceholder(episode),
 
+                    // Apply semi-transparent overlay for watched episodes
+                    if (isFinished)
+                      Container(
+                        color: Colors.black.withValues(alpha: 0.6),
+                      ),
+
                     // Play button overlay
                     Center(
                       child: Container(
@@ -2304,11 +2357,48 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       ),
                     ),
 
-                    // Top right: IMDB rating badge
+                    // Top right: Mark as watched button
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: GestureDetector(
+                        onTap: () => _toggleWatchedState(episode),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isFinished
+                              ? const Color(0xFF4CAF50)
+                              : Colors.white.withValues(alpha: 0.3),
+                            border: Border.all(
+                              color: isFinished
+                                ? const Color(0xFF4CAF50)
+                                : Colors.white.withValues(alpha: 0.8),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            isFinished ? Icons.check : Icons.circle_outlined,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // IMDB rating badge (moved to accommodate watched button)
                     if (hasMetadata && episodeInfo?.rating != null)
                       Positioned(
                         top: 8,
-                        right: 8,
+                        right: 60, // Positioned to the left of the watched button
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -2580,6 +2670,82 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         ),
       ),
     );
+  }
+
+  /// Toggle the watched state of an episode
+  Future<void> _toggleWatchedState(SeriesEpisode episode) async {
+    if (_seriesPlaylist == null) return;
+
+    // Get the series title for storage
+    final String? seriesTitle = _seriesPlaylist!.seriesTitle ??
+                                widget.playlistItem['title'] as String?;
+
+    if (seriesTitle == null || seriesTitle.isEmpty) {
+      print('❌ Cannot toggle watched state: No series title available');
+      return;
+    }
+
+    // Get episode details
+    final season = episode.seriesInfo.season ?? 1;
+    final episodeNum = episode.seriesInfo.episode ?? 1;
+
+    try {
+      // Check current watched state
+      final isCurrentlyFinished = await StorageService.isEpisodeFinished(
+        seriesTitle: seriesTitle,
+        season: season,
+        episode: episodeNum,
+      );
+
+      if (isCurrentlyFinished) {
+        // Episode is marked as watched, unmark it
+        print('🔄 Unmarking as watched: $seriesTitle S${season}E$episodeNum');
+        await StorageService.unmarkEpisodeAsFinished(
+          seriesTitle: seriesTitle,
+          season: season,
+          episode: episodeNum,
+        );
+      } else {
+        // Episode is not watched, mark it as finished
+        print('✅ Marking as watched: $seriesTitle S${season}E$episodeNum');
+        await StorageService.markEpisodeAsFinished(
+          seriesTitle: seriesTitle,
+          season: season,
+          episode: episodeNum,
+        );
+      }
+
+      // Reload the progress to update the UI
+      await _reloadProgress();
+
+      // Show a snackbar to confirm the action
+      // Note: isCurrentlyFinished is the OLD state before toggle, so we invert the message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isCurrentlyFinished
+                ? 'Episode marked as unwatched'
+                : 'Episode marked as watched',
+            ),
+            duration: const Duration(seconds: 2),
+            backgroundColor: isCurrentlyFinished
+              ? const Color(0xFF6366F1)
+              : const Color(0xFF4CAF50),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error toggling watched state: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating watched state: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   /// Play episode from OTT view with full playlist support

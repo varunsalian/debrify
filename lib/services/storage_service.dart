@@ -471,6 +471,13 @@ class StorageService {
     }
 
     final seriesData = map[key] as Map<String, dynamic>;
+
+    // Ensure seasons map exists
+    if (!seriesData.containsKey('seasons')) {
+      seriesData['seasons'] = {};
+    }
+
+    // Ensure finishedEpisodes map exists
     if (!seriesData.containsKey('finishedEpisodes')) {
       seriesData['finishedEpisodes'] = {};
     }
@@ -483,8 +490,95 @@ class StorageService {
       'finishedAt': DateTime.now().millisecondsSinceEpoch,
     };
 
+    // Also add/update in seasons map so it appears in getEpisodeProgress()
+    // This ensures UI can find the episode even if it was never played
+    if (!seriesData['seasons'].containsKey(season.toString())) {
+      seriesData['seasons'][season.toString()] = {};
+    }
+
+    final episodeData = seriesData['seasons'][season.toString()][episode.toString()];
+
+    if (episodeData == null) {
+      // Episode was never played - add dummy data to mark as watched
+      seriesData['seasons'][season.toString()][episode.toString()] = {
+        'positionMs': 0,
+        'durationMs': 1,
+        'speed': 1.0,
+        'aspect': 'contain',
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      };
+    } else {
+      // Episode has existing progress - update it to show as finished
+      // Set position = duration to show 100% progress
+      final existingData = episodeData as Map<String, dynamic>;
+      final durationMs = existingData['durationMs'] as int? ?? 1;
+      existingData['positionMs'] = durationMs; // Mark as fully watched
+      existingData['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+    }
+
     debugPrint(
       'StorageService: markEpisodeAsFinished title="$seriesTitle" S${season}E$episode',
+    );
+
+    await _savePlaybackStateMap(map);
+  }
+
+  /// Unmark an episode as finished (mark as unwatched)
+  static Future<void> unmarkEpisodeAsFinished({
+    required String seriesTitle,
+    required int season,
+    required int episode,
+  }) async {
+    final map = await _getPlaybackStateMap();
+    final key =
+        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
+    final seriesData = map[key];
+    if (seriesData == null || seriesData['type'] != 'series') return;
+
+    // Remove from finishedEpisodes map
+    final finishedEpisodes = seriesData['finishedEpisodes'];
+    if (finishedEpisodes != null) {
+      final seasonData = finishedEpisodes[season.toString()];
+      if (seasonData != null) {
+        seasonData.remove(episode.toString());
+
+        // Clean up empty season map
+        if (seasonData.isEmpty) {
+          finishedEpisodes.remove(season.toString());
+        }
+      }
+    }
+
+    // Also remove from seasons map if it only has dummy progress data (position 0)
+    // This keeps episodes that were actually watched with real progress
+    final seasons = seriesData['seasons'];
+    if (seasons != null) {
+      final seasonData = seasons[season.toString()];
+      if (seasonData != null) {
+        final episodeData = seasonData[episode.toString()];
+        if (episodeData != null) {
+          // Only remove if it's dummy data (position 0, duration 1)
+          final positionMs = episodeData['positionMs'] ?? 0;
+          final durationMs = episodeData['durationMs'] ?? 0;
+          if (positionMs == 0 && durationMs == 1) {
+            seasonData.remove(episode.toString());
+
+            // Clean up empty season map
+            if (seasonData.isEmpty) {
+              seasons.remove(season.toString());
+            }
+          } else {
+            // Episode has real progress, just reset it to 0
+            episodeData['positionMs'] = 0;
+            episodeData['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+          }
+        }
+      }
+    }
+
+    debugPrint(
+      'StorageService: unmarkEpisodeAsFinished title="$seriesTitle" S${season}E$episode',
     );
 
     await _savePlaybackStateMap(map);
