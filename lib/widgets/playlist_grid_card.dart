@@ -236,7 +236,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                       ),
 
                     // Progress indicator (bottom)
-                    if (progress != null && progress >= 0.05 && progress <= 0.95)
+                    if (progress != null && progress > 0 && progress < 1.0)
                       Positioned(
                         left: 0,
                         right: 0,

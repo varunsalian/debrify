@@ -358,7 +358,7 @@ class _PlaylistLandscapeCardState extends State<PlaylistLandscapeCard> {
           _buildMetadata(),
 
           // Progress bar if available
-          if (progress != null && progress >= 0.05 && progress <= 0.95)
+          if (progress != null && progress > 0 && progress < 1.0)
             _buildProgressBar(progress)
           else
             const SizedBox(height: 4),

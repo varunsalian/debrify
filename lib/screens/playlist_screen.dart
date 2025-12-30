@@ -88,8 +88,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       }
     }
 
-    // TODO: Load progress data - requires building from series playback state
-    final progressMap = <String, Map<String, dynamic>>{};
+    // Load progress data from playback state
+    final progressMap = await StorageService.buildPlaylistProgressMap(items);
 
     if (!mounted) return;
     setState(() {
@@ -102,7 +102,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     await _loadData();
   }
 
-  // Section filter: Continue Watching (5-95% progress, played in last 14 days)
+  // Section filter: Continue Watching (>0% and <100% progress, played in last 14 days)
   List<Map<String, dynamic>> get _continueWatching {
     final now = DateTime.now().millisecondsSinceEpoch;
     final fourteenDaysAgo = now - (14 * 24 * 60 * 60 * 1000);
@@ -119,7 +119,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       if (durationMs <= 0 || updatedAt < fourteenDaysAgo) return false;
 
       final percent = positionMs / durationMs;
-      return percent >= 0.05 && percent <= 0.95;
+      return percent > 0 && percent < 1.0;
     }).toList()
       ..sort((a, b) {
         final aKey = StorageService.computePlaylistDedupeKey(a);
