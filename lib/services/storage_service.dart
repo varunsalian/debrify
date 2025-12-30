@@ -856,21 +856,29 @@ class StorageService {
       }
     }
 
-    // Fallback: Search through all series/video entries for an exact match on stored title
-    // This handles cases where the stored title was cleaned differently at save time
+    // Fallback: Search through all series/video entries
+    // Check if the input title contains the stored series title
+    // This handles cases where playlist title is "Game of Thrones - Season 3" but stored title is "game of thrones"
     for (final entry in map.entries) {
       if ((entry.key.startsWith('series_') || entry.key.startsWith('video_')) &&
           entry.value is Map<String, dynamic> &&
           !keysToRemove.contains(entry.key)) {
 
         final storedTitle = (entry.value['title'] as String?)?.toLowerCase() ?? '';
+        if (storedTitle.isEmpty) continue;
+
+        final titleLower = title.toLowerCase();
         final cleanedTitleLower = cleanedTitle.toLowerCase();
 
-        // Use EXACT equality to prevent accidentally clearing similar titles
-        // (e.g., "Breaking Bad S01" shouldn't match "Breaking Bad S02")
-        if (storedTitle == cleanedTitleLower) {
+        // Check if the stored series title matches in several ways:
+        // 1. Exact match with cleaned title (e.g., "game of thrones" == "game of thrones")
+        // 2. Input title contains the stored series title (e.g., "game of thrones - season 3" contains "game of thrones")
+        // 3. Cleaned title contains the stored series title
+        if (storedTitle == cleanedTitleLower ||
+            storedTitle == titleLower ||
+            (titleLower.contains(storedTitle) && storedTitle.split(' ').length >= 2)) {
           keysToRemove.add(entry.key);
-          debugPrint('StorageService: exact title match - key: "${entry.key}", storedTitle: "$storedTitle"');
+          debugPrint('StorageService: stored title match - key: "${entry.key}", storedTitle: "$storedTitle"');
         }
       }
     }

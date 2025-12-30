@@ -1865,7 +1865,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                               if (continueWatching.isNotEmpty) ...[
                                 AdaptivePlaylistSection(
                                   sectionTitle: 'Continue Watching',
-                                  items: continueWatching.take(20).toList(),
+                                  items: continueWatching.take(5).toList(),
                                   progressMap: _progressMap,
                                   onItemPlay: _playItem,
                                   onItemView: _viewItem,
