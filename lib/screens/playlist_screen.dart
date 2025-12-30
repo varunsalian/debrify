@@ -130,26 +130,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       });
   }
 
-  // Section filter: Recently Added (added or played in last 14 days)
-  List<Map<String, dynamic>> get _recentlyAdded {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final fourteenDaysAgo = now - (14 * 24 * 60 * 60 * 1000);
-
-    return _allItems.where((item) {
-      final addedAt = item['addedAt'] as int? ?? 0;
-      final lastPlayed = item['lastPlayedAt'] as int? ?? 0;
-      // Show if added recently OR played recently (but not in Continue Watching)
-      return addedAt >= fourteenDaysAgo || lastPlayed >= fourteenDaysAgo;
-    }).toList()
+  // Section getter: All items sorted by addedAt (most recent first)
+  List<Map<String, dynamic>> get _allItemsSorted {
+    return _allItems.toList()
       ..sort((a, b) {
-        // Sort by most recent activity (either added or played)
         final aAdded = a['addedAt'] as int? ?? 0;
         final bAdded = b['addedAt'] as int? ?? 0;
-        final aPlayed = a['lastPlayedAt'] as int? ?? 0;
-        final bPlayed = b['lastPlayedAt'] as int? ?? 0;
-        final aTime = aAdded > aPlayed ? aAdded : aPlayed;
-        final bTime = bAdded > bPlayed ? bAdded : bPlayed;
-        return bTime.compareTo(aTime);
+        return bAdded.compareTo(aAdded); // Descending (most recent first)
       });
   }
 
@@ -1845,8 +1832,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       }
 
                       final continueWatching = _applySearchFilter(_continueWatching);
-                      final recentlyAdded = _applySearchFilter(_recentlyAdded);
-                      final allItems = _applySearchFilter(_allItems);
+                      final allItems = _applySearchFilter(_allItemsSorted);
 
                       return RefreshIndicator(
                         onRefresh: _refresh,
@@ -1866,20 +1852,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 AdaptivePlaylistSection(
                                   sectionTitle: 'Continue Watching',
                                   items: continueWatching.take(5).toList(),
-                                  progressMap: _progressMap,
-                                  onItemPlay: _playItem,
-                                  onItemView: _viewItem,
-                                  onItemDelete: _removeItem,
-                                  onItemClearProgress: _clearPlaylistProgress,
-                                ),
-                                const SizedBox(height: 32),
-                              ],
-
-                              // Recently Added section
-                              if (recentlyAdded.isNotEmpty) ...[
-                                AdaptivePlaylistSection(
-                                  sectionTitle: 'Recently Added',
-                                  items: recentlyAdded.take(4).toList(),
                                   progressMap: _progressMap,
                                   onItemPlay: _playItem,
                                   onItemView: _viewItem,
