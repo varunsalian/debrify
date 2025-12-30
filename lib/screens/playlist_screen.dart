@@ -18,7 +18,7 @@ import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/main_page_bridge.dart';
-import '../widgets/horizontal_playlist_row.dart';
+import '../widgets/adaptive_playlist_section.dart';
 import 'video_player_screen.dart';
 import 'playlist_content_view_screen.dart';
 
@@ -1602,6 +1602,109 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     });
   }
 
+  Widget _buildHeroHeader(int totalItems) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Only show hero header on larger screens (desktop/tablet)
+    if (screenWidth <= 600) {
+      return const SizedBox.shrink();
+    }
+
+    // Calculate total size
+    int totalBytes = 0;
+    for (final item in _allItems) {
+      final sizeBytes = item['sizeBytes'] as int?;
+      if (sizeBytes != null) {
+        totalBytes += sizeBytes;
+      }
+    }
+    final totalGB = (totalBytes / (1024 * 1024 * 1024)).toStringAsFixed(1);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'My Playlist',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE50914).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFFE50914).withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.video_library,
+                      color: Color(0xFFE50914),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$totalItems ${totalItems == 1 ? 'item' : 'items'}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.storage,
+                      color: Colors.white.withValues(alpha: 0.7),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$totalGB GB',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return RawKeyboardListener(
@@ -1703,9 +1806,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Hero header for desktop/tablet
+                              _buildHeroHeader(allItems.length),
+                              const SizedBox(height: 24),
+
                               // Continue Watching section
                               if (continueWatching.isNotEmpty) ...[
-                                HorizontalPlaylistRow(
+                                AdaptivePlaylistSection(
                                   sectionTitle: 'Continue Watching',
                                   items: continueWatching.take(20).toList(),
                                   progressMap: _progressMap,
@@ -1718,9 +1825,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
                               // Recently Added section
                               if (recentlyAdded.isNotEmpty) ...[
-                                HorizontalPlaylistRow(
+                                AdaptivePlaylistSection(
                                   sectionTitle: 'Recently Added',
-                                  items: recentlyAdded.take(20).toList(),
+                                  items: recentlyAdded.take(4).toList(),
                                   progressMap: _progressMap,
                                   onItemPlay: _playItem,
                                   onItemView: _viewItem,
@@ -1730,7 +1837,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                               ],
 
                               // All section
-                              HorizontalPlaylistRow(
+                              AdaptivePlaylistSection(
                                 sectionTitle: 'All',
                                 items: allItems,
                                 progressMap: _progressMap,
