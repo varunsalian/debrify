@@ -1584,13 +1584,22 @@ class StorageService {
             totalEpisodes = 1; // Fallback to at least 1
           }
 
-          // Count finished episodes
+          // Count finished episodes from both finishedEpisodes and seasons maps
+          // Use a Set to track which episodes are finished to avoid double-counting
+          final Set<String> finishedEpisodeKeys = {};
           int finishedEpisodeCount = 0;
+
+          // First, count episodes explicitly marked as finished (TV series)
           final finishedEpisodes = seriesState['finishedEpisodes'] as Map<String, dynamic>?;
           if (finishedEpisodes != null) {
             for (final seasonEntry in finishedEpisodes.entries) {
+              final seasonKey = seasonEntry.key;
               final seasonFinished = seasonEntry.value as Map<String, dynamic>;
-              finishedEpisodeCount += seasonFinished.length;
+              for (final episodeKey in seasonFinished.keys) {
+                final key = '${seasonKey}_$episodeKey';
+                finishedEpisodeKeys.add(key);
+                finishedEpisodeCount++;
+              }
             }
           }
 
@@ -1598,30 +1607,47 @@ class StorageService {
           int latestPosition = 0;
           int latestDuration = 0;
           int latestUpdatedAt = 0;
-          bool hasPartialProgress = false;
+          String? latestEpisodeKey;
 
           final seasons = seriesState['seasons'] as Map<String, dynamic>?;
           if (seasons != null) {
             for (final seasonEntry in seasons.entries) {
+              final seasonKey = seasonEntry.key;
               final episodes = seasonEntry.value as Map<String, dynamic>;
               for (final episodeEntry in episodes.entries) {
+                final episodeKey = episodeEntry.key;
                 final episodeData = episodeEntry.value as Map<String, dynamic>;
+                final positionMs = episodeData['positionMs'] as int? ?? 0;
+                final durationMs = episodeData['durationMs'] as int? ?? 0;
                 final updatedAt = episodeData['updatedAt'] as int? ?? 0;
+
+                // Count as finished if >= 95% watched AND not already counted
+                final key = '${seasonKey}_$episodeKey';
+                if (durationMs > 0 && (positionMs / durationMs) >= 0.95) {
+                  if (!finishedEpisodeKeys.contains(key)) {
+                    finishedEpisodeKeys.add(key);
+                    finishedEpisodeCount++;
+                  }
+                }
+
+                // Track latest episode for partial progress
                 if (updatedAt > latestUpdatedAt) {
                   latestUpdatedAt = updatedAt;
-                  latestPosition = episodeData['positionMs'] as int? ?? 0;
-                  latestDuration = episodeData['durationMs'] as int? ?? 0;
+                  latestPosition = positionMs;
+                  latestDuration = durationMs;
+                  latestEpisodeKey = key;
                 }
               }
             }
           }
 
-          // Calculate partial progress from current episode
+          // Calculate partial progress from latest episode ONLY if not already counted as finished
           double partialEpisodeProgress = 0.0;
-          if (latestDuration > 0 && latestPosition > 0) {
+          bool hasPartialProgress = false;
+          if (latestDuration > 0 && latestPosition > 0 && latestEpisodeKey != null) {
             partialEpisodeProgress = latestPosition / latestDuration;
-            // Only count as partial if not finished (< 95%)
-            if (partialEpisodeProgress < 0.95) {
+            // Only count as partial if < 95% (not already counted as finished)
+            if (partialEpisodeProgress < 0.95 && !finishedEpisodeKeys.contains(latestEpisodeKey)) {
               hasPartialProgress = true;
             }
           }
