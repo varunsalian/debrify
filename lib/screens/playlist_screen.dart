@@ -1591,6 +1591,57 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
+  Future<void> _clearPlaylistProgress(Map<String, dynamic> item) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withOpacity(0.08)),
+        ),
+        title: const Text(
+          'Clear watch progress?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'All watch progress for "${item['title'] ?? 'this playlist'}" will be cleared. This cannot be undone.',
+          style: const TextStyle(color: Colors.white70, fontSize: 15),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF9800),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: const Text('Clear Progress'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final title = item['title'] as String? ?? '';
+      await StorageService.clearPlaylistProgress(title: title);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Watch progress cleared')),
+      );
+      await _refresh();
+    }
+  }
+
   void _toggleSearch() {
     setState(() {
       _searchVisible = !_searchVisible;
@@ -1819,6 +1870,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                   onItemPlay: _playItem,
                                   onItemView: _viewItem,
                                   onItemDelete: _removeItem,
+                                  onItemClearProgress: _clearPlaylistProgress,
                                 ),
                                 const SizedBox(height: 32),
                               ],
@@ -1832,6 +1884,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                   onItemPlay: _playItem,
                                   onItemView: _viewItem,
                                   onItemDelete: _removeItem,
+                                  onItemClearProgress: _clearPlaylistProgress,
                                 ),
                                 const SizedBox(height: 32),
                               ],
@@ -1844,6 +1897,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 onItemPlay: _playItem,
                                 onItemView: _viewItem,
                                 onItemDelete: _removeItem,
+                                onItemClearProgress: _clearPlaylistProgress,
                               ),
                               const SizedBox(height: 32),
                             ],

@@ -813,6 +813,83 @@ class StorageService {
     debugPrint('StorageService: cleared playback state and video resume data');
   }
 
+  /// Clear all progress data for a specific playlist/series
+  static Future<void> clearPlaylistProgress({
+    required String title,
+  }) async {
+    final map = await _getPlaybackStateMap();
+
+    debugPrint('StorageService: clearPlaylistProgress called for "$title"');
+
+    final keysToRemove = <String>[];
+
+    // Use the SAME matching logic as when finding series progress
+    // Try multiple title variations to find all matching entries
+
+    // Variation 1: Use the full playlist item title
+    final fullTitleKey = 'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final fullVideoKey = 'video_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
+    // Variation 2: Try extracting clean title (like "breaking bad" from "Breaking.Bad.SEASON.01.S01...")
+    // This matches how SeriesPlaylist extracts the title
+    String cleanedTitle = title;
+
+    // Remove common patterns to extract series name
+    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.S\d{2}.*', caseSensitive: false), ''); // Remove S01-S08 and everything after
+    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.Season\..*', caseSensitive: false), ''); // Remove Season.1-8
+    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(1080p|720p|2160p|4k).*', caseSensitive: false), ''); // Remove quality
+    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(x264|x265|h264|h265).*', caseSensitive: false), ''); // Remove codec
+    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(BluRay|WEB|HDTV|WEBRip).*', caseSensitive: false), ''); // Remove source
+    cleanedTitle = cleanedTitle.replaceAll('.', ' ').trim();
+
+    final cleanTitleKey = 'series_${cleanedTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final cleanVideoKey = 'video_${cleanedTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
+    debugPrint('StorageService: checking keys - full: $fullTitleKey / $fullVideoKey, clean: $cleanTitleKey / $cleanVideoKey');
+    debugPrint('StorageService: available keys: ${map.keys.toList()}');
+
+    // Check for exact key matches first
+    for (final key in [cleanTitleKey, cleanVideoKey, fullTitleKey, fullVideoKey]) {
+      if (map.containsKey(key) && !keysToRemove.contains(key)) {
+        keysToRemove.add(key);
+        debugPrint('StorageService: exact key match: "$key"');
+      }
+    }
+
+    // Fallback: Search through all series/video entries for an exact match on stored title
+    // This handles cases where the stored title was cleaned differently at save time
+    for (final entry in map.entries) {
+      if ((entry.key.startsWith('series_') || entry.key.startsWith('video_')) &&
+          entry.value is Map<String, dynamic> &&
+          !keysToRemove.contains(entry.key)) {
+
+        final storedTitle = (entry.value['title'] as String?)?.toLowerCase() ?? '';
+        final cleanedTitleLower = cleanedTitle.toLowerCase();
+
+        // Use EXACT equality to prevent accidentally clearing similar titles
+        // (e.g., "Breaking Bad S01" shouldn't match "Breaking Bad S02")
+        if (storedTitle == cleanedTitleLower) {
+          keysToRemove.add(entry.key);
+          debugPrint('StorageService: exact title match - key: "${entry.key}", storedTitle: "$storedTitle"');
+        }
+      }
+    }
+
+    // Remove all matching keys
+    for (final key in keysToRemove) {
+      map.remove(key);
+      debugPrint('StorageService: removed progress entry with key: "$key"');
+    }
+
+    // Save the updated map if anything was removed
+    if (keysToRemove.isNotEmpty) {
+      await _savePlaybackStateMap(map);
+      debugPrint('StorageService: clearPlaylistProgress completed - removed ${keysToRemove.length} entries for "$title"');
+    } else {
+      debugPrint('StorageService: no progress data found for "$title"');
+    }
+  }
+
   // Internal helper for services needing shared prefs quickly
   static Future<SharedPreferences> _getPrefs() async {
     return await SharedPreferences.getInstance();

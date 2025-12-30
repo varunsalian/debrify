@@ -19,6 +19,7 @@ class AdaptivePlaylistSection extends StatelessWidget {
   final void Function(Map<String, dynamic> item) onItemPlay;
   final void Function(Map<String, dynamic> item) onItemView;
   final void Function(Map<String, dynamic> item) onItemDelete;
+  final void Function(Map<String, dynamic> item)? onItemClearProgress;
 
   const AdaptivePlaylistSection({
     super.key,
@@ -28,6 +29,7 @@ class AdaptivePlaylistSection extends StatelessWidget {
     required this.onItemPlay,
     required this.onItemView,
     required this.onItemDelete,
+    this.onItemClearProgress,
   });
 
   String _getDedupeKey(Map<String, dynamic> item) {
@@ -160,6 +162,7 @@ class AdaptivePlaylistSection extends StatelessWidget {
               onPlay: () => onItemPlay(item),
               onView: () => onItemView(item),
               onDelete: () => onItemDelete(item),
+              onClearProgress: onItemClearProgress != null ? () => onItemClearProgress!(item) : null,
               height: cardHeight,
             ),
           );
@@ -217,6 +220,7 @@ class AdaptivePlaylistSection extends StatelessWidget {
             onPlay: () => onItemPlay(item),
             onView: () => onItemView(item),
             onDelete: () => onItemDelete(item),
+            onClearProgress: onItemClearProgress != null ? () => onItemClearProgress!(item) : null,
           );
         },
       ),

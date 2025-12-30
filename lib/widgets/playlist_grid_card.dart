@@ -16,6 +16,7 @@ class PlaylistGridCard extends StatefulWidget {
   final VoidCallback onPlay;
   final VoidCallback onView;
   final VoidCallback onDelete;
+  final VoidCallback? onClearProgress;
 
   const PlaylistGridCard({
     super.key,
@@ -24,6 +25,7 @@ class PlaylistGridCard extends StatefulWidget {
     required this.onPlay,
     required this.onView,
     required this.onDelete,
+    this.onClearProgress,
   });
 
   @override
@@ -71,6 +73,15 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                 widget.onView();
               },
             ),
+            if (widget.onClearProgress != null)
+              ListTile(
+                leading: const Icon(Icons.restart_alt, color: Color(0xFFFF9800)),
+                title: const Text('Clear Progress', style: TextStyle(color: Colors.white, fontSize: 18)),
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onClearProgress?.call();
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.redAccent),
               title: const Text('Delete', style: TextStyle(color: Colors.white, fontSize: 18)),
