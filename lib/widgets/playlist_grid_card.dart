@@ -41,6 +41,19 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
   bool _isHovered = false;
   bool _isFocused = false;
 
+  void _updateFocusState(bool focused) {
+    if (_isFocused != focused) {
+      setState(() => _isFocused = focused);
+      widget.onFocusChanged?.call(focused);
+    }
+  }
+
+  void _updateHoverState(bool hovered) {
+    if (_isHovered != hovered) {
+      setState(() => _isHovered = hovered);
+    }
+  }
+
   void _showActionMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -162,15 +175,11 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
     }
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) => _updateHoverState(true),
+      onExit: (_) => _updateHoverState(false),
       child: Focus(
         autofocus: widget.autofocus,
-        onFocusChange: (focused) {
-          setState(() => _isFocused = focused);
-          // Notify parent about focus change for scroll management
-          widget.onFocusChanged?.call(focused);
-        },
+        onFocusChange: _updateFocusState,
         onKeyEvent: (node, event) {
           if (event is KeyDownEvent) {
             final key = event.logicalKey;
@@ -206,20 +215,12 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                 boxShadow: isActive
                     ? [
                         BoxShadow(
-                          color: const Color(0xFFE50914).withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          spreadRadius: 0,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          spreadRadius: 0,
+                          color: const Color(0xFFE50914).withValues(alpha: 0.3),
+                          blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
-                      ],
+                      ]
+                    : null, // No shadow when not focused - reduces rendering overhead
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),

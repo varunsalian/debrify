@@ -180,7 +180,7 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: GridView.builder(
         shrinkWrap: true,
-        physics: const ClampingScrollPhysics(), // Changed from NeverScrollableScrollPhysics for better focus handling
+        physics: const NeverScrollableScrollPhysics(), // Disable scroll physics to prevent conflicts with focus navigation
         primary: false,
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
@@ -216,29 +216,7 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
                     _hasNotifiedRestore = true;
                     widget.onFocusRestored?.call();
                   }
-                  // Ensure focused item is visible when navigating with DPAD
-                  if (focused) {
-                    // Use addPostFrameCallback for better timing - ensures widget is fully built
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      try {
-                        // Only try to scroll if context is still mounted
-                        if (itemContext.mounted) {
-                          Scrollable.ensureVisible(
-                            itemContext,
-                            alignment: 0.5,
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeInOut,
-                          );
-                        }
-                      } on FlutterError catch (e) {
-                        // Only catch FlutterErrors related to unmounted widgets
-                        // Let other errors propagate for debugging
-                        if (!e.toString().contains('mounted')) {
-                          rethrow;
-                        }
-                      }
-                    });
-                  }
+                  // Remove auto-scrolling - let Flutter's focus system handle it naturally
                 },
               );
             },
