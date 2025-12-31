@@ -659,13 +659,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
                                           }
                                         : null,
                                     icon: const Icon(Icons.check, size: 18),
-                                    label: Text(
-                                      _selectedFolderId != null
-                                          ? 'Restrict to "${_truncateFolderName(_selectedFolderName ?? '')}"'
-                                          : 'Select a folder',
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
+                                    label: const Text('Select'),
                                   ),
                                 ),
                               ),
