@@ -62,8 +62,12 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onReady(context);
     });
-    return Center(
-      child: Container(
+    // Wrap in GestureDetector to absorb all taps and prevent click-through
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {}, // Absorb all taps
+      child: Center(
+        child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 32),
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
@@ -122,6 +126,7 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
             ],
           ],
         ),
+      ),
       ),
     );
   }

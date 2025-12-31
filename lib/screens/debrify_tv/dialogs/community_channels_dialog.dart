@@ -653,8 +653,12 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
     final selectedCount = _getSelectedChannels().length;
     final totalCount = _manifest?.channels.length ?? 0;
 
-    return AlertDialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+    // Wrap in GestureDetector to absorb taps that land outside the dialog content
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {}, // Absorb taps on the barrier area
+      child: AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: 8,
@@ -1136,6 +1140,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
           ),
         ),
       ],
+    ),
     );
   }
 }

@@ -29,6 +29,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
   Timer? _longPressTimer;
   bool _longPressTriggered = false;
   DateTime? _lastLongPressTime;
+  bool _keyDownReceived = false; // Track if we received KeyDown while focused
 
   @override
   void dispose() {
@@ -47,6 +48,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
         if (!focused) {
           _longPressTimer?.cancel();
           _longPressTriggered = false;
+          _keyDownReceived = false; // Reset when losing focus
         }
       },
       onKeyEvent: (node, event) {
@@ -57,6 +59,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
             print(
               '[TvFocusableCard] Select/Enter key DOWN - starting long press timer',
             );
+            _keyDownReceived = true; // Mark that we received KeyDown while focused
             _longPressTriggered = false;
 
             // Start timer for long press (800ms)
@@ -74,24 +77,32 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
 
             return KeyEventResult.handled;
           } else if (event is KeyUpEvent) {
-            print('[TvFocusableCard] Select/Enter key UP');
+            print('[TvFocusableCard] Select/Enter key UP, keyDownReceived: $_keyDownReceived');
             _longPressTimer?.cancel();
 
-            // Check if we recently triggered a long press (within last 500ms)
+            // CRITICAL: Only process KeyUp if we received KeyDown while focused
+            // This prevents phantom triggers when focus changes during a key press
+            if (!_keyDownReceived) {
+              print('[TvFocusableCard] Ignoring KeyUp - no matching KeyDown received');
+              return KeyEventResult.handled;
+            }
+
+            // Check if we recently triggered a long press (within last 300ms)
             final timeSinceLongPress = _lastLongPressTime != null
                 ? DateTime.now().difference(_lastLongPressTime!).inMilliseconds
                 : 999999;
 
             // If not a long press and not immediately after closing dialog, trigger regular press
-            if (!_longPressTriggered && timeSinceLongPress > 500) {
+            if (!_longPressTriggered && timeSinceLongPress > 300) {
               print('[TvFocusableCard] Short press - triggering onPressed');
               widget.onPressed();
-            } else if (timeSinceLongPress <= 500) {
+            } else if (timeSinceLongPress <= 300) {
               print(
                 '[TvFocusableCard] Ignoring key up - too soon after long press dialog',
               );
             }
             _longPressTriggered = false;
+            _keyDownReceived = false; // Reset after processing
 
             return KeyEventResult.handled;
           }
@@ -106,7 +117,16 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
         return KeyEventResult.ignored;
       },
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () {
+          // Ignore taps that occur too soon after a dialog was dismissed
+          final timeSinceLongPress = _lastLongPressTime != null
+              ? DateTime.now().difference(_lastLongPressTime!).inMilliseconds
+              : 999999;
+          if (timeSinceLongPress <= 300) {
+            print('[TvFocusableCard] Ignoring tap - too soon after long press');
+            return;
+          }
           print('[TvFocusableCard] GestureDetector onTap triggered');
           widget.onPressed();
         },
@@ -115,6 +135,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                 print(
                   '[TvFocusableCard] GestureDetector onLongPress triggered!',
                 );
+                _lastLongPressTime = DateTime.now();
                 widget.onLongPress!();
               }
             : null,

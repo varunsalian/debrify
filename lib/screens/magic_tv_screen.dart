@@ -1861,8 +1861,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
+    // Set busy to block interactions during dialog
+    setState(() {
+      _isBusy = true;
+    });
+
     final mode = await _selectImportMode();
-    if (mode == null) {
+
+    // Wait for frames to ensure UI has updated and touch events are processed
+    if (mounted) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      await WidgetsBinding.instance.endOfFrame;
+      await WidgetsBinding.instance.endOfFrame;
+    }
+
+    if (mode == null || !mounted) {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
       return;
     }
 
@@ -2063,6 +2081,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final selectedChannels = await _promptCommunityChannelsDialog();
     if (selectedChannels == null || selectedChannels.isEmpty) {
       return;
+    }
+
+    // Wait for frames to ensure UI has updated and touch events are processed
+    if (mounted) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      await WidgetsBinding.instance.endOfFrame;
+      await WidgetsBinding.instance.endOfFrame;
     }
 
     if (!mounted) {
@@ -2875,29 +2900,59 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _handleDeleteChannel(DebrifyTvChannel channel) async {
+    // Set busy immediately to block any other interactions
+    setState(() {
+      _isBusy = true;
+    });
+
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.7),
       builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Delete channel?'),
-          content: Text('Remove "${channel.name}" and its saved keywords?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-              child: const Text('Delete'),
-            ),
-          ],
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) {
+              Navigator.of(ctx).pop(false);
+            }
+          },
+          child: AlertDialog(
+            title: const Text('Delete channel?'),
+            content: Text('Remove "${channel.name}" and its saved keywords?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
         );
       },
     );
-    if (confirmed == true) {
+
+    // Wait for TWO frames to ensure UI has fully updated and touch events are processed
+    if (mounted) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      await WidgetsBinding.instance.endOfFrame;
+      await WidgetsBinding.instance.endOfFrame;
+    }
+
+    if (confirmed == true && mounted) {
       await _deleteChannel(channel.id);
       _showSnack('Channel deleted', color: Colors.orange);
+    }
+
+    // Release busy state
+    if (mounted) {
+      setState(() {
+        _isBusy = false;
+      });
     }
   }
 
@@ -3040,31 +3095,59 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
+    // Set busy immediately to block any other interactions
+    setState(() {
+      _isBusy = true;
+    });
+
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.7),
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete all channels?'),
-          content: const Text(
-            'This will remove every Debrify TV channel along with cached torrents. '
-            'This action cannot be undone.',
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) {
+              Navigator.of(dialogContext).pop(false);
+            }
+          },
+          child: AlertDialog(
+            title: const Text('Delete all channels?'),
+            content: const Text(
+              'This will remove every Debrify TV channel along with cached torrents. '
+              'This action cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                child: const Text('Delete all'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-              child: const Text('Delete all'),
-            ),
-          ],
         );
       },
     );
 
+    // Wait for TWO frames to ensure UI has fully updated and touch events are processed
+    if (mounted) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      await WidgetsBinding.instance.endOfFrame;
+      await WidgetsBinding.instance.endOfFrame;
+    }
+
     if (confirmed != true || !mounted) {
+      // Release busy state if cancelled
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
       return;
     }
 
@@ -7632,7 +7715,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     }
 
                     Navigator.of(dialogContext).pop();
-                    await _watch();
+                    // Wait for frames to ensure UI has updated and touch events are processed
+                    await Future.delayed(const Duration(milliseconds: 100));
+                    await WidgetsBinding.instance.endOfFrame;
+                    await WidgetsBinding.instance.endOfFrame;
+                    if (mounted) {
+                      await _watch();
+                    }
                   },
                   child: const Text('Play'),
                 ),
@@ -7791,30 +7880,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              FilledButton(
-                onPressed: _isBusy ? null : () => _watchChannel(channel),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFE50914),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.all(12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Icon(Icons.play_arrow_rounded),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Edit channel',
-                onPressed: () => _handleEditChannel(channel),
-                icon: const Icon(Icons.edit_rounded, color: Colors.white70),
-              ),
-              IconButton(
-                tooltip: 'Delete channel',
-                onPressed: () => _handleDeleteChannel(channel),
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.redAccent,
+              // Wrap action buttons to absorb hits and prevent outer InkWell from receiving them
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {}, // Absorb taps that miss buttons
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FilledButton(
+                      onPressed: _isBusy ? null : () => _watchChannel(channel),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFE50914),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.all(12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Edit channel',
+                      onPressed: () => _handleEditChannel(channel),
+                      icon: const Icon(Icons.edit_rounded, color: Colors.white70),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete channel',
+                      onPressed: () => _handleDeleteChannel(channel),
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

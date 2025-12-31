@@ -234,10 +234,14 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
   Widget build(BuildContext context) {
     final dialogWidth = widget.isAndroidTv ? 540.0 : 500.0;
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      child: Container(
+    // Wrap in GestureDetector to absorb taps that land outside the dialog content
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {}, // Absorb taps on the barrier area
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
         width: dialogWidth,
         constraints: BoxConstraints(
           maxWidth: dialogWidth,
@@ -448,6 +452,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

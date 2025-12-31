@@ -53,11 +53,15 @@ class _CachedLoadingDialogState extends State<CachedLoadingDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 32),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
+    // Wrap in GestureDetector to absorb all taps and prevent click-through
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {}, // Absorb all taps
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 32),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           gradient: const LinearGradient(
             colors: [Color(0xFF1B1B1F), Color(0xFF101014)],
@@ -96,6 +100,7 @@ class _CachedLoadingDialogState extends State<CachedLoadingDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
