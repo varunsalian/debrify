@@ -54,6 +54,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _providerAccordionFocusNode = FocusNode();
   final FocusNode _advancedButtonFocusNode = FocusNode();
+  final FocusNode _sortDropdownFocusNode = FocusNode();
   final FocusNode _sortDirectionFocusNode = FocusNode();
   final FocusNode _filterButtonFocusNode = FocusNode();
   final FocusNode _clearFiltersButtonFocusNode = FocusNode();
@@ -70,6 +71,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _providerAccordionFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _advancedButtonFocused = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _sortDropdownFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _sortDirectionFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _filterButtonFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _clearFiltersButtonFocused = ValueNotifier<bool>(false);
@@ -186,6 +188,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
 
     // Focus listeners removed - now using onFocusChange callbacks directly in widgets
+    // Exception: DropdownButton doesn't have onFocusChange, so we use a listener
+    _sortDropdownFocusNode.addListener(_onSortDropdownFocusChange);
 
     _listAnimationController.forward();
     _loadDefaultSettings();
@@ -208,6 +212,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _isTelevision = isTv;
       });
     }
+  }
+
+  void _onSortDropdownFocusChange() {
+    _sortDropdownFocused.value = _sortDropdownFocusNode.hasFocus;
+    if (_sortDropdownFocusNode.hasFocus && _isTelevision) {
+      _scrollToFocusNode(_sortDropdownFocusNode);
+    }
+  }
+
+  /// Scrolls to make the focused widget visible on TV
+  void _scrollToFocusNode(FocusNode node) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final context = node.context;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.3,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
   }
 
   void _ensureFocusNodes() {
@@ -546,10 +573,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   @override
   void dispose() {
+    _sortDropdownFocusNode.removeListener(_onSortDropdownFocusChange);
     _searchController.dispose();
     _searchFocusNode.dispose();
     _providerAccordionFocusNode.dispose();
     _advancedButtonFocusNode.dispose();
+    _sortDropdownFocusNode.dispose();
     _sortDirectionFocusNode.dispose();
     _filterButtonFocusNode.dispose();
     _clearFiltersButtonFocusNode.dispose();
@@ -558,6 +587,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _searchFocused.dispose();
     _providerAccordionFocused.dispose();
     _advancedButtonFocused.dispose();
+    _sortDropdownFocused.dispose();
     _sortDirectionFocused.dispose();
     _filterButtonFocused.dispose();
     _clearFiltersButtonFocused.dispose();
@@ -8755,66 +8785,79 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: DropdownButton<String>(
-                                        value: _sortBy,
-                                        onChanged: (String? newValue) {
-                                          if (newValue != null) {
-                                            setState(() {
-                                              _sortBy = newValue;
-                                            });
-                                            _sortTorrents(reuseMetadata: true); // Reuse parsed metadata
-                                          }
-                                        },
-                                        items: const [
-                                          DropdownMenuItem(
-                                            value: 'relevance',
-                                            child: Text(
-                                              'Relevance',
-                                              style: TextStyle(fontSize: 12),
-                                            ),
+                                      child: ValueListenableBuilder<bool>(
+                                        valueListenable: _sortDropdownFocused,
+                                        builder: (context, isFocused, child) => Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: isFocused
+                                                ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                                : null,
                                           ),
-                                          DropdownMenuItem(
-                                            value: 'name',
-                                            child: Text(
-                                              'Name',
-                                              style: TextStyle(fontSize: 12),
-                                            ),
-                                          ),
-                                          DropdownMenuItem(
-                                            value: 'size',
-                                            child: Text(
-                                              'Size',
-                                              style: TextStyle(fontSize: 12),
-                                            ),
-                                          ),
-                                          DropdownMenuItem(
-                                            value: 'seeders',
-                                            child: Text(
-                                              'Seeders',
-                                              style: TextStyle(fontSize: 12),
-                                            ),
-                                          ),
-                                          DropdownMenuItem(
-                                            value: 'date',
-                                            child: Text(
-                                              'Date',
-                                              style: TextStyle(fontSize: 12),
-                                            ),
-                                          ),
-                                        ],
-                                        style: TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurface,
-                                          fontSize: 12,
+                                          child: child,
                                         ),
-                                        underline: Container(),
-                                        icon: Icon(
-                                          Icons.arrow_drop_down,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
-                                          size: 16,
+                                        child: DropdownButton<String>(
+                                          value: _sortBy,
+                                          focusNode: _sortDropdownFocusNode,
+                                          onChanged: (String? newValue) {
+                                            if (newValue != null) {
+                                              setState(() {
+                                                _sortBy = newValue;
+                                              });
+                                              _sortTorrents(reuseMetadata: true); // Reuse parsed metadata
+                                            }
+                                          },
+                                          items: const [
+                                            DropdownMenuItem(
+                                              value: 'relevance',
+                                              child: Text(
+                                                'Relevance',
+                                                style: TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'name',
+                                              child: Text(
+                                                'Name',
+                                                style: TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'size',
+                                              child: Text(
+                                                'Size',
+                                                style: TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'seeders',
+                                              child: Text(
+                                                'Seeders',
+                                                style: TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: 'date',
+                                              child: Text(
+                                                'Date',
+                                                style: TextStyle(fontSize: 12),
+                                              ),
+                                            ),
+                                          ],
+                                          style: TextStyle(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                            fontSize: 12,
+                                          ),
+                                          underline: Container(),
+                                          icon: Icon(
+                                            Icons.arrow_drop_down,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                            size: 16,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -8822,7 +8865,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     Focus(
                                       focusNode: _sortDirectionFocusNode,
                                       onFocusChange: (focused) {
-                                        _sortDirectionFocused.value = focused; // No setState needed!
+                                        _sortDirectionFocused.value = focused;
+                                        if (focused && _isTelevision) {
+                                          _scrollToFocusNode(_sortDirectionFocusNode);
+                                        }
                                       },
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent &&
@@ -8874,7 +8920,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     Focus(
                                       focusNode: _filterButtonFocusNode,
                                       onFocusChange: (focused) {
-                                        _filterButtonFocused.value = focused; // No setState needed!
+                                        _filterButtonFocused.value = focused;
+                                        if (focused && _isTelevision) {
+                                          _scrollToFocusNode(_filterButtonFocusNode);
+                                        }
                                       },
                                       onKeyEvent: (node, event) {
                                         if (event is KeyDownEvent &&
@@ -9283,6 +9332,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         torboxResultIsCached: _torboxResultIsCached,
         searchFocusNode: _searchFocusNode,
         episodeInputFocusNode: _episodeInputFocusNode,
+        filterButtonFocusNode: _filterButtonFocusNode,
       );
     }
 
@@ -9458,6 +9508,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         torboxResultIsCached: _torboxResultIsCached,
         searchFocusNode: _searchFocusNode,
         episodeInputFocusNode: _episodeInputFocusNode,
+        filterButtonFocusNode: _filterButtonFocusNode,
       );
     }
 
@@ -9839,6 +9890,7 @@ class _TorrentCard extends StatefulWidget {
     required this.torboxResultIsCached,
     required this.searchFocusNode,
     required this.episodeInputFocusNode,
+    required this.filterButtonFocusNode,
   });
 
   final Torrent torrent;
@@ -9868,6 +9920,7 @@ class _TorrentCard extends StatefulWidget {
   final bool Function(String) torboxResultIsCached;
   final FocusNode searchFocusNode;
   final FocusNode episodeInputFocusNode;
+  final FocusNode filterButtonFocusNode;
 
   @override
   State<_TorrentCard> createState() => _TorrentCardState();
@@ -9927,25 +9980,12 @@ class _TorrentCardState extends State<_TorrentCard> {
           widget.onCardActivated();
           return KeyEventResult.handled;
         }
-        // Handle Arrow Up from first card - navigate to Episode input (if visible) or Season dropdown or Search field
+        // Handle Arrow Up from first card - navigate to filter button in sort/filter row
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.arrowUp &&
             widget.index == 0) {
-          // If series with selected title and episode input is visible, go to Episode input
-          if (widget.isSeries && widget.selectedImdbTitle != null) {
-            // Episode input is only visible when:
-            // 1. No season data (fallback text input mode) OR
-            // 2. Has season data AND specific season selected (not "All Seasons")
-            final bool episodeInputVisible = !widget.hasSeasonData || widget.selectedSeason != null;
-            if (episodeInputVisible) {
-              widget.episodeInputFocusNode.requestFocus();
-            } else {
-              // Episode not visible, go to season dropdown
-              widget.seasonInputFocusNode.requestFocus();
-            }
-          } else {
-            widget.searchFocusNode.requestFocus();
-          }
+          // Navigate to the filter button in the sort/filter row
+          widget.filterButtonFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
         // Handle Back/Escape to return to search field (TV shortcut)
