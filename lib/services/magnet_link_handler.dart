@@ -15,6 +15,7 @@ class MagnetLinkHandler {
   final Function()? onPikPakAdded;
   final Function(Map<String, dynamic> result, String torrentName, String apiKey)? onRealDebridResult;
   final Function(TorboxTorrent torrent)? onTorboxResult;
+  final Function(String fileId, String fileName)? onPikPakResult;
 
   MagnetLinkHandler({
     required this.context,
@@ -23,6 +24,7 @@ class MagnetLinkHandler {
     this.onPikPakAdded,
     this.onRealDebridResult,
     this.onTorboxResult,
+    this.onPikPakResult,
   });
 
   /// Process a magnet link
@@ -295,20 +297,29 @@ class MagnetLinkHandler {
       if (!context.mounted) return;
       Navigator.of(context).pop(); // Close loading dialog
 
-      // Extract file name from response
+      // Extract file ID and name from response
+      String? fileId;
       String? fileName;
       if (result['file'] != null) {
+        fileId = result['file']['id'];
         fileName = result['file']['name'] ?? torrentName;
       } else if (result['task'] != null) {
+        fileId = result['task']['file_id'];
         fileName = result['task']['name'] ?? torrentName;
       } else {
+        fileId = result['id'];
         fileName = torrentName;
       }
 
-      _showSuccess('Successfully added to PikPak: $fileName');
-
-      if (onPikPakAdded != null) {
-        onPikPakAdded!();
+      // Use post-action handling if available
+      if (onPikPakResult != null && fileId != null) {
+        await onPikPakResult!(fileId, fileName ?? torrentName);
+      } else {
+        // Fallback: just show success
+        _showSuccess('Successfully added to PikPak: $fileName');
+        if (onPikPakAdded != null) {
+          onPikPakAdded!();
+        }
       }
     } catch (e) {
       if (!context.mounted) return;

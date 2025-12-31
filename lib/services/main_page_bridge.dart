@@ -10,6 +10,7 @@ class MainPageBridge {
   static void Function(String fileId, String folderName)? openPikPakFolder;
   static Future<void> Function(Map<String, dynamic> result, String torrentName, String apiKey)? handleRealDebridResult;
   static Future<void> Function(TorboxTorrent torrent)? handleTorboxResult;
+  static Future<void> Function(String fileId, String fileName)? handlePikPakResult;
   static VoidCallback? hideAutoLaunchOverlay;
   static Future<void> Function(Map<String, dynamic> playlistItem)? playPlaylistItem;
 

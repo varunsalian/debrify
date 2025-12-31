@@ -175,6 +175,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       await _showTorboxPostAddOptions(torboxTorrent, torrent);
     };
 
+    // Expose PikPak post-action handler via bridge for deep links
+    MainPageBridge.handlePikPakResult = (fileId, fileName) async {
+      if (!mounted) return;
+      await _showPikPakPostAddOptionsFromExternal(fileId, fileName);
+    };
+
     _listAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -635,6 +641,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.handleRealDebridResult = null;
     MainPageBridge.handleTorboxResult = null;
+    MainPageBridge.handlePikPakResult = null;
     _listAnimationController.dispose();
     super.dispose();
   }
@@ -3882,6 +3889,251 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         );
       },
+    );
+  }
+
+  /// Handle PikPak post-action for external magnet links
+  Future<void> _showPikPakPostAddOptionsFromExternal(
+    String fileId,
+    String fileName,
+  ) async {
+    if (!mounted) return;
+
+    final postAction = await StorageService.getPikPakPostTorrentAction();
+    final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
+
+    // For 'none' action, just show success
+    if (postAction == 'none') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.check, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Torrent added to PikPak successfully',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    // For 'open' action, open PikPak folder directly
+    if (postAction == 'open') {
+      if (!pikpakHidden) {
+        MainPageBridge.openPikPakFolder?.call(fileId, fileName);
+      }
+      return;
+    }
+
+    // For video-related actions (playlist, play, download, choose), fetch folder contents
+    List<Map<String, dynamic>> videoFiles = [];
+    try {
+      final pikpak = PikPakApiService.instance;
+      final allFiles = await pikpak.listFilesRecursive(folderId: fileId);
+      videoFiles = allFiles.where((file) {
+        final name = (file['name'] as String?) ?? '';
+        final kind = (file['kind'] as String?) ?? '';
+        return kind != 'drive#folder' && FileUtils.isVideoFile(name);
+      }).toList();
+    } catch (e) {
+      debugPrint('PikPak: Failed to list files for post-action: $e');
+    }
+
+    final hasVideo = videoFiles.isNotEmpty;
+
+    // Handle specific actions
+    switch (postAction) {
+      case 'playlist':
+        if (hasVideo) {
+          _addPikPakToPlaylist(videoFiles, fileName, fileId);
+        } else {
+          _showPikPakNoVideosSnack();
+        }
+        return;
+      case 'play':
+        if (hasVideo) {
+          _playPikPakVideos(videoFiles, fileName);
+        } else {
+          _showPikPakNoVideosSnack();
+        }
+        return;
+      case 'download':
+        if (hasVideo) {
+          _downloadPikPakFiles(fileId, fileName);
+        } else {
+          _showPikPakNoVideosSnack();
+        }
+        return;
+      case 'choose':
+      default:
+        // Show dialog with options
+        break;
+    }
+
+    // Show choose dialog
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              color: const Color(0xFF0F172A),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFFAA00), Color(0xFFFF6600)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(Icons.cloud_done_rounded, color: Colors.white),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fileName,
+                                maxLines: 5,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                hasVideo
+                                    ? 'Ready on PikPak. ${videoFiles.length} video${videoFiles.length > 1 ? 's' : ''} found.'
+                                    : 'Ready on PikPak. No videos detected.',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFF1E293B)),
+                  // Action buttons
+                  _DebridActionTile(
+                    icon: Icons.open_in_new,
+                    color: const Color(0xFFF59E0B),
+                    title: 'Open in PikPak',
+                    subtitle: pikpakHidden
+                        ? 'Enable PikPak navigation in settings to use this'
+                        : 'View folder in PikPak files tab',
+                    enabled: !pikpakHidden,
+                    autofocus: !pikpakHidden,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      MainPageBridge.openPikPakFolder?.call(fileId, fileName);
+                    },
+                  ),
+                  _DebridActionTile(
+                    icon: Icons.play_circle_fill_rounded,
+                    color: const Color(0xFF60A5FA),
+                    title: 'Play now',
+                    subtitle: hasVideo
+                        ? 'Stream instantly from PikPak.'
+                        : 'No video files found.',
+                    enabled: hasVideo,
+                    autofocus: pikpakHidden && hasVideo,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _playPikPakVideos(videoFiles, fileName);
+                    },
+                  ),
+                  _DebridActionTile(
+                    icon: Icons.download_rounded,
+                    color: const Color(0xFF4ADE80),
+                    title: 'Download to device',
+                    subtitle: 'Grab files from PikPak instantly.',
+                    enabled: true,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _downloadPikPakFiles(fileId, fileName);
+                    },
+                  ),
+                  _DebridActionTile(
+                    icon: Icons.playlist_add_rounded,
+                    color: const Color(0xFFA78BFA),
+                    title: 'Add to Playlist',
+                    subtitle: hasVideo
+                        ? 'Save for later playback.'
+                        : 'No video files to add.',
+                    enabled: hasVideo,
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _addPikPakToPlaylist(videoFiles, fileName, fileId);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPikPakNoVideosSnack() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('No video files found in this torrent'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
     );
   }
 

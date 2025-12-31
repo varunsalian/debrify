@@ -562,6 +562,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           // Fallback: Navigate to Torbox tab
           MainPageBridge.switchTab?.call(5); // Torbox tab index
         },
+        onPikPakResult: (fileId, fileName) async {
+          // Use the same post-action flow as torrent search
+          await MainPageBridge.handlePikPakResult?.call(fileId, fileName);
+        },
+        onPikPakAdded: () {
+          // Fallback: Navigate to PikPak tab
+          MainPageBridge.switchTab?.call(6); // PikPak tab index
+        },
       );
 
       // Handle the magnet link
