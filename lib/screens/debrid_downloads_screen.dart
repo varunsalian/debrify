@@ -18,6 +18,7 @@ import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
 import '../services/android_native_downloader.dart';
+import '../services/main_page_bridge.dart';
 import 'dart:ui'; // Added for ImageFilter
 import '../widgets/file_selection_dialog.dart';
 
@@ -107,6 +108,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _torrentScrollController.addListener(_onTorrentScroll);
     _downloadScrollController.addListener(_onDownloadScroll);
 
+    // Register back navigation handler for folder navigation (tab screen)
+    MainPageBridge.registerTabBackHandler('realdebrid', _handleBackNavigation);
+
     // If asked to show options for a specific torrent, open after init
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (widget.initialTorrentForOptions != null) {
@@ -164,6 +168,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   @override
   void dispose() {
+    // Unregister back navigation handler
+    MainPageBridge.unregisterTabBackHandler('realdebrid');
+
     _torrentScrollController.dispose();
     _downloadScrollController.dispose();
     _magnetController.dispose();
@@ -175,6 +182,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _viewModeDropdownFocusNode.dispose();
 
     super.dispose();
+  }
+
+  /// Handle back navigation for folder browsing.
+  /// Returns true if handled (navigated up), false if at root level.
+  bool _handleBackNavigation() {
+    if (_currentTorrentId != null) {
+      _navigateUp();
+      return true; // We handled the back press
+    }
+    return false; // Not in folder mode, let app handle it
   }
 
   void _onTorrentScroll() {
@@ -1791,43 +1808,35 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Widget _buildFolderBrowserScaffold() {
-    return PopScope(
-      canPop: false, // Always intercept back in folder browser mode
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          // User pressed back - navigate up folder or back to torrent list
-          _navigateUp();
-        }
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            focusNode: _backButtonFocusNode,
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _navigateUp,
+    // Back navigation is handled via MainPageBridge.handleBackNavigation
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          focusNode: _backButtonFocusNode,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _navigateUp,
+        ),
+        title: Text(_getCurrentFolderTitle()),
+        actions: [
+          IconButton(
+            focusNode: _refreshButtonFocusNode,
+            icon: const Icon(Icons.refresh),
+            onPressed: _currentTorrent != null
+                ? () => _navigateIntoTorrent(_currentTorrent!)
+                : null,
           ),
-          title: Text(_getCurrentFolderTitle()),
-          actions: [
-            IconButton(
-              focusNode: _refreshButtonFocusNode,
-              icon: const Icon(Icons.refresh),
-              onPressed: _currentTorrent != null
-                  ? () => _navigateIntoTorrent(_currentTorrent!)
-                  : null,
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildViewModeDropdown(),
+          Expanded(
+            child: FocusTraversalGroup(
+              policy: OrderedTraversalPolicy(),
+              child: _buildFolderContentsView(),
             ),
-          ],
-        ),
-        body: Column(
-          children: [
-            _buildViewModeDropdown(),
-            Expanded(
-              child: FocusTraversalGroup(
-                policy: OrderedTraversalPolicy(),
-                child: _buildFolderContentsView(),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

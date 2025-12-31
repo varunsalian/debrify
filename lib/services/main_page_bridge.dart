@@ -13,6 +13,68 @@ class MainPageBridge {
   static VoidCallback? hideAutoLaunchOverlay;
   static Future<void> Function(Map<String, dynamic> playlistItem)? playPlaylistItem;
 
+  // ==========================================================================
+  // Back Navigation Handling
+  // ==========================================================================
+  // Two types of handlers:
+  // 1. Tab handlers - for tab screens (RealDebrid, TorBox, PikPak). Only one active at a time.
+  // 2. Pushed route stack - for screens pushed on top (e.g., playlist content view).
+  // ==========================================================================
+
+  /// Tab handlers registered by key (e.g., "realdebrid", "torbox", "pikpak")
+  static final Map<String, bool Function()> _tabHandlers = {};
+
+  /// Currently active tab key
+  static String? _activeTabKey;
+
+  /// Stack of handlers for pushed routes (on top of tab screens)
+  static final List<bool Function()> _pushedRouteStack = [];
+
+  /// Register a tab's back handler. Call in initState of tab screens.
+  static void registerTabBackHandler(String key, bool Function() handler) {
+    _tabHandlers[key] = handler;
+  }
+
+  /// Unregister a tab's back handler. Call in dispose of tab screens.
+  static void unregisterTabBackHandler(String key) {
+    _tabHandlers.remove(key);
+  }
+
+  /// Set the currently active tab. Call from main.dart when tab changes.
+  static void setActiveTab(String? key) {
+    _activeTabKey = key;
+  }
+
+  /// Push a handler for a pushed route. Call in initState of pushed screens.
+  static void pushRouteBackHandler(bool Function() handler) {
+    _pushedRouteStack.add(handler);
+  }
+
+  /// Pop a handler for a pushed route. Call in dispose of pushed screens.
+  static void popRouteBackHandler(bool Function() handler) {
+    if (_pushedRouteStack.isNotEmpty && _pushedRouteStack.last == handler) {
+      _pushedRouteStack.removeLast();
+    }
+  }
+
+  /// Handle back navigation. Checks pushed routes first, then active tab.
+  /// Returns true if handled, false otherwise.
+  static bool handleBackNavigation() {
+    // First, check pushed route handlers (most recent first)
+    if (_pushedRouteStack.isNotEmpty) {
+      if (_pushedRouteStack.last()) {
+        return true;
+      }
+    }
+
+    // Then, check the active tab's handler
+    if (_activeTabKey != null && _tabHandlers.containsKey(_activeTabKey)) {
+      return _tabHandlers[_activeTabKey]!();
+    }
+
+    return false;
+  }
+
   // Store a playlist item that should be auto-played when PlaylistScreen initializes
   static Map<String, dynamic>? _playlistItemToAutoPlay;
 

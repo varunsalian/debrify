@@ -81,6 +81,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   void initState() {
     super.initState();
     _initializeScreen();
+
+    // Register back navigation handler for folder navigation (pushed route)
+    MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
   }
 
   /// Initialize screen by loading saved mode first, then content
@@ -116,12 +119,25 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   @override
   void dispose() {
+    // Unregister back navigation handler
+    MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+
     _scrollRetryTimer
         ?.cancel(); // Cancel any pending scroll retry to prevent memory leaks
     _viewModeDropdownFocusNode.dispose();
     _backButtonFocusNode.dispose();
     _episodeListScrollController.dispose();
     super.dispose();
+  }
+
+  /// Handle back navigation for folder browsing.
+  /// Returns true if handled (navigated up folder), false if at root (let Navigator.pop handle it).
+  bool _handleBackNavigation() {
+    if (_folderPath.isNotEmpty) {
+      _navigateUp();
+      return true; // We handled the back press (navigated up a folder)
+    }
+    return false; // At root, let the normal pop behavior happen
   }
 
   /// Load saved view mode for this playlist item
@@ -852,48 +868,35 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title = (widget.playlistItem['title'] as String?) ?? 'Playlist Item';
-
-    // At root when folder path is empty - allow normal pop to exit screen
-    final isAtRoot = _folderPath.isEmpty;
-
-    return PopScope(
-      canPop: isAtRoot,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          // User pressed back while in a subfolder - navigate up
-          _navigateUp();
-        }
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            focusNode: _backButtonFocusNode,
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _navigateUp,
+    // Back navigation is handled via MainPageBridge.handleBackNavigation
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          focusNode: _backButtonFocusNode,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _navigateUp,
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadContent,
+            tooltip: 'Refresh',
           ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadContent,
-              tooltip: 'Refresh',
+        ],
+      ),
+      body: Column(
+        children: [
+          // View mode dropdown
+          if (!_isLoading && _errorMessage == null)
+            ViewModeDropdown(
+              currentMode: _currentViewMode,
+              onModeChanged: _applyViewMode,
+              focusNode: _viewModeDropdownFocusNode,
             ),
-          ],
-        ),
-        body: Column(
-          children: [
-            // View mode dropdown
-            if (!_isLoading && _errorMessage == null)
-              ViewModeDropdown(
-                currentMode: _currentViewMode,
-                onModeChanged: _applyViewMode,
-                focusNode: _viewModeDropdownFocusNode,
-              ),
 
-            // Content area
-            Expanded(child: _buildContent()),
-          ],
-        ),
+          // Content area
+          Expanded(child: _buildContent()),
+        ],
       ),
     );
   }

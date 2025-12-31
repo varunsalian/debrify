@@ -5,6 +5,7 @@ import '../../services/pikpak_api_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
+import '../../services/main_page_bridge.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
@@ -81,6 +82,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadSettings();
+
+    // Register back navigation handler for folder navigation (tab screen)
+    MainPageBridge.registerTabBackHandler('pikpak', _handleBackNavigation);
   }
 
   void _onScroll() {
@@ -93,6 +97,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   @override
   void dispose() {
+    // Unregister back navigation handler
+    MainPageBridge.unregisterTabBackHandler('pikpak');
+
     _scrollController.dispose();
     _refreshButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
@@ -100,6 +107,18 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _settingsButtonFocusNode.dispose();
     _viewModeDropdownFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Handle back navigation for folder browsing.
+  /// Returns true if handled (navigated up), false if at root level.
+  bool _handleBackNavigation() {
+    // Check if we can navigate up
+    if (_isInVirtualFolder || _navigationStack.isNotEmpty ||
+        (_restrictedFolderId != null && _currentFolderId != _restrictedFolderId)) {
+      _navigateUpWithVirtual();
+      return true; // We handled the back press
+    }
+    return false; // At root, let app handle it
   }
 
   Future<void> _loadSettings() async {
@@ -1299,20 +1318,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Only show when navigated at least one level deep (inside a folder)
     final showViewModeDropdown = _navigationStack.isNotEmpty || _isInVirtualFolder;
 
-    // Check if we're at root (allow system back) or in subfolder (intercept back)
-    final isAtRoot = _navigationStack.isEmpty &&
-                     !_isInVirtualFolder &&
-                     (_currentFolderId == null || _isAtRestrictedRoot);
-
-    return PopScope(
-      canPop: isAtRoot,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          // User pressed back while in a subfolder - navigate up
-          _navigateUpWithVirtual();
-        }
-      },
-      child: Scaffold(
+    // Back navigation is handled via MainPageBridge.handleBackNavigation
+    return Scaffold(
       appBar: AppBar(
         leading: (_currentFolderId != null && !_isAtRestrictedRoot) || _isInVirtualFolder
             ? IconButton(
@@ -1359,7 +1366,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             ),
           ),
         ],
-      ),
       ),
     );
   }

@@ -582,6 +582,22 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     });
     _animationController.reset();
     _animationController.forward();
+
+    // Notify MainPageBridge which tab is now active for back navigation
+    // Map tab indices to handler keys
+    String? activeTabKey;
+    switch (index) {
+      case 1:
+        activeTabKey = 'realdebrid';
+        break;
+      case 5:
+        activeTabKey = 'torbox';
+        break;
+      case 6:
+        activeTabKey = 'pikpak';
+        break;
+    }
+    MainPageBridge.setActiveTab(activeTabKey);
   }
 
 
@@ -946,6 +962,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           canPop: false,
           onPopInvoked: (bool didPop) async {
             if (didPop) return;
+
+            // First, check if any child screen wants to handle back navigation
+            // (e.g., folder navigation in RealDebrid, TorBox, PikPak, Playlist screens)
+            if (MainPageBridge.handleBackNavigation()) {
+              return; // Back was handled by child screen (navigated up a folder)
+            }
 
             // Allow navigation within app for all platforms
             if (Navigator.canPop(context)) {

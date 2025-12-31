@@ -73,6 +73,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _scrollController.addListener(_onScroll);
     _pendingInitialTorrent = widget.initialTorrentToOpen;
     _loadApiKeyAndTorrents();
+
+    // Register back navigation handler for folder navigation (tab screen)
+    MainPageBridge.registerTabBackHandler('torbox', _handleBackNavigation);
   }
 
   @override
@@ -775,10 +778,23 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   @override
   void dispose() {
+    // Unregister back navigation handler
+    MainPageBridge.unregisterTabBackHandler('torbox');
+
     _scrollController.dispose();
     _magnetController.dispose();
     _viewModeDropdownFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Handle back navigation for folder browsing.
+  /// Returns true if handled (navigated up), false if at root level.
+  bool _handleBackNavigation() {
+    if (!_isAtRoot) {
+      _navigateUp();
+      return true; // We handled the back press
+    }
+    return false; // At root, let app handle it
   }
 
   void _onScroll() {
@@ -3962,36 +3978,28 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: _isAtRoot, // Allow system back at root (torrent list), intercept in folders
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          // User pressed back while in a torrent/folder - navigate up
-          _navigateUp();
-        }
-      },
-      child: Scaffold(
-        appBar: _isAtRoot ? null : AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _navigateUp,
-            tooltip: 'Back',
-          ),
-          title: Text(_currentFolderName),
+    // Back navigation is handled via MainPageBridge.handleBackNavigation
+    return Scaffold(
+      appBar: _isAtRoot ? null : AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _navigateUp,
+          tooltip: 'Back',
         ),
-        body: Column(
-          children: [
-            const SizedBox(height: 8),
-            if (_isAtRoot) _buildToolbar(),
-            if (!_isAtRoot) _buildViewModeDropdown(),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _refresh,
-                child: _buildFilesFoldersList(),
-              ),
+        title: Text(_currentFolderName),
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 8),
+          if (_isAtRoot) _buildToolbar(),
+          if (!_isAtRoot) _buildViewModeDropdown(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: _buildFilesFoldersList(),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
