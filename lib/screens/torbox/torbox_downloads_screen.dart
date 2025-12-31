@@ -3962,27 +3962,36 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _isAtRoot ? null : AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _navigateUp,
-          tooltip: 'Back',
-        ),
-        title: Text(_currentFolderName),
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 8),
-          if (_isAtRoot) _buildToolbar(),
-          if (!_isAtRoot) _buildViewModeDropdown(),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: _buildFilesFoldersList(),
-            ),
+    return PopScope(
+      canPop: _isAtRoot, // Allow system back at root (torrent list), intercept in folders
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          // User pressed back while in a torrent/folder - navigate up
+          _navigateUp();
+        }
+      },
+      child: Scaffold(
+        appBar: _isAtRoot ? null : AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _navigateUp,
+            tooltip: 'Back',
           ),
-        ],
+          title: Text(_currentFolderName),
+        ),
+        body: Column(
+          children: [
+            const SizedBox(height: 8),
+            if (_isAtRoot) _buildToolbar(),
+            if (!_isAtRoot) _buildViewModeDropdown(),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: _buildFilesFoldersList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

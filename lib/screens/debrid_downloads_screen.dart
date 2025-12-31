@@ -1791,34 +1791,43 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Widget _buildFolderBrowserScaffold() {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          focusNode: _backButtonFocusNode,
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _navigateUp,
-        ),
-        title: Text(_getCurrentFolderTitle()),
-        actions: [
-          IconButton(
-            focusNode: _refreshButtonFocusNode,
-            icon: const Icon(Icons.refresh),
-            onPressed: _currentTorrent != null
-                ? () => _navigateIntoTorrent(_currentTorrent!)
-                : null,
+    return PopScope(
+      canPop: false, // Always intercept back in folder browser mode
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          // User pressed back - navigate up folder or back to torrent list
+          _navigateUp();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            focusNode: _backButtonFocusNode,
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _navigateUp,
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildViewModeDropdown(),
-          Expanded(
-            child: FocusTraversalGroup(
-              policy: OrderedTraversalPolicy(),
-              child: _buildFolderContentsView(),
+          title: Text(_getCurrentFolderTitle()),
+          actions: [
+            IconButton(
+              focusNode: _refreshButtonFocusNode,
+              icon: const Icon(Icons.refresh),
+              onPressed: _currentTorrent != null
+                  ? () => _navigateIntoTorrent(_currentTorrent!)
+                  : null,
             ),
-          ),
-        ],
+          ],
+        ),
+        body: Column(
+          children: [
+            _buildViewModeDropdown(),
+            Expanded(
+              child: FocusTraversalGroup(
+                policy: OrderedTraversalPolicy(),
+                child: _buildFolderContentsView(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

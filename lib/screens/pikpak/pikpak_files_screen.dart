@@ -1299,7 +1299,20 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Only show when navigated at least one level deep (inside a folder)
     final showViewModeDropdown = _navigationStack.isNotEmpty || _isInVirtualFolder;
 
-    return Scaffold(
+    // Check if we're at root (allow system back) or in subfolder (intercept back)
+    final isAtRoot = _navigationStack.isEmpty &&
+                     !_isInVirtualFolder &&
+                     (_currentFolderId == null || _isAtRestrictedRoot);
+
+    return PopScope(
+      canPop: isAtRoot,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          // User pressed back while in a subfolder - navigate up
+          _navigateUpWithVirtual();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         leading: (_currentFolderId != null && !_isAtRestrictedRoot) || _isInVirtualFolder
             ? IconButton(
@@ -1346,6 +1359,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
