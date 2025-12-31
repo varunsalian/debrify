@@ -15,6 +15,8 @@ class TorboxSettingsPage extends StatefulWidget {
 class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   final TextEditingController _apiKeyController = TextEditingController();
   final FocusNode _apiKeyFocusNode = FocusNode();
+  final FocusNode _addApiKeyButtonFocusNode = FocusNode();
+  final FocusNode _logoutButtonFocusNode = FocusNode();
   static const Map<ShortcutActivator, Intent> _dpadShortcuts =
       <ShortcutActivator, Intent>{
     SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
@@ -65,6 +67,8 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   void dispose() {
     _apiKeyController.dispose();
     _apiKeyFocusNode.dispose();
+    _addApiKeyButtonFocusNode.dispose();
+    _logoutButtonFocusNode.dispose();
     super.dispose();
   }
 
@@ -117,7 +121,6 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     TorboxAccountService.clearUserInfo();
     // Clear the hidden from nav flag on logout
     await StorageService.clearTorboxHiddenFromNav();
-    FocusScope.of(context).unfocus();
     setState(() {
       _savedApiKey = null;
       _isEditing = false;
@@ -125,6 +128,12 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     });
     _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
+    // Restore focus to Add API Key button after logout (for TV navigation)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _addApiKeyButtonFocusNode.requestFocus();
+      }
+    });
   }
 
   Future<void> _updateCacheCheck(bool value) async {
@@ -533,6 +542,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                               SizedBox(
                                 width: double.infinity,
                                 child: OutlinedButton.icon(
+                                  focusNode: _logoutButtonFocusNode,
                                   onPressed: _deleteKey,
                                   icon: const Icon(Icons.logout),
                                   label: const Text('Logout'),
@@ -543,6 +553,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                               ),
                             ] else ...[
                               FilledButton.icon(
+                                focusNode: _addApiKeyButtonFocusNode,
                                 onPressed: () {
                                   setState(() {
                                     _isEditing = true;

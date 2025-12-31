@@ -253,6 +253,13 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       MainPageBridge.notifyIntegrationChanged();
 
       _showSnackBar('Logged out successfully', isError: false);
+
+      // Restore focus to email field after logout (for TV navigation)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _emailFocusNode.requestFocus();
+        }
+      });
     } catch (e) {
       print('Error logging out: $e');
       if (!mounted) return;

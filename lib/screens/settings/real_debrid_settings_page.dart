@@ -15,6 +15,8 @@ class RealDebridSettingsPage extends StatefulWidget {
 class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   final TextEditingController _apiKeyController = TextEditingController();
   final FocusNode _apiKeyFocusNode = FocusNode();
+  final FocusNode _addApiKeyButtonFocusNode = FocusNode();
+  final FocusNode _logoutButtonFocusNode = FocusNode();
   bool _apiKeyFocused = false;
   String? _savedApiKey;
   String _fileSelection = 'largest';
@@ -64,6 +66,8 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   void dispose() {
     _apiKeyController.dispose();
     _apiKeyFocusNode.dispose();
+    _addApiKeyButtonFocusNode.dispose();
+    _logoutButtonFocusNode.dispose();
     super.dispose();
   }
 
@@ -116,7 +120,6 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     AccountService.clearUserInfo();
     // Clear the hidden from nav flag on logout
     await StorageService.clearRealDebridHiddenFromNav();
-    FocusScope.of(context).unfocus();
     setState(() {
       _savedApiKey = null;
       _isEditing = false;
@@ -125,6 +128,12 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     });
     _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
+    // Restore focus to Add API Key button after logout (for TV navigation)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _addApiKeyButtonFocusNode.requestFocus();
+      }
+    });
   }
 
   Future<void> _saveSelection(String v) async {
@@ -558,6 +567,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                 SizedBox(
                                   width: double.infinity,
                                   child: OutlinedButton.icon(
+                                    focusNode: _logoutButtonFocusNode,
                                     onPressed: _deleteKey,
                                     icon: const Icon(Icons.logout),
                                     label: const Text('Logout'),
@@ -568,6 +578,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                 ),
                               ] else ...[
                                 FilledButton.icon(
+                                  focusNode: _addApiKeyButtonFocusNode,
                                   onPressed: () =>
                                       _beginEditApiKey(prefill: false),
                                   icon: const Icon(Icons.add),
