@@ -1982,6 +1982,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<void> _handleImportChannelsFromUrl() async {
     final input = await _promptImportUrl();
     if (input == null) {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
       return;
     }
 
@@ -2006,6 +2011,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         'Enter a valid debrify:// link or http(s) URL.',
         color: Colors.red,
       );
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
       return;
     }
 
@@ -2080,6 +2090,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Future<void> _handleImportChannelsFromCommunity() async {
     final selectedChannels = await _promptCommunityChannelsDialog();
     if (selectedChannels == null || selectedChannels.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
       return;
     }
 
