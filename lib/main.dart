@@ -564,7 +564,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         },
         onPikPakResult: (fileId, fileName) async {
           // Use the same post-action flow as torrent search
-          await MainPageBridge.handlePikPakResult?.call(fileId, fileName);
+          if (MainPageBridge.handlePikPakResult != null) {
+            await MainPageBridge.handlePikPakResult!(fileId, fileName);
+          } else {
+            // Bridge not set (TorrentSearchScreen not mounted), handle inline
+            await _handlePikPakPostActionFallback(context, fileId, fileName);
+          }
         },
         onPikPakAdded: () {
           // Fallback: Navigate to PikPak tab
@@ -578,6 +583,87 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     // Initialize the service
     deepLinkService.initialize();
+  }
+
+  /// Fallback handler for PikPak post-action when TorrentSearchScreen is not mounted
+  Future<void> _handlePikPakPostActionFallback(
+    BuildContext ctx,
+    String fileId,
+    String fileName,
+  ) async {
+    final postAction = await StorageService.getPikPakPostTorrentAction();
+    final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
+
+    // For 'none' action, just show success
+    if (postAction == 'none') {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: const Text('Torrent added to PikPak successfully'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+      return;
+    }
+
+    // For 'open' action, open PikPak folder directly
+    if (postAction == 'open') {
+      if (!pikpakHidden) {
+        MainPageBridge.openPikPakFolder?.call(fileId, fileName);
+      }
+      return;
+    }
+
+    // For 'choose' or other actions, show a simple dialog with available options
+    if (!ctx.mounted) return;
+
+    await showDialog(
+      context: ctx,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Added to PikPak',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              fileName,
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'What would you like to do?',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Close'),
+          ),
+          if (!pikpakHidden)
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                MainPageBridge.openPikPakFolder?.call(fileId, fileName);
+              },
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFFAA00)),
+              child: const Text('Open in PikPak', style: TextStyle(color: Colors.black)),
+            ),
+        ],
+      ),
+    );
   }
 
   void _onItemTapped(int index) {
