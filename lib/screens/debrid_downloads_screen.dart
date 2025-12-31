@@ -2157,16 +2157,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               visualDensity: VisualDensity.compact,
             ),
           ),
-          const SizedBox(width: 8),
-          Tooltip(
-            message: 'Delete all torrents',
-            child: IconButton(
-              onPressed: _torrents.isEmpty ? null : _handleDeleteAllTorrents,
-              icon: const Icon(Icons.delete_sweep),
-              color: const Color(0xFFEF4444),
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
         ],
       ),
     );
@@ -2192,16 +2182,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               onPressed: _showAddLinkDialog,
               icon: const Icon(Icons.note_add_outlined),
               color: theme.colorScheme.primary,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Tooltip(
-            message: 'Delete all DDL downloads',
-            child: IconButton(
-              onPressed: _downloads.isEmpty ? null : _handleDeleteAllDownloads,
-              icon: const Icon(Icons.delete_sweep),
-              color: const Color(0xFFEF4444),
               visualDensity: VisualDensity.compact,
             ),
           ),
