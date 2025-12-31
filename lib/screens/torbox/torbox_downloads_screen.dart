@@ -2626,13 +2626,23 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: _magnetController,
-                maxLines: 3,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Paste magnet link here…',
-                  border: OutlineInputBorder(),
+              Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                    node.nextFocus();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextField(
+                  controller: _magnetController,
+                  maxLines: 3,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Paste magnet link here…',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ),
             ],
