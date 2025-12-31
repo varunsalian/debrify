@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import '../../screens/video_player_screen.dart';
 import '../../services/pikpak_api_service.dart';
@@ -40,6 +41,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   bool _ignoreSmallVideos = true;
   String? _email;
 
+  // Add link state
+  final TextEditingController _linkController = TextEditingController();
+  bool _isAddingLink = false;
+
   // Pagination state
   String? _nextPageToken;
   bool _hasMore = true;
@@ -76,6 +81,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   final FocusNode _viewModeDropdownFocusNode = FocusNode(
     debugLabel: 'pikpak-view-mode',
   );
+  final FocusNode _addLinkButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-add-link',
+  );
 
   @override
   void initState() {
@@ -101,11 +109,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     MainPageBridge.unregisterTabBackHandler('pikpak');
 
     _scrollController.dispose();
+    _linkController.dispose();
     _refreshButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
     _retryButtonFocusNode.dispose();
     _settingsButtonFocusNode.dispose();
     _viewModeDropdownFocusNode.dispose();
+    _addLinkButtonFocusNode.dispose();
     super.dispose();
   }
 
@@ -1345,6 +1355,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         ),
         actions: [
           IconButton(
+            focusNode: _addLinkButtonFocusNode,
+            icon: const Icon(Icons.add_link),
+            onPressed: _isLoading ? null : _showAddLinkDialog,
+            tooltip: 'Add Link',
+          ),
+          IconButton(
             focusNode: _refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
             onPressed: _isLoading ? null : _refreshFiles,
@@ -2284,6 +2300,227 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
 
     return startIndex;
+  }
+
+  // ============================================================================
+  // Add Link Dialog
+  // ============================================================================
+
+  Future<void> _showAddLinkDialog() async {
+    // Auto-paste link from clipboard if available
+    await _autoPasteLink();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Add Link',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter a link to download:',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _linkController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'magnet:?xt=... or https://...',
+                hintStyle: TextStyle(color: Colors.grey[600]),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF475569)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF475569)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFFFAA00)),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+              ),
+              maxLines: 3,
+              minLines: 1,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Supported: Magnet links, HTTP/HTTPS URLs',
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    _linkController.clear();
+                    Navigator.of(context).pop();
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: Color(0xFF475569)),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _isAddingLink ? null : _addLink,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: const Color(0xFFFFAA00),
+                  ),
+                  child: _isAddingLink
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Add', style: TextStyle(color: Colors.black)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _autoPasteLink() async {
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData?.text != null) {
+        final text = clipboardData!.text!.trim();
+        // Check if it looks like a supported link
+        if (text.startsWith('http://') ||
+            text.startsWith('https://') ||
+            text.startsWith('magnet:')) {
+          _linkController.text = text;
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to read clipboard: $e');
+    }
+  }
+
+  bool _isValidPikPakLink(String link) {
+    final trimmedLink = link.trim();
+    return trimmedLink.startsWith('http://') ||
+        trimmedLink.startsWith('https://') ||
+        trimmedLink.startsWith('magnet:');
+  }
+
+  Future<void> _addLink() async {
+    final link = _linkController.text.trim();
+    if (link.isEmpty) {
+      _showSnackBar('Please enter a link', isError: true);
+      return;
+    }
+
+    if (!_isValidPikPakLink(link)) {
+      _showSnackBar(
+        'Please enter a valid URL or magnet link',
+        isError: true,
+      );
+      return;
+    }
+
+    Navigator.of(context).pop(); // Close the dialog
+
+    setState(() {
+      _isAddingLink = true;
+    });
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFFFFAA00)),
+            const SizedBox(height: 16),
+            const Text(
+              'Adding to PikPak...',
+              style: TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              link.length > 50 ? '${link.substring(0, 50)}...' : link,
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final pikpak = PikPakApiService.instance;
+
+      // Use current folder if browsing, otherwise use restricted folder or root
+      final parentFolderId = _currentFolderId ?? _restrictedFolderId;
+
+      final result = await pikpak.addOfflineDownload(
+        link,
+        parentFolderId: parentFolderId,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+
+      // Extract file name from response
+      String? fileName;
+      if (result['file'] != null) {
+        fileName = result['file']['name'];
+      } else if (result['task'] != null) {
+        fileName = result['task']['name'];
+      }
+
+      _showSnackBar(
+        'Added to PikPak${fileName != null ? ': $fileName' : ''}',
+        isError: false,
+      );
+
+      // Clear the controller and refresh
+      _linkController.clear();
+      _refreshFiles();
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+
+      _showSnackBar('Failed to add: ${e.toString()}', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAddingLink = false;
+        });
+      }
+    }
   }
 }
 
