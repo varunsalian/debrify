@@ -854,34 +854,46 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   Widget build(BuildContext context) {
     final title = (widget.playlistItem['title'] as String?) ?? 'Playlist Item';
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          focusNode: _backButtonFocusNode,
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _navigateUp,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadContent,
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // View mode dropdown
-          if (!_isLoading && _errorMessage == null)
-            ViewModeDropdown(
-              currentMode: _currentViewMode,
-              onModeChanged: _applyViewMode,
-              focusNode: _viewModeDropdownFocusNode,
-            ),
+    // At root when folder path is empty - allow normal pop to exit screen
+    final isAtRoot = _folderPath.isEmpty;
 
-          // Content area
-          Expanded(child: _buildContent()),
-        ],
+    return PopScope(
+      canPop: isAtRoot,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          // User pressed back while in a subfolder - navigate up
+          _navigateUp();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            focusNode: _backButtonFocusNode,
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _navigateUp,
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadContent,
+              tooltip: 'Refresh',
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            // View mode dropdown
+            if (!_isLoading && _errorMessage == null)
+              ViewModeDropdown(
+                currentMode: _currentViewMode,
+                onModeChanged: _applyViewMode,
+                focusNode: _viewModeDropdownFocusNode,
+              ),
+
+            // Content area
+            Expanded(child: _buildContent()),
+          ],
+        ),
       ),
     );
   }
