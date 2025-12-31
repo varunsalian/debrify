@@ -1238,7 +1238,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 children: [
                   Icon(Icons.folder_special, color: Colors.amber),
                   const SizedBox(width: 12),
-                  const Expanded(child: Text('Folder Restriction (Optional)')),
+                  Expanded(
+                    child: Text(
+                      'Folder Restriction',
+                      style: Theme.of(dialogContext).textTheme.titleMedium,
+                    ),
+                  ),
                 ],
               ),
               content: const Column(
@@ -1270,6 +1275,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   ),
                 ],
               ),
+              actionsOverflowButtonSpacing: 8,
+              actionsOverflowDirection: VerticalDirection.up,
               actions: [
                 Shortcuts(
                   shortcuts: const <ShortcutActivator, Intent>{
@@ -1290,7 +1297,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                       focusNode: _folderRestrictionSkipButtonFocusNode,
                       child: TextButton(
                         onPressed: () => Navigator.pop(dialogContext, false),
-                        child: const Text('Skip (Full Access)'),
+                        child: const Text('Skip'),
                       ),
                     ),
                   ),
@@ -1315,7 +1322,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                       child: FilledButton.icon(
                         onPressed: () => Navigator.pop(dialogContext, true),
                         icon: const Icon(Icons.folder_open, size: 18),
-                        label: const Text('Select Folder'),
+                        label: const Text('Restrict'),
                       ),
                     ),
                   ),
