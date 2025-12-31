@@ -514,21 +514,21 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
             margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
             decoration: BoxDecoration(
               color: hasFocus
-                  ? Theme.of(context).primaryColor.withOpacity(0.15)
+                  ? const Color(0xFF00E5FF).withOpacity(0.25)
                   : Theme.of(context).colorScheme.surface,
               border: Border.all(
                 color: hasFocus
-                    ? Theme.of(context).primaryColor
+                    ? const Color(0xFF00E5FF)
                     : Theme.of(context).dividerColor.withOpacity(0.3),
-                width: hasFocus ? 2 : 1,
+                width: hasFocus ? 3 : 1,
               ),
               borderRadius: BorderRadius.circular(8),
               boxShadow: hasFocus
                   ? [
                       BoxShadow(
-                        color: Theme.of(context).primaryColor.withOpacity(0.2),
-                        blurRadius: 8,
-                        spreadRadius: 1,
+                        color: const Color(0xFF00E5FF).withOpacity(0.5),
+                        blurRadius: 12,
+                        spreadRadius: 2,
                       ),
                     ]
                   : [
@@ -657,35 +657,55 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {}, // Absorb taps on the barrier area
-      child: AlertDialog(
+      child: Dialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: 8,
-      title: Row(
-        children: [
-          Icon(
-            Icons.cloud_download,
-            color: Theme.of(context).primaryColor,
-            size: 28,
-          ),
-          const SizedBox(width: 12),
-          const Text(
-            'Import Community Shared Channels',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
-      content: Container(
-        width: 750,
-        height: 650,
-        padding: const EdgeInsets.all(4),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = MediaQuery.of(context).size.width;
+          final screenHeight = MediaQuery.of(context).size.height;
+          final isSmallScreen = screenWidth < 500;
+          final dialogWidth = screenWidth > 1200 ? 800.0 : (screenWidth > 800 ? 700.0 : screenWidth * 0.95);
+          final dialogHeight = screenHeight * (isSmallScreen ? 0.75 : 0.7);
+
+          return Container(
+            width: dialogWidth,
+            height: dialogHeight,
+            padding: EdgeInsets.all(isSmallScreen ? 12 : 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Row(
+                  children: [
+                    Icon(
+                      Icons.cloud_download,
+                      color: Theme.of(context).primaryColor,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Community Channels',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Content
+                Expanded(
+                  child: Padding(
+        padding: EdgeInsets.all(isSmallScreen ? 2 : 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // URL Input and Fetch Button - More compact
+            // URL Input and Fetch Button
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: EdgeInsets.all(isSmallScreen ? 4 : 6),
               decoration: BoxDecoration(
                 color: Theme.of(
                   context,
@@ -698,13 +718,13 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                     child: TextField(
                       controller: _repoUrlController,
                       focusNode: _repoUrlFocusNode,
+                      style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
                       decoration: InputDecoration(
-                        labelText: 'Repository URL',
-                        hintText: 'Enter community repository URL',
+                        hintText: 'Repository URL',
                         errorText: _errorMessage,
                         prefixIcon: Icon(
                           Icons.link,
-                          size: 20,
+                          size: isSmallScreen ? 16 : 20,
                           color: Theme.of(
                             context,
                           ).primaryColor.withOpacity(0.7),
@@ -723,9 +743,9 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                             width: 2,
                           ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: isSmallScreen ? 8 : 12,
+                          vertical: isSmallScreen ? 6 : 8,
                         ),
                       ),
                       autofocus: true,
@@ -745,11 +765,6 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                             gradient: LinearGradient(
                               colors: _isLoading
                                   ? [Colors.grey.shade400, Colors.grey.shade500]
-                                  : hasFocus
-                                  ? [
-                                      const Color(0xFF2196F3),
-                                      const Color(0xFF1976D2),
-                                    ]
                                   : [
                                       const Color(0xFF42A5F5),
                                       const Color(0xFF2196F3),
@@ -757,14 +772,16 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
+                            border: hasFocus ? Border.all(
+                              color: const Color(0xFF00E5FF),
+                              width: 3,
+                            ) : null,
                             boxShadow: hasFocus
                                 ? [
                                     BoxShadow(
-                                      color: const Color(
-                                        0xFF2196F3,
-                                      ).withOpacity(0.3),
-                                      blurRadius: 8,
-                                      spreadRadius: 1,
+                                      color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                      blurRadius: 12,
+                                      spreadRadius: 2,
                                     ),
                                   ]
                                 : [
@@ -775,37 +792,26 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                                     ),
                                   ],
                           ),
-                          child: ElevatedButton.icon(
+                          child: IconButton(
                             onPressed: _isLoading ? null : _fetchChannels,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
+                            style: IconButton.styleFrom(
+                              padding: const EdgeInsets.all(12),
                               backgroundColor: Colors.transparent,
                               foregroundColor: Colors.white,
-                              shadowColor: Colors.transparent,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
                             ),
                             icon: _isLoading
-                                ? SizedBox(
-                                    width: 16,
-                                    height: 16,
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Icon(Icons.download_rounded, size: 18),
-                            label: Text(
-                              _isLoading ? 'Fetching...' : 'Fetch',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                                : const Icon(Icons.download_rounded, size: 22),
                           ),
                         );
                       },
@@ -826,40 +832,22 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: hasFocus
-                              ? [
-                                  Theme.of(
-                                    context,
-                                  ).primaryColor.withOpacity(0.1),
-                                  Theme.of(
-                                    context,
-                                  ).primaryColor.withOpacity(0.05),
-                                ]
-                              : [
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceVariant.withOpacity(0.5),
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceVariant.withOpacity(0.3),
-                                ],
-                        ),
+                        color: hasFocus
+                            ? const Color(0xFF00E5FF).withOpacity(0.25)
+                            : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
                         border: Border.all(
                           color: hasFocus
-                              ? Theme.of(context).primaryColor
+                              ? const Color(0xFF00E5FF)
                               : Theme.of(context).dividerColor.withOpacity(0.3),
-                          width: hasFocus ? 2 : 1,
+                          width: hasFocus ? 3 : 1,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: hasFocus
                             ? [
                                 BoxShadow(
-                                  color: Theme.of(
-                                    context,
-                                  ).primaryColor.withOpacity(0.15),
-                                  blurRadius: 6,
-                                  spreadRadius: 0,
+                                  color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                  blurRadius: 12,
+                                  spreadRadius: 2,
                                 ),
                               ]
                             : [],
@@ -994,152 +982,101 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
               const Spacer(),
           ],
         ),
-      ),
-      actionsPadding: const EdgeInsets.all(12),
-      actions: [
-        Focus(
-          focusNode: _cancelButtonFocusNode,
-          child: Builder(
-            builder: (context) {
-              final hasFocus = Focus.of(context).hasFocus;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  gradient: LinearGradient(
-                    colors: hasFocus
-                        ? [Colors.grey.shade600, Colors.grey.shade700]
-                        : [Colors.grey.shade500, Colors.grey.shade600],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: hasFocus
-                      ? [
-                          BoxShadow(
-                            color: Colors.grey.shade600.withOpacity(0.3),
-                            blurRadius: 6,
-                            spreadRadius: 0,
-                          ),
-                        ]
-                      : [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 3,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                ),
-                child: TextButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    backgroundColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: const Icon(Icons.close, size: 18),
-                  label: Text(
-                    'Cancel',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: hasFocus ? FontWeight.bold : FontWeight.w600,
-                    ),
                   ),
                 ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 12),
-        Focus(
-          focusNode: _importButtonFocusNode,
-          child: Builder(
-            builder: (context) {
-              final hasFocus = Focus.of(context).hasFocus;
-              final hasSelection = selectedCount > 0;
+                // Action buttons
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Focus(
+                      focusNode: _cancelButtonFocusNode,
+                      child: Builder(
+                        builder: (context) {
+                          final hasFocus = Focus.of(context).hasFocus;
+                          return Container(
+                            decoration: hasFocus ? BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFF00E5FF), width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                  blurRadius: 12,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ) : null,
+                            child: TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                backgroundColor: Colors.grey.shade600,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Focus(
+                      focusNode: _importButtonFocusNode,
+                      child: Builder(
+                        builder: (context) {
+                          final hasFocus = Focus.of(context).hasFocus;
+                          final hasSelection = selectedCount > 0;
 
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  gradient: LinearGradient(
-                    colors: !hasSelection
-                        ? [
-                            Colors.grey.shade400.withOpacity(0.5),
-                            Colors.grey.shade500.withOpacity(0.5),
-                          ]
-                        : hasFocus
-                        ? [const Color(0xFF4CAF50), const Color(0xFF45A049)]
-                        : [const Color(0xFF66BB6A), const Color(0xFF4CAF50)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: hasSelection
-                      ? hasFocus
-                            ? [
+                          return Container(
+                            decoration: hasFocus ? BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFF00E5FF), width: 3),
+                              boxShadow: [
                                 BoxShadow(
-                                  color: const Color(
-                                    0xFF4CAF50,
-                                  ).withOpacity(0.3),
-                                  blurRadius: 8,
-                                  spreadRadius: 1,
+                                  color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                  blurRadius: 12,
+                                  spreadRadius: 2,
                                 ),
-                              ]
-                            : [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.15),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
+                              ],
+                            ) : null,
+                            child: FilledButton(
+                              onPressed: hasSelection
+                                  ? () => Navigator.of(context).pop(_getSelectedChannels())
+                                  : null,
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                backgroundColor: hasSelection
+                                    ? const Color(0xFF4CAF50)
+                                    : Colors.grey.shade400,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: Text(
+                                hasSelection ? 'Import ($selectedCount)' : 'Import',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
                                 ),
-                              ]
-                      : [],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                child: ElevatedButton.icon(
-                  onPressed: hasSelection
-                      ? () => Navigator.of(context).pop(_getSelectedChannels())
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    backgroundColor: Colors.transparent,
-                    foregroundColor: hasSelection
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.5),
-                    disabledBackgroundColor: Colors.transparent,
-                    disabledForegroundColor: Colors.white.withOpacity(0.5),
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: Icon(
-                    hasSelection
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
-                    size: 20,
-                  ),
-                  label: Text(
-                    selectedCount > 0
-                        ? 'Import Selected ($selectedCount)'
-                        : 'Import Selected',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: hasFocus ? FontWeight.bold : FontWeight.w600,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+              ],
+            ),
+          );
+        },
+      ),
     ),
     );
   }
