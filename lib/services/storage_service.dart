@@ -132,6 +132,7 @@ class StorageService {
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
+  static const String _playlistFavoritesKey = 'playlist_favorites_v1';
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
 
   // Torrent Search History
@@ -1497,6 +1498,63 @@ class StorageService {
     viewModes[dedupeKey] = viewMode;
 
     await prefs.setString(_playlistViewModesKey, jsonEncode(viewModes));
+  }
+
+  /// Check if a playlist item is favorited
+  static Future<bool> isPlaylistItemFavorited(Map<String, dynamic> item) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_playlistFavoritesKey);
+
+    if (favoritesJson == null) return false;
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      final dedupeKey = computePlaylistDedupeKey(item);
+      return favorites[dedupeKey] == true;
+    } catch (e) {
+      debugPrint('Error reading playlist favorites: $e');
+      return false;
+    }
+  }
+
+  /// Set favorite status for a playlist item
+  static Future<void> setPlaylistItemFavorited(Map<String, dynamic> item, bool isFavorited) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_playlistFavoritesKey);
+
+    Map<String, dynamic> favorites = {};
+    if (favoritesJson != null) {
+      try {
+        favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      } catch (e) {
+        debugPrint('Error parsing playlist favorites: $e');
+      }
+    }
+
+    final dedupeKey = computePlaylistDedupeKey(item);
+    if (isFavorited) {
+      favorites[dedupeKey] = true;
+    } else {
+      favorites.remove(dedupeKey);
+    }
+
+    await prefs.setString(_playlistFavoritesKey, jsonEncode(favorites));
+  }
+
+  /// Get all favorite dedupe keys
+  static Future<Set<String>> getPlaylistFavoriteKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_playlistFavoritesKey);
+
+    if (favoritesJson == null) return {};
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      return favorites.keys.toSet();
+    } catch (e) {
+      debugPrint('Error reading playlist favorites: $e');
+      return {};
+    }
   }
 
   /// Build progress map for playlist items

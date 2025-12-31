@@ -14,10 +14,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 class PlaylistGridCard extends StatefulWidget {
   final Map<String, dynamic> item;
   final Map<String, dynamic>? progressData;
+  final bool isFavorited;
   final VoidCallback onPlay;
   final VoidCallback onView;
   final VoidCallback onDelete;
   final VoidCallback? onClearProgress;
+  final VoidCallback? onToggleFavorite;
   final bool autofocus;
   final void Function(bool focused)? onFocusChanged;
 
@@ -25,10 +27,12 @@ class PlaylistGridCard extends StatefulWidget {
     super.key,
     required this.item,
     this.progressData,
+    this.isFavorited = false,
     required this.onPlay,
     required this.onView,
     required this.onDelete,
     this.onClearProgress,
+    this.onToggleFavorite,
     this.autofocus = false,
     this.onFocusChanged,
   });
@@ -91,6 +95,21 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                 widget.onView();
               },
             ),
+            if (widget.onToggleFavorite != null)
+              ListTile(
+                leading: Icon(
+                  widget.isFavorited ? Icons.star : Icons.star_border,
+                  color: const Color(0xFFFFD700),
+                ),
+                title: Text(
+                  widget.isFavorited ? 'Remove from Favorites' : 'Add to Favorites',
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onToggleFavorite?.call();
+                },
+              ),
             if (widget.onClearProgress != null)
               ListTile(
                 leading: const Icon(Icons.restart_alt, color: Color(0xFFFF9800)),
@@ -265,6 +284,25 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                             ),
+                          ),
+                        ),
+                      ),
+
+                    // Favorite star badge (top right)
+                    if (widget.isFavorited)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.star,
+                            color: Color(0xFFFFD700),
+                            size: 18,
                           ),
                         ),
                       ),

@@ -1,23 +1,25 @@
 import 'package:flutter/material.dart';
 import 'playlist_grid_card.dart';
 
-/// Adaptive playlist section that uses responsive grid layout
-/// for all platforms including Android TV with DPAD support.
+/// Adaptive playlist section with platform-optimized layouts:
+/// - TV/Large screens (width > 1000): Horizontal scrolling rows (Netflix-style)
+/// - Mobile/Tablet: Responsive grid layout
 ///
-/// Layout strategy:
-/// - Large screens/TV (width > 1200): 5-column grid
-/// - Desktop (width > 800): 4-column grid
-/// - Tablet (width > 600): 3-column grid
-/// - Mobile (width > 400): 2-column grid
-/// - Small mobile (width <= 400): Single column
+/// TV navigation:
+/// - Left/Right: Scroll within the row
+/// - Up/Down: Move between sections
 class AdaptivePlaylistSection extends StatefulWidget {
   final String sectionTitle;
+  final IconData? sectionIcon;
+  final Color? sectionIconColor;
   final List<Map<String, dynamic>> items;
   final Map<String, Map<String, dynamic>> progressMap;
+  final Set<String> favoriteKeys;
   final void Function(Map<String, dynamic> item) onItemPlay;
   final void Function(Map<String, dynamic> item) onItemView;
   final void Function(Map<String, dynamic> item) onItemDelete;
   final void Function(Map<String, dynamic> item)? onItemClearProgress;
+  final void Function(Map<String, dynamic> item)? onItemToggleFavorite;
   final bool shouldAutofocusFirst;
   final int? targetFocusIndex;
   final bool shouldRestoreFocus;
@@ -26,12 +28,16 @@ class AdaptivePlaylistSection extends StatefulWidget {
   const AdaptivePlaylistSection({
     super.key,
     required this.sectionTitle,
+    this.sectionIcon,
+    this.sectionIconColor,
     required this.items,
     required this.progressMap,
+    this.favoriteKeys = const {},
     required this.onItemPlay,
     required this.onItemView,
     required this.onItemDelete,
     this.onItemClearProgress,
+    this.onItemToggleFavorite,
     this.shouldAutofocusFirst = false,
     this.targetFocusIndex,
     this.shouldRestoreFocus = false,
@@ -43,13 +49,18 @@ class AdaptivePlaylistSection extends StatefulWidget {
 }
 
 class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
-  // Flag to ensure onFocusRestored is called only once per restoration cycle
   bool _hasNotifiedRestore = false;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   void didUpdateWidget(AdaptivePlaylistSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reset flag when shouldRestoreFocus changes from false to true (new restoration cycle)
     if (!oldWidget.shouldRestoreFocus && widget.shouldRestoreFocus) {
       _hasNotifiedRestore = false;
     }
@@ -79,18 +90,18 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
     return '$provider|${title.toLowerCase()}';
   }
 
-  LayoutMode _getLayoutMode(BuildContext context, double screenWidth) {
-    // Use responsive grid for all platforms including Android TV
-    if (screenWidth > 1200) {
-      return LayoutMode.grid5; // Large screens/TV
-    } else if (screenWidth > 800) {
-      return LayoutMode.grid4; // Desktop
+  // Force horizontal layout for any screen > 600 (tablets and TVs)
+  bool _isTV(double screenWidth) => screenWidth > 600;
+
+  (int, double) _getGridParams(double screenWidth) {
+    if (screenWidth > 900) {
+      return (5, 0.68);
     } else if (screenWidth > 600) {
-      return LayoutMode.grid3; // Tablet
+      return (4, 0.72);
     } else if (screenWidth > 400) {
-      return LayoutMode.grid2; // Mobile
+      return (3, 0.68);
     } else {
-      return LayoutMode.grid1; // Small mobile
+      return (2, 0.72);
     }
   }
 
@@ -100,8 +111,8 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
       return const SizedBox.shrink();
     }
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final layoutMode = _getLayoutMode(context, screenWidth);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isTV = _isTV(screenWidth);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,34 +120,52 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
       children: [
         if (widget.sectionTitle.isNotEmpty) ...[
           _buildSectionHeader(),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
         ],
-        _buildGrid(layoutMode),
+        if (isTV)
+          _buildHorizontalRow(screenWidth)
+        else
+          _buildGrid(screenWidth),
       ],
     );
   }
 
   Widget _buildSectionHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
+          if (widget.sectionIcon != null) ...[
+            Icon(
+              widget.sectionIcon,
+              color: widget.sectionIconColor ?? const Color(0xFFFFD700),
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+          ],
           Text(
             widget.sectionTitle,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.5,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.3,
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            '(${widget.items.length})',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '${widget.items.length}',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -144,93 +173,106 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
     );
   }
 
-  Widget _buildGrid(LayoutMode mode) {
-    final int crossAxisCount;
-    final double childAspectRatio;
+  /// TV layout: Horizontal scrolling row with Netflix-style cards
+  Widget _buildHorizontalRow(double screenWidth) {
+    // Card dimensions for TV - portrait poster style
+    const double cardWidth = 180;
+    const double cardHeight = 270; // ~2:3 aspect ratio
 
-    switch (mode) {
-      case LayoutMode.grid1:
-        crossAxisCount = 1;
-        childAspectRatio = 2.0; // Wider cards for single column
-        break;
-      case LayoutMode.grid2:
-        crossAxisCount = 2;
-        childAspectRatio = 0.75; // Slightly portrait for mobile
-        break;
-      case LayoutMode.grid3:
-        crossAxisCount = 3;
-        childAspectRatio = 0.85; // Taller cards for tablet - more room for titles
-        break;
-      case LayoutMode.grid4:
-        crossAxisCount = 4;
-        childAspectRatio = 0.85; // Taller cards for desktop - more room for titles
-        break;
-      case LayoutMode.grid5:
-        crossAxisCount = 5;
-        childAspectRatio = 0.85; // Taller cards for large screens/TV - more room for titles
-        break;
-      default:
-        crossAxisCount = 2;
-        childAspectRatio = 0.75;
-    }
-
-    // GridView with DPAD navigation - removed nested FocusTraversalGroup to allow
-    // upward navigation to search button. Parent FocusTraversalGroup handles all traversal.
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(), // Disable scroll physics to prevent conflicts with focus navigation
-        primary: false,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          childAspectRatio: childAspectRatio,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-        ),
+    return SizedBox(
+      height: cardHeight,
+      child: ListView.builder(
+        controller: _scrollController,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         itemCount: widget.items.length,
         itemBuilder: (context, index) {
-          final item = widget.items[index];
-          final dedupeKey = _getDedupeKey(item);
-          final progressData = widget.progressMap[dedupeKey];
-
-          // Use Builder to get proper context for ensureVisible
-          return Builder(
-            builder: (BuildContext itemContext) {
-              // Determine if this specific card should have autofocus
-              final bool shouldAutofocus = (widget.shouldAutofocusFirst && index == 0) ||
-                                          (widget.shouldRestoreFocus && widget.targetFocusIndex == index);
-
-              return PlaylistGridCard(
-                key: ValueKey('playlist_$dedupeKey'), // Removed index to preserve focus during rebuilds
-                item: item,
-                progressData: progressData,
-                onPlay: () => widget.onItemPlay(item),
-                onView: () => widget.onItemView(item),
-                onDelete: () => widget.onItemDelete(item),
-                onClearProgress: widget.onItemClearProgress != null ? () => widget.onItemClearProgress!(item) : null,
-                autofocus: shouldAutofocus,
-                onFocusChanged: (focused) {
-                  // Notify parent when focus is restored (only once per cycle)
-                  if (focused && widget.shouldRestoreFocus && widget.targetFocusIndex == index && !_hasNotifiedRestore) {
-                    _hasNotifiedRestore = true;
-                    widget.onFocusRestored?.call();
-                  }
-                  // Remove auto-scrolling - let Flutter's focus system handle it naturally
-                },
-              );
-            },
+          return Padding(
+            padding: EdgeInsets.only(
+              right: index < widget.items.length - 1 ? 16 : 0,
+            ),
+            child: SizedBox(
+              width: cardWidth,
+              height: cardHeight,
+              child: _buildCardItem(context, index),
+            ),
           );
         },
       ),
     );
   }
-}
 
-enum LayoutMode {
-  grid5,      // Large screens/TV
-  grid4,      // Desktop
-  grid3,      // Tablet
-  grid2,      // Mobile
-  grid1,      // Small mobile
+  /// Mobile/Tablet layout: Responsive grid
+  Widget _buildGrid(double screenWidth) {
+    final (crossAxisCount, childAspectRatio) = _getGridParams(screenWidth);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        primary: false,
+        addAutomaticKeepAlives: true,
+        addRepaintBoundaries: true,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          childAspectRatio: childAspectRatio,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: widget.items.length,
+        itemBuilder: _buildCardItem,
+      ),
+    );
+  }
+
+  Widget _buildCardItem(BuildContext context, int index) {
+    final item = widget.items[index];
+    final dedupeKey = _getDedupeKey(item);
+    final progressData = widget.progressMap[dedupeKey];
+    final bool shouldAutofocus = (widget.shouldAutofocusFirst && index == 0) ||
+                                (widget.shouldRestoreFocus && widget.targetFocusIndex == index);
+
+    return RepaintBoundary(
+      child: PlaylistGridCard(
+        key: ValueKey('playlist_$dedupeKey'),
+        item: item,
+        progressData: progressData,
+        isFavorited: widget.favoriteKeys.contains(dedupeKey),
+        onPlay: () => widget.onItemPlay(item),
+        onView: () => widget.onItemView(item),
+        onDelete: () => widget.onItemDelete(item),
+        onClearProgress: widget.onItemClearProgress != null ? () => widget.onItemClearProgress!(item) : null,
+        onToggleFavorite: widget.onItemToggleFavorite != null ? () => widget.onItemToggleFavorite!(item) : null,
+        autofocus: shouldAutofocus,
+        onFocusChanged: (focused) {
+          if (focused && widget.shouldRestoreFocus && widget.targetFocusIndex == index && !_hasNotifiedRestore) {
+            _hasNotifiedRestore = true;
+            widget.onFocusRestored?.call();
+          }
+          // Auto-scroll to focused item on TV
+          if (focused && _scrollController.hasClients) {
+            _scrollToIndex(index);
+          }
+        },
+      ),
+    );
+  }
+
+  /// Scroll to make the focused item visible with some padding
+  void _scrollToIndex(int index) {
+    const double cardWidth = 180;
+    const double spacing = 16;
+    const double padding = 20;
+
+    final targetOffset = (index * (cardWidth + spacing)) + padding - 100;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final clampedOffset = targetOffset.clamp(0.0, maxScroll);
+
+    _scrollController.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+  }
 }

@@ -34,6 +34,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   List<Map<String, dynamic>> _allItems = [];
   Map<String, Map<String, dynamic>> _progressMap = {};
 
+  // Search state
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final ValueNotifier<String> _searchQuery = ValueNotifier<String>('');
+  Timer? _searchDebouncer;
+
+  // Favorites state
+  Set<String> _favoriteKeys = {};
+
   // Track focus state for restoration after operations
   int? _targetFocusIndex;
   bool _shouldRestoreFocus = false;
@@ -45,6 +54,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   void initState() {
     super.initState();
     _initFuture = _init();
+
+    // Search controller listener with debounce
+    _searchController.addListener(_onSearchChanged);
 
     // Register playlist item playback handler
     MainPageBridge.playPlaylistItem = _playItem;
@@ -60,7 +72,18 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchQuery.dispose();
+    _searchDebouncer?.cancel();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _searchDebouncer?.cancel();
+    _searchDebouncer = Timer(const Duration(milliseconds: 100), () {
+      _searchQuery.value = _searchController.text.toLowerCase().trim();
+    });
   }
 
   Future<void> _init() async {
@@ -81,10 +104,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Load progress data from playback state
     final progressMap = await StorageService.buildPlaylistProgressMap(items);
 
+    // Load favorites
+    final favoriteKeys = await StorageService.getPlaylistFavoriteKeys();
+
     if (!mounted) return;
     setState(() {
       _allItems = items;
       _progressMap = progressMap;
+      _favoriteKeys = favoriteKeys;
     });
   }
 
@@ -102,6 +129,51 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       });
   }
 
+  // Search-filtered items
+  List<Map<String, dynamic>> _getFilteredItems(String query) {
+    if (query.isEmpty) return _allItemsSorted;
+    return _allItemsSorted.where((item) {
+      final title = ((item['title'] as String?) ?? '').toLowerCase();
+      return title.contains(query);
+    }).toList();
+  }
+
+  // Favorites section items (filtered by search)
+  List<Map<String, dynamic>> _getFavoriteItems(String query) {
+    return _getFilteredItems(query).where((item) {
+      final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+      return _favoriteKeys.contains(dedupeKey);
+    }).toList();
+  }
+
+  // All items section (filtered by search)
+  List<Map<String, dynamic>> _getAllItemsSection(String query) {
+    return _getFilteredItems(query);
+  }
+
+  // Toggle favorite status for an item
+  Future<void> _toggleFavorite(Map<String, dynamic> item) async {
+    final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+    final isCurrentlyFavorited = _favoriteKeys.contains(dedupeKey);
+
+    await StorageService.setPlaylistItemFavorited(item, !isCurrentlyFavorited);
+
+    if (!mounted) return;
+    setState(() {
+      if (isCurrentlyFavorited) {
+        _favoriteKeys.remove(dedupeKey);
+      } else {
+        _favoriteKeys.add(dedupeKey);
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isCurrentlyFavorited ? 'Removed from favorites' : 'Added to favorites'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
 
   Future<void> _playItem(Map<String, dynamic> item) async {
     // Track when user plays this item
@@ -1629,94 +1701,623 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
 
+  // Show search dialog
+  void _showSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => _SearchDialog(
+        initialQuery: _searchController.text,
+        onSearch: (query) {
+          _searchController.text = query;
+          _searchQuery.value = query.toLowerCase().trim();
+        },
+        onClear: () {
+          _searchController.clear();
+          _searchQuery.value = '';
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-          backgroundColor: const Color(0xFF0F172A),
-          body: Stack(
-            children: [
-              // Main content
-              Column(
-                children: [
-                  // Content
-                  Expanded(
-                    child: FutureBuilder<void>(
-                      future: _initFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation(Color(0xFFE50914)),
-                            ),
-                          );
-                        }
+      backgroundColor: const Color(0xFF0F172A),
+      body: FutureBuilder<void>(
+        future: _initFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
+              ),
+            );
+          }
 
-                        if (_allItems.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.video_library_outlined,
-                                  size: 80,
-                                  color: Colors.white.withOpacity(0.2),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No items in playlist',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.5),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
+          if (_allItems.isEmpty) {
+            return _buildEmptyState();
+          }
 
-                        final allItems = _allItemsSorted;
+          return ValueListenableBuilder<String>(
+            valueListenable: _searchQuery,
+            builder: (context, query, child) {
+              final favoriteItems = _getFavoriteItems(query);
+              final allItems = _getAllItemsSection(query);
 
-                        return RefreshIndicator(
-                          onRefresh: _refresh,
-                          backgroundColor: const Color(0xFF1E293B),
-                          color: const Color(0xFFE50914),
-                          child: SingleChildScrollView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Only show All items, no sections
-                                AdaptivePlaylistSection(
-                                  sectionTitle: '', // No section title
-                                  items: allItems,
-                                  progressMap: _progressMap,
-                                  onItemPlay: _playItem,
-                                  onItemView: _viewItem,
-                                  onItemDelete: _removeItem,
-                                  onItemClearProgress: _clearPlaylistProgress,
-                                  shouldAutofocusFirst: true, // Always autofocus first item
-                                  targetFocusIndex: _shouldRestoreFocus ? _targetFocusIndex : null,
-                                  shouldRestoreFocus: _shouldRestoreFocus,
-                                  onFocusRestored: () {
-                                    setState(() {
-                                      _shouldRestoreFocus = false;
-                                      _targetFocusIndex = null;
-                                    });
-                                  },
-                                ),
-                                const SizedBox(height: 32),
-                              ],
+              if (allItems.isEmpty && favoriteItems.isEmpty) {
+                return _buildNoResultsState(query);
+              }
+
+              return FocusTraversalGroup(
+                policy: _PlaylistFocusTraversalPolicy(),
+                child: RefreshIndicator(
+                  onRefresh: _refresh,
+                  backgroundColor: const Color(0xFF1E293B),
+                  color: const Color(0xFF6366F1),
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    cacheExtent: 500.0,
+                    slivers: [
+                      // Search button row - navigable via DPAD
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              _buildSearchButton(query),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Favorites Section
+                      if (favoriteItems.isNotEmpty) ...[
+                        SliverToBoxAdapter(
+                          child: RepaintBoundary(
+                            child: AdaptivePlaylistSection(
+                              sectionTitle: 'Favorites',
+                              sectionIcon: Icons.star_rounded,
+                              sectionIconColor: const Color(0xFFFFD700),
+                              items: favoriteItems,
+                              progressMap: _progressMap,
+                              favoriteKeys: _favoriteKeys,
+                              onItemPlay: _playItem,
+                              onItemView: _viewItem,
+                              onItemDelete: _removeItem,
+                              onItemClearProgress: _clearPlaylistProgress,
+                              onItemToggleFavorite: _toggleFavorite,
+                              shouldAutofocusFirst: false,
+                              targetFocusIndex: _shouldRestoreFocus ? _targetFocusIndex : null,
+                              shouldRestoreFocus: _shouldRestoreFocus,
+                              onFocusRestored: () {
+                                setState(() {
+                                  _shouldRestoreFocus = false;
+                                  _targetFocusIndex = null;
+                                });
+                              },
                             ),
                           ),
-                        );
+                        ),
+                        const SliverToBoxAdapter(child: SizedBox(height: 28)),
+                      ],
+
+                      // All Items Section
+                      SliverToBoxAdapter(
+                        child: RepaintBoundary(
+                          child: AdaptivePlaylistSection(
+                            sectionTitle: favoriteItems.isNotEmpty ? 'All Items' : '',
+                            sectionIcon: favoriteItems.isNotEmpty ? Icons.grid_view_rounded : null,
+                            sectionIconColor: const Color(0xFF6366F1),
+                            items: allItems,
+                            progressMap: _progressMap,
+                            favoriteKeys: _favoriteKeys,
+                            onItemPlay: _playItem,
+                            onItemView: _viewItem,
+                            onItemDelete: _removeItem,
+                            onItemClearProgress: _clearPlaylistProgress,
+                            onItemToggleFavorite: _toggleFavorite,
+                            shouldAutofocusFirst: false,
+                            targetFocusIndex: _shouldRestoreFocus && favoriteItems.isEmpty ? _targetFocusIndex : null,
+                            shouldRestoreFocus: _shouldRestoreFocus && favoriteItems.isEmpty,
+                            onFocusRestored: () {
+                              setState(() {
+                                _shouldRestoreFocus = false;
+                                _targetFocusIndex = null;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+
+                      const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSearchButton(String currentQuery) {
+    final hasActiveSearch = currentQuery.isNotEmpty;
+
+    return Focus(
+      focusNode: _searchFocusNode,
+      autofocus: true, // Search button gets initial focus
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            _showSearchDialog();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return GestureDetector(
+            onTap: _showSearchDialog,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.symmetric(
+                horizontal: hasActiveSearch ? 12 : 10,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                color: hasActiveSearch
+                    ? const Color(0xFF6366F1).withValues(alpha: 0.2)
+                    : const Color(0xFF1E293B).withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(hasActiveSearch ? 20 : 12),
+                border: Border.all(
+                  color: isFocused
+                      ? const Color(0xFF6366F1)
+                      : hasActiveSearch
+                          ? const Color(0xFF6366F1).withValues(alpha: 0.5)
+                          : Colors.white.withValues(alpha: 0.1),
+                  width: isFocused ? 2 : 1,
+                ),
+                boxShadow: isFocused ? [
+                  BoxShadow(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    spreadRadius: 1,
+                  ),
+                ] : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.search_rounded,
+                    color: hasActiveSearch
+                        ? const Color(0xFF6366F1)
+                        : Colors.white.withValues(alpha: 0.7),
+                    size: 20,
+                  ),
+                  if (hasActiveSearch) ...[
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: Text(
+                        currentQuery,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () {
+                        _searchController.clear();
+                        _searchQuery.value = '';
                       },
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        size: 16,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.video_library_outlined,
+              size: 56,
+              color: Colors.white.withValues(alpha: 0.3),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'No items in playlist',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 17,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add items from your debrid downloads',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.35),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoResultsState(String query) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.search_off_rounded,
+              size: 56,
+              color: Colors.white.withValues(alpha: 0.3),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'No results found',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 17,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try searching for "$query" differently',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.35),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Search dialog for playlist search - TV optimized
+class _SearchDialog extends StatefulWidget {
+  final String initialQuery;
+  final void Function(String query) onSearch;
+  final VoidCallback onClear;
+
+  const _SearchDialog({
+    required this.initialQuery,
+    required this.onSearch,
+    required this.onClear,
+  });
+
+  @override
+  State<_SearchDialog> createState() => _SearchDialogState();
+}
+
+class _SearchDialogState extends State<_SearchDialog> {
+  late TextEditingController _controller;
+  late FocusNode _textFieldFocusNode;
+  late FocusNode _searchButtonFocusNode;
+  late FocusNode _clearButtonFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialQuery);
+    _textFieldFocusNode = FocusNode();
+    _searchButtonFocusNode = FocusNode();
+    _clearButtonFocusNode = FocusNode();
+
+    // Auto-focus text field
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _textFieldFocusNode.requestFocus();
+    });
+  }
+
+  // Handle DPAD navigation from TextField to buttons
+  KeyEventResult _handleTextFieldKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      // Down arrow: move to buttons
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        if (widget.initialQuery.isNotEmpty) {
+          _clearButtonFocusNode.requestFocus();
+        } else {
+          _searchButtonFocusNode.requestFocus();
+        }
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _textFieldFocusNode.dispose();
+    _searchButtonFocusNode.dispose();
+    _clearButtonFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _performSearch() {
+    widget.onSearch(_controller.text);
+    Navigator.of(context).pop();
+  }
+
+  void _performClear() {
+    _controller.clear();
+    widget.onClear();
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: 500,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title
+            Row(
+              children: [
+                const Icon(
+                  Icons.search_rounded,
+                  color: Color(0xFF6366F1),
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Search Playlist',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    color: Colors.white.withValues(alpha: 0.5),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Search field with DPAD navigation
+            Focus(
+              onKeyEvent: _handleTextFieldKey,
+              child: TextField(
+                controller: _controller,
+                focusNode: _textFieldFocusNode,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                cursorColor: const Color(0xFF6366F1),
+                onSubmitted: (_) => _performSearch(),
+                decoration: InputDecoration(
+                hintText: 'Enter search term...',
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4),
+                ),
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF6366F1),
+                    width: 2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+              ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Action buttons with DPAD navigation
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Clear button
+                if (widget.initialQuery.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: _DialogButton(
+                      focusNode: _clearButtonFocusNode,
+                      label: 'Clear',
+                      icon: Icons.clear_all_rounded,
+                      onPressed: _performClear,
+                      onUpPressed: () => _textFieldFocusNode.requestFocus(),
+                      isSecondary: true,
+                    ),
+                  ),
+                // Search button
+                _DialogButton(
+                  focusNode: _searchButtonFocusNode,
+                  label: 'Search',
+                  icon: Icons.search_rounded,
+                  onPressed: _performSearch,
+                  onUpPressed: () => _textFieldFocusNode.requestFocus(),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom focus traversal policy that prevents focus from escaping upward to navbar
+class _PlaylistFocusTraversalPolicy extends FocusTraversalPolicy with DirectionalFocusTraversalPolicyMixin {
+  @override
+  bool inDirection(FocusNode currentNode, TraversalDirection direction) {
+    // Let the default behavior handle most directions
+    final result = super.inDirection(currentNode, direction);
+
+    // If trying to go up and no node was found (would escape to navbar),
+    // prevent the focus change by returning true (handled) without moving focus
+    if (direction == TraversalDirection.up && !result) {
+      return true; // Claim we handled it, but don't actually move focus
+    }
+
+    return result;
+  }
+
+  @override
+  Iterable<FocusNode> sortDescendants(Iterable<FocusNode> descendants, FocusNode currentNode) {
+    // Use reading order (left-to-right, top-to-bottom)
+    return descendants.toList()..sort((a, b) {
+      final aRect = a.rect;
+      final bRect = b.rect;
+
+      // Sort by Y first (top to bottom), then by X (left to right)
+      final yDiff = aRect.top.compareTo(bRect.top);
+      if (yDiff != 0) return yDiff;
+      return aRect.left.compareTo(bRect.left);
+    });
+  }
+}
+
+/// TV-optimized button for dialog with DPAD navigation
+class _DialogButton extends StatelessWidget {
+  final FocusNode focusNode;
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final VoidCallback? onUpPressed;
+  final bool isSecondary;
+
+  const _DialogButton({
+    required this.focusNode,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.onUpPressed,
+    this.isSecondary = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            onPressed();
+            return KeyEventResult.handled;
+          }
+          // Up arrow: navigate back to text field
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp && onUpPressed != null) {
+            onUpPressed!();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return GestureDetector(
+            onTap: onPressed,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: isFocused
+                    ? (isSecondary ? Colors.white.withValues(alpha: 0.2) : const Color(0xFF6366F1))
+                    : (isSecondary ? Colors.transparent : const Color(0xFF6366F1).withValues(alpha: 0.8)),
+                borderRadius: BorderRadius.circular(10),
+                border: isSecondary
+                    ? Border.all(
+                        color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.3),
+                        width: isFocused ? 2 : 1,
+                      )
+                    : Border.all(
+                        color: isFocused ? Colors.white : Colors.transparent,
+                        width: 2,
+                      ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
