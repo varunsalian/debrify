@@ -988,6 +988,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       return;
     }
 
+    // Try to find the torrent in the loaded list first
     TorboxTorrent? target;
     for (final torrent in _torrents) {
       if (torrent.id == pendingTorrent.id) {
@@ -996,9 +997,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       }
     }
 
-    if (target == null) {
-      return;
-    }
+    // If not found in list, use the pending torrent directly
+    // (it already has all the data from the API response)
+    target ??= pendingTorrent;
 
     _initialActionHandled = true;
     _pendingInitialTorrent = null;
