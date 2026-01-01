@@ -1083,12 +1083,16 @@ class _AndroidTvPlaybackPayloadBuilder {
         PlaylistEntry(
           url: resolved,
           title: entry.title,
+          relativePath: entry.relativePath,
           restrictedLink: entry.restrictedLink,
           torrentHash: entry.torrentHash,
           sizeBytes: entry.sizeBytes,
           provider: entry.provider,
           torboxTorrentId: entry.torboxTorrentId,
           torboxFileId: entry.torboxFileId,
+          pikpakFileId: entry.pikpakFileId,
+          rdTorrentId: entry.rdTorrentId,
+          rdLinkIndex: entry.rdLinkIndex,
         ),
       );
     }
