@@ -433,19 +433,24 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _showMissingApiKeySnack('Real Debrid');
         return;
       }
-      MainPageBridge.returnToTorrentSearchOnBack = true;
-      setState(() {
-        _pages[4] = DebridDownloadsScreen(initialTorrentForOptions: torrent);
-      });
-      _onItemTapped(4);
-      // Reset the page after a delay to prevent recurring dialogs
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _pages[4] = const DebridDownloadsScreen();
-          });
-        }
-      });
+      // Always push as a new route - provides consistent UX where back returns to torrent search
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (ctx) => PopScope(
+            canPop: false,
+            onPopInvoked: (didPop) {
+              if (didPop) return;
+              if (!MainPageBridge.handleBackNavigation()) {
+                Navigator.of(ctx).pop();
+              }
+            },
+            child: DebridDownloadsScreen(
+              initialTorrentForOptions: torrent,
+              isPushedRoute: true,
+            ),
+          ),
+        ),
+      );
     };
     MainPageBridge.openTorboxFolder = (torboxTorrent) {
       if (!mounted) return;
@@ -453,20 +458,24 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _showMissingApiKeySnack('Torbox');
         return;
       }
-      MainPageBridge.returnToTorrentSearchOnBack = true;
-      setState(() {
-        _pages[5] = TorboxDownloadsScreen(
-          initialTorrentToOpen: torboxTorrent,
-        );
-      });
-      _onItemTapped(5);
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _pages[5] = const TorboxDownloadsScreen();
-          });
-        }
-      });
+      // Always push as a new route - provides consistent UX where back returns to torrent search
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (ctx) => PopScope(
+            canPop: false,
+            onPopInvoked: (didPop) {
+              if (didPop) return;
+              if (!MainPageBridge.handleBackNavigation()) {
+                Navigator.of(ctx).pop();
+              }
+            },
+            child: TorboxDownloadsScreen(
+              initialTorrentToOpen: torboxTorrent,
+              isPushedRoute: true,
+            ),
+          ),
+        ),
+      );
     };
     MainPageBridge.openPikPakFolder = (fileId, folderName) {
       if (!mounted) return;
@@ -474,21 +483,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _showMissingApiKeySnack('PikPak');
         return;
       }
-      MainPageBridge.returnToTorrentSearchOnBack = true;
-      setState(() {
-        _pages[6] = PikPakFilesScreen(
-          initialFolderId: fileId,
-          initialFolderName: folderName,
-        );
-      });
-      _onItemTapped(6);
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _pages[6] = const PikPakFilesScreen();
-          });
-        }
-      });
+      // Always push as a new route - provides consistent UX where back returns to torrent search
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (ctx) => PopScope(
+            canPop: false,
+            onPopInvoked: (didPop) {
+              if (didPop) return;
+              if (!MainPageBridge.handleBackNavigation()) {
+                Navigator.of(ctx).pop();
+              }
+            },
+            child: PikPakFilesScreen(
+              initialFolderId: fileId,
+              initialFolderName: folderName,
+              isPushedRoute: true,
+            ),
+          ),
+        ),
+      );
     };
     MainPageBridge.hideAutoLaunchOverlay = _hideAutoLaunchOverlay;
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);

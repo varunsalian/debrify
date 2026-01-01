@@ -27,9 +27,14 @@ class TorboxDownloadsScreen extends StatefulWidget {
   const TorboxDownloadsScreen({
     super.key,
     this.initialTorrentToOpen,
+    this.isPushedRoute = false,
   });
 
   final TorboxTorrent? initialTorrentToOpen;
+
+  /// When true, this screen was pushed as a route (not displayed in a tab).
+  /// Back navigation will pop the route instead of switching tabs.
+  final bool isPushedRoute;
 
   @override
   State<TorboxDownloadsScreen> createState() => _TorboxDownloadsScreenState();
@@ -74,8 +79,12 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _pendingInitialTorrent = widget.initialTorrentToOpen;
     _loadApiKeyAndTorrents();
 
-    // Register back navigation handler for folder navigation (tab screen)
-    MainPageBridge.registerTabBackHandler('torbox', _handleBackNavigation);
+    // Register back navigation handler for folder navigation
+    if (widget.isPushedRoute) {
+      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+    } else {
+      MainPageBridge.registerTabBackHandler('torbox', _handleBackNavigation);
+    }
   }
 
   @override
@@ -779,7 +788,11 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   @override
   void dispose() {
     // Unregister back navigation handler
-    MainPageBridge.unregisterTabBackHandler('torbox');
+    if (widget.isPushedRoute) {
+      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+    } else {
+      MainPageBridge.unregisterTabBackHandler('torbox');
+    }
 
     _scrollController.dispose();
     _magnetController.dispose();
@@ -790,19 +803,30 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
-    // If came from torrent search "Open in Torbox" flow and at torrent root,
-    // go back to torrent search instead of torrents list
-    if (MainPageBridge.returnToTorrentSearchOnBack &&
-        !_isAtRoot &&
-        _navigationStack.length == 1) {
-      MainPageBridge.returnToTorrentSearchOnBack = false;
-      MainPageBridge.switchTab?.call(0); // Torrent search is index 0
+    // If inside a subfolder within a torrent, navigate up
+    if (!_isAtRoot && _navigationStack.length > 1) {
+      _navigateUp();
       return true;
     }
-    if (!_isAtRoot) {
+
+    // At torrent root level (viewing torrent files, not inside a subfolder)
+    if (!_isAtRoot && _navigationStack.length == 1) {
+      // If pushed as a route, pop to go back
+      if (widget.isPushedRoute) {
+        Navigator.of(context).pop();
+        return true;
+      }
+      // If came from torrent search flow, switch back to torrent search tab
+      if (MainPageBridge.returnToTorrentSearchOnBack) {
+        MainPageBridge.returnToTorrentSearchOnBack = false;
+        MainPageBridge.switchTab?.call(0);
+        return true;
+      }
+      // Normal case: go back to torrents list
       _navigateUp();
-      return true; // We handled the back press
+      return true;
     }
+
     return false; // At root, let app handle it
   }
 

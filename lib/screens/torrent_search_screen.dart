@@ -3837,9 +3837,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       case 'open':
         // Open in PikPak tab
-        if (!pikpakHidden) {
-          MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
-        }
+        MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
         return;
       case 'playlist':
         // Add to playlist
@@ -3957,11 +3955,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             icon: Icons.open_in_new,
                             color: const Color(0xFFF59E0B),
                             title: 'Open in PikPak',
-                            subtitle: pikpakHidden
-                                ? 'Enable PikPak navigation in settings to use this'
-                                : 'View folder in PikPak files tab',
-                            enabled: !pikpakHidden,
-                            autofocus: !pikpakHidden,
+                            subtitle: 'View folder in PikPak files tab',
+                            enabled: true,
+                            autofocus: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
                               // Navigate to the specific PikPak folder
@@ -3976,7 +3972,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 ? 'Stream instantly from PikPak.'
                                 : 'No video files found.',
                             enabled: hasVideo,
-                            autofocus: pikpakHidden && hasVideo,
+                            autofocus: false,
                             onTap: () {
                               Navigator.of(ctx).pop();
                               _playPikPakVideos(videoFiles, torrentName);
@@ -4083,9 +4079,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // For 'open' action, open PikPak folder directly
     if (postAction == 'open') {
-      if (!pikpakHidden) {
-        MainPageBridge.openPikPakFolder?.call(fileId, fileName);
-      }
+      MainPageBridge.openPikPakFolder?.call(fileId, fileName);
       return;
     }
 
@@ -4211,11 +4205,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     icon: Icons.open_in_new,
                     color: const Color(0xFFF59E0B),
                     title: 'Open in PikPak',
-                    subtitle: pikpakHidden
-                        ? 'Enable PikPak navigation in settings to use this'
-                        : 'View folder in PikPak files tab',
-                    enabled: !pikpakHidden,
-                    autofocus: !pikpakHidden,
+                    subtitle: 'View folder in PikPak files tab',
+                    enabled: true,
+                    autofocus: true,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       MainPageBridge.openPikPakFolder?.call(fileId, fileName);
@@ -4229,7 +4221,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ? 'Stream instantly from PikPak.'
                         : 'No video files found.',
                     enabled: hasVideo,
-                    autofocus: pikpakHidden && hasVideo,
+                    autofocus: false,
                     onTap: () {
                       Navigator.of(ctx).pop();
                       _playPikPakVideos(videoFiles, fileName);
@@ -5789,9 +5781,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       case 'open':
         // Open in Torbox tab
-        if (!torboxHidden) {
-          MainPageBridge.openTorboxFolder?.call(torboxTorrent);
-        }
+        MainPageBridge.openTorboxFolder?.call(torboxTorrent);
         return;
       case 'playlist':
         // Add to playlist
@@ -5918,11 +5908,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             icon: Icons.open_in_new,
                             color: const Color(0xFFF59E0B),
                             title: 'Open in Torbox',
-                            subtitle: torboxHidden
-                                ? 'Enable Torbox navigation in settings to use this'
-                                : 'View this torrent in Torbox tab',
-                            enabled: !torboxHidden,
-                            autofocus: !torboxHidden,
+                            subtitle: 'View this torrent in Torbox tab',
+                            enabled: true,
+                            autofocus: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
                               // Open the torrent in Torbox tab
@@ -5937,7 +5925,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 ? 'Open instantly in the Torbox player experience.'
                                 : 'Available for torrents with video files.',
                             enabled: hasVideo,
-                            autofocus: torboxHidden && hasVideo,
+                            autofocus: false,
                             onTap: () {
                               Navigator.of(ctx).pop();
                               _playTorboxTorrent(torboxTorrent);
@@ -6978,7 +6966,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'open':
         // Open in Real-Debrid tab
-        if (!rdHidden && !isRarArchive) {
+        if (!isRarArchive) {
           final rdTorrent = RDTorrent(
             id: result['torrentId'].toString(),
             filename: torrentName,
@@ -7162,13 +7150,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 icon: Icons.open_in_new,
                                 color: const Color(0xFFF59E0B),
                                 title: 'Open in Real-Debrid',
-                                subtitle: rdHidden
-                                    ? 'Enable Real-Debrid navigation in settings to use this'
-                                    : isRarArchive
-                                        ? 'Not available for RAR archives (not extracted by Real-Debrid)'
-                                        : 'View this torrent in Real-Debrid tab',
-                                enabled: !rdHidden && !isRarArchive,
-                                autofocus: !rdHidden && !isRarArchive,
+                                subtitle: isRarArchive
+                                    ? 'Not available for RAR archives (not extracted by Real-Debrid)'
+                                    : 'View this torrent in Real-Debrid tab',
+                                enabled: !isRarArchive,
+                                autofocus: !isRarArchive,
                                 onTap: () {
                                   Navigator.of(ctx).pop();
                                   // Create RDTorrent object and open it in Real-Debrid tab
@@ -7195,7 +7181,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     ? 'Unrestrict and open instantly in the built-in player.'
                                     : 'Available for video torrents only.',
                                 enabled: hasAnyVideo,
-                                autofocus: rdHidden && hasAnyVideo,
+                                autofocus: isRarArchive && hasAnyVideo,
                                 onTap: () async {
                                   Navigator.of(ctx).pop();
                                   await _playFromResult(

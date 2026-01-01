@@ -16,10 +16,15 @@ class PikPakFilesScreen extends StatefulWidget {
   final String? initialFolderId;
   final String? initialFolderName;
 
+  /// When true, this screen was pushed as a route (not displayed in a tab).
+  /// Back navigation will pop the route instead of switching tabs.
+  final bool isPushedRoute;
+
   const PikPakFilesScreen({
     super.key,
     this.initialFolderId,
     this.initialFolderName,
+    this.isPushedRoute = false,
   });
 
   @override
@@ -91,8 +96,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _scrollController.addListener(_onScroll);
     _loadSettings();
 
-    // Register back navigation handler for folder navigation (tab screen)
-    MainPageBridge.registerTabBackHandler('pikpak', _handleBackNavigation);
+    // Register back navigation handler for folder navigation
+    if (widget.isPushedRoute) {
+      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+    } else {
+      MainPageBridge.registerTabBackHandler('pikpak', _handleBackNavigation);
+    }
   }
 
   void _onScroll() {
@@ -106,7 +115,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   @override
   void dispose() {
     // Unregister back navigation handler
-    MainPageBridge.unregisterTabBackHandler('pikpak');
+    if (widget.isPushedRoute) {
+      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+    } else {
+      MainPageBridge.unregisterTabBackHandler('pikpak');
+    }
 
     _scrollController.dispose();
     _linkController.dispose();
@@ -122,22 +135,28 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
-    // If came from torrent search "Open in PikPak" flow and at torrent root,
-    // go back to torrent search instead of PikPak root
-    if (MainPageBridge.returnToTorrentSearchOnBack &&
-        !_isInVirtualFolder &&
-        _navigationStack.isEmpty &&
-        _currentFolderId != null) {
-      MainPageBridge.returnToTorrentSearchOnBack = false;
-      MainPageBridge.switchTab?.call(0); // Torrent search is index 0
-      return true;
-    }
-    // Check if we can navigate up
+    // If inside a virtual folder or subfolder, navigate up
     if (_isInVirtualFolder || _navigationStack.isNotEmpty ||
         (_restrictedFolderId != null && _currentFolderId != _restrictedFolderId)) {
       _navigateUpWithVirtual();
-      return true; // We handled the back press
+      return true;
     }
+
+    // At torrent/folder root level (no subfolders to go up to)
+    if (_currentFolderId != null) {
+      // If pushed as a route, pop to go back
+      if (widget.isPushedRoute) {
+        Navigator.of(context).pop();
+        return true;
+      }
+      // If came from torrent search flow, switch back to torrent search tab
+      if (MainPageBridge.returnToTorrentSearchOnBack) {
+        MainPageBridge.returnToTorrentSearchOnBack = false;
+        MainPageBridge.switchTab?.call(0);
+        return true;
+      }
+    }
+
     return false; // At root, let app handle it
   }
 

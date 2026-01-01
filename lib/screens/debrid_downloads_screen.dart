@@ -23,9 +23,17 @@ import 'dart:ui'; // Added for ImageFilter
 import '../widgets/file_selection_dialog.dart';
 
 class DebridDownloadsScreen extends StatefulWidget {
-  const DebridDownloadsScreen({super.key, this.initialTorrentForOptions});
+  const DebridDownloadsScreen({
+    super.key,
+    this.initialTorrentForOptions,
+    this.isPushedRoute = false,
+  });
 
   final RDTorrent? initialTorrentForOptions;
+
+  /// When true, this screen was pushed as a route (not displayed in a tab).
+  /// Back navigation will pop the route instead of switching tabs.
+  final bool isPushedRoute;
 
   @override
   State<DebridDownloadsScreen> createState() => _DebridDownloadsScreenState();
@@ -108,8 +116,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _torrentScrollController.addListener(_onTorrentScroll);
     _downloadScrollController.addListener(_onDownloadScroll);
 
-    // Register back navigation handler for folder navigation (tab screen)
-    MainPageBridge.registerTabBackHandler('realdebrid', _handleBackNavigation);
+    // Register back navigation handler for folder navigation
+    if (widget.isPushedRoute) {
+      // Pushed as a route - use pushed route handler
+      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+    } else {
+      // Displayed in a tab
+      MainPageBridge.registerTabBackHandler('realdebrid', _handleBackNavigation);
+    }
 
     // If asked to show options for a specific torrent, open after init
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -169,7 +183,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   @override
   void dispose() {
     // Unregister back navigation handler
-    MainPageBridge.unregisterTabBackHandler('realdebrid');
+    if (widget.isPushedRoute) {
+      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+    } else {
+      MainPageBridge.unregisterTabBackHandler('realdebrid');
+    }
 
     _torrentScrollController.dispose();
     _downloadScrollController.dispose();
@@ -187,19 +205,30 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
-    // If came from torrent search "Open in RealDebrid" flow and at torrent root,
-    // go back to torrent search instead of torrents list
-    if (MainPageBridge.returnToTorrentSearchOnBack &&
-        _folderPath.isEmpty &&
-        _currentTorrentId != null) {
-      MainPageBridge.returnToTorrentSearchOnBack = false;
-      MainPageBridge.switchTab?.call(0); // Torrent search is index 0
+    // If inside a folder within the torrent, navigate up
+    if (_currentTorrentId != null && _folderPath.isNotEmpty) {
+      _navigateUp();
       return true;
     }
-    if (_currentTorrentId != null) {
+
+    // At torrent root level (viewing torrent files, not inside a subfolder)
+    if (_currentTorrentId != null && _folderPath.isEmpty) {
+      // If pushed as a route, pop to go back
+      if (widget.isPushedRoute) {
+        Navigator.of(context).pop();
+        return true;
+      }
+      // If came from torrent search flow, switch back to torrent search tab
+      if (MainPageBridge.returnToTorrentSearchOnBack) {
+        MainPageBridge.returnToTorrentSearchOnBack = false;
+        MainPageBridge.switchTab?.call(0);
+        return true;
+      }
+      // Normal case: go back to torrents list
       _navigateUp();
-      return true; // We handled the back press
+      return true;
     }
+
     return false; // Not in folder mode, let app handle it
   }
 
