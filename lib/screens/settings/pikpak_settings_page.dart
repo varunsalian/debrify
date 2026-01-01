@@ -241,25 +241,15 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
       if (!mounted) return;
 
-      setState(() {
-        _isConnected = false;
-        _passwordController.clear();
-        _restrictedFolderId = null;
-        _restrictedFolderName = null;
-        _hiddenFromNav = false;
-      });
-
       // Notify main page to update navigation
       MainPageBridge.notifyIntegrationChanged();
 
       _showSnackBar('Logged out successfully', isError: false);
 
-      // Restore focus to email field after logout (for TV navigation)
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _emailFocusNode.requestFocus();
-        }
-      });
+      // Pop back to settings page with logout flag for TV navigation
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
     } catch (e) {
       print('Error logging out: $e');
       if (!mounted) return;

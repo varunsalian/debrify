@@ -25,6 +25,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
 
+  // Focus node for the first connection card (Real-Debrid) for TV navigation
+  final FocusNode _firstCardFocusNode = FocusNode(debugLabel: 'firstCardFocus');
+
   bool _realDebridConnected = false;
   String _realDebridStatus = 'Not connected';
   String _realDebridCaption = 'Tap to connect';
@@ -41,6 +44,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadSummaries();
+  }
+
+  @override
+  void dispose() {
+    _firstCardFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSummaries() async {
@@ -165,6 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.cloud_circle_rounded,
           onTap: _openPikPakSettings,
         ),
+        firstCardFocusNode: _firstCardFocusNode,
       ),
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
@@ -194,11 +204,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPikPakSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const PikPakSettingsPage()));
+    final loggedOut = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const PikPakSettingsPage()),
+    );
     if (!mounted) return;
-    setState(() {});
+    await _loadSummaries();
+    if (loggedOut == true) {
+      _focusFirstCard();
+    }
   }
 
   Future<void> _openStartupSettings() async {
@@ -218,17 +231,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openRealDebridSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const RealDebridSettingsPage()));
+    final loggedOut = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const RealDebridSettingsPage()),
+    );
+    if (!mounted) return;
     await _loadSummaries();
+    if (loggedOut == true) {
+      _focusFirstCard();
+    }
   }
 
   Future<void> _openTorboxSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const TorboxSettingsPage()));
+    final loggedOut = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const TorboxSettingsPage()),
+    );
+    if (!mounted) return;
     await _loadSummaries();
+    if (loggedOut == true) {
+      _focusFirstCard();
+    }
+  }
+
+  void _focusFirstCard() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _firstCardFocusNode.requestFocus();
+      }
+    });
   }
 
   Future<void> _clearDownloadData() async {
@@ -521,11 +550,13 @@ class _ConnectionsSummary extends StatelessWidget {
   final _ConnectionInfo realDebrid;
   final _ConnectionInfo torbox;
   final _ConnectionInfo pikpak;
+  final FocusNode? firstCardFocusNode;
 
   const _ConnectionsSummary({
     required this.realDebrid,
     required this.torbox,
     required this.pikpak,
+    this.firstCardFocusNode,
   });
 
   @override
@@ -554,7 +585,10 @@ class _ConnectionsSummary extends StatelessWidget {
               children: [
                 SizedBox(
                   width: itemWidth,
-                  child: _ConnectionCard(info: realDebrid),
+                  child: _ConnectionCard(
+                    info: realDebrid,
+                    focusNode: firstCardFocusNode,
+                  ),
                 ),
                 SizedBox(
                   width: itemWidth,
@@ -593,7 +627,8 @@ class _ConnectionInfo {
 
 class _ConnectionCard extends StatelessWidget {
   final _ConnectionInfo info;
-  const _ConnectionCard({required this.info});
+  final FocusNode? focusNode;
+  const _ConnectionCard({required this.info, this.focusNode});
 
   @override
   Widget build(BuildContext context) {
@@ -608,6 +643,7 @@ class _ConnectionCard extends StatelessWidget {
       color: theme.colorScheme.surfaceContainerHigh,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
+        focusNode: focusNode,
         borderRadius: BorderRadius.circular(18),
         onTap: () async {
           await info.onTap();

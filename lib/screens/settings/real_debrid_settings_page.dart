@@ -120,20 +120,12 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     AccountService.clearUserInfo();
     // Clear the hidden from nav flag on logout
     await StorageService.clearRealDebridHiddenFromNav();
-    setState(() {
-      _savedApiKey = null;
-      _isEditing = false;
-      _apiKeyController.clear();
-      _hiddenFromNav = false;
-    });
     _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
-    // Restore focus to Add API Key button after logout (for TV navigation)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _addApiKeyButtonFocusNode.requestFocus();
-      }
-    });
+    // Pop back to settings page with logout flag for TV navigation
+    if (mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   Future<void> _saveSelection(String v) async {

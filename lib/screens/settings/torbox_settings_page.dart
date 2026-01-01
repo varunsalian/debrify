@@ -121,19 +121,12 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     TorboxAccountService.clearUserInfo();
     // Clear the hidden from nav flag on logout
     await StorageService.clearTorboxHiddenFromNav();
-    setState(() {
-      _savedApiKey = null;
-      _isEditing = false;
-      _hiddenFromNav = false;
-    });
     _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
-    // Restore focus to Add API Key button after logout (for TV navigation)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _addApiKeyButtonFocusNode.requestFocus();
-      }
-    });
+    // Pop back to settings page with logout flag for TV navigation
+    if (mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   Future<void> _updateCacheCheck(bool value) async {
