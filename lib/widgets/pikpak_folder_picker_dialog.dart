@@ -886,7 +886,7 @@ class _NewFolderDialog extends StatefulWidget {
 
 class _NewFolderDialogState extends State<_NewFolderDialog> {
   final TextEditingController _controller = TextEditingController();
-  final FocusNode _inputFocusNode = FocusNode(debugLabel: 'folder-name-input');
+  late final FocusNode _inputFocusNode;
   late final FocusNode _cancelButtonFocusNode;
   late final FocusNode _createButtonFocusNode;
 
@@ -895,17 +895,38 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
   @override
   void initState() {
     super.initState();
-    _setupButtonFocusNodes();
+    _setupFocusNodes();
 
-    // Auto-focus input field
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _inputFocusNode.requestFocus();
-      }
-    });
+    // Auto-focus input field for TV
+    if (widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _inputFocusNode.requestFocus();
+        }
+      });
+    }
   }
 
-  void _setupButtonFocusNodes() {
+  void _setupFocusNodes() {
+    _inputFocusNode = FocusNode(
+      debugLabel: 'folder-name-input',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        // DPAD Down: Move to Create button
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          _createButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // Enter/Select: Submit the form
+        if (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.select) {
+          _validateAndSubmit();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
     _cancelButtonFocusNode = FocusNode(
       debugLabel: 'cancel-btn',
       onKeyEvent: (node, event) {
@@ -981,13 +1002,19 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
     final screenSize = MediaQuery.of(context).size;
     final screenWidth = screenSize.width;
 
-    return Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
-      },
-      child: Dialog(
+    return FocusScope(
+      autofocus: true,
+      child: Shortcuts(
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(TraversalDirection.down),
+          SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(TraversalDirection.up),
+          SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(TraversalDirection.left),
+          SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(TraversalDirection.right),
+          SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+        },
+        child: Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         child: ConstrainedBox(
           constraints: BoxConstraints(
@@ -1048,55 +1075,35 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
               const SizedBox(height: 16),
 
               // Input field
-              Focus(
+              TextField(
+                controller: _controller,
                 focusNode: _inputFocusNode,
-                onKeyEvent: (node, event) {
-                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                  // DPAD Down: Move to Create button
-                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                    _createButtonFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-
-                  // Enter when input is focused: Submit
-                  if (event.logicalKey == LogicalKeyboardKey.enter ||
-                      event.logicalKey == LogicalKeyboardKey.select) {
-                    _validateAndSubmit();
-                    return KeyEventResult.handled;
-                  }
-
-                  return KeyEventResult.ignored;
-                },
-                child: TextField(
-                  controller: _controller,
-                  autofocus: !widget.isTelevision,
-                  decoration: InputDecoration(
-                    labelText: 'Folder Name',
-                    hintText: 'Enter folder name',
-                    errorText: _errorMessage.isEmpty ? null : _errorMessage,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 2,
-                      ),
-                    ),
-                    prefixIcon: const Icon(Icons.drive_file_rename_outline),
+                autofocus: !widget.isTelevision,
+                decoration: InputDecoration(
+                  labelText: 'Folder Name',
+                  hintText: 'Enter folder name',
+                  errorText: _errorMessage.isEmpty ? null : _errorMessage,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  onChanged: (value) {
-                    // Clear error when user types
-                    if (_errorMessage.isNotEmpty) {
-                      setState(() {
-                        _errorMessage = '';
-                      });
-                    }
-                  },
-                  onSubmitted: (_) => _validateAndSubmit(),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2,
+                    ),
+                  ),
+                  prefixIcon: const Icon(Icons.drive_file_rename_outline),
                 ),
+                onChanged: (value) {
+                  // Clear error when user types
+                  if (_errorMessage.isNotEmpty) {
+                    setState(() {
+                      _errorMessage = '';
+                    });
+                  }
+                },
+                onSubmitted: (_) => _validateAndSubmit(),
               ),
               const SizedBox(height: 20),
 
@@ -1121,6 +1128,7 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
             ],
           ),
         ),
+      ),
       ),
       ),
     );
