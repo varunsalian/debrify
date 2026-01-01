@@ -48,9 +48,71 @@ class TorrentSearchScreen extends StatefulWidget {
   State<TorrentSearchScreen> createState() => _TorrentSearchScreenState();
 }
 
+/// Preserves search state when navigating away (e.g., to view torrent in debrid tab)
+/// This allows seamless return to the search screen with results intact
+class _TorrentSearchPreservedState {
+  String? searchQuery;
+  SearchMode? searchMode;
+  ImdbTitleResult? selectedImdbTitle;
+  bool? isSeries;
+  List<Torrent>? allTorrents;
+  List<Torrent>? torrents;
+  bool? hasSearched;
+  Map<String, bool>? engineStates;
+  Map<String, int>? engineCounts;
+  Map<String, String>? engineErrors;
+  String? selectedEngineFilter;
+  String? sortBy;
+  bool? sortAscending;
+  TorrentFilterState? filters;
+  String? seasonText;
+  String? episodeText;
+  List<int>? availableSeasons;
+  int? selectedSeason;
+  bool? seriesControlsExpanded;
+  bool? imdbControlsCollapsed;
+  Map<String, bool>? torboxCacheStatus;
+  Map<String, _TorrentMetadata>? torrentMetadata;
+  bool? showingTorboxCachedOnly;
+  double? scrollOffset;
+
+  bool get hasState => hasSearched == true && (allTorrents?.isNotEmpty ?? false);
+
+  void clear() {
+    searchQuery = null;
+    searchMode = null;
+    selectedImdbTitle = null;
+    isSeries = null;
+    allTorrents = null;
+    torrents = null;
+    hasSearched = null;
+    engineStates = null;
+    engineCounts = null;
+    engineErrors = null;
+    selectedEngineFilter = null;
+    sortBy = null;
+    sortAscending = null;
+    filters = null;
+    seasonText = null;
+    episodeText = null;
+    availableSeasons = null;
+    selectedSeason = null;
+    seriesControlsExpanded = null;
+    imdbControlsCollapsed = null;
+    torboxCacheStatus = null;
+    torrentMetadata = null;
+    showingTorboxCachedOnly = null;
+    scrollOffset = null;
+  }
+}
+
+/// Static preserved state instance
+final _preservedState = _TorrentSearchPreservedState();
+
 class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _resultsScrollController = ScrollController();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _providerAccordionFocusNode = FocusNode();
   final FocusNode _advancedButtonFocusNode = FocusNode();
@@ -101,6 +163,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _showingTorboxCachedOnly = false;
   bool _isTelevision = false;
   bool _isBulkAdding = false;
+  double? _pendingScrollOffset; // Scroll offset to restore after list is built
+  double _lastKnownScrollOffset = 0.0; // Track scroll position continuously
   final List<FocusNode> _cardFocusNodes = [];
   int _focusedCardIndex = -1; // -1 means no card is focused
 
@@ -197,6 +261,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Exception: DropdownButton doesn't have onFocusChange, so we use a listener
     _sortDropdownFocusNode.addListener(_onSortDropdownFocusChange);
 
+    // Track scroll position continuously so we can preserve it on dispose
+    _resultsScrollController.addListener(_onScrollChanged);
+
     _listAnimationController.forward();
     _loadDefaultSettings();
     _detectTelevision();
@@ -209,6 +276,48 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _torboxCacheCheckEnabled = enabled;
       });
     });
+
+    // Restore preserved state if available (returning from debrid folder view)
+    _restorePreservedState();
+  }
+
+  /// Restores search state if navigating back from debrid folder view
+  void _restorePreservedState() {
+    if (!_preservedState.hasState) return;
+
+    // Restore all preserved state
+    _searchController.text = _preservedState.searchQuery ?? '';
+    _searchMode = _preservedState.searchMode ?? SearchMode.keyword;
+    _selectedImdbTitle = _preservedState.selectedImdbTitle;
+    _isSeries = _preservedState.isSeries ?? false;
+    _allTorrents = _preservedState.allTorrents ?? [];
+    _torrents = _preservedState.torrents ?? [];
+    _hasSearched = _preservedState.hasSearched ?? false;
+    _engineStates = _preservedState.engineStates ?? {};
+    _engineCounts = _preservedState.engineCounts ?? {};
+    _engineErrors = _preservedState.engineErrors ?? {};
+    _selectedEngineFilter = _preservedState.selectedEngineFilter;
+    _sortBy = _preservedState.sortBy ?? 'relevance';
+    _sortAscending = _preservedState.sortAscending ?? false;
+    _filters = _preservedState.filters ?? const TorrentFilterState.empty();
+    _seasonController.text = _preservedState.seasonText ?? '';
+    _episodeController.text = _preservedState.episodeText ?? '';
+    _availableSeasons = _preservedState.availableSeasons;
+    _selectedSeason = _preservedState.selectedSeason;
+    _seriesControlsExpanded = _preservedState.seriesControlsExpanded ?? false;
+    _imdbControlsCollapsed = _preservedState.imdbControlsCollapsed ?? false;
+    _torboxCacheStatus = _preservedState.torboxCacheStatus;
+    _torrentMetadata = _preservedState.torrentMetadata ?? {};
+    _showingTorboxCachedOnly = _preservedState.showingTorboxCachedOnly ?? false;
+
+    // Ensure focus nodes are created for restored torrents
+    _ensureFocusNodes();
+
+    // Store scroll offset to restore after build completes
+    _pendingScrollOffset = _preservedState.scrollOffset;
+
+    // Clear preserved state after restoration (one-time use)
+    _preservedState.clear();
   }
 
   Future<void> _detectTelevision() async {
@@ -224,6 +333,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _sortDropdownFocused.value = _sortDropdownFocusNode.hasFocus;
     if (_sortDropdownFocusNode.hasFocus && _isTelevision) {
       _scrollToFocusNode(_sortDropdownFocusNode);
+    }
+  }
+
+  void _onScrollChanged() {
+    if (_resultsScrollController.hasClients) {
+      _lastKnownScrollOffset = _resultsScrollController.offset;
     }
   }
 
@@ -579,8 +694,37 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   @override
   void dispose() {
+    // Preserve state before disposing (for seamless return after viewing debrid folder)
+    _preservedState.searchQuery = _searchController.text;
+    _preservedState.searchMode = _searchMode;
+    _preservedState.selectedImdbTitle = _selectedImdbTitle;
+    _preservedState.isSeries = _isSeries;
+    _preservedState.allTorrents = List.from(_allTorrents);
+    _preservedState.torrents = List.from(_torrents);
+    _preservedState.hasSearched = _hasSearched;
+    _preservedState.engineStates = Map.from(_engineStates);
+    _preservedState.engineCounts = Map.from(_engineCounts);
+    _preservedState.engineErrors = Map.from(_engineErrors);
+    _preservedState.selectedEngineFilter = _selectedEngineFilter;
+    _preservedState.sortBy = _sortBy;
+    _preservedState.sortAscending = _sortAscending;
+    _preservedState.filters = _filters;
+    _preservedState.seasonText = _seasonController.text;
+    _preservedState.episodeText = _episodeController.text;
+    _preservedState.availableSeasons = _availableSeasons != null ? List.from(_availableSeasons!) : null;
+    _preservedState.selectedSeason = _selectedSeason;
+    _preservedState.seriesControlsExpanded = _seriesControlsExpanded;
+    _preservedState.imdbControlsCollapsed = _imdbControlsCollapsed;
+    _preservedState.torboxCacheStatus = _torboxCacheStatus != null ? Map.from(_torboxCacheStatus!) : null;
+    _preservedState.torrentMetadata = Map.from(_torrentMetadata);
+    _preservedState.showingTorboxCachedOnly = _showingTorboxCachedOnly;
+    // Use last known offset since controller may not have clients during dispose
+    _preservedState.scrollOffset = _lastKnownScrollOffset;
+
     _sortDropdownFocusNode.removeListener(_onSortDropdownFocusChange);
+    _resultsScrollController.removeListener(_onScrollChanged);
     _searchController.dispose();
+    _resultsScrollController.dispose();
     _searchFocusNode.dispose();
     _providerAccordionFocusNode.dispose();
     _advancedButtonFocusNode.dispose();
@@ -8907,7 +9051,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     final bool showCachedOnlyBanner = _showingTorboxCachedOnly;
                     final int metadataRows = showCachedOnlyBanner ? 3 : 2;
 
+                    // Restore scroll position if pending
+                    if (_pendingScrollOffset != null) {
+                      final offset = _pendingScrollOffset!;
+                      _pendingScrollOffset = null;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted && _resultsScrollController.hasClients) {
+                          final maxScroll = _resultsScrollController.position.maxScrollExtent;
+                          final targetOffset = offset > maxScroll ? maxScroll : offset;
+                          if (targetOffset > 0) {
+                            _resultsScrollController.jumpTo(targetOffset);
+                          }
+                        }
+                      });
+                    }
+
                     return ListView.builder(
+                      controller: _resultsScrollController,
                       padding: const EdgeInsets.only(bottom: 16),
                       itemCount: _torrents.length + metadataRows,
                       itemBuilder: (context, index) {
