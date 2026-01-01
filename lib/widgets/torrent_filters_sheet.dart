@@ -15,19 +15,23 @@ class TorrentFiltersSheet extends StatefulWidget {
 class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
   late Set<QualityTier> _selectedQualities;
   late Set<RipSourceCategory> _selectedSources;
+  late Set<AudioLanguage> _selectedLanguages;
   final FocusNode _clearButtonFocusNode = FocusNode();
   final FocusNode _closeButtonFocusNode = FocusNode();
   final FocusNode _applyButtonFocusNode = FocusNode();
   final List<FocusNode> _qualityChipFocusNodes = [];
   final List<FocusNode> _ripChipFocusNodes = [];
+  final List<FocusNode> _languageChipFocusNodes = [];
   final List<bool> _qualityChipFocusStates = [];
   final List<bool> _ripChipFocusStates = [];
+  final List<bool> _languageChipFocusStates = [];
 
   @override
   void initState() {
     super.initState();
     _selectedQualities = widget.initialState.qualities.toSet();
     _selectedSources = widget.initialState.ripSources.toSet();
+    _selectedLanguages = widget.initialState.languages.toSet();
 
     // Create focus nodes for quality chips
     for (int i = 0; i < _qualityOptions.length; i++) {
@@ -57,6 +61,20 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       _ripChipFocusStates.add(false);
     }
 
+    // Create focus nodes for language chips
+    for (int i = 0; i < _languageOptions.length; i++) {
+      final node = FocusNode(debugLabel: 'language-chip-$i');
+      node.addListener(() {
+        if (mounted) {
+          setState(() {
+            _languageChipFocusStates[i] = node.hasFocus;
+          });
+        }
+      });
+      _languageChipFocusNodes.add(node);
+      _languageChipFocusStates.add(false);
+    }
+
     // Auto-focus first quality chip after sheet is fully built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _qualityChipFocusNodes.isNotEmpty) {
@@ -74,6 +92,9 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       node.dispose();
     }
     for (final node in _ripChipFocusNodes) {
+      node.dispose();
+    }
+    for (final node in _languageChipFocusNodes) {
       node.dispose();
     }
     super.dispose();
@@ -95,10 +116,19 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
     });
   }
 
+  void _toggleLanguage(AudioLanguage language) {
+    setState(() {
+      if (!_selectedLanguages.add(language)) {
+        _selectedLanguages.remove(language);
+      }
+    });
+  }
+
   void _clearAll() {
     setState(() {
       _selectedQualities.clear();
       _selectedSources.clear();
+      _selectedLanguages.clear();
     });
   }
 
@@ -107,6 +137,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
       TorrentFilterState(
         qualities: _selectedQualities.toSet(),
         ripSources: _selectedSources.toSet(),
+        languages: _selectedLanguages.toSet(),
       ),
     );
   }
@@ -149,7 +180,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                               (event.logicalKey == LogicalKeyboardKey.select ||
                                   event.logicalKey == LogicalKeyboardKey.enter ||
                                   event.logicalKey == LogicalKeyboardKey.space)) {
-                            if (_selectedQualities.isNotEmpty || _selectedSources.isNotEmpty) {
+                            if (_selectedQualities.isNotEmpty || _selectedSources.isNotEmpty || _selectedLanguages.isNotEmpty) {
                               _clearAll();
                               return KeyEventResult.handled;
                             }
@@ -159,7 +190,8 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                         child: TextButton(
                           onPressed:
                               _selectedQualities.isEmpty &&
-                                  _selectedSources.isEmpty
+                                  _selectedSources.isEmpty &&
+                                  _selectedLanguages.isEmpty
                               ? null
                               : _clearAll,
                           child: const Text('Clear'),
@@ -326,6 +358,62 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                             )
                             .toList(),
                       ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Language',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _languageOptions
+                            .asMap()
+                            .entries
+                            .map(
+                              (entry) {
+                                final index = entry.key;
+                                final option = entry.value;
+                                final isFocused = _languageChipFocusStates[index];
+                                return Focus(
+                                  focusNode: _languageChipFocusNodes[index],
+                                  onKeyEvent: (node, event) {
+                                    if (event is KeyDownEvent &&
+                                        (event.logicalKey == LogicalKeyboardKey.select ||
+                                            event.logicalKey == LogicalKeyboardKey.enter ||
+                                            event.logicalKey == LogicalKeyboardKey.space)) {
+                                      _toggleLanguage(option.value);
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: isFocused
+                                          ? Border.all(
+                                              color: const Color(0xFF3B82F6),
+                                              width: 2,
+                                            )
+                                          : null,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: FilterChip(
+                                      label: Text(option.title),
+                                      selected: _selectedLanguages.contains(
+                                        option.value,
+                                      ),
+                                      onSelected: (_) => _toggleLanguage(option.value),
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                            .toList(),
+                      ),
                     ],
                   ),
                 ),
@@ -402,4 +490,27 @@ const _ripOptions = <_ChipOption<RipSourceCategory>>[
   _ChipOption(RipSourceCategory.dvdrip, 'DVDRip', 'DVD sources, SD rips'),
   _ChipOption(RipSourceCategory.cam, 'CAM / TS', 'CAM, HDCAM, telesync'),
   _ChipOption(RipSourceCategory.other, 'Other', 'Unclassified / scene'),
+];
+
+class _LanguageOption {
+  final AudioLanguage value;
+  final String title;
+
+  const _LanguageOption(this.value, this.title);
+}
+
+const _languageOptions = <_LanguageOption>[
+  _LanguageOption(AudioLanguage.english, 'English'),
+  _LanguageOption(AudioLanguage.hindi, 'Hindi'),
+  _LanguageOption(AudioLanguage.spanish, 'Spanish'),
+  _LanguageOption(AudioLanguage.french, 'French'),
+  _LanguageOption(AudioLanguage.german, 'German'),
+  _LanguageOption(AudioLanguage.russian, 'Russian'),
+  _LanguageOption(AudioLanguage.chinese, 'Chinese'),
+  _LanguageOption(AudioLanguage.japanese, 'Japanese'),
+  _LanguageOption(AudioLanguage.korean, 'Korean'),
+  _LanguageOption(AudioLanguage.italian, 'Italian'),
+  _LanguageOption(AudioLanguage.portuguese, 'Portuguese'),
+  _LanguageOption(AudioLanguage.arabic, 'Arabic'),
+  _LanguageOption(AudioLanguage.multiAudio, 'Multi-Audio'),
 ];

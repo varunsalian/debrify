@@ -2777,6 +2777,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               return false;
             }
           }
+          if (activeFilters.languages.isNotEmpty) {
+            final lang = info?.audioLanguage;
+            if (lang == null || !activeFilters.languages.contains(lang)) {
+              return false;
+            }
+          }
           return true;
         })
         .toList(growable: false);
@@ -2801,6 +2807,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         seriesInfo: info,
         qualityTier: _detectQualityTier(info.quality, torrent.name),
         ripSource: _detectRipSource(torrent.name),
+        audioLanguage: _detectAudioLanguage(torrent.name),
       );
     }
     return map;
@@ -2858,6 +2865,61 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return RipSourceCategory.other;
   }
 
+  AudioLanguage? _detectAudioLanguage(String rawName) {
+    final lower = rawName.toLowerCase();
+    // Multi-audio detection first (takes priority)
+    if (_matchesAny(lower, [
+      'multi-audio',
+      'multi audio',
+      'multiaudio',
+      'dual-audio',
+      'dual audio',
+      'dualaudio',
+      'multi-lang',
+      'multilang',
+    ])) {
+      return AudioLanguage.multiAudio;
+    }
+    // Individual language detection
+    if (RegExp(r'\b(hindi|hin)\b').hasMatch(lower)) {
+      return AudioLanguage.hindi;
+    }
+    if (RegExp(r'\b(spanish|spa|esp|latino|castellano)\b').hasMatch(lower)) {
+      return AudioLanguage.spanish;
+    }
+    if (RegExp(r'\b(french|fra|fre|vf|vff|vfq)\b').hasMatch(lower)) {
+      return AudioLanguage.french;
+    }
+    if (RegExp(r'\b(german|ger|deu|german\.dts)\b').hasMatch(lower)) {
+      return AudioLanguage.german;
+    }
+    if (RegExp(r'\b(russian|rus)\b').hasMatch(lower)) {
+      return AudioLanguage.russian;
+    }
+    if (RegExp(r'\b(chinese|chi|chs|cht|mandarin|cantonese)\b').hasMatch(lower)) {
+      return AudioLanguage.chinese;
+    }
+    if (RegExp(r'\b(japanese|jap|jpn)\b').hasMatch(lower)) {
+      return AudioLanguage.japanese;
+    }
+    if (RegExp(r'\b(korean|kor)\b').hasMatch(lower)) {
+      return AudioLanguage.korean;
+    }
+    if (RegExp(r'\b(italian|ita)\b').hasMatch(lower)) {
+      return AudioLanguage.italian;
+    }
+    if (RegExp(r'\b(portuguese|por|pt-br)\b').hasMatch(lower)) {
+      return AudioLanguage.portuguese;
+    }
+    if (RegExp(r'\b(arabic|ara)\b').hasMatch(lower)) {
+      return AudioLanguage.arabic;
+    }
+    if (RegExp(r'\b(english|eng)\b').hasMatch(lower)) {
+      return AudioLanguage.english;
+    }
+    return null; // Unknown/not specified
+  }
+
   bool _matchesAny(String source, List<String> needles) {
     for (final needle in needles) {
       if (source.contains(needle)) {
@@ -2908,6 +2970,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     for (final source in _filters.ripSources) {
       badges.add('Source · ${_ripLabel(source)}');
     }
+    for (final lang in _filters.languages) {
+      badges.add('Language · ${_languageLabel(lang)}');
+    }
     return badges;
   }
 
@@ -2938,6 +3003,37 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'CAM / TS';
       case RipSourceCategory.other:
         return 'Other';
+    }
+  }
+
+  String _languageLabel(AudioLanguage language) {
+    switch (language) {
+      case AudioLanguage.english:
+        return 'English';
+      case AudioLanguage.hindi:
+        return 'Hindi';
+      case AudioLanguage.spanish:
+        return 'Spanish';
+      case AudioLanguage.french:
+        return 'French';
+      case AudioLanguage.german:
+        return 'German';
+      case AudioLanguage.russian:
+        return 'Russian';
+      case AudioLanguage.chinese:
+        return 'Chinese';
+      case AudioLanguage.japanese:
+        return 'Japanese';
+      case AudioLanguage.korean:
+        return 'Korean';
+      case AudioLanguage.italian:
+        return 'Italian';
+      case AudioLanguage.portuguese:
+        return 'Portuguese';
+      case AudioLanguage.arabic:
+        return 'Arabic';
+      case AudioLanguage.multiAudio:
+        return 'Multi-Audio';
     }
   }
 
@@ -10835,11 +10931,13 @@ class _TorrentMetadata {
   final SeriesInfo seriesInfo;
   final QualityTier? qualityTier;
   final RipSourceCategory ripSource;
+  final AudioLanguage? audioLanguage;
 
   const _TorrentMetadata({
     required this.seriesInfo,
     this.qualityTier,
     RipSourceCategory? ripSource,
+    this.audioLanguage,
   }) : ripSource = ripSource ?? RipSourceCategory.other;
 }
 
