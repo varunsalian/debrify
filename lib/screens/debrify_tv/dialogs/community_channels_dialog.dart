@@ -200,12 +200,15 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
       }
     });
 
-    // Restore focus to the specific channel that was focused
+    // If all selected, move focus to Import button; otherwise restore previous focus
     if (widget.isAndroidTv && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
 
-        if (focusedChannelId != null) {
+        if (_selectAll) {
+          // All channels selected - move focus to Import button
+          _safeRequestFocus(_importButtonFocusNode);
+        } else if (focusedChannelId != null) {
           final node = _channelFocusNodes[focusedChannelId];
           _safeRequestFocus(node);
         } else {
@@ -395,6 +398,13 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
           } else {
             _cancelButtonFocusNode.requestFocus();
           }
+          return KeyEventResult.handled;
+        }
+
+        // Navigate to Import button with left/right arrows
+        if (key == LogicalKeyboardKey.arrowLeft ||
+            key == LogicalKeyboardKey.arrowRight) {
+          _importButtonFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
 
