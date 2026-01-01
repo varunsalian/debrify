@@ -50,22 +50,89 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
   bool _isTelevision = false;
   final List<FocusNode> _folderFocusNodes = [];
   final List<ValueNotifier<bool>> _folderFocusStates = [];
-  final FocusNode _cancelButtonFocusNode = FocusNode(
-    debugLabel: 'cancel-button',
-  );
-  final FocusNode _confirmButtonFocusNode = FocusNode(
-    debugLabel: 'confirm-button',
-  );
-  final FocusNode _closeButtonFocusNode = FocusNode(debugLabel: 'close-button');
-  final FocusNode _newFolderButtonFocusNode = FocusNode(
-    debugLabel: 'new-folder-button',
-  );
+  late final FocusNode _cancelButtonFocusNode;
+  late final FocusNode _confirmButtonFocusNode;
+  late final FocusNode _closeButtonFocusNode;
+  late final FocusNode _newFolderButtonFocusNode;
 
   @override
   void initState() {
     super.initState();
+    _setupButtonFocusNodes();
     _detectTelevision();
     _loadRootFolders();
+  }
+
+  void _setupButtonFocusNodes() {
+    _closeButtonFocusNode = FocusNode(debugLabel: 'close-button');
+
+    _newFolderButtonFocusNode = FocusNode(
+      debugLabel: 'new-folder-button',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        // DPAD Right: Move to Cancel button
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _cancelButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // DPAD Up: Move to last folder item
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          final flatFolders = _getFlattenedFolders();
+          if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
+            _folderFocusNodes[flatFolders.length - 1].requestFocus();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
+    _cancelButtonFocusNode = FocusNode(
+      debugLabel: 'cancel-button',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        // DPAD Left: Move to New Folder button
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _newFolderButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // DPAD Right: Move to Confirm button
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _confirmButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // DPAD Up: Move to last folder item
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          final flatFolders = _getFlattenedFolders();
+          if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
+            _folderFocusNodes[flatFolders.length - 1].requestFocus();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
+    _confirmButtonFocusNode = FocusNode(
+      debugLabel: 'confirm-button',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        // DPAD Left: Move to Cancel button
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _cancelButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // DPAD Up: Move to last folder item
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          final flatFolders = _getFlattenedFolders();
+          if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
+            _folderFocusNodes[flatFolders.length - 1].requestFocus();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+    );
   }
 
   Future<void> _detectTelevision() async {
@@ -399,6 +466,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
       autofocus: true,
       child: Focus(
         autofocus: _isTelevision,
+        skipTraversal: true, // Prevent this from being a focus target
         descendantsAreFocusable: true,
         child: FocusTraversalGroup(
           policy: WidgetOrderTraversalPolicy(),
@@ -451,14 +519,12 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
                         ),
                         FocusTraversalOrder(
                           order: const NumericFocusOrder(0),
-                          child: Focus(
+                          child: IconButton(
                             focusNode: _closeButtonFocusNode,
-                            child: IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
                           ),
                         ),
                       ],
@@ -547,37 +613,15 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
                         // New Folder button on the left
                         FocusTraversalOrder(
                           order: const NumericFocusOrder(1000),
-                          child: Focus(
+                          child: FilledButton.tonalIcon(
                             focusNode: _newFolderButtonFocusNode,
-                            onKeyEvent: (node, event) {
-                              if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                              // DPAD Right: Move to Cancel button
-                              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                                _cancelButtonFocusNode.requestFocus();
-                                return KeyEventResult.handled;
-                              }
-
-                              // DPAD Up: Move to last folder item
-                              if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                final flatFolders = _getFlattenedFolders();
-                                if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
-                                  _folderFocusNodes[flatFolders.length - 1].requestFocus();
-                                  return KeyEventResult.handled;
-                                }
-                              }
-
-                              return KeyEventResult.ignored;
-                            },
-                            child: FilledButton.tonalIcon(
-                              onPressed: _showNewFolderDialog,
-                              icon: const Icon(Icons.create_new_folder, size: 18),
-                              label: const Text('New Folder'),
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
+                            onPressed: _showNewFolderDialog,
+                            icon: const Icon(Icons.create_new_folder, size: 18),
+                            label: const Text('New Folder'),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
                               ),
                             ),
                           ),
@@ -589,78 +633,28 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
                           children: [
                             FocusTraversalOrder(
                               order: const NumericFocusOrder(1001),
-                              child: Focus(
+                              child: TextButton(
                                 focusNode: _cancelButtonFocusNode,
-                                onKeyEvent: (node, event) {
-                                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                                  // DPAD Left: Move to New Folder button
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                                    _newFolderButtonFocusNode.requestFocus();
-                                    return KeyEventResult.handled;
-                                  }
-
-                                  // DPAD Right: Move to Confirm button
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                                    _confirmButtonFocusNode.requestFocus();
-                                    return KeyEventResult.handled;
-                                  }
-
-                                  // DPAD Up: Move to last folder item
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                    final flatFolders = _getFlattenedFolders();
-                                    if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
-                                      _folderFocusNodes[flatFolders.length - 1].requestFocus();
-                                      return KeyEventResult.handled;
-                                    }
-                                  }
-
-                                  return KeyEventResult.ignored;
-                                },
-                                child: TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Cancel'),
-                                ),
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Cancel'),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Flexible(
                               child: FocusTraversalOrder(
                                 order: const NumericFocusOrder(1002),
-                                child: Focus(
+                                child: FilledButton.icon(
                                   focusNode: _confirmButtonFocusNode,
-                                  onKeyEvent: (node, event) {
-                                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                                    // DPAD Left: Move to Cancel button
-                                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                                      _cancelButtonFocusNode.requestFocus();
-                                      return KeyEventResult.handled;
-                                    }
-
-                                    // DPAD Up: Move to last folder item
-                                    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                      final flatFolders = _getFlattenedFolders();
-                                      if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
-                                        _folderFocusNodes[flatFolders.length - 1].requestFocus();
-                                        return KeyEventResult.handled;
-                                      }
-                                    }
-
-                                    return KeyEventResult.ignored;
-                                  },
-                                  child: FilledButton.icon(
-                                    onPressed: _selectedFolderId != null
-                                        ? () {
-                                            Navigator.pop(context, {
-                                              'folderId': _selectedFolderId,
-                                              'folderName': _selectedFolderName,
-                                            });
-                                          }
-                                        : null,
-                                    icon: const Icon(Icons.check, size: 18),
-                                    label: const Text('Select'),
-                                  ),
+                                  onPressed: _selectedFolderId != null
+                                      ? () {
+                                          Navigator.pop(context, {
+                                            'folderId': _selectedFolderId,
+                                            'folderName': _selectedFolderName,
+                                          });
+                                        }
+                                      : null,
+                                  icon: const Icon(Icons.check, size: 18),
+                                  label: const Text('Select'),
                                 ),
                               ),
                             ),
@@ -687,8 +681,10 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
     final isSelected = _selectedFolderId == folder.id;
     final canExpand = !folder.hasLoadedChildren || folder.children.isNotEmpty;
 
-    final itemWidget = InkWell(
+    // Use GestureDetector instead of InkWell to avoid focus conflicts on TV
+    final itemWidget = GestureDetector(
       onTap: () => _selectFolder(folder.id, folder.name),
+      behavior: HitTestBehavior.opaque,
       child: Container(
         padding: EdgeInsets.only(
           left: 8.0 + (folder.level * 24.0),
@@ -698,15 +694,16 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
         ),
         child: Row(
           children: [
-            // Expand/collapse icon
+            // Expand/collapse icon - use GestureDetector instead of IconButton for TV
             SizedBox(
               width: 24,
               height: 24,
               child: canExpand
-                  ? IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      icon: folder.isLoading
+                  ? GestureDetector(
+                      onTap: folder.isLoading
+                          ? null
+                          : () => _loadFolderChildren(folder),
+                      child: folder.isLoading
                           ? const SizedBox(
                               width: 16,
                               height: 16,
@@ -718,21 +715,20 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
                                   : Icons.chevron_right,
                               size: 20,
                             ),
-                      onPressed: folder.isLoading
-                          ? null
-                          : () => _loadFolderChildren(folder),
                     )
                   : null,
             ),
             const SizedBox(width: 8),
 
-            // Radio button
-            Radio<String>(
-              value: folder.id,
-              groupValue: _selectedFolderId,
-              onChanged: (value) => _selectFolder(folder.id, folder.name),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
+            // Radio indicator (visual only, not focusable)
+            ExcludeFocus(
+              child: Radio<String>(
+                value: folder.id,
+                groupValue: _selectedFolderId,
+                onChanged: (_) {}, // Non-null to keep enabled styling
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
             ),
             const SizedBox(width: 8),
 
@@ -891,14 +887,15 @@ class _NewFolderDialog extends StatefulWidget {
 class _NewFolderDialogState extends State<_NewFolderDialog> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _inputFocusNode = FocusNode(debugLabel: 'folder-name-input');
-  final FocusNode _cancelButtonFocusNode = FocusNode(debugLabel: 'cancel-btn');
-  final FocusNode _createButtonFocusNode = FocusNode(debugLabel: 'create-btn');
+  late final FocusNode _cancelButtonFocusNode;
+  late final FocusNode _createButtonFocusNode;
 
   String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
+    _setupButtonFocusNodes();
 
     // Auto-focus input field
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -906,6 +903,44 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
         _inputFocusNode.requestFocus();
       }
     });
+  }
+
+  void _setupButtonFocusNodes() {
+    _cancelButtonFocusNode = FocusNode(
+      debugLabel: 'cancel-btn',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        // DPAD Up: Back to input
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _inputFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // DPAD Right: Move to Create button
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _createButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
+    _createButtonFocusNode = FocusNode(
+      debugLabel: 'create-btn',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        // DPAD Up: Back to input
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _inputFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // DPAD Left: Move to Cancel button
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _cancelButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
   }
 
   @override
@@ -1069,55 +1104,17 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Focus(
+                  TextButton(
                     focusNode: _cancelButtonFocusNode,
-                    onKeyEvent: (node, event) {
-                      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                      // DPAD Up: Back to input
-                      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                        _inputFocusNode.requestFocus();
-                        return KeyEventResult.handled;
-                      }
-
-                      // DPAD Right: Move to Create button
-                      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                        _createButtonFocusNode.requestFocus();
-                        return KeyEventResult.handled;
-                      }
-
-                      return KeyEventResult.ignored;
-                    },
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 12),
-                  Focus(
+                  FilledButton.icon(
                     focusNode: _createButtonFocusNode,
-                    onKeyEvent: (node, event) {
-                      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                      // DPAD Up: Back to input
-                      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                        _inputFocusNode.requestFocus();
-                        return KeyEventResult.handled;
-                      }
-
-                      // DPAD Left: Move to Cancel button
-                      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                        _cancelButtonFocusNode.requestFocus();
-                        return KeyEventResult.handled;
-                      }
-
-                      return KeyEventResult.ignored;
-                    },
-                    child: FilledButton.icon(
-                      onPressed: _validateAndSubmit,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Create'),
-                    ),
+                    onPressed: _validateAndSubmit,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Create'),
                   ),
                 ],
               ),
