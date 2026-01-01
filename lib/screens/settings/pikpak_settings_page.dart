@@ -126,11 +126,6 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) {
-            // Auto-focus the first button when dialog opens for TV navigation
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _folderRestrictionSkipButtonFocusNode.requestFocus();
-            });
-
             return AlertDialog(
               title: Row(
                 children: [
@@ -169,20 +164,17 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                 ],
               ),
               actions: [
-                Focus(
+                TextButton(
                   focusNode: _folderRestrictionSkipButtonFocusNode,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, false),
-                    child: const Text('Skip (Full Access)'),
-                  ),
+                  autofocus: true,
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Skip (Full Access)'),
                 ),
-                Focus(
+                FilledButton.icon(
                   focusNode: _folderRestrictionSelectButtonFocusNode,
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.pop(dialogContext, true),
-                    icon: const Icon(Icons.folder_open, size: 18),
-                    label: const Text('Select Folder'),
-                  ),
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  icon: const Icon(Icons.folder_open, size: 18),
+                  label: const Text('Select Folder'),
                 ),
               ],
             );
