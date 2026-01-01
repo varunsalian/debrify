@@ -265,6 +265,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _prefetchStopRequested = true;
     _stopPrefetch();
+    // Clean up dialog state to avoid dangling context references
+    _progressSheetContext = null;
+    _progressOpen = false;
     _progress.dispose();
     _keywordsController.dispose();
     _channelSearchController.dispose();
@@ -432,28 +435,38 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     BuildContext? dialogContext,
     bool clearQueue = true,
   }) {
+    debugPrint('[MagicTV] _cancelActiveWatch called, dialogContext=$dialogContext, clearQueue=$clearQueue, _watchCancelled=$_watchCancelled');
     if (_watchCancelled) {
+      debugPrint('[MagicTV] _cancelActiveWatch: Already cancelled, just popping dialog');
       if (dialogContext != null) {
         try {
           Navigator.of(dialogContext).pop();
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[MagicTV] _cancelActiveWatch: Error popping dialog: $e');
+        }
       }
       return;
     }
     _watchCancelled = true;
     _prefetchStopRequested = true;
+    debugPrint('[MagicTV] _cancelActiveWatch: Set _watchCancelled=true, stopping prefetch');
     unawaited(_stopPrefetch());
     if (clearQueue) {
+      debugPrint('[MagicTV] _cancelActiveWatch: Clearing queue (had ${_queue.length} items)');
       _queue.clear();
     }
     _progress.value = [];
     if (dialogContext != null) {
+      debugPrint('[MagicTV] _cancelActiveWatch: Popping dialog via dialogContext');
       try {
         Navigator.of(dialogContext).pop();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[MagicTV] _cancelActiveWatch: Error popping dialog: $e');
+      }
       _progressOpen = false;
       _progressSheetContext = null;
     } else if (_progressOpen) {
+      debugPrint('[MagicTV] _cancelActiveWatch: No dialogContext, calling _closeProgressDialog');
       _closeProgressDialog();
     }
     if (mounted) {
@@ -462,6 +475,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _status = '';
       });
     }
+    debugPrint('[MagicTV] _cancelActiveWatch: Done');
   }
 
   String _determineDefaultProvider(
@@ -6634,11 +6648,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   void _showCachedPlaybackDialog() {
+    debugPrint('[MagicTV] _showCachedPlaybackDialog called, _progressOpen=$_progressOpen, mounted=$mounted, _watchCancelled=$_watchCancelled');
     if (_progressOpen || !mounted) {
       return;
     }
 
-    // Skip showing dialog during auto-launch (overlay handles loading UI)
+    // Reset cancellation flag for new playback session.
+    // This must happen before the auto-launch check so that playback can proceed
+    // even when the dialog is skipped (auto-launch has its own overlay UI).
+    _watchCancelled = false;
+    debugPrint('[MagicTV] _showCachedPlaybackDialog: Reset _watchCancelled to false');
+
+    // Skip showing dialog during auto-launch (overlay handles loading UI).
+    // Note: _watchCancelled is already reset above, so playback will proceed normally.
     if (MainPage.isAutoLaunchShowingOverlay) {
       debugPrint(
         'DebrifyTVScreen: Skipping progress dialog during auto-launch',
@@ -6658,9 +6680,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         barrierDismissible: false,
         transitionDuration: const Duration(milliseconds: 260),
         pageBuilder: (ctx, _, __) {
+          // Use pageBuilder context directly - simpler and avoids race conditions
+          _progressSheetContext = ctx;
           return CachedLoadingDialog(
-            onReady: (dialogCtx) {
-              _progressSheetContext = dialogCtx;
+            onCancel: () {
+              debugPrint('[MagicTV] onCancel callback triggered');
+              _cancelActiveWatch(dialogContext: ctx);
             },
           );
         },
