@@ -433,6 +433,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _showMissingApiKeySnack('Real Debrid');
         return;
       }
+      MainPageBridge.returnToTorrentSearchOnBack = true;
       setState(() {
         _pages[4] = DebridDownloadsScreen(initialTorrentForOptions: torrent);
       });
@@ -452,6 +453,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _showMissingApiKeySnack('Torbox');
         return;
       }
+      MainPageBridge.returnToTorrentSearchOnBack = true;
       setState(() {
         _pages[5] = TorboxDownloadsScreen(
           initialTorrentToOpen: torboxTorrent,
@@ -472,6 +474,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _showMissingApiKeySnack('PikPak');
         return;
       }
+      MainPageBridge.returnToTorrentSearchOnBack = true;
       setState(() {
         _pages[6] = PikPakFilesScreen(
           initialFolderId: fileId,

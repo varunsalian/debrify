@@ -187,6 +187,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // If came from torrent search "Open in RealDebrid" flow and at torrent root,
+    // go back to torrent search instead of torrents list
+    if (MainPageBridge.returnToTorrentSearchOnBack &&
+        _folderPath.isEmpty &&
+        _currentTorrentId != null) {
+      MainPageBridge.returnToTorrentSearchOnBack = false;
+      MainPageBridge.switchTab?.call(0); // Torrent search is index 0
+      return true;
+    }
     if (_currentTorrentId != null) {
       _navigateUp();
       return true; // We handled the back press
@@ -1814,7 +1823,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         leading: IconButton(
           focusNode: _backButtonFocusNode,
           icon: const Icon(Icons.arrow_back),
-          onPressed: _navigateUp,
+          onPressed: () => _handleBackNavigation(),
         ),
         title: Text(_getCurrentFolderTitle()),
         actions: [

@@ -790,6 +790,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // If came from torrent search "Open in Torbox" flow and at torrent root,
+    // go back to torrent search instead of torrents list
+    if (MainPageBridge.returnToTorrentSearchOnBack &&
+        !_isAtRoot &&
+        _navigationStack.length == 1) {
+      MainPageBridge.returnToTorrentSearchOnBack = false;
+      MainPageBridge.switchTab?.call(0); // Torrent search is index 0
+      return true;
+    }
     if (!_isAtRoot) {
       _navigateUp();
       return true; // We handled the back press
@@ -3993,7 +4002,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       appBar: _isAtRoot ? null : AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: _navigateUp,
+          onPressed: () => _handleBackNavigation(),
           tooltip: 'Back',
         ),
         title: Text(_currentFolderName),

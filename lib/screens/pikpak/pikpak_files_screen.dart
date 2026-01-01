@@ -122,6 +122,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // If came from torrent search "Open in PikPak" flow and at torrent root,
+    // go back to torrent search instead of PikPak root
+    if (MainPageBridge.returnToTorrentSearchOnBack &&
+        !_isInVirtualFolder &&
+        _navigationStack.isEmpty &&
+        _currentFolderId != null) {
+      MainPageBridge.returnToTorrentSearchOnBack = false;
+      MainPageBridge.switchTab?.call(0); // Torrent search is index 0
+      return true;
+    }
     // Check if we can navigate up
     if (_isInVirtualFolder || _navigationStack.isNotEmpty ||
         (_restrictedFolderId != null && _currentFolderId != _restrictedFolderId)) {
@@ -1335,7 +1345,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             ? IconButton(
                 focusNode: _backButtonFocusNode,
                 icon: const Icon(Icons.arrow_back),
-                onPressed: _navigateUpWithVirtual,
+                onPressed: () => _handleBackNavigation(),
                 tooltip: 'Back',
               )
             : null,

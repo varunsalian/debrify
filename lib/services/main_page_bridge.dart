@@ -8,6 +8,10 @@ class MainPageBridge {
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;
+
+  /// Flag to track if user came from torrent search "Open in xxx" flow.
+  /// When true, back navigation should return to torrent search instead of folder navigation.
+  static bool returnToTorrentSearchOnBack = false;
   static Future<void> Function(Map<String, dynamic> result, String torrentName, String apiKey)? handleRealDebridResult;
   static Future<void> Function(TorboxTorrent torrent)? handleTorboxResult;
   static Future<void> Function(String fileId, String fileName)? handlePikPakResult;
