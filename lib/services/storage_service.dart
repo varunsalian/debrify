@@ -138,6 +138,12 @@ class StorageService {
   // Torrent Search History
   static const String _torrentSearchHistoryKey = 'torrent_search_history_v1';
   static const String _torrentSearchHistoryEnabledKey = 'torrent_search_history_enabled';
+
+  // Default Torrent Filter Settings
+  static const String _defaultFilterQualitiesKey = 'default_filter_qualities_v1';
+  static const String _defaultFilterRipSourcesKey = 'default_filter_rip_sources_v1';
+  static const String _defaultFilterLanguagesKey = 'default_filter_languages_v1';
+
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
@@ -2449,6 +2455,43 @@ class StorageService {
   static Future<void> setTorrentSearchHistoryEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_torrentSearchHistoryEnabledKey, enabled);
+  }
+
+  // Default Torrent Filter Settings
+  static Future<List<String>> getDefaultFilterQualities() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_defaultFilterQualitiesKey);
+    if (json == null) return [];
+    return List<String>.from(jsonDecode(json));
+  }
+
+  static Future<void> setDefaultFilterQualities(List<String> qualities) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_defaultFilterQualitiesKey, jsonEncode(qualities));
+  }
+
+  static Future<List<String>> getDefaultFilterRipSources() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_defaultFilterRipSourcesKey);
+    if (json == null) return [];
+    return List<String>.from(jsonDecode(json));
+  }
+
+  static Future<void> setDefaultFilterRipSources(List<String> ripSources) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_defaultFilterRipSourcesKey, jsonEncode(ripSources));
+  }
+
+  static Future<List<String>> getDefaultFilterLanguages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_defaultFilterLanguagesKey);
+    if (json == null) return [];
+    return List<String>.from(jsonDecode(json));
+  }
+
+  static Future<void> setDefaultFilterLanguages(List<String> languages) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_defaultFilterLanguagesKey, jsonEncode(languages));
   }
 }
 

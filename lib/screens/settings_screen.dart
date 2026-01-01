@@ -13,6 +13,7 @@ import 'settings/real_debrid_settings_page.dart';
 import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
+import 'settings/filter_settings_page.dart';
 import 'settings/engine_import_page.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -177,6 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         firstCardFocusNode: _firstCardFocusNode,
       ),
       onOpenTorrentSettings: _openTorrentSettings,
+      onOpenFilterSettings: _openFilterSettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenStartupSettings: _openStartupSettings,
@@ -218,6 +220,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const StartupSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openFilterSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const FilterSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -379,6 +389,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 class _SettingsLayout extends StatelessWidget {
   final _ConnectionsSummary connections;
   final Future<void> Function() onOpenTorrentSettings;
+  final Future<void> Function() onOpenFilterSettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenStartupSettings;
@@ -390,6 +401,7 @@ class _SettingsLayout extends StatelessWidget {
   const _SettingsLayout({
     required this.connections,
     required this.onOpenTorrentSettings,
+    required this.onOpenFilterSettings,
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
     required this.onOpenStartupSettings,
@@ -421,6 +433,12 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Search Settings',
                 subtitle: 'Engines, filters, and sorting',
                 onTap: onOpenTorrentSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.filter_list_rounded,
+                title: 'Filter Settings',
+                subtitle: 'Default quality, source, and language filters',
+                onTap: onOpenFilterSettings,
               ),
               _SettingsTile(
                 icon: Icons.extension_rounded,

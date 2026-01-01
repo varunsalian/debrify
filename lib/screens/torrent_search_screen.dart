@@ -572,6 +572,52 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _searchFocusNode.requestFocus();
       }
     });
+
+    // Load default filters only if no preserved state (not returning from debrid folder)
+    if (!_preservedState.hasState) {
+      await _loadDefaultFilters();
+    }
+  }
+
+  Future<void> _loadDefaultFilters() async {
+    try {
+      final qualities = await StorageService.getDefaultFilterQualities();
+      final sources = await StorageService.getDefaultFilterRipSources();
+      final languages = await StorageService.getDefaultFilterLanguages();
+
+      if (!mounted) return;
+
+      // Convert stored strings back to enums
+      final qualitySet = <QualityTier>{};
+      final sourceSet = <RipSourceCategory>{};
+      final languageSet = <AudioLanguage>{};
+
+      for (final q in qualities) {
+        final tier = QualityTier.values.where((e) => e.name == q).firstOrNull;
+        if (tier != null) qualitySet.add(tier);
+      }
+      for (final s in sources) {
+        final source = RipSourceCategory.values.where((e) => e.name == s).firstOrNull;
+        if (source != null) sourceSet.add(source);
+      }
+      for (final l in languages) {
+        final lang = AudioLanguage.values.where((e) => e.name == l).firstOrNull;
+        if (lang != null) languageSet.add(lang);
+      }
+
+      // Only set if any defaults are configured
+      if (qualitySet.isNotEmpty || sourceSet.isNotEmpty || languageSet.isNotEmpty) {
+        setState(() {
+          _filters = TorrentFilterState(
+            qualities: qualitySet,
+            ripSources: sourceSet,
+            languages: languageSet,
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('TorrentSearchScreen: Failed to load default filters: $e');
+    }
   }
 
   void _ensureEngineFocusNodes() {
