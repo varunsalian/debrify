@@ -120,6 +120,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (widget.isPushedRoute) {
       // Pushed as a route - use pushed route handler
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+      // Set up timeout - if we're still at root after 10 seconds, pop and show error
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted && widget.isPushedRoute && _currentTorrentId == null) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to open torrent. Please try again.'),
+              backgroundColor: Color(0xFFEF4444),
+            ),
+          );
+        }
+      });
     } else {
       // Displayed in a tab
       MainPageBridge.registerTabBackHandler('realdebrid', _handleBackNavigation);
@@ -1765,6 +1777,31 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // When pushed as a route and still at root, show loading state
+    // (we're waiting for navigation into the specific torrent)
+    if (widget.isPushedRoute && _currentTorrentId == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Back',
+          ),
+          title: const Text('Opening torrent...'),
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading torrent files...'),
+            ],
+          ),
+        ),
+      );
+    }
+
     // If in folder browsing mode, show folder view
     if (_currentTorrentId != null) {
       return _buildFolderBrowserScaffold();

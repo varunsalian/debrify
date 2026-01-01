@@ -99,6 +99,18 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Register back navigation handler for folder navigation
     if (widget.isPushedRoute) {
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+      // Set up timeout - if we're still at root after 10 seconds, pop and show error
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted && widget.isPushedRoute && _currentFolderId == null) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to open folder. Please try again.'),
+              backgroundColor: Color(0xFFEF4444),
+            ),
+          );
+        }
+      });
     } else {
       MainPageBridge.registerTabBackHandler('pikpak', _handleBackNavigation);
     }
@@ -1341,6 +1353,31 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // When pushed as a route and still at root, show loading state
+    // (we're waiting for navigation into the specific folder)
+    if (widget.isPushedRoute && _currentFolderId == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Back',
+          ),
+          title: const Text('Opening folder...'),
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading folder contents...'),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (!_pikpakEnabled) {
       return _buildNotEnabled();
     }
