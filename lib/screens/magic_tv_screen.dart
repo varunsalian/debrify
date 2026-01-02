@@ -6875,75 +6875,144 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Top bar with compact action buttons - no title
+          // Use FittedBox on mobile to scale buttons to fit, fixed layout on TV for D-pad
           SizedBox(
             height: 36, // Fixed height for button bar
-            child: Row(
-              children: [
-                // Quick Play button
-                TvCompactButton(
-                  onPressed: _isBusy ? null : _showQuickPlayDialog,
-                  icon: Icons.play_arrow_rounded,
-                  label: 'Quick Play',
-                  backgroundColor: const Color(0xFFE50914),
-                ),
-                const SizedBox(width: 12),
-                // Import button
-                TvCompactButton(
-                  onPressed: _isBusy ? null : _handleImportChannels,
-                  icon: Icons.cloud_download_rounded,
-                  label: 'Import',
-                  backgroundColor: const Color(0xFF2563EB),
-                ),
-                const SizedBox(width: 12),
-                // Add Channel button
-                TvCompactButton(
-                  onPressed: _isBusy ? null : _handleAddChannel,
-                  icon: Icons.add_rounded,
-                  label: 'Add',
-                  backgroundColor: const Color(0xFF10B981),
-                ),
-                const SizedBox(width: 12),
-                // Delete All button
-                TvCompactButton(
-                  onPressed: _isBusy || _channels.isEmpty
-                      ? null
-                      : _handleDeleteAllChannels,
-                  icon: Icons.delete_outline_rounded,
-                  label: 'Delete All',
-                  backgroundColor: Colors.redAccent,
-                ),
-                const Spacer(),
-                // Search button
-                TvCompactButton(
-                  onPressed: () {
-                    setState(() {
-                      _showSearchBar = !_showSearchBar;
-                      if (_showSearchBar) {
-                        // Focus on search field when showing
-                        Future.delayed(const Duration(milliseconds: 100), () {
-                          _channelSearchFocusNode.requestFocus();
-                        });
-                      } else {
-                        // Clear search when hiding
-                        _channelSearchController.clear();
-                        _channelSearchTerm = '';
-                      }
-                    });
-                  },
-                  icon: Icons.search_rounded,
-                  label: null, // Icon only for search
-                  backgroundColor: const Color(0xFF9333EA), // Purple color
-                ),
-                const SizedBox(width: 12),
-                // Settings button
-                TvCompactButton(
-                  onPressed: _showGlobalSettingsDialog,
-                  icon: Icons.settings_rounded,
-                  label: null, // Icon only for settings
-                  backgroundColor: const Color(0xFF64748B), // Slate gray color
-                ),
-              ],
-            ),
+            child: !_isAndroidTv
+                ? FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      children: [
+                        // Quick Play button
+                        TvCompactButton(
+                          onPressed: _isBusy ? null : _showQuickPlayDialog,
+                          icon: Icons.play_arrow_rounded,
+                          label: 'Quick Play',
+                          backgroundColor: const Color(0xFFE50914),
+                        ),
+                        const SizedBox(width: 12),
+                        // Import button
+                        TvCompactButton(
+                          onPressed: _isBusy ? null : _handleImportChannels,
+                          icon: Icons.cloud_download_rounded,
+                          label: 'Import',
+                          backgroundColor: const Color(0xFF2563EB),
+                        ),
+                        const SizedBox(width: 12),
+                        // Add Channel button
+                        TvCompactButton(
+                          onPressed: _isBusy ? null : _handleAddChannel,
+                          icon: Icons.add_rounded,
+                          label: 'Add',
+                          backgroundColor: const Color(0xFF10B981),
+                        ),
+                        const SizedBox(width: 12),
+                        // Delete All button
+                        TvCompactButton(
+                          onPressed: _isBusy || _channels.isEmpty
+                              ? null
+                              : _handleDeleteAllChannels,
+                          icon: Icons.delete_outline_rounded,
+                          label: 'Delete All',
+                          backgroundColor: Colors.redAccent,
+                        ),
+                        const SizedBox(width: 12),
+                        // Search button
+                        TvCompactButton(
+                          onPressed: () {
+                            setState(() {
+                              _showSearchBar = !_showSearchBar;
+                              if (_showSearchBar) {
+                                Future.delayed(const Duration(milliseconds: 100), () {
+                                  _channelSearchFocusNode.requestFocus();
+                                });
+                              } else {
+                                _channelSearchController.clear();
+                                _channelSearchTerm = '';
+                              }
+                            });
+                          },
+                          icon: Icons.search_rounded,
+                          label: null,
+                          backgroundColor: const Color(0xFF9333EA),
+                        ),
+                        const SizedBox(width: 12),
+                        // Settings button
+                        TvCompactButton(
+                          onPressed: _showGlobalSettingsDialog,
+                          icon: Icons.settings_rounded,
+                          label: null,
+                          backgroundColor: const Color(0xFF64748B),
+                        ),
+                      ],
+                    ),
+                  )
+                : Row(
+                    children: [
+                      // Quick Play button
+                      TvCompactButton(
+                        onPressed: _isBusy ? null : _showQuickPlayDialog,
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Quick Play',
+                        backgroundColor: const Color(0xFFE50914),
+                      ),
+                      const SizedBox(width: 12),
+                      // Import button
+                      TvCompactButton(
+                        onPressed: _isBusy ? null : _handleImportChannels,
+                        icon: Icons.cloud_download_rounded,
+                        label: 'Import',
+                        backgroundColor: const Color(0xFF2563EB),
+                      ),
+                      const SizedBox(width: 12),
+                      // Add Channel button
+                      TvCompactButton(
+                        onPressed: _isBusy ? null : _handleAddChannel,
+                        icon: Icons.add_rounded,
+                        label: 'Add',
+                        backgroundColor: const Color(0xFF10B981),
+                      ),
+                      const SizedBox(width: 12),
+                      // Delete All button
+                      TvCompactButton(
+                        onPressed: _isBusy || _channels.isEmpty
+                            ? null
+                            : _handleDeleteAllChannels,
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Delete All',
+                        backgroundColor: Colors.redAccent,
+                      ),
+                      const Spacer(),
+                      // Search button
+                      TvCompactButton(
+                        onPressed: () {
+                          setState(() {
+                            _showSearchBar = !_showSearchBar;
+                            if (_showSearchBar) {
+                              Future.delayed(const Duration(milliseconds: 100), () {
+                                _channelSearchFocusNode.requestFocus();
+                              });
+                            } else {
+                              _channelSearchController.clear();
+                              _channelSearchTerm = '';
+                            }
+                          });
+                        },
+                        icon: Icons.search_rounded,
+                        label: null,
+                        backgroundColor: const Color(0xFF9333EA),
+                      ),
+                      const SizedBox(width: 12),
+                      // Settings button
+                      TvCompactButton(
+                        onPressed: _showGlobalSettingsDialog,
+                        icon: Icons.settings_rounded,
+                        label: null,
+                        backgroundColor: const Color(0xFF64748B),
+                      ),
+                    ],
+                  ),
           ),
           // Search field for TV (only show when toggled)
           if (_showSearchBar) ...[
