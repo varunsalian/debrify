@@ -2996,8 +2996,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     });
 
     try {
-      // Generate simplified YAML for sharing (without cached torrents)
-      final yamlContent = _generateChannelYaml(channel);
+      // Generate YAML for sharing (with cached torrents from DB)
+      final yamlContent = await _generateChannelYaml(channel);
 
       // Encode as magnet link
       final magnetLink = MagnetYamlService.encode(
@@ -3054,13 +3054,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   Text(
                     'Size: ${_formatBytes(estimatedSize)} • '
                     'Compression: ${compressionRatio.toStringAsFixed(1)}x',
-                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    style: const TextStyle(fontSize: 11, color: Colors.white60),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Channel: ${channel.name}\n'
                     'Keywords: ${channel.keywords.length}',
-                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    style: const TextStyle(fontSize: 11, color: Colors.white60),
                   ),
                 ],
               ),
@@ -3098,20 +3098,66 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  String _generateChannelYaml(DebrifyTvChannel channel) {
-    // Generate simplified YAML with just channel config (no cached data)
+  Future<String> _generateChannelYaml(DebrifyTvChannel channel) async {
+    // Generate YAML with channel config and torrent data from cache
     final buffer = StringBuffer();
     buffer.writeln('channel_name: "${channel.name}"');
     buffer.writeln('avoid_nsfw: ${channel.avoidNsfw}');
     buffer.writeln('');
     buffer.writeln('keywords:');
 
+    // Get cached torrents from database (not in-memory cache)
+    final cacheEntry = await DebrifyTvCacheService.getEntry(channel.id);
+    final cachedTorrents = cacheEntry?.torrents ?? <CachedTorrent>[];
     for (final keyword in channel.keywords) {
       buffer.writeln('  $keyword:');
-      buffer.writeln('    torrents: []');
+
+      // Find all torrents that match this keyword (case-insensitive)
+      final keywordLower = keyword.toLowerCase();
+      final matchingTorrents = cachedTorrents
+          .where((t) => t.keywords.contains(keywordLower))
+          .toList();
+
+      // Dedupe by infohash
+      final seen = <String>{};
+      final uniqueTorrents = matchingTorrents.where((t) {
+        if (seen.contains(t.infohash)) return false;
+        seen.add(t.infohash);
+        return true;
+      }).toList();
+
+      if (uniqueTorrents.isEmpty) {
+        buffer.writeln('    torrents: []');
+      } else {
+        buffer.writeln('    torrents:');
+        for (final torrent in uniqueTorrents) {
+          // Output full torrent object for proper import
+          buffer.writeln('      - infohash: ${torrent.infohash}');
+          buffer.writeln('        name: "${_escapeYamlString(torrent.name)}"');
+          buffer.writeln('        size_bytes: ${torrent.sizeBytes}');
+          buffer.writeln('        created_unix: ${torrent.createdUnix}');
+          buffer.writeln('        seeders: ${torrent.seeders}');
+          buffer.writeln('        leechers: ${torrent.leechers}');
+          buffer.writeln('        completed: ${torrent.completed}');
+          buffer.writeln('        scraped_date: ${torrent.scrapedDate}');
+          if (torrent.sources.isNotEmpty) {
+            buffer.writeln('        sources: [${torrent.sources.map((s) => '"$s"').join(', ')}]');
+          }
+        }
+      }
     }
 
     return buffer.toString();
+  }
+
+  String _escapeYamlString(String value) {
+    // Escape special characters for YAML string
+    return value
+        .replaceAll('\\', '\\\\')
+        .replaceAll('"', '\\"')
+        .replaceAll('\n', '\\n')
+        .replaceAll('\r', '\\r')
+        .replaceAll('\t', '\\t');
   }
 
   Future<void> _handleDeleteAllChannels() async {
