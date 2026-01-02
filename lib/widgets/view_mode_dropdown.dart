@@ -14,6 +14,7 @@ class ViewModeDropdown extends StatelessWidget {
   final ValueChanged<FolderViewMode> onModeChanged;
   final FocusNode? focusNode;
   final bool autofocus;
+  final bool showSeriesView;
 
   const ViewModeDropdown({
     super.key,
@@ -21,6 +22,7 @@ class ViewModeDropdown extends StatelessWidget {
     required this.onModeChanged,
     this.focusNode,
     this.autofocus = true,
+    this.showSeriesView = true,
   });
 
   IconData _getIconForMode(FolderViewMode mode) {
@@ -78,7 +80,9 @@ class ViewModeDropdown extends StatelessWidget {
           fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         ),
-        items: FolderViewMode.values.map((mode) {
+        items: FolderViewMode.values
+            .where((mode) => showSeriesView || mode != FolderViewMode.seriesArrange)
+            .map((mode) {
           return DropdownMenuItem(
             value: mode,
             child: Text(_getLabelForMode(mode)),

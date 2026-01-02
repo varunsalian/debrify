@@ -1870,10 +1870,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             value: _FolderViewMode.sortedAZ,
             child: Text('Sort (A-Z)'),
           ),
-          DropdownMenuItem(
-            value: _FolderViewMode.seriesArrange,
-            child: Text('Series View'),
-          ),
         ],
         onChanged: (value) {
           if (value != null) _setViewMode(value);
