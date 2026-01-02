@@ -555,22 +555,36 @@ class VideoPlayerLauncher {
     final provider = entry.provider?.toLowerCase();
     final hasTorboxMetadata =
         entry.torboxTorrentId != null && entry.torboxFileId != null;
+    final hasTorboxWebDownloadMetadata =
+        entry.torboxWebDownloadId != null && entry.torboxFileId != null;
 
-    if (provider == 'torbox' || hasTorboxMetadata) {
+    if (provider == 'torbox' || hasTorboxMetadata || hasTorboxWebDownloadMetadata) {
       final torrentId = entry.torboxTorrentId;
+      final webDownloadId = entry.torboxWebDownloadId;
       final fileId = entry.torboxFileId;
-      if (torrentId == null || fileId == null) {
+      if (fileId == null || (torrentId == null && webDownloadId == null)) {
         throw Exception('Torbox file metadata missing');
       }
       final apiKey = await StorageService.getTorboxApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing Torbox API key');
       }
-      final url = await TorboxService.requestFileDownloadLink(
-        apiKey: apiKey,
-        torrentId: torrentId,
-        fileId: fileId,
-      );
+      String url;
+      if (webDownloadId != null) {
+        // Web download - use web download API
+        url = await TorboxService.requestWebDownloadFileLink(
+          apiKey: apiKey,
+          webId: webDownloadId,
+          fileId: fileId,
+        );
+      } else {
+        // Torrent - use torrent API
+        url = await TorboxService.requestFileDownloadLink(
+          apiKey: apiKey,
+          torrentId: torrentId!,
+          fileId: fileId,
+        );
+      }
       if (url.isEmpty) {
         throw Exception('Torbox returned an empty stream URL');
       }
@@ -1089,6 +1103,7 @@ class _AndroidTvPlaybackPayloadBuilder {
           sizeBytes: entry.sizeBytes,
           provider: entry.provider,
           torboxTorrentId: entry.torboxTorrentId,
+          torboxWebDownloadId: entry.torboxWebDownloadId,
           torboxFileId: entry.torboxFileId,
           pikpakFileId: entry.pikpakFileId,
           rdTorrentId: entry.rdTorrentId,
@@ -1331,7 +1346,11 @@ class _AndroidTvPlaybackPayloadBuilder {
     final provider = entry.provider?.toLowerCase();
     if (provider == 'torbox') {
       final torrentId = entry.torboxTorrentId;
+      final webDownloadId = entry.torboxWebDownloadId;
       final fileId = entry.torboxFileId;
+      if (webDownloadId != null && fileId != null) {
+        return 'torbox_web_${webDownloadId}_$fileId';
+      }
       if (torrentId != null && fileId != null) {
         return 'torbox_${torrentId}_$fileId';
       }

@@ -269,10 +269,13 @@ String _filenameHash(String filename) {
 
 String _resumeIdForEntry(PlaylistEntry entry) {
   final provider = entry.provider?.toLowerCase();
-  if (provider == 'torbox' &&
-      entry.torboxTorrentId != null &&
-      entry.torboxFileId != null) {
-    return 'torbox_${entry.torboxTorrentId}_${entry.torboxFileId}';
+  if (provider == 'torbox') {
+    if (entry.torboxWebDownloadId != null && entry.torboxFileId != null) {
+      return 'torbox_web_${entry.torboxWebDownloadId}_${entry.torboxFileId}';
+    }
+    if (entry.torboxTorrentId != null && entry.torboxFileId != null) {
+      return 'torbox_${entry.torboxTorrentId}_${entry.torboxFileId}';
+    }
   }
   return _filenameHash(entry.title);
 }

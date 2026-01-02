@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/torbox_torrent.dart';
 import '../models/torbox_user.dart';
+import '../models/torbox_web_download.dart';
 
 class TorboxService {
   static const String _baseUrl = 'https://api.torbox.app/v1/api';
@@ -448,6 +449,275 @@ class TorboxService {
       }
     }
     return null;
+  }
+
+  // ==================== WEB DOWNLOAD API METHODS ====================
+
+  /// Fetch web downloads list with pagination
+  static Future<Map<String, dynamic>> getWebDownloads(
+    String apiKey, {
+    int offset = 0,
+    int limit = 50,
+    int? webId,
+  }) async {
+    final queryParameters = <String, String>{
+      'bypass_cache': 'true',
+    };
+    if (webId != null) {
+      queryParameters['id'] = '$webId';
+    } else {
+      queryParameters['offset'] = '$offset';
+      queryParameters['limit'] = '$limit';
+    }
+
+    final uri = Uri.parse('$_baseUrl/webdl/mylist')
+        .replace(queryParameters: queryParameters);
+
+    try {
+      if (webId != null) {
+        debugPrint('TorboxService: Fetching web download id=$webId');
+      } else {
+        debugPrint(
+          'TorboxService: Fetching web downloads offset=$offset limit=$limit',
+        );
+      }
+      final headers = {
+        'Authorization': _formatAuthHeader(apiKey),
+        'Content-Type': 'application/json',
+      };
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode != 200) {
+        debugPrint(
+          'TorboxService: Web download fetch status ${response.statusCode}. Body: ${response.body}',
+        );
+        throw Exception('Failed to fetch web downloads: ${response.statusCode}');
+      }
+
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      final bool success = payload['success'] as bool? ?? false;
+      if (!success) {
+        final dynamic error = payload['error'];
+        debugPrint(
+          'TorboxService: Web download fetch error: ${error ?? 'unknown'}. Payload: $payload',
+        );
+        throw Exception(error?.toString() ?? 'Torbox API returned an error');
+      }
+
+      final data = payload['data'];
+      if (data is List) {
+        final rawList = data.whereType<Map<String, dynamic>>().toList();
+        final webDownloads = rawList
+            .map(TorboxWebDownload.fromJson)
+            .where((wd) => wd.isCompleted)
+            .toList();
+        final bool hasMore = webId == null && rawList.length == limit && rawList.isNotEmpty;
+        debugPrint(
+          'TorboxService: Retrieved ${webDownloads.length} completed web downloads (raw=${rawList.length}). hasMore=$hasMore',
+        );
+        return {
+          'webDownloads': webDownloads,
+          'hasMore': hasMore,
+        };
+      }
+
+      debugPrint('TorboxService: Web download payload unexpected: $payload');
+      throw Exception('Unexpected response format from Torbox');
+    } catch (e) {
+      debugPrint('TorboxService: Web download request failed: $e');
+      throw Exception('Torbox web download request failed: $e');
+    }
+  }
+
+  /// Request download link for a web download file
+  static Future<String> requestWebDownloadFileLink({
+    required String apiKey,
+    required int webId,
+    required int fileId,
+    bool zipLink = false,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/webdl/requestdl').replace(
+      queryParameters: {
+        'token': apiKey.trim(),
+        'web_id': '$webId',
+        'file_id': '$fileId',
+        'zip_link': zipLink ? 'true' : 'false',
+      },
+    );
+
+    final headers = {
+      'Authorization': _formatAuthHeader(apiKey),
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      debugPrint(
+        'TorboxService: requestWebDownloadFileLink webId=$webId fileId=$fileId zipLink=$zipLink',
+      );
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
+      debugPrint(
+        'TorboxService: requestWebDownloadFileLink status=${response.statusCode}',
+      );
+
+      if (response.statusCode != 200) {
+        if (response.statusCode == 401) {
+          throw Exception('Invalid Torbox API key');
+        } else if (response.statusCode == 403) {
+          throw Exception('Access denied by Torbox');
+        } else if (response.statusCode == 404) {
+          throw Exception('File not found on Torbox');
+        } else if (response.statusCode == 429) {
+          throw Exception('Too many requests to Torbox. Please wait and try again');
+        } else if (response.statusCode >= 500) {
+          throw Exception('Torbox service is temporarily unavailable');
+        }
+        throw Exception('Failed to get download link from Torbox');
+      }
+
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      final bool success = payload['success'] as bool? ?? false;
+      if (!success) {
+        final dynamic error = payload['error'];
+        throw Exception(error?.toString() ?? 'Torbox API reported an error');
+      }
+
+      final dynamic data = payload['data'];
+      if (data is String && data.isNotEmpty) {
+        return data;
+      }
+
+      throw Exception('Torbox API returned an unexpected payload: $payload');
+    } catch (e) {
+      debugPrint('TorboxService: requestWebDownloadFileLink failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Request ZIP download link for entire web download
+  static String createWebDownloadZipPermalink(String apiKey, int webId) {
+    final token = apiKey.trim();
+    final uri = Uri.parse('$_baseUrl/webdl/requestdl').replace(
+      queryParameters: {
+        'token': token,
+        'web_id': '$webId',
+        'zip_link': 'true',
+        'redirect': 'true',
+      },
+    );
+    return uri.toString();
+  }
+
+  /// Create a web download from a URL
+  static Future<Map<String, dynamic>> createWebDownload({
+    required String apiKey,
+    required String link,
+    String? name,
+    String? password,
+    bool asQueued = false,
+    bool addOnlyIfCached = false,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/webdl/createwebdownload');
+    final headers = {'Authorization': _formatAuthHeader(apiKey)};
+
+    final request = http.MultipartRequest('POST', uri)
+      ..headers.addAll(headers)
+      ..fields['link'] = link
+      ..fields['as_queued'] = asQueued ? 'true' : 'false'
+      ..fields['add_only_if_cached'] = addOnlyIfCached ? 'true' : 'false';
+
+    if (name != null && name.isNotEmpty) {
+      request.fields['name'] = name;
+    }
+    if (password != null && password.isNotEmpty) {
+      request.fields['password'] = password;
+    }
+
+    try {
+      debugPrint(
+        'TorboxService: createWebDownload link=${link.length >= 80 ? link.substring(0, 80) : link}',
+      );
+      final response = await request.send().timeout(
+        const Duration(seconds: 60), // Longer timeout as per user's request
+      );
+      final body = await response.stream.bytesToString();
+      debugPrint(
+        'TorboxService: createWebDownload status=${response.statusCode} body=$body',
+      );
+
+      final Map<String, dynamic> payload =
+          json.decode(body) as Map<String, dynamic>;
+
+      if (response.statusCode == 400) {
+        return payload;
+      }
+
+      if (response.statusCode != 200) {
+        if (response.statusCode == 401) {
+          throw Exception('Invalid Torbox API key');
+        } else if (response.statusCode == 403) {
+          throw Exception('Access denied by Torbox');
+        } else if (response.statusCode == 429) {
+          throw Exception('Too many requests to Torbox. Please wait and try again');
+        } else if (response.statusCode >= 500) {
+          throw Exception('Torbox service is temporarily unavailable');
+        }
+        throw Exception('Failed to add web download to Torbox');
+      }
+
+      return payload;
+    } catch (e) {
+      debugPrint('TorboxService: createWebDownload failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a web download
+  static Future<void> deleteWebDownload({
+    required String apiKey,
+    required int webId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/webdl/controlwebdownload');
+    final headers = {
+      'Authorization': _formatAuthHeader(apiKey),
+      'Content-Type': 'application/json',
+    };
+
+    final body = json.encode({
+      'webdownload_id': webId,
+      'operation': 'delete',
+    });
+
+    try {
+      debugPrint('TorboxService: deleteWebDownload webId=$webId');
+      final response = await http
+          .post(uri, headers: headers, body: body)
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        debugPrint(
+          'TorboxService: deleteWebDownload status ${response.statusCode}. Body: ${response.body}',
+        );
+        throw Exception('Failed to delete web download: ${response.statusCode}');
+      }
+
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      final bool success = payload['success'] as bool? ?? false;
+      if (!success) {
+        final dynamic error = payload['error'];
+        throw Exception(error?.toString() ?? 'Failed to delete web download');
+      }
+
+      debugPrint('TorboxService: Web download $webId deleted successfully');
+    } catch (e) {
+      debugPrint('TorboxService: deleteWebDownload failed: $e');
+      rethrow;
+    }
   }
 
   static String _formatAuthHeader(String apiKey) {

@@ -1368,11 +1368,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final provider = entry.provider?.toLowerCase();
     final hasTorboxMetadata =
         entry.torboxTorrentId != null && entry.torboxFileId != null;
+    final hasTorboxWebDownloadMetadata =
+        entry.torboxWebDownloadId != null && entry.torboxFileId != null;
 
-    if (provider == 'torbox' || hasTorboxMetadata) {
+    if (provider == 'torbox' || hasTorboxMetadata || hasTorboxWebDownloadMetadata) {
       final torrentId = entry.torboxTorrentId;
+      final webDownloadId = entry.torboxWebDownloadId;
       final fileId = entry.torboxFileId;
-      if (torrentId == null || fileId == null) {
+      if (fileId == null || (torrentId == null && webDownloadId == null)) {
         throw Exception('Torbox file metadata missing');
       }
       final apiKey = await StorageService.getTorboxApiKey();
@@ -1380,11 +1383,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         throw Exception('Missing Torbox API key');
       }
       try {
-        final url = await TorboxService.requestFileDownloadLink(
-          apiKey: apiKey,
-          torrentId: torrentId,
-          fileId: fileId,
-        );
+        String url;
+        if (webDownloadId != null) {
+          // Web download - use web download API
+          url = await TorboxService.requestWebDownloadFileLink(
+            apiKey: apiKey,
+            webId: webDownloadId,
+            fileId: fileId,
+          );
+        } else {
+          // Torrent - use torrent API
+          url = await TorboxService.requestFileDownloadLink(
+            apiKey: apiKey,
+            torrentId: torrentId!,
+            fileId: fileId,
+          );
+        }
         if (url.isEmpty) {
           throw Exception('Torbox returned an empty stream URL');
         }
@@ -1990,12 +2004,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 		final provider = entry.provider?.toLowerCase();
 		if (provider == 'torbox') {
 			final torrentId = entry.torboxTorrentId;
+			final webDownloadId = entry.torboxWebDownloadId;
 			final fileId = entry.torboxFileId;
+			if (webDownloadId != null && fileId != null) {
+				debugPrint('ResumeKey: torbox web download detected web=$webDownloadId file=$fileId');
+				return 'torbox_web_${webDownloadId}_$fileId';
+			}
 			if (torrentId != null && fileId != null) {
 				debugPrint('ResumeKey: torbox entry detected torrent=$torrentId file=$fileId');
 				return 'torbox_${torrentId}_$fileId';
 			}
-			debugPrint('ResumeKey: torbox entry missing IDs torrent=$torrentId file=$fileId');
+			debugPrint('ResumeKey: torbox entry missing IDs torrent=$torrentId web=$webDownloadId file=$fileId');
 		}
 		return null;
 	}

@@ -1630,9 +1630,51 @@ class DownloadService {
             } else {
               // EXISTING TORBOX/REALDEBRID LOGIC
               final isTorbox = meta['torboxDownload'] == true;
+              final isTorboxWebDownload = meta['torboxWebDownload'] == true;
 
-              if (isTorbox) {
-                // Torbox download path
+              if (isTorboxWebDownload) {
+                // Torbox web download path
+                final apiKey = meta['apiKey'] as String?;
+                final webDownloadId = meta['torboxWebDownloadId'] as int?;
+                final fileId = meta['torboxFileId'] as int?;
+                final isZip = meta['torboxZip'] == true;
+
+                debugPrint('DL TORBOX WEB: webDownloadId=$webDownloadId, fileId=$fileId, isZip=$isZip, apiKey=${apiKey?.isNotEmpty ?? false ? "present" : "missing"}');
+
+                if (apiKey == null || apiKey.isEmpty) {
+                  debugPrint('DL ERROR: Torbox web download missing API key');
+                  throw Exception('Torbox web download missing API key');
+                }
+
+                if (isZip) {
+                  // ZIP download - use permalink
+                  if (webDownloadId == null) {
+                    debugPrint('DL ERROR: Torbox web download ZIP missing webDownloadId');
+                    throw Exception('Torbox web download ZIP missing webDownloadId');
+                  }
+                  finalUrl = TorboxService.createWebDownloadZipPermalink(apiKey, webDownloadId);
+                  debugPrint('DL TORBOX WEB ZIP: Generated permalink: $finalUrl');
+                } else {
+                  // Regular file download
+                  if (webDownloadId == null || fileId == null) {
+                    debugPrint('DL ERROR: Torbox web download missing webDownloadId or fileId');
+                    throw Exception('Torbox web download missing webDownloadId or fileId');
+                  }
+                  debugPrint('DL TORBOX WEB: Requesting download link for file $fileId in web download $webDownloadId');
+                  finalUrl = await TorboxService.requestWebDownloadFileLink(
+                    apiKey: apiKey,
+                    webId: webDownloadId,
+                    fileId: fileId,
+                  );
+                  debugPrint('DL TORBOX WEB SUCCESS: Got download URL: ${finalUrl.substring(0, finalUrl.length > 50 ? 50 : finalUrl.length)}...');
+                }
+
+                if (finalUrl.isEmpty) {
+                  debugPrint('DL ERROR: Torbox web download returned empty download URL');
+                  throw Exception('Torbox web download returned empty download URL');
+                }
+              } else if (isTorbox) {
+                // Torbox torrent download path
               final apiKey = meta['apiKey'] as String?;
               final torrentId = meta['torboxTorrentId'] as int?;
               final fileId = meta['torboxFileId'] as int?;
@@ -1849,9 +1891,56 @@ class DownloadService {
             } else {
               // EXISTING TORBOX/REALDEBRID RETRY LOGIC (keep exactly as is)
               final isTorbox = meta['torboxDownload'] == true;
+              final isTorboxWebDownload = meta['torboxWebDownload'] == true;
 
-              if (isTorbox) {
-              // Torbox retry path
+              if (isTorboxWebDownload) {
+                // Torbox web download retry path
+                final apiKey = meta['apiKey'] as String?;
+                final webDownloadId = meta['torboxWebDownloadId'] as int?;
+                final fileId = meta['torboxFileId'] as int?;
+                final isZip = meta['torboxZip'] == true;
+
+                if (apiKey != null && apiKey.isNotEmpty) {
+                  String freshUrl = '';
+
+                  if (isZip && webDownloadId != null) {
+                    // Regenerate ZIP permalink
+                    freshUrl = TorboxService.createWebDownloadZipPermalink(apiKey, webDownloadId);
+                    debugPrint('DL RETRY TORBOX WEB ZIP: Regenerated permalink');
+                  } else if (webDownloadId != null && fileId != null) {
+                    // Re-request file download link
+                    freshUrl = await TorboxService.requestWebDownloadFileLink(
+                      apiKey: apiKey,
+                      webId: webDownloadId,
+                      fileId: fileId,
+                    );
+                    debugPrint('DL RETRY TORBOX WEB: Got fresh download URL');
+                  }
+
+                  if (freshUrl.isNotEmpty) {
+                    final refreshed = _PendingRequest(
+                      queuedId: p.queuedId,
+                      url: freshUrl,
+                      providedFileName: p.providedFileName,
+                      headers: p.headers,
+                      wifiOnly: p.wifiOnly,
+                      retries: p.retries,
+                      meta: p.meta,
+                      context: p.context,
+                      torrentName: p.torrentName,
+                      contentKey: p.contentKey,
+                      destPath: p.destPath,
+                    );
+                    _pending.insert(0, refreshed);
+                    _pendingById[refreshed.queuedId] = refreshed;
+                    await _persistPending();
+                    retried = true;
+                    debugPrint('DL RETRY TORBOX WEB: Re-queued with fresh URL');
+                    continue; // try scheduling the refreshed entry immediately
+                  }
+                }
+              } else if (isTorbox) {
+              // Torbox torrent retry path
               final apiKey = meta['apiKey'] as String?;
               final torrentId = meta['torboxTorrentId'] as int?;
               final fileId = meta['torboxFileId'] as int?;

@@ -8,6 +8,7 @@ class PlaylistEntry {
   final String?
   provider; // Source provider identifier (e.g. realdebrid, torbox, pikpak)
   final int? torboxTorrentId; // Torbox torrent identifier for lazy resolution
+  final int? torboxWebDownloadId; // Torbox web download identifier for lazy resolution
   final int? torboxFileId; // Torbox file identifier for lazy resolution
   final String? pikpakFileId; // PikPak file identifier for lazy resolution
   final String? rdTorrentId; // Real-Debrid torrent ID for lazy resolution
@@ -21,6 +22,7 @@ class PlaylistEntry {
     this.sizeBytes,
     this.provider,
     this.torboxTorrentId,
+    this.torboxWebDownloadId,
     this.torboxFileId,
     this.pikpakFileId,
     this.rdTorrentId,
