@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'debrid_service.dart';
 import 'torbox_service.dart';
@@ -325,7 +326,7 @@ class DownloadService {
 
   Future<String> _recordsFilePath() async {
     final dir = await getApplicationSupportDirectory();
-    final file = File('${dir.path}/$_recordsFile');
+    final file = File(path.join(dir.path, _recordsFile));
     if (!await file.exists()) {
       await file.create(recursive: true);
       await file.writeAsString('{}');
@@ -1193,7 +1194,7 @@ class DownloadService {
 
     // Place under downloads/<folder>
     final String downloadsRoot = await _appDownloadsSubdir();
-    final String dir = '$downloadsRoot/$folder';
+    final String dir = path.join(downloadsRoot, folder);
     final Directory d = Directory(dir);
     if (!await d.exists()) {
       await d.create(recursive: true);
@@ -1477,7 +1478,7 @@ class DownloadService {
         final Directory? downloadsDir = await getDownloadsDirectory();
         if (downloadsDir != null) {
           if (Platform.isWindows) {
-          final Directory appDownloadsDir = Directory('${downloadsDir.path}/Debrify');
+          final Directory appDownloadsDir = Directory(path.join(downloadsDir.path, 'Debrify'));
           if (!await appDownloadsDir.exists()) {
             await appDownloadsDir.create(recursive: true);
           }
@@ -1499,7 +1500,7 @@ class DownloadService {
         final Directory? downloadsDir = await getDownloadsDirectory();
         if (downloadsDir != null) {
           // Create a subfolder for the app to organize downloads
-          final Directory appDownloadsDir = Directory('${downloadsDir.path}/Debrify');
+          final Directory appDownloadsDir = Directory(path.join(downloadsDir.path, 'Debrify'));
           if (!await appDownloadsDir.exists()) {
             await appDownloadsDir.create(recursive: true);
           }
@@ -1509,10 +1510,10 @@ class DownloadService {
         // Fallback to app documents if Downloads directory is not accessible
       }
     }
-    
+
     // Fallback: Use a stable, app-specific downloads directory under Documents
     final Directory docs = await getApplicationDocumentsDirectory();
-    final Directory dlDir = Directory('${docs.path}/downloads');
+    final Directory dlDir = Directory(path.join(docs.path, 'downloads'));
     if (!await dlDir.exists()) {
       await dlDir.create(recursive: true);
     }
@@ -1805,8 +1806,8 @@ class DownloadService {
           } else if (rec != null && (rec['destPath'] as String?) != null && (rec['destPath'] as String).isNotEmpty) {
             finalPath = rec['destPath'] as String;
           } else {
-            final (dirAbsPath, filename) = await _smartLocationFor(finalUrl, finalFileName, p.torrentName);
-            finalPath = '$dirAbsPath/$filename';
+            final (dirAbsPath, filenamePart) = await _smartLocationFor(finalUrl, finalFileName, p.torrentName);
+            finalPath = path.join(dirAbsPath, filenamePart);
             _upsertRecord(p.queuedId, {'destPath': finalPath});
             p.destPath = finalPath;
           }

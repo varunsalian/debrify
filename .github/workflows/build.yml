@@ -67,88 +67,88 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-#  macos:
-#    runs-on: macos-latest
-#    steps:
-#    - name: Checkout code
-#      uses: actions/checkout@v4
-#
-#    - name: Setup Flutter
-#      uses: subosito/flutter-action@v2
-#      with:
-#        flutter-version: '3.32.8'
-#        channel: 'stable'
-#
-#    - name: Get dependencies
-#      run: flutter pub get
-#
-#    - name: Build macOS app
-#      run: flutter build macos --release
-#
-#    - name: Install create-dmg
-#      run: HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
-#
-#    - name: Prepare DMG staging folder
-#      run: |
-#        cd build/macos/Build/Products/Release
-#        rm -rf dmg-root
-#        mkdir -p dmg-root
-#        rm -f debrify-${{ github.event.release.tag_name }}.dmg
-#        cp -R debrify.app dmg-root/Debrify.app
-#
-#    - name: Create DMG
-#      run: |
-#        cd build/macos/Build/Products/Release
-#        create-dmg \
-#          --volname "Debrify" \
-#          --window-pos 200 120 \
-#          --window-size 520 360 \
-#          --icon-size 120 \
-#          --icon "Debrify.app" 120 180 \
-#          --app-drop-link 400 180 \
-#          debrify-${{ github.event.release.tag_name }}.dmg \
-#          dmg-root
-#
-#    - name: Upload DMG to Release
-#      uses: softprops/action-gh-release@v1
-#      with:
-#        files: build/macos/Build/Products/Release/debrify-${{ github.event.release.tag_name }}.dmg
-#      env:
-#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#
-#  windows:
-#    runs-on: windows-latest
-#    steps:
-#    - name: Checkout code
-#      uses: actions/checkout@v4
-#
-#    - name: Setup Flutter
-#      uses: subosito/flutter-action@v2
-#      with:
-#        flutter-version: '3.32.8'
-#        channel: 'stable'
-#
-#    - name: Enable Windows desktop
-#      run: flutter config --enable-windows-desktop
-#
-#    - name: Get dependencies
-#      run: flutter pub get
-#
-#    - name: Build Windows app
-#      run: flutter build windows --release
-#
-#    - name: Install Inno Setup
-#      run: choco install innosetup --no-progress --yes
-#
-#    - name: Build Windows installer
-#      shell: pwsh
-#      run: |
-#        $env:DEBRIFY_VERSION = '${{ github.event.release.tag_name }}'
-#        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows\installer.iss
-#
-#    - name: Upload Windows installer to Release
-#      uses: softprops/action-gh-release@v1
-#      with:
-#        files: build/windows/installer/debrify-${{ github.event.release.tag_name }}-setup.exe
-#      env:
-#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  macos:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.8'
+        channel: 'stable'
+
+    - name: Get dependencies
+      run: flutter pub get
+
+    - name: Build macOS app
+      run: flutter build macos --release
+
+    - name: Install create-dmg
+      run: HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
+
+    - name: Prepare DMG staging folder
+      run: |
+        cd build/macos/Build/Products/Release
+        rm -rf dmg-root
+        mkdir -p dmg-root
+        rm -f debrify-${{ github.event.release.tag_name }}.dmg
+        cp -R debrify.app dmg-root/Debrify.app
+
+    - name: Create DMG
+      run: |
+        cd build/macos/Build/Products/Release
+        create-dmg \
+          --volname "Debrify" \
+          --window-pos 200 120 \
+          --window-size 520 360 \
+          --icon-size 120 \
+          --icon "Debrify.app" 120 180 \
+          --app-drop-link 400 180 \
+          debrify-${{ github.event.release.tag_name }}.dmg \
+          dmg-root
+
+    - name: Upload DMG to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/macos/Build/Products/Release/debrify-${{ github.event.release.tag_name }}.dmg
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.8'
+        channel: 'stable'
+
+    - name: Enable Windows desktop
+      run: flutter config --enable-windows-desktop
+
+    - name: Get dependencies
+      run: flutter pub get
+
+    - name: Build Windows app
+      run: flutter build windows --release
+
+    - name: Install Inno Setup
+      run: choco install innosetup --no-progress --yes
+
+    - name: Build Windows installer
+      shell: pwsh
+      run: |
+        $env:DEBRIFY_VERSION = '${{ github.event.release.tag_name }}'
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows\installer.iss
+
+    - name: Upload Windows installer to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/windows/installer/debrify-${{ github.event.release.tag_name }}-setup.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
