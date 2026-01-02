@@ -153,6 +153,7 @@ class _PremiumTopNavState extends State<PremiumTopNav> {
                                     key: ValueKey<String>('top-nav-${items[i].label}'),
                                     selected: i == widget.currentIndex,
                                     showLabel: showAllLabels || i == widget.currentIndex,
+                                    compact: showAllLabels,
                                     icon: items[i].icon,
                                     label: items[i].label,
                                     badge: (badges != null && i < badges.length)
@@ -241,6 +242,7 @@ class _ScrollHintOverlay extends StatelessWidget {
 class _TopNavButton extends StatefulWidget {
   final bool selected;
   final bool showLabel;
+  final bool compact;
   final IconData icon;
   final String label;
   final int? badge;
@@ -251,6 +253,7 @@ class _TopNavButton extends StatefulWidget {
     super.key,
     required this.selected,
     required this.showLabel,
+    this.compact = false,
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -324,6 +327,14 @@ class _TopNavButtonState extends State<_TopNavButton> {
     final colorScheme = Theme.of(context).colorScheme;
     final bool selected = widget.selected;
     final bool highlighted = _focused || selected;
+    final bool compact = widget.compact;
+
+    // Compact sizes for when all labels are shown
+    final double iconSize = compact ? 16 : 18;
+    final double fontSize = compact ? 11 : 13;
+    final double hPadding = compact ? 10 : 12;
+    final double vPadding = compact ? 6 : 8;
+    final double labelPadding = compact ? 6 : 8;
 
     return FocusableActionDetector(
       focusNode: _focusNode,
@@ -348,7 +359,7 @@ class _TopNavButtonState extends State<_TopNavButton> {
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: vPadding),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               color: selected
@@ -372,7 +383,7 @@ class _TopNavButtonState extends State<_TopNavButton> {
                   children: [
                     Icon(
                       widget.icon,
-                      size: 18,
+                      size: iconSize,
                       color: selected
                           ? colorScheme.primary
                           : (highlighted ? Colors.white : Colors.white60),
@@ -384,7 +395,7 @@ class _TopNavButtonState extends State<_TopNavButton> {
                       child: widget.showLabel
                           ? Padding(
                               key: const ValueKey('label'),
-                              padding: const EdgeInsets.only(left: 8),
+                              padding: EdgeInsets.only(left: labelPadding),
                               child: Text(
                                 widget.label,
                                 maxLines: 1,
@@ -394,7 +405,7 @@ class _TopNavButtonState extends State<_TopNavButton> {
                                   color: selected
                                       ? Colors.white
                                       : (highlighted ? Colors.white : Colors.white60),
-                                  fontSize: 13,
+                                  fontSize: fontSize,
                                 ),
                               ),
                             )
