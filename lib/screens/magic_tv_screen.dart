@@ -2992,7 +2992,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     setState(() {
       _isBusy = true;
-      _status = 'Generating magnet link…';
+      _status = 'Generating channel link…';
     });
 
     try {
@@ -3022,7 +3022,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         context: context,
         builder: (dialogContext) {
           return AlertDialog(
-            title: const Text('Channel Magnet Link'),
+            title: const Text('Share Channel'),
             content: SizedBox(
               width: 500,
               child: Column(
@@ -3030,7 +3030,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Share this magnet link with others to import your channel configuration:',
+                    'Share this Debrify channel link with others to import your channel configuration:',
                     style: const TextStyle(fontSize: 13),
                   ),
                   const SizedBox(height: 16),
@@ -3073,7 +3073,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               FilledButton.icon(
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: magnetLink));
-                  _showSnack('Magnet link copied!', color: Colors.green);
+                  _showSnack('Channel link copied!', color: Colors.green);
                   Navigator.of(dialogContext).pop();
                 },
                 icon: const Icon(Icons.copy_rounded),
@@ -3085,7 +3085,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
     } catch (error) {
       _showSnack(
-        'Failed to generate magnet link: ${_formatImportError(error)}',
+        'Failed to generate channel link: ${_formatImportError(error)}',
         color: Colors.red,
       );
     } finally {
@@ -6804,13 +6804,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    // Use TV-optimized grid layout on Android TV, mobile layout otherwise
-    return _isAndroidTv
-        ? _buildTvGridLayout(bottomInset)
-        : _buildChannelsTab(bottomInset);
+    // Use grid layout on all devices for consistency
+    return _buildTvGridLayout(bottomInset);
   }
 
-  // TV-optimized Grid Layout (Apple TV Style)
+  // Grid Layout for all devices (responsive)
   Widget _buildTvGridLayout(double bottomInset) {
     final searchTerm = _channelSearchTerm.trim().toLowerCase();
     final filteredChannels = searchTerm.isEmpty
@@ -6821,8 +6819,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               )
               .toList();
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    // Responsive padding: smaller on mobile, larger on TV/tablet
+    final horizontalPadding = screenWidth < 600 ? 16.0 : 40.0;
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(40, 24, 40, 24 + bottomInset),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 24, horizontalPadding, 24 + bottomInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -6959,33 +6961,53 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          // Channel grid
+          // Channel grid (responsive)
           Expanded(
             child: filteredChannels.isEmpty
                 ? _buildTvEmptyState()
-                : GridView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 4,
-                    ),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 4, // 4 columns for TV
-                          mainAxisSpacing: 24,
-                          crossAxisSpacing: 24,
-                          childAspectRatio:
-                              1.5, // Width:Height ratio for consistent sizing
-                        ),
-                    itemCount:
-                        filteredChannels.length +
-                        1, // +1 for "Add Channel" card
-                    itemBuilder: (context, index) {
-                      if (index == filteredChannels.length) {
-                        // "Add Channel" card at the end
-                        return _buildTvAddChannelCard();
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Responsive grid: 2 cols on mobile, 3 on tablet, 4 on TV/desktop
+                      final width = constraints.maxWidth;
+                      int crossAxisCount;
+                      double spacing;
+                      double childAspectRatio;
+
+                      if (width < 500) {
+                        crossAxisCount = 2;
+                        spacing = 12;
+                        childAspectRatio = 1.4;
+                      } else if (width < 800) {
+                        crossAxisCount = 3;
+                        spacing = 16;
+                        childAspectRatio = 1.45;
+                      } else {
+                        crossAxisCount = 4;
+                        spacing = 24;
+                        childAspectRatio = 1.5;
                       }
-                      final channel = filteredChannels[index];
-                      return _buildTvChannelCard(channel);
+
+                      return GridView.builder(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 4,
+                        ),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          mainAxisSpacing: spacing,
+                          crossAxisSpacing: spacing,
+                          childAspectRatio: childAspectRatio,
+                        ),
+                        itemCount: filteredChannels.length + 1, // +1 for "Add Channel" card
+                        itemBuilder: (context, index) {
+                          if (index == filteredChannels.length) {
+                            // "Add Channel" card at the end
+                            return _buildTvAddChannelCard();
+                          }
+                          final channel = filteredChannels[index];
+                          return _buildTvChannelCard(channel);
+                        },
+                      );
                     },
                   ),
           ),
@@ -7046,45 +7068,112 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         );
         _showTvChannelOptionsMenu(channel);
       },
-      showLongPressHint: true,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
+      showLongPressHint: _isAndroidTv, // Only show hint on Android TV
+      child: Stack(
         children: [
-          // Channel number badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE50914),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+          // Main card content
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Channel number badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE50914),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Channel name - centered
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    channel.name.toUpperCase(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.2,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          // Channel name - centered
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              channel.name.toUpperCase(),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                height: 1.2,
-                letterSpacing: 0.5,
+          // 3-dot menu for non-Android TV devices
+          if (!_isAndroidTv)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: PopupMenuButton<String>(
+                icon: Icon(
+                  Icons.more_vert,
+                  color: Colors.white.withOpacity(0.7),
+                  size: 20,
+                ),
+                padding: EdgeInsets.zero,
+                tooltip: 'Options',
+                color: const Color(0xFF1F1F1F),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    _handleEditChannel(channel);
+                  } else if (value == 'share') {
+                    _handleShareChannelAsMagnet(channel);
+                  } else if (value == 'delete') {
+                    _handleDeleteChannel(channel);
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_rounded, size: 18, color: Color(0xFF2563EB)),
+                        SizedBox(width: 12),
+                        Text('Edit'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'share',
+                    child: Row(
+                      children: [
+                        Icon(Icons.share_rounded, size: 18, color: Color(0xFF10B981)),
+                        SizedBox(width: 12),
+                        Text('Share Channel'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                        SizedBox(width: 12),
+                        Text('Delete'),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
         ],
       ),
     );
@@ -7118,14 +7207,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 backgroundColor: const Color(0xFF2563EB),
               ),
               const SizedBox(height: 16),
-              // Share as Magnet Link button
+              // Share Channel button
               TvFocusableButton(
                 onPressed: () {
                   Navigator.of(dialogContext).pop();
                   _handleShareChannelAsMagnet(channel);
                 },
                 icon: Icons.share_rounded,
-                label: 'Share as Magnet Link',
+                label: 'Share Channel',
                 backgroundColor: const Color(0xFF10B981),
               ),
               const SizedBox(height: 16),
