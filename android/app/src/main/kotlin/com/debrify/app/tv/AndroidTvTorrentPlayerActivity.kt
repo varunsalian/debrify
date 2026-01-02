@@ -1,8 +1,10 @@
 package com.debrify.app.tv
 
+import android.animation.ValueAnimator
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.view.animation.DecelerateInterpolator
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
@@ -79,9 +81,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var speedButton: AppCompatButton? = null
     private var nightModeButton: AppCompatButton? = null
 
-    // Time Display in Controls
-    private var debrifyTimeDisplay: TextView? = null
+    // Time Display in Controls (Cinema Mode - split displays)
+    private var debrifyTimeDisplay: TextView? = null  // Legacy combined display (hidden)
+    private var debrifyTimeCurrent: TextView? = null  // Current time (left)
+    private var debrifyTimeTotal: TextView? = null    // Total time (right)
     private var debrifyProgressLine: View? = null
+
+    // Cinema Mode Interactive Progress Bar
+    private var cinemaProgressContainer: View? = null
+    private var cinemaProgressBackground: View? = null
+    private var cinemaProgressThumb: View? = null
+    private var cinemaSpeedIndicator: TextView? = null
+    private var cinemaProgressTrackWidth: Int = 0
+    private var cinemaSeekMode: Boolean = false  // True when actively seeking via progress bar
+    private var cinemaProgressAnimator: ValueAnimator? = null
+    private var cinemaLastAnimatedProgress: Float = 0f
 
     // Player
     private var player: ExoPlayer? = null
@@ -1028,9 +1042,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val nextButton: AppCompatButton? = playerView.findViewById(R.id.debrify_next_button)
         val randomButton: AppCompatButton? = playerView.findViewById(R.id.debrify_random_button)
 
-        // Time display view
-        debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display)
+        // Time display views (Cinema Mode)
+        debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display)  // Legacy (hidden)
+        debrifyTimeCurrent = playerView.findViewById(R.id.debrify_time_current)  // Current time
+        debrifyTimeTotal = playerView.findViewById(R.id.debrify_time_total)      // Total time
         debrifyProgressLine = playerView.findViewById(R.id.debrify_progress_line)
+
+        // Cinema Mode Interactive Progress Bar
+        cinemaProgressContainer = playerView.findViewById(R.id.cinema_progress_container)
+        cinemaProgressBackground = playerView.findViewById(R.id.cinema_progress_background)
+        cinemaProgressThumb = playerView.findViewById(R.id.cinema_progress_thumb)
+        cinemaSpeedIndicator = playerView.findViewById(R.id.cinema_speed_indicator)
+        setupCinemaProgressBar()
 
         controlsOverlay?.visibility = View.GONE
         controlsOverlay?.alpha = 0f
@@ -1643,8 +1666,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return super.dispatchKeyEvent(event)
         }
 
-        // Up button - show playlist
+        // Up button - from dock go to progress bar, otherwise show playlist
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            // If focus is in controls dock, UP goes to progress bar
+            if (focusInControls && controlsMenuVisible && !cinemaSeekMode) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    cinemaProgressContainer?.requestFocus()
+                }
+                return true
+            }
+            // Otherwise show playlist (if available)
             if (playlistMode == PlaylistMode.NONE) {
                 return super.dispatchKeyEvent(event)
             }
@@ -1661,9 +1692,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
-                    if (!seekbarVisible) {
-                        showSeekbar()
-                    }
+                    // Long-press: Show controls and focus progress bar for seeking
+                    showControlsAndFocusProgressBar()
                 } else if (event.repeatCount == 0) {
                     seekBy(SEEK_STEP_MS)
                 }
@@ -1677,9 +1707,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
-                    if (!seekbarVisible) {
-                        showSeekbar()
-                    }
+                    // Long-press: Show controls and focus progress bar for seeking
+                    showControlsAndFocusProgressBar()
                 } else if (event.repeatCount == 0) {
                     seekBy(-SEEK_STEP_MS)
                 }
@@ -1848,15 +1877,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateSeekbarProgress() {
+        // Skip updates when in cinema seek mode (progress bar is being controlled manually)
+        if (cinemaSeekMode) return
+
         val player = player ?: return
-        val timeDisplay = debrifyTimeDisplay ?: return
 
         val currentPosition = player.currentPosition
         val duration = player.duration
 
         if (duration > 0) {
-            // Update time display in format "MM:SS / MM:SS"
-            timeDisplay.text = "${formatTime(currentPosition)} / ${formatTime(duration)}"
+            // Update Cinema Mode split time displays
+            debrifyTimeCurrent?.text = formatTime(currentPosition)
+            debrifyTimeTotal?.text = formatTime(duration)
+
+            // Update legacy combined display (for compatibility)
+            debrifyTimeDisplay?.text = "${formatTime(currentPosition)} / ${formatTime(duration)}"
 
             // Update progress line width
             debrifyProgressLine?.let { progressLine ->
@@ -1872,7 +1907,221 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    // Seekbar
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CINEMA MODE - Interactive Progress Bar (replaces old seekbar overlay)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private fun showControlsAndFocusProgressBar() {
+        if (!controlsMenuVisible) {
+            showControlsMenu()
+        }
+        // Delay focus to allow controls to become visible
+        controlsHandler.postDelayed({
+            cinemaProgressContainer?.requestFocus()
+        }, 100)
+    }
+
+    private fun setupCinemaProgressBar() {
+        cinemaProgressContainer?.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                enterCinemaSeekMode()
+            } else {
+                exitCinemaSeekMode(confirm = false)
+            }
+        }
+
+        cinemaProgressContainer?.setOnKeyListener { _, keyCode, event ->
+            if (!cinemaSeekMode) return@setOnKeyListener false
+
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        val step = getAcceleratedSeekStep(event.repeatCount)
+                        seekbarPosition = (seekbarPosition - step).coerceAtLeast(0)
+                        updateCinemaSeekSpeed(step)
+                        updateCinemaProgressUI()
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        val step = getAcceleratedSeekStep(event.repeatCount)
+                        seekbarPosition = (seekbarPosition + step).coerceAtMost(videoDuration)
+                        updateCinemaSeekSpeed(step)
+                        updateCinemaProgressUI()
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                        confirmCinemaSeek()
+                        true
+                    }
+                    KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
+                        exitCinemaSeekMode(confirm = false)
+                        pauseButton?.requestFocus()
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        exitCinemaSeekMode(confirm = false)
+                        pauseButton?.requestFocus()
+                        true
+                    }
+                    else -> false
+                }
+            } else if (event.action == KeyEvent.ACTION_UP) {
+                // Reset speed indicator when key is released
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    currentSeekSpeed = 1.0f
+                    cinemaSpeedIndicator?.visibility = View.GONE
+                }
+                false
+            } else false
+        }
+    }
+
+    private fun enterCinemaSeekMode() {
+        if (cinemaSeekMode || player == null) return
+
+        seekbarPosition = player?.currentPosition ?: 0
+        videoDuration = player?.duration ?: 0
+
+        if (videoDuration <= 0) {
+            Toast.makeText(this, "Seeking not available", Toast.LENGTH_SHORT).show()
+            pauseButton?.requestFocus()
+            return
+        }
+
+        // Pause playback during seeking
+        val wasPlaying = player?.isPlaying == true
+        if (wasPlaying) {
+            player?.pause()
+        }
+
+        cinemaSeekMode = true
+        currentSeekSpeed = 1.0f
+
+        // Reset animated progress to current position
+        cinemaLastAnimatedProgress = if (videoDuration > 0) {
+            seekbarPosition.toFloat() / videoDuration.toFloat()
+        } else 0f
+
+        // Show thumb with smooth entrance animation
+        cinemaProgressThumb?.let { thumb ->
+            thumb.visibility = View.VISIBLE
+            thumb.alpha = 0f
+            thumb.scaleX = 0.6f
+            thumb.scaleY = 0.6f
+            thumb.animate()
+                .alpha(1f)
+                .scaleX(1.15f)  // Slight overshoot
+                .scaleY(1.15f)
+                .setDuration(200)
+                .setInterpolator(android.view.animation.OvershootInterpolator(2f))
+                .withEndAction {
+                    // Settle to normal size
+                    thumb.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(100)
+                        .start()
+                }
+                .start()
+        }
+
+        // Highlight current time
+        debrifyTimeCurrent?.setTextColor(Color.parseColor("#FF2D55"))
+
+        // Cache track width
+        cinemaProgressBackground?.let { bg ->
+            cinemaProgressTrackWidth = bg.width
+        }
+
+        updateCinemaProgressUI()
+    }
+
+    private fun exitCinemaSeekMode(confirm: Boolean) {
+        if (!cinemaSeekMode) return
+
+        cinemaSeekMode = false
+
+        // Cancel any running progress animation
+        cinemaProgressAnimator?.cancel()
+
+        // Hide thumb with smooth exit animation
+        cinemaProgressThumb?.let { thumb ->
+            thumb.animate()
+                .alpha(0f)
+                .scaleX(0.3f)
+                .scaleY(0.3f)
+                .setDuration(150)
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction {
+                    thumb.visibility = View.INVISIBLE
+                    thumb.scaleX = 1f
+                    thumb.scaleY = 1f
+                }
+                .start()
+        }
+
+        // Fade current time color back to white
+        debrifyTimeCurrent?.setTextColor(Color.WHITE)
+
+        // Resume playback
+        player?.play()
+    }
+
+    private fun confirmCinemaSeek() {
+        if (!cinemaSeekMode || player == null) return
+        player?.seekTo(seekbarPosition)
+        exitCinemaSeekMode(confirm = true)
+        pauseButton?.requestFocus()
+    }
+
+    private fun updateCinemaSeekSpeed(stepMs: Long) {
+        currentSeekSpeed = stepMs / 10_000f  // Base is 10s = 1x
+        // Speed indicator removed for cleaner UI - speed still affects seeking behavior
+    }
+
+    private fun updateCinemaProgressUI() {
+        // Update time display
+        debrifyTimeCurrent?.text = formatTime(seekbarPosition)
+        debrifyTimeTotal?.text = formatTime(videoDuration)
+
+        val targetProgress = if (videoDuration > 0) {
+            seekbarPosition.toFloat() / videoDuration.toFloat()
+        } else 0f
+
+        val parentWidth = cinemaProgressTrackWidth
+        if (parentWidth <= 0) return
+
+        // Cancel any running animation
+        cinemaProgressAnimator?.cancel()
+
+        // Animate from current to target position
+        cinemaProgressAnimator = ValueAnimator.ofFloat(cinemaLastAnimatedProgress, targetProgress).apply {
+            duration = 80  // Quick but smooth
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animator ->
+                val animatedProgress = animator.animatedValue as Float
+
+                // Update progress bar width
+                debrifyProgressLine?.let { progressLine ->
+                    val progressWidth = (parentWidth * animatedProgress).toInt()
+                    val layoutParams = progressLine.layoutParams
+                    layoutParams.width = progressWidth
+                    progressLine.layoutParams = layoutParams
+                }
+
+                // Update thumb position with smooth glide
+                cinemaProgressThumb?.let { thumb ->
+                    val thumbOffset = (parentWidth * animatedProgress) - (thumb.width / 2f)
+                    thumb.translationX = thumbOffset.coerceAtLeast(0f)
+                }
+            }
+            start()
+        }
+
+        cinemaLastAnimatedProgress = targetProgress
+    }
+
+    // Seekbar (Legacy - kept for compatibility)
     private fun showSeekbar() {
         if (seekbarVisible || player == null) return
 

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cinema Mode: Premium Play/Pause Button
+     Center stage button with special prominence -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ═══ FOCUSED STATE - Glowing signature red ═══ -->
+    <item android:state_focused="true">
+        <layer-list>
+            <!-- Outer glow aura -->
+            <item android:bottom="-4dp" android:left="-4dp" android:right="-4dp" android:top="-4dp">
+                <shape android:shape="rectangle">
+                    <corners android:radius="28dp" />
+                    <solid android:color="#00000000" />
+                    <stroke
+                        android:width="6dp"
+                        android:color="#33FF2D55" />
+                </shape>
+            </item>
+            <!-- Main button body - signature red -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="22dp" />
+                    <solid android:color="@color/cinema_red" />
+                </shape>
+            </item>
+            <!-- Inner highlight -->
+            <item android:top="1dp" android:left="1dp" android:right="1dp" android:bottom="0dp">
+                <shape android:shape="rectangle">
+                    <corners android:radius="21dp" />
+                    <gradient
+                        android:angle="90"
+                        android:startColor="#00000000"
+                        android:endColor="#26FFFFFF"
+                        android:type="linear" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- ═══ PRESSED STATE ═══ -->
+    <item android:state_pressed="true">
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="22dp" />
+                    <solid android:color="@color/cinema_red_deep" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- ═══ DEFAULT STATE - Prominent but subtle ═══ -->
+    <item>
+        <layer-list>
+            <!-- Semi-transparent red hint -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="22dp" />
+                    <solid android:color="#33FF2D55" />
+                </shape>
+            </item>
+            <!-- Border -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="22dp" />
+                    <stroke
+                        android:width="1.5dp"
+                        android:color="#66FF2D55" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+</selector>

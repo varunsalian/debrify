@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         CINEMA MODE - Premium Theatrical Color Palette
+         Inspired by: Movie theaters, luxury streaming, IMAX experience
+         ═══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- ═══ Deep Blacks - The Canvas ═══ -->
+    <color name="cinema_void">#FF000000</color>
+    <color name="cinema_black">#FF0A0A0C</color>
+    <color name="cinema_charcoal">#FF141418</color>
+    <color name="cinema_slate">#FF1C1C22</color>
+
+    <!-- ═══ Accent - Cinematic Gold (warm theater lighting) ═══ -->
+    <color name="cinema_gold">#FFD4AF37</color>
+    <color name="cinema_gold_soft">#FFFFD700</color>
+    <color name="cinema_gold_glow">#33D4AF37</color>
+    <color name="cinema_amber">#FFFFBF00</color>
+
+    <!-- ═══ Progress - Signature Red (IMAX/Dolby inspired) ═══ -->
+    <color name="cinema_red">#FFFF2D55</color>
+    <color name="cinema_red_deep">#FFDC143C</color>
+    <color name="cinema_red_glow">#66FF2D55</color>
+
+    <!-- ═══ Frosted Glass Dock ═══ -->
+    <color name="cinema_glass">#1AFFFFFF</color>
+    <color name="cinema_glass_border">#26FFFFFF</color>
+    <color name="cinema_glass_highlight">#0DFFFFFF</color>
+    <color name="cinema_glass_focused">#33FFFFFF</color>
+
+    <!-- ═══ Button States ═══ -->
+    <color name="cinema_button_idle">#1AFFFFFF</color>
+    <color name="cinema_button_focused">#FFFFFFFF</color>
+    <color name="cinema_button_focused_bg">#33FFFFFF</color>
+    <color name="cinema_button_pressed">#4DFFFFFF</color>
+
+    <!-- ═══ Text Colors ═══ -->
+    <color name="cinema_text_primary">#FFFFFFFF</color>
+    <color name="cinema_text_secondary">#B3FFFFFF</color>
+    <color name="cinema_text_muted">#66FFFFFF</color>
+    <color name="cinema_text_title">#FFFAF8F5</color>
+
+    <!-- ═══ Progress Bar ═══ -->
+    <color name="cinema_progress_bg">#33FFFFFF</color>
+    <color name="cinema_progress_buffered">#4DFFFFFF</color>
+    <color name="cinema_progress_played">#FFFF2D55</color>
+    <color name="cinema_progress_thumb">#FFFFFFFF</color>
+
+    <!-- ═══ Shadows & Depth ═══ -->
+    <color name="cinema_shadow">#CC000000</color>
+    <color name="cinema_shadow_soft">#66000000</color>
+    <color name="cinema_glow_white">#26FFFFFF</color>
+
+</resources>

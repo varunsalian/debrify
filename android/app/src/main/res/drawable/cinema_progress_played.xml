@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cinema Mode: Progress Bar Played Track (Signature Red) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Main progress color -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="4dp" />
+            <solid android:color="@color/cinema_red" />
+        </shape>
+    </item>
+    <!-- Top highlight for depth -->
+    <item android:top="0dp" android:bottom="3dp">
+        <shape android:shape="rectangle">
+            <corners android:topLeftRadius="4dp" android:topRightRadius="4dp" />
+            <gradient
+                android:angle="90"
+                android:startColor="#00FFFFFF"
+                android:endColor="#33FFFFFF"
+                android:type="linear" />
+        </shape>
+    </item>
+</layer-list>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Text color for Cinema control buttons - inverts on focus -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#FF000000" />
+    <item android:state_pressed="true" android:color="#FF000000" />
+    <item android:color="#FFFFFFFF" />
+</selector>

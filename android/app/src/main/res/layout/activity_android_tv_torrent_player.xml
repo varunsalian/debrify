@@ -29,33 +29,57 @@
         android:paddingBottom="24dp"
         android:elevation="10dp" />
 
-    <!-- Top Title Overlay (fades out after 4 seconds) -->
-    <LinearLayout
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         CINEMA MODE - Premium Title Overlay
+         Cinematic title presentation with elegant typography
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <FrameLayout
         android:id="@+id/android_tv_title_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="20dp"
-        android:paddingBottom="12dp"
         android:visibility="gone"
         android:elevation="20dp">
 
-        <TextView
-            android:id="@+id/android_tv_player_title"
-            android:layout_width="wrap_content"
+        <!-- Cinematic gradient scrim -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:background="@drawable/cinema_title_scrim" />
+
+        <!-- Title content -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:gravity="center"
-            android:maxLines="2"
-            android:textColor="#CCFFFFFF"
-            android:textSize="14sp"
-            android:fontFamily="sans-serif-medium"
-            android:textAlignment="center" />
-    </LinearLayout>
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:paddingStart="48dp"
+            android:paddingEnd="48dp"
+            android:paddingTop="28dp"
+            android:paddingBottom="16dp">
+
+            <!-- Main Title - Elegant serif-like presentation -->
+            <TextView
+                android:id="@+id/android_tv_player_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="2"
+                android:textColor="@color/cinema_text_title"
+                android:textSize="18sp"
+                android:fontFamily="sans-serif-light"
+                android:letterSpacing="0.04"
+                android:lineSpacingMultiplier="1.2"
+                android:textAlignment="center"
+                android:shadowColor="#99000000"
+                android:shadowDx="0"
+                android:shadowDy="2"
+                android:shadowRadius="4" />
+
+        </LinearLayout>
+
+    </FrameLayout>
 
     <!-- Channel Badge (bottom right) -->
     <TextView

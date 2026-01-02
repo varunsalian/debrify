@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cinema Mode: Hero play button state animator - more dramatic -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Focused: Larger scale with dramatic elevation -->
+    <item android:state_focused="true">
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:duration="200"
+                android:valueTo="1.1"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/overshoot" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:duration="200"
+                android:valueTo="1.1"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/overshoot" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:duration="200"
+                android:valueTo="16dp"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </set>
+    </item>
+
+    <!-- Pressed: Quick scale down -->
+    <item android:state_pressed="true">
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:duration="80"
+                android:valueTo="0.92"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:duration="80"
+                android:valueTo="0.92"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:duration="80"
+                android:valueTo="4dp"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </set>
+    </item>
+
+    <!-- Default: Normal scale -->
+    <item>
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:duration="200"
+                android:valueTo="1.0"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:duration="200"
+                android:valueTo="1.0"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:duration="200"
+                android:valueTo="0dp"
+                android:valueType="floatType"
+                android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </set>
+    </item>
+
+</selector>

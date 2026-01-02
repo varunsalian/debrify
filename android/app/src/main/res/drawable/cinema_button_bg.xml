@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cinema Mode: Premium Control Button
+     Elegant pill-shaped buttons with luxurious focus states -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ═══ FOCUSED STATE - Glowing white prominence ═══ -->
+    <item android:state_focused="true">
+        <layer-list>
+            <!-- Outer glow ring -->
+            <item android:bottom="-3dp" android:left="-3dp" android:right="-3dp" android:top="-3dp">
+                <shape android:shape="rectangle">
+                    <corners android:radius="24dp" />
+                    <solid android:color="#00000000" />
+                    <stroke
+                        android:width="4dp"
+                        android:color="#1AFFFFFF" />
+                </shape>
+            </item>
+            <!-- Main button body - bright white -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="20dp" />
+                    <solid android:color="@color/cinema_button_focused" />
+                </shape>
+            </item>
+            <!-- Inner gradient for 3D depth -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="20dp" />
+                    <gradient
+                        android:angle="90"
+                        android:startColor="#0D000000"
+                        android:endColor="#00000000"
+                        android:type="linear" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- ═══ PRESSED STATE - Slightly darker ═══ -->
+    <item android:state_pressed="true">
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="20dp" />
+                    <solid android:color="#E6FFFFFF" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- ═══ DEFAULT STATE - Transparent/ghost ═══ -->
+    <item>
+        <layer-list>
+            <!-- Subtle glass background -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="20dp" />
+                    <solid android:color="#1AFFFFFF" />
+                </shape>
+            </item>
+            <!-- Hairline border -->
+            <item>
+                <shape android:shape="rectangle">
+                    <corners android:radius="20dp" />
+                    <stroke
+                        android:width="1dp"
+                        android:color="#1AFFFFFF" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+</selector>
