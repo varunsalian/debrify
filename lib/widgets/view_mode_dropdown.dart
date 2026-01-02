@@ -41,7 +41,7 @@ class ViewModeDropdown extends StatelessWidget {
       case FolderViewMode.sortedAZ:
         return 'Sort (A-Z)';
       case FolderViewMode.seriesArrange:
-        return 'Series Arrange';
+        return 'Series View';
     }
   }
 

@@ -5071,7 +5071,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           ),
           DropdownMenuItem(
             value: _FolderViewMode.seriesArrange,
-            child: Text('Series Arrange'),
+            child: Text('Series View'),
           ),
         ],
         onChanged: (value) {

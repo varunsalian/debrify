@@ -1341,7 +1341,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           ),
           DropdownMenuItem(
             value: _FolderViewMode.seriesArrange,
-            child: Text('Series Arrange'),
+            child: Text('Series View'),
           ),
         ],
         onChanged: (value) {

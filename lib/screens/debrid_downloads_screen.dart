@@ -1872,7 +1872,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ),
           DropdownMenuItem(
             value: _FolderViewMode.seriesArrange,
-            child: Text('Series Arrange'),
+            child: Text('Series View'),
           ),
         ],
         onChanged: (value) {
