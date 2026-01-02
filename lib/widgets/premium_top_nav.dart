@@ -102,6 +102,10 @@ class _PremiumTopNavState extends State<PremiumTopNav> {
     final haptics = widget.haptics;
     final onTap = widget.onTap;
 
+    // Show all labels on larger screens (tablets, desktops)
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final showAllLabels = screenWidth >= 800;
+
     return SizedBox(
       height: widget.preferredSize.height,
       child: Stack(
@@ -121,6 +125,7 @@ class _PremiumTopNavState extends State<PremiumTopNav> {
                         _TopNavButton(
                           key: ValueKey<String>('top-nav-${items[i].label}'),
                           selected: i == widget.currentIndex,
+                          showLabel: showAllLabels || i == widget.currentIndex,
                           icon: items[i].icon,
                           label: items[i].label,
                           badge: (badges != null && i < badges.length)
@@ -203,6 +208,7 @@ class _ScrollHintOverlay extends StatelessWidget {
 
 class _TopNavButton extends StatefulWidget {
   final bool selected;
+  final bool showLabel;
   final IconData icon;
   final String label;
   final int? badge;
@@ -212,6 +218,7 @@ class _TopNavButton extends StatefulWidget {
   const _TopNavButton({
     super.key,
     required this.selected,
+    required this.showLabel,
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -361,7 +368,7 @@ class _TopNavButtonState extends State<_TopNavButton> {
                       duration: const Duration(milliseconds: 200),
                       switchInCurve: Curves.easeOut,
                       switchOutCurve: Curves.easeOut,
-                      child: selected
+                      child: widget.showLabel
                           ? Padding(
                               key: const ValueKey('label'),
                               padding: const EdgeInsets.only(left: 8),
@@ -369,9 +376,9 @@ class _TopNavButtonState extends State<_TopNavButton> {
                                 widget.label,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.white,
+                                  color: selected ? Colors.white : Colors.white70,
                                   fontSize: 13,
                                 ),
                               ),
