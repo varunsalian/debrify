@@ -1623,33 +1623,72 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  controller: _webLinkController,
-                  maxLines: 2,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Paste URL here (YouTube, file hosts, etc.)',
-                    labelText: 'URL *',
-                    border: OutlineInputBorder(),
+                Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent) {
+                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                        node.nextFocus();
+                        return KeyEventResult.handled;
+                      }
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: TextField(
+                    controller: _webLinkController,
+                    maxLines: 2,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Paste URL here (YouTube, file hosts, etc.)',
+                      labelText: 'URL *',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _webNameController,
-                  decoration: const InputDecoration(
-                    hintText: 'Custom name for the download',
-                    labelText: 'Name (optional)',
-                    border: OutlineInputBorder(),
+                Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent) {
+                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                        node.nextFocus();
+                        return KeyEventResult.handled;
+                      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                        node.previousFocus();
+                        return KeyEventResult.handled;
+                      }
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: TextField(
+                    controller: _webNameController,
+                    decoration: const InputDecoration(
+                      hintText: 'Custom name for the download',
+                      labelText: 'Name (optional)',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _webPasswordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Password if required',
-                    labelText: 'Password (optional)',
-                    border: OutlineInputBorder(),
+                Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent) {
+                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                        node.nextFocus();
+                        return KeyEventResult.handled;
+                      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                        node.previousFocus();
+                        return KeyEventResult.handled;
+                      }
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: TextField(
+                    controller: _webPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Password if required',
+                      labelText: 'Password (optional)',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
