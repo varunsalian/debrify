@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'premium_nav_bar.dart' show NavItem; // reuse NavItem type
@@ -106,48 +107,79 @@ class _PremiumTopNavState extends State<PremiumTopNav> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final showAllLabels = screenWidth >= 800;
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return SizedBox(
       height: widget.preferredSize.height,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: FocusTraversalGroup(
-                policy: OrderedTraversalPolicy(),
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  child: Row(
-                    children: [
-                      for (int i = 0; i < items.length; i++) ...[
-                        _TopNavButton(
-                          key: ValueKey<String>('top-nav-${items[i].label}'),
-                          selected: i == widget.currentIndex,
-                          showLabel: showAllLabels || i == widget.currentIndex,
-                          icon: items[i].icon,
-                          label: items[i].label,
-                          badge: (badges != null && i < badges.length)
-                              ? badges[i]
-                              : null,
-                          autofocus: widget.enableAutofocus && widget.currentIndex == i,
-                          onPressed: () {
-                            if (haptics) HapticFeedback.selectionClick();
-                            onTap(i);
-                          },
-                        ),
-                        if (i != items.length - 1) const SizedBox(width: 8),
-                      ],
-                    ],
-                  ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: colorScheme.surface.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  width: 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: FocusTraversalGroup(
+                        policy: OrderedTraversalPolicy(),
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            child: Row(
+                              children: [
+                                for (int i = 0; i < items.length; i++) ...[
+                                  _TopNavButton(
+                                    key: ValueKey<String>('top-nav-${items[i].label}'),
+                                    selected: i == widget.currentIndex,
+                                    showLabel: showAllLabels || i == widget.currentIndex,
+                                    icon: items[i].icon,
+                                    label: items[i].label,
+                                    badge: (badges != null && i < badges.length)
+                                        ? badges[i]
+                                        : null,
+                                    autofocus: widget.enableAutofocus && widget.currentIndex == i,
+                                    onPressed: () {
+                                      if (haptics) HapticFeedback.selectionClick();
+                                      onTap(i);
+                                    },
+                                  ),
+                                  if (i != items.length - 1) const SizedBox(width: 6),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  _ScrollHintOverlay(isLeft: true, visible: _showLeftHint),
+                  _ScrollHintOverlay(isLeft: false, visible: _showRightHint),
+                ],
               ),
             ),
           ),
-          _ScrollHintOverlay(isLeft: true, visible: _showLeftHint),
-          _ScrollHintOverlay(isLeft: false, visible: _showRightHint),
-        ],
+        ),
       ),
     );
   }
@@ -291,13 +323,7 @@ class _TopNavButtonState extends State<_TopNavButton> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final bool selected = widget.selected;
-    final bool showFocusBorder = _focused || selected;
-
-    final backgroundColor = selected
-        ? colorScheme.primary.withValues(alpha: 0.18)
-        : (_focused
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.transparent);
+    final bool highlighted = _focused || selected;
 
     return FocusableActionDetector(
       focusNode: _focusNode,
@@ -322,39 +348,24 @@ class _TopNavButtonState extends State<_TopNavButton> {
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
-            padding: EdgeInsets.symmetric(
-              horizontal: selected ? 12 : 10,
-              vertical: 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: backgroundColor,
-              border: showFocusBorder
-                  ? Border.all(
-                      color: selected
-                          ? colorScheme.primary
-                          : Colors.white.withValues(alpha: 0.65),
-                      width: selected ? 2 : 1.6,
-                    )
-                  : Border.all(color: Colors.white.withValues(alpha: 0.12)),
-              boxShadow: showFocusBorder
-                  ? [
-                      BoxShadow(
-                        color: (selected
-                                ? colorScheme.primary
-                                : Colors.white)
-                            .withValues(alpha: 0.25),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ]
-                  : null,
+              borderRadius: BorderRadius.circular(10),
+              color: selected
+                  ? colorScheme.primary.withValues(alpha: 0.2)
+                  : (_focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent),
+              border: Border.all(
+                color: selected
+                    ? colorScheme.primary.withValues(alpha: 0.5)
+                    : (_focused ? Colors.white.withValues(alpha: 0.2) : Colors.transparent),
+                width: 1.5,
+              ),
             ),
             child: Material(
               type: MaterialType.transparency,
               child: InkWell(
                 onTap: widget.onPressed,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 canRequestFocus: false,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -362,7 +373,9 @@ class _TopNavButtonState extends State<_TopNavButton> {
                     Icon(
                       widget.icon,
                       size: 18,
-                      color: selected ? colorScheme.primary : Colors.white70,
+                      color: selected
+                          ? colorScheme.primary
+                          : (highlighted ? Colors.white : Colors.white60),
                     ),
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 200),
@@ -377,8 +390,10 @@ class _TopNavButtonState extends State<_TopNavButton> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: selected ? Colors.white : Colors.white70,
+                                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                                  color: selected
+                                      ? Colors.white
+                                      : (highlighted ? Colors.white : Colors.white60),
                                   fontSize: 13,
                                 ),
                               ),
@@ -395,13 +410,11 @@ class _TopNavButtonState extends State<_TopNavButton> {
               right: -4,
               top: -6,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: colorScheme.tertiary,
                   borderRadius: BorderRadius.circular(999),
-                  border:
-                      Border.all(color: Colors.black.withValues(alpha: 0.2)),
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.2)),
                 ),
                 child: Text(
                   widget.badge! > 99 ? '99+' : '${widget.badge}',
