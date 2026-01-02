@@ -23,6 +23,7 @@ import '../../utils/torbox_folder_tree_builder.dart';
 import '../../widgets/stat_chip.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../video_player_screen.dart';
+import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 class TorboxDownloadsScreen extends StatefulWidget {
   const TorboxDownloadsScreen({
@@ -5338,7 +5339,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   Widget _buildWebDownloadCard(TorboxWebDownload webDownload, int index) {
     final videoCount = webDownload.files.where(_torboxFileLooksLikeVideo).length;
 
-    return Card(
+    return TvFocusScrollWrapper(
+      child: Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -5475,6 +5477,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -5482,7 +5485,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   Widget _buildTorrentFolderCard(TorboxTorrent torrent, int index) {
     final videoCount = torrent.files.where(_torboxFileLooksLikeVideo).length;
 
-    return Card(
+    return TvFocusScrollWrapper(
+      child: Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -5633,6 +5637,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -5641,7 +5646,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     final isFolder = node.isFolder;
     final isVideo = !isFolder && FileUtils.isVideoFile(node.name);
 
-    return Card(
+    return TvFocusScrollWrapper(
+      child: Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -5792,6 +5798,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

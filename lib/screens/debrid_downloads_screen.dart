@@ -21,6 +21,7 @@ import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
 import 'dart:ui'; // Added for ImageFilter
 import '../widgets/file_selection_dialog.dart';
+import 'debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 class DebridDownloadsScreen extends StatefulWidget {
   const DebridDownloadsScreen({
@@ -2160,7 +2161,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       ),
     );
 
-    return cardContent;
+    return TvFocusScrollWrapper(child: cardContent);
   }
 
   Widget _buildViewSelector() {
@@ -2673,7 +2674,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       ),
     );
 
-    return cardContent;
+    return TvFocusScrollWrapper(child: cardContent);
   }
 
   Widget _buildPrimaryActionButton({
@@ -2987,7 +2988,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final canStream = download.streamable == 1;
     final isVideo = FileUtils.isVideoFile(download.filename);
 
-    return Card(
+    return TvFocusScrollWrapper(
+      child: Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -3110,6 +3112,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

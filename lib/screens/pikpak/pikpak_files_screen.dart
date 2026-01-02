@@ -11,6 +11,7 @@ import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
 import '../../widgets/file_selection_dialog.dart';
+import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
   final String? initialFolderId;
@@ -1628,7 +1629,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // We'll check for actual streaming links when playing
     final hasStreamingLink = isVideo && isComplete;
 
-    return Card(
+    return TvFocusScrollWrapper(
+      child: Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1838,6 +1840,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
