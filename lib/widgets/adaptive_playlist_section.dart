@@ -98,10 +98,12 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
       return (5, 0.68);
     } else if (screenWidth > 600) {
       return (4, 0.72);
-    } else if (screenWidth > 400) {
-      return (3, 0.68);
+    } else if (screenWidth > 500) {
+      // Larger phones/small tablets: 3 columns
+      return (3, 0.62);
     } else {
-      return (2, 0.72);
+      // Standard phones: 2 columns with taller cards for better visibility
+      return (2, 0.58);
     }
   }
 

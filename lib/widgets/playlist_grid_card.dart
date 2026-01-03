@@ -183,14 +183,14 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
       // Desktop/tablet: readable font, 4 lines for long titles
       titleFontSize = 13;
       maxLines = 4;
-    } else if (screenWidth > 400) {
-      // Mobile: medium font, 3 lines
+    } else if (screenWidth > 500) {
+      // Larger phones: medium font, 3 lines
       titleFontSize = 13;
       maxLines = 3;
     } else {
-      // Small mobile: standard font, 2 lines
+      // Standard phones: larger font for better readability, 3 lines
       titleFontSize = 14;
-      maxLines = 2;
+      maxLines = 3;
     }
 
     return MouseRegion(
