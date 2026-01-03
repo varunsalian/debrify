@@ -1656,7 +1656,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   // Handle IMDB result selection
-  void _onImdbResultSelected(ImdbTitleResult result) async {
+  Future<void> _onImdbResultSelected(ImdbTitleResult result) async {
 
     // Clear autocomplete immediately
     setState(() {
@@ -2036,6 +2036,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
       },
     ).then((selectedValue) {
+      if (!mounted) return;
       if (selectedValue != _selectedSeason) {
         setState(() {
           _selectedSeason = selectedValue;
@@ -10522,16 +10523,25 @@ class _TorrentCardState extends State<_TorrentCard> {
   bool _isFocused = false;
   // Static timer shared across all cards to throttle scroll animations
   static Timer? _scrollThrottleTimer;
+  // Track active instances to clean up static timer when last one disposes
+  static int _activeInstances = 0;
 
   @override
   void initState() {
     super.initState();
+    _activeInstances++;
     widget.focusNode.addListener(_onFocusChange);
   }
 
   @override
   void dispose() {
     widget.focusNode.removeListener(_onFocusChange);
+    _activeInstances--;
+    // Cancel static timer when last instance disposes
+    if (_activeInstances == 0) {
+      _scrollThrottleTimer?.cancel();
+      _scrollThrottleTimer = null;
+    }
     super.dispose();
   }
 
@@ -11417,10 +11427,13 @@ class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
   bool _isFocused = false;
   // Static timer shared across all autocomplete items to throttle scroll animations
   static Timer? _scrollThrottleTimer;
+  // Track active instances to clean up static timer when last one disposes
+  static int _activeInstances = 0;
 
   @override
   void initState() {
     super.initState();
+    _activeInstances++;
     widget.focusNode.addListener(_onFocusChange);
     _isFocused = widget.focusNode.hasFocus;
   }
@@ -11428,6 +11441,12 @@ class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
   @override
   void dispose() {
     widget.focusNode.removeListener(_onFocusChange);
+    _activeInstances--;
+    // Cancel static timer when last instance disposes
+    if (_activeInstances == 0) {
+      _scrollThrottleTimer?.cancel();
+      _scrollThrottleTimer = null;
+    }
     super.dispose();
   }
 
