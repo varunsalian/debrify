@@ -77,6 +77,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   bool _isScrollScheduled =
       false; // Flag to prevent duplicate scroll scheduling
 
+  // OTT view auto-switch timer (for non-series content)
+  Timer? _ottViewAutoSwitchTimer;
+
   // Search state (for Raw and Sort A-Z modes)
   bool _isSearchActive = false;
   final TextEditingController _searchController = TextEditingController();
@@ -131,6 +134,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     _scrollRetryTimer
         ?.cancel(); // Cancel any pending scroll retry to prevent memory leaks
+    _ottViewAutoSwitchTimer
+        ?.cancel(); // Cancel OTT view auto-switch timer to prevent memory leaks
     _viewModeDropdownFocusNode.dispose();
     _backButtonFocusNode.dispose();
     _episodeListScrollController.dispose();
@@ -1430,7 +1435,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     if (!_seriesPlaylist!.isSeries) {
       // Auto-switch to Sort (A-Z) view after a brief delay
-      Future.delayed(const Duration(seconds: 2), () {
+      // Cancel any pending timer to prevent duplicates
+      _ottViewAutoSwitchTimer?.cancel();
+      _ottViewAutoSwitchTimer = Timer(const Duration(seconds: 2), () {
         if (mounted && _currentViewMode == FolderViewMode.seriesArrange) {
           setState(() {
             _currentViewMode = FolderViewMode.sortedAZ;

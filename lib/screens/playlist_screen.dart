@@ -72,6 +72,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   @override
   void dispose() {
+    // Clear static callback to prevent memory leak
+    MainPageBridge.playPlaylistItem = null;
+    // Remove listener before disposing controller
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
     _searchQuery.dispose();
