@@ -17,10 +17,10 @@
     <color name="cinema_gold_glow">#33D4AF37</color>
     <color name="cinema_amber">#FFFFBF00</color>
 
-    <!-- ═══ Progress - Signature Red (IMAX/Dolby inspired) ═══ -->
-    <color name="cinema_red">#FFFF2D55</color>
-    <color name="cinema_red_deep">#FFDC143C</color>
-    <color name="cinema_red_glow">#66FF2D55</color>
+    <!-- ═══ Progress - Netflix Red ═══ -->
+    <color name="cinema_red">#FFE50914</color>
+    <color name="cinema_red_deep">#FFB20710</color>
+    <color name="cinema_red_glow">#66E50914</color>
 
     <!-- ═══ Frosted Glass Dock ═══ -->
     <color name="cinema_glass">#1AFFFFFF</color>
@@ -43,7 +43,7 @@
     <!-- ═══ Progress Bar ═══ -->
     <color name="cinema_progress_bg">#33FFFFFF</color>
     <color name="cinema_progress_buffered">#4DFFFFFF</color>
-    <color name="cinema_progress_played">#FFFF2D55</color>
+    <color name="cinema_progress_played">#FFE50914</color>
     <color name="cinema_progress_thumb">#FFFFFFFF</color>
 
     <!-- ═══ Shadows & Depth ═══ -->

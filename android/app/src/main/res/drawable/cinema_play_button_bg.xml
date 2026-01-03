@@ -13,7 +13,7 @@
                     <solid android:color="#00000000" />
                     <stroke
                         android:width="6dp"
-                        android:color="#33FF2D55" />
+                        android:color="#33E50914" />
                 </shape>
             </item>
             <!-- Main button body - signature red -->
@@ -56,7 +56,7 @@
             <item>
                 <shape android:shape="rectangle">
                     <corners android:radius="22dp" />
-                    <solid android:color="#33FF2D55" />
+                    <solid android:color="#33E50914" />
                 </shape>
             </item>
             <!-- Border -->
@@ -65,7 +65,7 @@
                     <corners android:radius="22dp" />
                     <stroke
                         android:width="1.5dp"
-                        android:color="#66FF2D55" />
+                        android:color="#66E50914" />
                 </shape>
             </item>
         </layer-list>

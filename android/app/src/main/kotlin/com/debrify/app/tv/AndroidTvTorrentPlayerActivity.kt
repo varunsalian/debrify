@@ -2025,8 +2025,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .start()
         }
 
-        // Highlight current time
-        debrifyTimeCurrent?.setTextColor(Color.parseColor("#FF2D55"))
+        // Highlight current time with Netflix red
+        debrifyTimeCurrent?.setTextColor(Color.parseColor("#E50914"))
 
         // Cache track width
         cinemaProgressBackground?.let { bg ->
