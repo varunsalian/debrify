@@ -8900,8 +8900,49 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             autocompleteFocusNodes: _autocompleteFocusNodes,
                             seasonInputFocusNode: _seasonInputFocusNode,
                             onClearPressed: () {
+                              // Reset search input (controllers can be cleared outside setState)
                               _searchController.clear();
-                              _handleSearchFieldChanged('');
+                              _seasonController.clear();
+                              _episodeController.clear();
+
+                              // Cancel any pending IMDB debounced search
+                              _imdbSearchDebouncer?.cancel();
+
+                              // Invalidate any pending search requests
+                              _activeSearchRequestId++;
+                              _imdbRequestId++;
+
+                              // Reset all state inside setState for proper UI rebuild
+                              setState(() {
+                                // IMDB state
+                                _selectedImdbTitle = null;
+                                _activeAdvancedSelection = null;
+                                _isSeries = false;
+                                _availableSeasons = null;
+                                _selectedSeason = null;
+                                _imdbAutocompleteResults.clear();
+                                _imdbSearchError = null;
+                                _isImdbSearching = false;
+                                _imdbControlsCollapsed = false;
+                                _seriesControlsExpanded = false;
+
+                                // Search results - back to initial state
+                                _hasSearched = false;
+                                _isLoading = false;
+                                _allTorrents = [];
+                                _torrents = [];
+                                _engineCounts = {};
+                                _engineErrors = {};
+                                _torrentMetadata = {};
+                                _errorMessage = '';
+                                _selectedEngineFilter = null;
+                                _filters = const TorrentFilterState.empty();
+                                _torboxCacheStatus = null;
+                                _showingTorboxCachedOnly = false;
+                                _sortBy = 'relevance';
+                                _sortAscending = false;
+                              });
+
                               _searchFocusNode.requestFocus();
                             },
                             onChanged: _handleSearchFieldChanged,
