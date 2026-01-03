@@ -1008,14 +1008,23 @@ class DownloadService {
               AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
               _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
               if (recId != null) _upsertRecord(recId, {'state': 'paused'});
+              _lastFileByTaskId.remove(taskId);
+              _reevaluateQueue();
             } else {
-              debugPrint('ANDR ERR net=${nowNet.name} → failed');
-              AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
-              _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
-              if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+              // Network is online - try PikPak cold storage retry first
+              _lastFileByTaskId.remove(taskId);
+              unawaited(() async {
+                final retried = await _handlePikPakFailedRetry(recId);
+                if (!retried) {
+                  // Not PikPak or max retries exceeded - mark as failed
+                  debugPrint('ANDR ERR net=${nowNet.name} → failed');
+                  AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+                  _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+                  if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+                }
+                _reevaluateQueue();
+              }());
             }
-            _lastFileByTaskId.remove(taskId);
-            _reevaluateQueue();
             break;
         }
       });
@@ -1040,8 +1049,20 @@ class DownloadService {
                 await FileDownloader().database.deleteRecordWithId(update.task.taskId);
               } catch (_) {}
             }
-            if (update.status == TaskStatus.complete ||
-                update.status == TaskStatus.failed ||
+            if (update.status == TaskStatus.failed) {
+              // Try PikPak cold storage retry before giving up
+              final recId = _resolveRecordIdForTaskId(update.task.taskId);
+              unawaited(() async {
+                final retried = await _handlePikPakFailedRetry(recId);
+                if (retried) {
+                  // Clean up the failed task record from plugin
+                  try {
+                    await FileDownloader().database.deleteRecordWithId(update.task.taskId);
+                  } catch (_) {}
+                }
+                _reevaluateQueue();
+              }());
+            } else if (update.status == TaskStatus.complete ||
                 update.status == TaskStatus.canceled ||
                 update.status == TaskStatus.paused) {
               _reevaluateQueue();
@@ -1531,6 +1552,93 @@ class DownloadService {
 
   (String contentUri, String mimeType)? getLastFileForTask(String taskId) => _lastFileByTaskId[taskId];
 
+  /// Handles PikPak cold storage retry for failed downloads.
+  /// Returns true if retry was initiated, false if not applicable or max retries exceeded.
+  Future<bool> _handlePikPakFailedRetry(String? recId) async {
+    if (recId == null) return false;
+
+    final rec = _records[recId];
+    if (rec == null) return false;
+
+    final String? metaStr = rec['meta'] as String?;
+    if (metaStr == null || metaStr.isEmpty) return false;
+
+    try {
+      final meta = jsonDecode(metaStr);
+      final isPikPak = meta['pikpakDownload'] == true;
+      if (!isPikPak) return false;
+
+      final fileId = meta['pikpakFileId'] as String?;
+      if (fileId == null || fileId.isEmpty) return false;
+
+      // PikPak cold storage retry with exponential backoff
+      // Same constants as in catch block during start
+      const int pikpakMaxColdRetries = 5;
+      const int pikpakBaseDelaySeconds = 5;
+      const int pikpakMaxDelaySeconds = 30;
+
+      final int coldAttempt = (meta['_pikpakColdAttempt'] as int?) ?? 0;
+
+      if (coldAttempt >= pikpakMaxColdRetries) {
+        debugPrint('DL RETRY PIKPAK FAILED: Max cold storage retries ($pikpakMaxColdRetries) exceeded for file $fileId');
+        return false;
+      }
+
+      // Calculate delay with exponential backoff (capped)
+      final int delaySeconds = (pikpakBaseDelaySeconds * (1 << coldAttempt))
+          .clamp(pikpakBaseDelaySeconds, pikpakMaxDelaySeconds);
+
+      debugPrint('DL RETRY PIKPAK FAILED: Cold storage attempt ${coldAttempt + 1}/$pikpakMaxColdRetries, waiting ${delaySeconds}s for file $fileId');
+
+      // Wait for cold storage to potentially warm up
+      await Future.delayed(Duration(seconds: delaySeconds));
+
+      debugPrint('DL RETRY PIKPAK FAILED: Refreshing URL for file $fileId');
+
+      // Get fresh file details
+      final freshData = await PikPakApiService.instance.getFileDetails(fileId);
+      final freshUrl = PikPakApiService.instance.getStreamingUrl(freshData);
+
+      if (freshUrl == null || freshUrl.isEmpty) {
+        debugPrint('DL RETRY PIKPAK FAILED: Failed to get fresh URL');
+        return false;
+      }
+
+      // Update meta with incremented cold attempt count
+      final updatedMeta = Map<String, dynamic>.from(meta);
+      updatedMeta['_pikpakColdAttempt'] = coldAttempt + 1;
+
+      // Re-queue the download
+      final displayName = rec['displayName'] as String?;
+      final torrentName = rec['torrentName'] as String?;
+      final destPath = rec['destPath'] as String?;
+      final wifiOnly = rec['wifiOnly'] as bool? ?? false;
+      final retries = rec['retries'] as int? ?? 3;
+
+      // Remove old record
+      _records.remove(recId);
+      await _saveRecords();
+
+      // Enqueue with fresh URL
+      await enqueueDownload(
+        url: freshUrl,
+        fileName: displayName,
+        meta: jsonEncode(updatedMeta),
+        torrentName: torrentName,
+        destPath: destPath,
+        wifiOnly: wifiOnly,
+        retries: retries,
+        insertAtFront: true,
+      );
+
+      debugPrint('DL RETRY PIKPAK FAILED: Re-queued with fresh URL (attempt ${coldAttempt + 1})');
+      return true;
+    } catch (e) {
+      debugPrint('DL RETRY PIKPAK FAILED: Error during retry: $e');
+      return false;
+    }
+  }
+
   Future<void> _reevaluateQueue() async {
     if (_reevaluating) {
       _reevaluateScheduled = true;
@@ -1855,35 +1963,62 @@ class DownloadService {
               final fileId = meta['pikpakFileId'] as String?;
               if (fileId != null && fileId.isNotEmpty) {
                 try {
-                  debugPrint('DL RETRY PIKPAK: Refreshing URL for file $fileId');
+                  // PikPak cold storage retry with exponential backoff
+                  // Files in cold storage need 10-30s to reactivate
+                  // Total worst case: 5 + 10 + 20 + 30 + 30 = 95 seconds
+                  const int pikpakMaxColdRetries = 5;
+                  const int pikpakBaseDelaySeconds = 5;
+                  const int pikpakMaxDelaySeconds = 30;
 
-                  // Get fresh file details
-                  final freshData = await PikPakApiService.instance.getFileDetails(fileId);
-                  final freshUrl = PikPakApiService.instance.getStreamingUrl(freshData);
+                  final int coldAttempt = (meta['_pikpakColdAttempt'] as int?) ?? 0;
 
-                  if (freshUrl != null && freshUrl.isNotEmpty) {
-                    // Create new pending request with fresh URL
-                    final refreshed = _PendingRequest(
-                      queuedId: p.queuedId,
-                      url: freshUrl,
-                      providedFileName: p.providedFileName,
-                      headers: p.headers,
-                      wifiOnly: p.wifiOnly,
-                      retries: p.retries,
-                      meta: p.meta,
-                      context: p.context,
-                      torrentName: p.torrentName,
-                      contentKey: p.contentKey,
-                      destPath: p.destPath,
-                    );
-                    _pending.insert(0, refreshed);
-                    _pendingById[refreshed.queuedId] = refreshed;
-                    await _persistPending();
-                    retried = true;
-                    debugPrint('DL RETRY PIKPAK: Re-queued with fresh URL');
-                    continue; // try scheduling the refreshed entry immediately
+                  if (coldAttempt >= pikpakMaxColdRetries) {
+                    debugPrint('DL RETRY PIKPAK: Max cold storage retries ($pikpakMaxColdRetries) exceeded for file $fileId');
+                    // Don't retry anymore, let it fail
                   } else {
-                    debugPrint('DL RETRY PIKPAK: Failed to get fresh URL');
+                    // Calculate delay with exponential backoff (capped)
+                    final int delaySeconds = (pikpakBaseDelaySeconds * (1 << coldAttempt))
+                        .clamp(pikpakBaseDelaySeconds, pikpakMaxDelaySeconds);
+
+                    debugPrint('DL RETRY PIKPAK: Cold storage attempt ${coldAttempt + 1}/$pikpakMaxColdRetries, waiting ${delaySeconds}s before retry for file $fileId');
+
+                    // Wait for cold storage to potentially warm up
+                    await Future.delayed(Duration(seconds: delaySeconds));
+
+                    debugPrint('DL RETRY PIKPAK: Refreshing URL for file $fileId');
+
+                    // Get fresh file details
+                    final freshData = await PikPakApiService.instance.getFileDetails(fileId);
+                    final freshUrl = PikPakApiService.instance.getStreamingUrl(freshData);
+
+                    if (freshUrl != null && freshUrl.isNotEmpty) {
+                      // Update meta with incremented cold attempt count
+                      final updatedMeta = Map<String, dynamic>.from(meta);
+                      updatedMeta['_pikpakColdAttempt'] = coldAttempt + 1;
+
+                      // Create new pending request with fresh URL and updated meta
+                      final refreshed = _PendingRequest(
+                        queuedId: p.queuedId,
+                        url: freshUrl,
+                        providedFileName: p.providedFileName,
+                        headers: p.headers,
+                        wifiOnly: p.wifiOnly,
+                        retries: p.retries,
+                        meta: jsonEncode(updatedMeta),
+                        context: p.context,
+                        torrentName: p.torrentName,
+                        contentKey: p.contentKey,
+                        destPath: p.destPath,
+                      );
+                      _pending.insert(0, refreshed);
+                      _pendingById[refreshed.queuedId] = refreshed;
+                      await _persistPending();
+                      retried = true;
+                      debugPrint('DL RETRY PIKPAK: Re-queued with fresh URL (attempt ${coldAttempt + 1})');
+                      continue; // try scheduling the refreshed entry immediately
+                    } else {
+                      debugPrint('DL RETRY PIKPAK: Failed to get fresh URL');
+                    }
                   }
                 } catch (e) {
                   debugPrint('DL RETRY PIKPAK: Error refreshing URL: $e');
