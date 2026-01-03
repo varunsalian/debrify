@@ -77,6 +77,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   bool _isScrollScheduled =
       false; // Flag to prevent duplicate scroll scheduling
 
+  // Search state (for Raw and Sort A-Z modes)
+  bool _isSearchActive = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'playlist-search');
+  final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'playlist-search-button');
+  List<_SearchResult> _searchResults = [];
+
   @override
   void initState() {
     super.initState();
@@ -127,12 +134,20 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     _viewModeDropdownFocusNode.dispose();
     _backButtonFocusNode.dispose();
     _episodeListScrollController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchButtonFocusNode.dispose();
     super.dispose();
   }
 
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up folder), false if at root (let Navigator.pop handle it).
   bool _handleBackNavigation() {
+    // Close search first if active
+    if (_isSearchActive) {
+      _toggleSearch();
+      return true; // We handled the back press (closed search)
+    }
     if (_folderPath.isNotEmpty) {
       _navigateUp();
       return true; // We handled the back press (navigated up a folder)
@@ -463,6 +478,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     setState(() {
       _currentViewMode = mode;
+
+      // Close search when switching to Series Arrange mode
+      if (mode == FolderViewMode.seriesArrange && _isSearchActive) {
+        _isSearchActive = false;
+        _searchController.clear();
+        _searchResults.clear();
+      }
 
       // Get current folder's nodes
       RDFileNode currentFolder = _rootContent!;
@@ -866,6 +888,242 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
   }
 
+  // ============ Search Methods ============
+
+  /// Toggle search mode on/off
+  void _toggleSearch() {
+    setState(() {
+      _isSearchActive = !_isSearchActive;
+      if (!_isSearchActive) {
+        _searchController.clear();
+        _searchResults.clear();
+      } else {
+        // Focus the search field when activating
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _searchFocusNode.requestFocus();
+        });
+      }
+    });
+  }
+
+  /// Perform deep search across all files
+  void _performSearch(String query) {
+    if (_rootContent == null || query.isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+
+    final lowerQuery = query.toLowerCase();
+    final results = <_SearchResult>[];
+
+    // Recursive function to search with path tracking
+    void searchNode(RDFileNode node, List<String> path) {
+      if (!node.isFolder) {
+        // Only search video files
+        if (FileUtils.isVideoFile(node.name) &&
+            node.name.toLowerCase().contains(lowerQuery)) {
+          results.add(_SearchResult(
+            node: node,
+            path: path.join(' / '),
+          ));
+        }
+      } else {
+        // Recurse into folder
+        for (final child in node.children) {
+          searchNode(child, [...path, node.name]);
+        }
+      }
+    }
+
+    // Start search from root's children (skip root name itself)
+    for (final child in _rootContent!.children) {
+      searchNode(child, []);
+    }
+
+    setState(() => _searchResults = results);
+  }
+
+  /// Build the search bar widget
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search all files...',
+          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.grey),
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchResults.clear();
+                    });
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: const Color(0xFF1E293B),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        style: const TextStyle(color: Colors.white),
+        onChanged: _performSearch,
+        onSubmitted: (_) {
+          // Unfocus TextField when user presses search/enter on TV keyboard
+          _searchFocusNode.unfocus();
+        },
+      ),
+    );
+  }
+
+  /// Build the search results list
+  Widget _buildSearchResults() {
+    if (_searchController.text.isEmpty) {
+      return const Center(
+        child: Text(
+          'Type to search all files',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Text(
+          'No files found',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        return _buildSearchResultCard(result);
+      },
+    );
+  }
+
+  /// Build a card for a search result
+  Widget _buildSearchResultCard(_SearchResult result) {
+    final node = result.node;
+
+    // Get progress for this file
+    double progress = 0.0;
+    bool isFinished = false;
+    final progressData = _getProgressForFile(node);
+    if (progressData != null) {
+      final positionMs = progressData['positionMs'] as int? ?? 0;
+      final durationMs = progressData['durationMs'] as int? ?? 0;
+      if (durationMs > 0) {
+        progress = positionMs / durationMs;
+        isFinished = progress >= 0.9 || (durationMs - positionMs) < 120000;
+      }
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: const Color(0xFF1E293B),
+      child: InkWell(
+        onTap: () => _playFile(node),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  // Icon
+                  const Icon(
+                    Icons.play_circle_outline,
+                    color: Colors.blue,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 12),
+                  // File info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          node.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        // Show path if not empty
+                        if (result.path.isNotEmpty)
+                          Text(
+                            result.path,
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        if (node.bytes != null)
+                          Text(
+                            Formatters.formatFileSize(node.bytes!),
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Progress badge
+                  if (progress > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isFinished ? Colors.green : Colors.blue,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        isFinished ? 'DONE' : '${(progress * 100).toInt()}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Progress bar at bottom
+            if (progress > 0 && !isFinished)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: Colors.transparent,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                  minHeight: 3,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Back navigation is handled via MainPageBridge.handleBackNavigation
@@ -877,6 +1135,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           onPressed: _navigateUp,
         ),
         actions: [
+          // Search button (only for Raw and Sort A-Z modes)
+          if (_currentViewMode != FolderViewMode.seriesArrange)
+            IconButton(
+              focusNode: _searchButtonFocusNode,
+              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+              onPressed: _toggleSearch,
+              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadContent,
@@ -894,8 +1160,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               focusNode: _viewModeDropdownFocusNode,
             ),
 
+          // Search bar (only for Raw and Sort A-Z modes when active)
+          if (_isSearchActive && _currentViewMode != FolderViewMode.seriesArrange)
+            _buildSearchBar(),
+
           // Content area
-          Expanded(child: _buildContent()),
+          Expanded(child: _isSearchActive ? _buildSearchResults() : _buildContent()),
         ],
       ),
     );
@@ -3199,4 +3469,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     return cleanedPath;
   }
+}
+
+/// Helper class to hold search result with its folder path
+class _SearchResult {
+  final RDFileNode node;
+  final String path;
+
+  const _SearchResult({
+    required this.node,
+    required this.path,
+  });
 }
