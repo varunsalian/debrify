@@ -30,8 +30,7 @@
         android:elevation="10dp" />
 
     <!-- ═══════════════════════════════════════════════════════════════════════
-         CINEMA MODE - Premium Title Overlay
-         Cinematic title presentation with elegant typography
+         CINEMA MODE - Subtle Title Overlay
          ═══════════════════════════════════════════════════════════════════════ -->
     <FrameLayout
         android:id="@+id/android_tv_title_container"
@@ -41,43 +40,132 @@
         android:visibility="gone"
         android:elevation="20dp">
 
-        <!-- Cinematic gradient scrim -->
+        <!-- Subtle gradient scrim -->
         <View
             android:layout_width="match_parent"
-            android:layout_height="120dp"
+            android:layout_height="72dp"
             android:background="@drawable/cinema_title_scrim" />
 
-        <!-- Title content -->
-        <LinearLayout
+        <!-- ═══ SIMPLE MODE: Centered title ═══ -->
+        <TextView
+            android:id="@+id/android_tv_player_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
             android:paddingStart="48dp"
             android:paddingEnd="48dp"
-            android:paddingTop="28dp"
-            android:paddingBottom="16dp">
+            android:paddingTop="20dp"
+            android:paddingBottom="12dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="2"
+            android:textColor="#CCFFFFFF"
+            android:textSize="15sp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.02"
+            android:lineSpacingMultiplier="1.2"
+            android:shadowColor="#66000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
 
-            <!-- Main Title - Elegant serif-like presentation -->
-            <TextView
-                android:id="@+id/android_tv_player_title"
-                android:layout_width="wrap_content"
+        <!-- ═══ OTT MODE: Compact metadata layout ═══ -->
+        <LinearLayout
+            android:id="@+id/android_tv_title_ott"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="48dp"
+            android:paddingEnd="48dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="12dp"
+            android:visibility="gone">
+
+            <!-- Left: Badge + Episode Title -->
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="2"
-                android:textColor="@color/cinema_text_title"
-                android:textSize="18sp"
-                android:fontFamily="sans-serif-light"
-                android:letterSpacing="0.04"
-                android:lineSpacingMultiplier="1.2"
-                android:textAlignment="center"
-                android:shadowColor="#99000000"
-                android:shadowDx="0"
-                android:shadowDy="2"
-                android:shadowRadius="4" />
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <!-- Top row: Badge + Rating -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Episode Badge -->
+                    <TextView
+                        android:id="@+id/android_tv_ott_episode_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/ott_episode_badge"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:paddingTop="3dp"
+                        android:paddingBottom="3dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:fontFamily="sans-serif-medium" />
+
+                    <!-- IMDB Rating (compact, inline) -->
+                    <LinearLayout
+                        android:id="@+id/android_tv_ott_rating_container"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginStart="12dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="★"
+                            android:textColor="#F5C518"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/android_tv_ott_rating"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="3dp"
+                            android:textColor="#99FFFFFF"
+                            android:textSize="12sp"
+                            android:fontFamily="sans-serif-medium" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Episode Title (can wrap to 2 lines) -->
+                <TextView
+                    android:id="@+id/android_tv_ott_episode_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textColor="#CCFFFFFF"
+                    android:textSize="15sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:lineSpacingMultiplier="1.2"
+                    android:shadowColor="#66000000"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="3" />
+
+            </LinearLayout>
 
         </LinearLayout>
+
+        <!-- Hidden: Series name (kept for binding but not shown) -->
+        <TextView
+            android:id="@+id/android_tv_ott_series_name"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
 
     </FrameLayout>
 

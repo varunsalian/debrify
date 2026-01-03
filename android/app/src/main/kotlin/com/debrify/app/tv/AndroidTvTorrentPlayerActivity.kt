@@ -51,6 +51,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var playerView: PlayerView
     private lateinit var titleContainer: View
     private lateinit var titleView: TextView
+    // OTT-style title views (compact mode when metadata available)
+    private lateinit var titleOttContainer: View
+    private lateinit var ottEpisodeBadge: TextView
+    private lateinit var ottEpisodeTitle: TextView
+    private lateinit var ottRatingContainer: View
+    private lateinit var ottRating: TextView
     private lateinit var channelBadge: TextView
     private lateinit var subtitleOverlay: SubtitleView
     private lateinit var playlistOverlay: View
@@ -345,6 +351,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     seriesAdapter?.notifyDataSetChanged()
                     movieAdapter?.notifyDataSetChanged()
                     android.util.Log.d("TVMazeUpdate", "UI refresh done")
+
+                    // Also refresh title bar for currently playing episode
+                    val currentItem = model.items.getOrNull(currentIndex)
+                    if (currentItem != null) {
+                        android.util.Log.d("TVMazeUpdate", "Refreshing title for current episode: ${currentItem.title}")
+                        updateTitle(currentItem)
+                    }
                 }
             } else {
                 android.util.Log.w("TVMazeUpdate", "No items updated - anyUpdated=false")
@@ -390,6 +403,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playerView = findViewById(R.id.android_tv_player_view)
         titleContainer = findViewById(R.id.android_tv_title_container)
         titleView = findViewById(R.id.android_tv_player_title)
+        // OTT-style title views (compact mode)
+        titleOttContainer = findViewById(R.id.android_tv_title_ott)
+        ottEpisodeBadge = findViewById(R.id.android_tv_ott_episode_badge)
+        ottEpisodeTitle = findViewById(R.id.android_tv_ott_episode_title)
+        ottRatingContainer = findViewById(R.id.android_tv_ott_rating_container)
+        ottRating = findViewById(R.id.android_tv_ott_rating)
         channelBadge = findViewById(R.id.android_tv_channel_badge)
         subtitleOverlay = findViewById(R.id.android_tv_subtitles_custom)
         playlistOverlay = findViewById(R.id.android_tv_playlist_overlay)
@@ -1284,9 +1303,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateTitle(item: PlaybackItem) {
+        // Always set the simple title (used when controls not visible)
         titleView.text = item.title
-        channelBadge.visibility = View.GONE
 
+        // Pre-populate OTT fields for when controls menu is shown
+        val model = payload
+        if (model?.contentType?.lowercase(java.util.Locale.US) == "series") {
+            if (item.season != null && item.episode != null) {
+                val seasonStr = item.season.toString().padStart(2, '0')
+                val episodeStr = item.episode.toString().padStart(2, '0')
+                ottEpisodeBadge.text = "S$seasonStr E$episodeStr"
+            }
+            ottEpisodeTitle.text = item.title
+
+            val rating = item.rating
+            if (rating != null && rating > 0) {
+                ottRatingContainer.visibility = View.VISIBLE
+                ottRating.text = String.format(java.util.Locale.US, "%.1f", rating)
+            } else {
+                ottRatingContainer.visibility = View.GONE
+            }
+        }
+
+        // Always show simple mode by default (OTT mode only when controls menu visible)
+        titleView.visibility = View.VISIBLE
+        titleOttContainer.visibility = View.GONE
+
+        channelBadge.visibility = View.GONE
         titleContainer.visibility = View.VISIBLE
         titleContainer.alpha = 1f
         titleHandler.removeCallbacks(hideTitleRunnable)
@@ -1762,10 +1805,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Hide subtitles when controls menu is shown
         subtitleOverlay.visibility = View.GONE
 
-        // Show title when controls menu is shown (matches TorboxTv behavior)
+        // Show title when controls menu is shown
         titleHandler.removeCallbacks(hideTitleRunnable)
         titleContainer.animate().cancel()
-        if (titleView.text?.isNotEmpty() == true) {
+
+        // Switch to OTT mode if we have series metadata, otherwise keep simple mode
+        val model = payload
+        val currentItem = model?.items?.getOrNull(currentIndex)
+        val hasSeriesMetadata = model?.contentType?.lowercase(java.util.Locale.US) == "series" &&
+                               currentItem?.season != null && currentItem.episode != null
+
+        if (hasSeriesMetadata) {
+            titleView.visibility = View.GONE
+            titleOttContainer.visibility = View.VISIBLE
+        } else {
+            titleView.visibility = View.VISIBLE
+            titleOttContainer.visibility = View.GONE
+        }
+
+        if (titleView.text?.isNotEmpty() == true || hasSeriesMetadata) {
             titleContainer.visibility = View.VISIBLE
             titleContainer.alpha = 1f
         }
@@ -1817,13 +1875,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         cancelScheduledHideControlsMenu()
         controlsMenuVisible = false
 
-        // Hide title when controls hide
+        // Hide title and revert to simple mode when controls hide
         titleHandler.removeCallbacks(hideTitleRunnable)
         titleContainer.animate()
             .alpha(0f)
             .setDuration(250)
             .withEndAction {
                 titleContainer.visibility = View.GONE
+                // Revert to simple mode for next title flash
+                titleView.visibility = View.VISIBLE
+                titleOttContainer.visibility = View.GONE
             }
             .start()
 
