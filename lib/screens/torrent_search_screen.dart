@@ -11298,6 +11298,34 @@ class _SearchTextFieldState extends State<_SearchTextField> {
           child: Focus(
             focusNode: widget.focusNode,
             onFocusChange: (_) {}, // Handled by listener
+            onKeyEvent: (node, event) {
+              // On TV, handle Escape/Back to clear search when there's text
+              if (widget.isTelevision &&
+                  event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.escape ||
+                      event.logicalKey == LogicalKeyboardKey.goBack)) {
+                if (widget.controller.text.isNotEmpty) {
+                  widget.onClearPressed();
+                  return KeyEventResult.handled;
+                }
+              }
+              // On TV, handle arrow right at end of text to trigger clear
+              if (widget.isTelevision &&
+                  event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                final text = widget.controller.text;
+                final selection = widget.controller.selection;
+                // Check if cursor is at end of text
+                if (text.isNotEmpty &&
+                    selection.isValid &&
+                    selection.isCollapsed &&
+                    selection.baseOffset >= text.length) {
+                  widget.onClearPressed();
+                  return KeyEventResult.handled;
+                }
+              }
+              return KeyEventResult.ignored;
+            },
             child: TextField(
               controller: widget.controller,
               onSubmitted: widget.onSubmitted,
