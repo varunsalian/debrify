@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'dart:convert';
-import 'dart:developer' show Timeline, Flow;
 import 'package:flutter/services.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/torrent.dart';
@@ -127,7 +127,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _expandControlsFocusNode = FocusNode();
   final FocusNode _seasonInputFocusNode = FocusNode();
   final FocusNode _episodeInputFocusNode = FocusNode();
-  List<FocusNode> _autocompleteFocusNodes = [];
+  // Pooled autocomplete focus nodes (reused across searches to avoid GC pressure)
+  static const int _autocompleteFocusNodePoolSize = 15;
+  final List<FocusNode> _autocompleteFocusNodes = [];
+  Timer? _pendingAutocompleteFocusRequest; // For cancelling overlapping focus requests
+  Timer? _scrollThrottleTimer; // For throttling ensureVisible calls
 
   // Focus states using ValueNotifier to avoid full screen rebuilds
   final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
@@ -261,6 +265,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Exception: DropdownButton doesn't have onFocusChange, so we use a listener
     _sortDropdownFocusNode.addListener(_onSortDropdownFocusChange);
 
+    // Initialize pooled autocomplete focus nodes (reused across searches)
+    for (int i = 0; i < _autocompleteFocusNodePoolSize; i++) {
+      _autocompleteFocusNodes.add(FocusNode(debugLabel: 'imdb_autocomplete_$i'));
+    }
+
     // Track scroll position continuously so we can preserve it on dispose
     _resultsScrollController.addListener(_onScrollChanged);
 
@@ -342,16 +351,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  /// Scrolls to make the focused widget visible on TV
+  /// Scrolls to make the focused widget visible on TV (throttled to prevent overlapping animations)
   void _scrollToFocusNode(FocusNode node) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Cancel any pending scroll to prevent overlapping animations
+    _scrollThrottleTimer?.cancel();
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 50), () {
       if (!mounted) return;
       final context = node.context;
       if (context != null) {
         Scrollable.ensureVisible(
           context,
           alignment: 0.3,
-          duration: const Duration(milliseconds: 150),
+          duration: const Duration(milliseconds: 100),
           curve: Curves.easeOutCubic,
         );
       }
@@ -643,6 +654,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Gets or creates a focus node for an engine - avoids creating FocusNode in build path
+  FocusNode _getOrCreateEngineFocusNode(String engineId) {
+    var node = _engineTileFocusNodes[engineId];
+    if (node == null) {
+      node = FocusNode(debugLabel: 'engine-tile-$engineId');
+      _engineTileFocusNodes[engineId] = node;
+      _engineTileFocusStates[engineId] = false;
+    }
+    return node;
+  }
+
   void _handleIntegrationChanged() {
     _loadApiKeys();
   }
@@ -804,11 +826,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _seasonController.dispose();
     _episodeController.dispose();
     _imdbSearchDebouncer?.cancel();
+    _pendingAutocompleteFocusRequest?.cancel();
+    _scrollThrottleTimer?.cancel();
     _imdbRequestId = 0; // Reset request ID
     for (final node in _autocompleteFocusNodes) {
       node.dispose();
     }
-    _autocompleteFocusNodes.clear();
 
     for (final node in _cardFocusNodes) {
       node.dispose();
@@ -1549,21 +1572,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Increment request ID to track the latest request
     final requestId = ++_imdbRequestId;
-    debugPrint('IMDB search triggered for: "$query" (requestId: $requestId)');
 
-    if (query.trim().isEmpty) {
+    final trimmedQuery = query.trim();
+
+    // Handle empty or short queries - consolidated setState
+    if (trimmedQuery.isEmpty || trimmedQuery.length < 2) {
       setState(() {
         _imdbAutocompleteResults.clear();
-        _imdbSearchError = null;
-        _isImdbSearching = false;
-      });
-      return;
-    }
-
-    if (query.trim().length < 2) {
-      setState(() {
-        _imdbAutocompleteResults.clear();
-        _imdbSearchError = 'Enter at least 2 characters';
+        _imdbSearchError = trimmedQuery.isEmpty ? null : 'Enter at least 2 characters';
         _isImdbSearching = false;
       });
       return;
@@ -1571,9 +1587,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Don't show loading state immediately to prevent flicker
     // It will be shown after debounce if search actually happens
-    setState(() {
-      _imdbSearchError = null;
-    });
+    if (_imdbSearchError != null) {
+      setState(() {
+        _imdbSearchError = null;
+      });
+    }
 
     // Debounce: wait 500ms after user stops typing (increased from 300ms)
     _imdbSearchDebouncer = Timer(const Duration(milliseconds: 500), () {
@@ -1583,58 +1601,51 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           _isImdbSearching = true;
         });
       }
-      _performImdbAutocompleteSearch(query.trim(), requestId);
+      _performImdbAutocompleteSearch(trimmedQuery, requestId);
     });
   }
 
   Future<void> _performImdbAutocompleteSearch(String query, int requestId) async {
     try {
-      debugPrint('IMDB search started for: "$query" (requestId: $requestId)');
       final results = await ImdbLookupService.searchTitles(query);
 
       // Check if this is still the latest request
       if (requestId != _imdbRequestId) {
-        debugPrint('IMDB search discarded (stale): "$query" (requestId: $requestId, current: $_imdbRequestId)');
         return;
       }
 
       if (!mounted) return;
 
-      debugPrint('IMDB search completed: "$query" (requestId: $requestId, results: ${results.length})');
-
-      // Dispose old focus nodes and create new ones
-      for (final node in _autocompleteFocusNodes) {
-        node.dispose();
+      if (kDebugMode) {
+        debugPrint('IMDB search completed: "$query" (requestId: $requestId, results: ${results.length})');
       }
-      _autocompleteFocusNodes = List.generate(
-        results.take(10).length,
-        (index) => FocusNode(debugLabel: 'imdb_autocomplete_$index'),
-      );
+
+      // Focus nodes are now pooled - no need to create/dispose on each search
+      // Just limit results to pool size
+      final limitedResults = results.take(_autocompleteFocusNodePoolSize).toList();
 
       setState(() {
-        _imdbAutocompleteResults = results.take(10).toList();
+        _imdbAutocompleteResults = limitedResults;
         _isImdbSearching = false;
-        _imdbSearchError = results.isEmpty ? 'No IMDb matches found' : null;
+        _imdbSearchError = limitedResults.isEmpty ? 'No IMDb matches found' : null;
       });
 
       // On TV: Auto-focus first result after results appear
-      if (_isTelevision && _autocompleteFocusNodes.isNotEmpty && results.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          Future.delayed(const Duration(milliseconds: 150), () {
-            if (_autocompleteFocusNodes.isNotEmpty && mounted) {
-              _autocompleteFocusNodes[0].requestFocus();
-            }
-          });
+      // Cancel any pending focus request to avoid overlapping requests
+      if (_isTelevision && limitedResults.isNotEmpty) {
+        _pendingAutocompleteFocusRequest?.cancel();
+        _pendingAutocompleteFocusRequest = Timer(const Duration(milliseconds: 100), () {
+          if (mounted && _imdbAutocompleteResults.isNotEmpty) {
+            _autocompleteFocusNodes[0].requestFocus();
+          }
         });
       }
     } catch (e) {
       // Check if this is still the latest request before updating error state
       if (requestId != _imdbRequestId) {
-        debugPrint('IMDB search error discarded (stale): "$query" (requestId: $requestId, current: $_imdbRequestId)');
         return;
       }
 
-      debugPrint('IMDB autocomplete error for "$query" (requestId: $requestId): $e');
       if (!mounted) return;
       setState(() {
         _imdbAutocompleteResults.clear();
@@ -2439,7 +2450,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     runSpacing: 8,
                     children: _availableEngines.map((engine) {
                       final engineId = engine.name;
-                      final focusNode = _engineTileFocusNodes[engineId];
+                      // Get or create focus node to avoid creating in build path
+                      final focusNode = _getOrCreateEngineFocusNode(engineId);
                       final isEnabled = _engineStates[engineId] ?? false;
                       final isFocused = _engineTileFocusStates[engineId] ?? false;
 
@@ -2448,7 +2460,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         label: engine.displayName,
                         value: isEnabled,
                         onToggle: (value) => _setEngineEnabled(engineId, value),
-                        tileFocusNode: focusNode ?? FocusNode(),
+                        tileFocusNode: focusNode,
                         tileFocused: isFocused,
                         onFocusChange: (visible) {
                           if (_engineTileFocusStates[engineId] != visible) {
@@ -2543,9 +2555,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       },
       onShowFocusHighlight: onFocusChange,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
+      // Use Container instead of AnimatedContainer for instant feedback on TV
+      child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           color: value
@@ -2641,7 +2652,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     Map<String, _TorrentMetadata>? metadataOverride,
     bool reuseMetadata = false, // Skip expensive metadata rebuilding when only sort changes
   }) {
-    Timeline.startSync('TorrentSearchScreen.sortTorrents');
     final List<Torrent> baseList = nextBase ?? _allTorrents;
     final Map<String, _TorrentMetadata> metadata =
         metadataOverride ??
@@ -2660,10 +2670,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final bool hasEpisode = _activeAdvancedSelection?.episode != null;
     final bool shouldApplyCoveragePriority = isSeries && !hasEpisode;
     final bool shouldPrioritizeSingleEpisode = isSeries && hasEpisode;
-
-    debugPrint('TorrentSearchScreen: Sorting torrents - isSeries=$isSeries, hasEpisode=$hasEpisode, '
-        'shouldApplyCoveragePriority=$shouldApplyCoveragePriority, shouldPrioritizeSingleEpisode=$shouldPrioritizeSingleEpisode, '
-        'season=${_activeAdvancedSelection?.season}, episode=${_activeAdvancedSelection?.episode}, title=${_activeAdvancedSelection?.title}');
 
     switch (_sortBy) {
       case 'name':
@@ -2763,15 +2769,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final filtered = _applyFiltersToList(sortedTorrents, metadataMap: metadata);
 
-    // Debug: Log top 3 results to understand sorting
-    if (sortedTorrents.isNotEmpty) {
-      debugPrint('TorrentSearchScreen: Top 3 results after sorting:');
-      for (int i = 0; i < sortedTorrents.length && i < 3; i++) {
-        final t = sortedTorrents[i];
-        debugPrint('  $i: ${t.name} - coveragePriority=${t.coveragePriority}, coverageType=${t.coverageType}, seeders=${t.seeders}');
-      }
-    }
-
     setState(() {
       _allTorrents = sortedTorrents;
       _torrentMetadata = metadata;
@@ -2787,7 +2784,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
       });
     }
-    Timeline.finishSync();
   }
 
   List<Torrent> _applyFiltersToList(
@@ -2846,18 +2842,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
+  /// Builds metadata map, reusing cached entries when available
   Map<String, _TorrentMetadata> _buildTorrentMetadataMap(
     List<Torrent> torrents,
   ) {
     final map = <String, _TorrentMetadata>{};
     for (final torrent in torrents) {
-      final info = SeriesParser.parseFilename(torrent.name);
-      map[torrent.infohash] = _TorrentMetadata(
-        seriesInfo: info,
-        qualityTier: _detectQualityTier(info.quality, torrent.name),
-        ripSource: _detectRipSource(torrent.name),
-        audioLanguage: _detectAudioLanguage(torrent.name),
-      );
+      // Reuse existing metadata if already parsed
+      final existing = _torrentMetadata[torrent.infohash];
+      if (existing != null) {
+        map[torrent.infohash] = existing;
+      } else {
+        final info = SeriesParser.parseFilename(torrent.name);
+        map[torrent.infohash] = _TorrentMetadata(
+          seriesInfo: info,
+          qualityTier: _detectQualityTier(info.quality, torrent.name),
+          ripSource: _detectRipSource(torrent.name),
+          audioLanguage: _detectAudioLanguage(torrent.name),
+        );
+      }
     }
     return map;
   }
@@ -3594,7 +3597,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       Container(
                         constraints: const BoxConstraints(maxHeight: 200),
                         child: ListView.builder(
-                          shrinkWrap: true,
+                          // shrinkWrap removed - parent has maxHeight constraint
+                          padding: EdgeInsets.zero,
                           itemCount: _torrents.length,
                           itemBuilder: (context, index) {
                             final torrent = _torrents[index];
@@ -8240,7 +8244,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   // Individual video options - scrollable
                   Expanded(
                     child: ListView.builder(
-                      shrinkWrap: true,
+                      // shrinkWrap removed - Expanded provides constraints
+                      padding: EdgeInsets.zero,
                       itemCount: fileList.length,
                       itemBuilder: (context, index) {
                         final file = fileList[index];
@@ -9889,6 +9894,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // For TV mode, use dedicated history focus nodes
     if (_isTelevision && index < _historyCardFocusNodes.length) {
       return _TorrentCard(
+        key: ValueKey('history_${torrent.infohash}'),
         torrent: torrent,
         index: index,
         focusNode: _historyCardFocusNodes[index],
@@ -10065,6 +10071,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // For TV mode, use the new isolated _TorrentCard widget
     if (_isTelevision && index < _cardFocusNodes.length) {
       return _TorrentCard(
+        key: ValueKey(torrent.infohash),
         torrent: torrent,
         index: index,
         focusNode: _cardFocusNodes[index],
@@ -10447,6 +10454,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 /// Individual torrent card widget with isolated focus state
 class _TorrentCard extends StatefulWidget {
   const _TorrentCard({
+    super.key,
     required this.torrent,
     required this.index,
     required this.focusNode,
@@ -10512,6 +10520,8 @@ class _TorrentCard extends StatefulWidget {
 
 class _TorrentCardState extends State<_TorrentCard> {
   bool _isFocused = false;
+  // Static timer shared across all cards to throttle scroll animations
+  static Timer? _scrollThrottleTimer;
 
   @override
   void initState() {
@@ -10533,14 +10543,15 @@ class _TorrentCardState extends State<_TorrentCard> {
         _isFocused = focused;
       });
 
-      // Auto-scroll on focus
+      // Auto-scroll on focus (throttled to prevent overlapping animations)
       if (focused && widget.isTelevision) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollThrottleTimer?.cancel();
+        _scrollThrottleTimer = Timer(const Duration(milliseconds: 50), () {
           if (!mounted) return;
-          final context = widget.focusNode.context;
-          if (context != null) {
+          final ctx = widget.focusNode.context;
+          if (ctx != null) {
             Scrollable.ensureVisible(
-              context,
+              ctx,
               alignment: 0.2,
               duration: const Duration(milliseconds: 100),
               curve: Curves.easeOutCubic,
@@ -11404,6 +11415,8 @@ class _ImdbAutocompleteItem extends StatefulWidget {
 
 class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
   bool _isFocused = false;
+  // Static timer shared across all autocomplete items to throttle scroll animations
+  static Timer? _scrollThrottleTimer;
 
   @override
   void initState() {
@@ -11435,15 +11448,16 @@ class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
       setState(() {
         _isFocused = focused;
       });
-      // Scroll to visible AFTER the frame completes to avoid layout issues
+      // Scroll to visible with throttle to avoid overlapping animations
       if (focused) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollThrottleTimer?.cancel();
+        _scrollThrottleTimer = Timer(const Duration(milliseconds: 50), () {
           if (!mounted) return;
           final ctx = context;
           Scrollable.ensureVisible(
             ctx,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 100), // Faster scroll
+            duration: const Duration(milliseconds: 100),
           );
         });
       }
