@@ -146,11 +146,16 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View channelSlideView;
     private View channelRgbBars;
     private SubtitleView subtitleOverlay;
-    private View searchOverlay;
-    private View searchPanel;
-    private EditText searchInput;
-    private RecyclerView searchResultsView;
-    private ChannelSearchAdapter searchAdapter;
+    // Unified Channel Guide
+    private View unifiedGuideOverlay;
+    private View unifiedGuidePanel;
+    private EditText unifiedGuideSearch;
+    private RecyclerView unifiedGuideList;
+    private ChannelSearchAdapter unifiedGuideAdapter;
+    private TextView unifiedGuideCurrentNumber;
+    private TextView unifiedGuideChannelCount;
+    private TextWatcher unifiedGuideTextWatcher;
+    private boolean unifiedGuideVisible = false;
     private View loadingBarContainer;
     private View loadingBar;
     private android.animation.ValueAnimator loadingBarAnimator;
@@ -183,11 +188,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     };
     private boolean reopenControlsMenuAfterSeek = false;
     private boolean resumePlaybackOnSeekbarClose = false;
-    private View channelJumpOverlay;
-    private TextView channelJumpInput;
-    private final StringBuilder channelJumpBuffer = new StringBuilder();
-    private View channelJumpDefaultFocus;
-    private boolean channelJumpVisible = false;
 
     // Custom Seekbar Views
     private View seekbarOverlay;
@@ -208,7 +208,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private final ArrayList<ChannelEntry> channelDirectoryEntries = new ArrayList<>();
     private final ArrayList<ChannelEntry> filteredChannelEntries = new ArrayList<>();
-    private boolean searchOverlayVisible = false;
     private android.animation.ValueAnimator staticAnimator;
     private Handler staticHandler = new Handler(Looper.getMainLooper());
 
@@ -325,10 +324,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         channelRgbBars = findViewById(R.id.channel_rgb_bars);
         // Use our custom SubtitleView that's positioned independently
         subtitleOverlay = findViewById(R.id.player_subtitles_custom);
-        searchOverlay = findViewById(R.id.player_search_overlay);
-        searchPanel = findViewById(R.id.player_search_panel);
-        searchInput = findViewById(R.id.player_search_input);
-        searchResultsView = findViewById(R.id.player_search_results);
+        // Unified Channel Guide views
+        unifiedGuideOverlay = findViewById(R.id.unified_guide_overlay);
+        unifiedGuidePanel = findViewById(R.id.unified_guide_panel);
+        unifiedGuideSearch = findViewById(R.id.unified_guide_search);
+        unifiedGuideList = findViewById(R.id.unified_guide_list);
+        unifiedGuideCurrentNumber = findViewById(R.id.unified_guide_current_number);
+        unifiedGuideChannelCount = findViewById(R.id.unified_guide_channel_count);
         loadingBarContainer = findViewById(R.id.player_loading_bar_container);
         loadingBar = findViewById(R.id.player_loading_bar);
         loadingIndicator = findViewById(R.id.player_loading_indicator);
@@ -339,9 +341,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Initialize PikPak retry overlay (reuse loading indicator for now)
         setupPikPakRetryOverlay();
-
-        // Initialize Radial Menu Views
-        setupChannelJumpOverlay();
 
         // Initialize Custom Seekbar Views
         seekbarOverlay = findViewById(R.id.seekbar_overlay);
@@ -403,7 +402,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
 
-        setupSearchOverlay(intent);
+        setupUnifiedGuide(intent);
         runOnUiThread(() -> {
             updateChannelBadge(currentChannelName);
             updateTitleBadge(initialTitle);
@@ -781,9 +780,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             case "guide":
                 hideControlsMenu();
                 if (!channelDirectoryEntries.isEmpty()) {
-                    showSearchOverlay();
+                    showUnifiedGuide(true); // Focus search bar
                 } else {
-                    Toast.makeText(this, "Channel search unavailable", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Channel guide unavailable", Toast.LENGTH_SHORT).show();
                 }
                 break;
             case "channel_next":
@@ -1181,205 +1180,211 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     }
 
-    private void setupChannelJumpOverlay() {
-        channelJumpOverlay = findViewById(R.id.channel_jump_overlay);
-        if (channelJumpOverlay == null) {
-            return;
-        }
-        channelJumpInput = channelJumpOverlay.findViewById(R.id.channel_jump_input);
-        View goButton = channelJumpOverlay.findViewById(R.id.channel_key_go);
-        View clearButton = channelJumpOverlay.findViewById(R.id.channel_key_clear);
-        channelJumpDefaultFocus = channelJumpOverlay.findViewById(R.id.channel_key_1);
+    // ═══════════════════════════════════════════════════════════════════════════════════
+    // UNIFIED CHANNEL GUIDE - Modern Streaming Style
+    // Combines channel number pad and channel scanner into one elegant overlay
+    // ═══════════════════════════════════════════════════════════════════════════════════
 
-        if (goButton != null) {
-            goButton.setOnClickListener(v -> submitChannelJump());
-        }
-
-        if (clearButton != null) {
-            clearButton.setOnClickListener(v -> clearChannelJumpInput());
-        }
-
-        // Wire up number buttons 0-9
-        int[] digitButtonIds = new int[] {
-                R.id.channel_key_0,
-                R.id.channel_key_1,
-                R.id.channel_key_2,
-                R.id.channel_key_3,
-                R.id.channel_key_4,
-                R.id.channel_key_5,
-                R.id.channel_key_6,
-                R.id.channel_key_7,
-                R.id.channel_key_8,
-                R.id.channel_key_9
-        };
-        for (int i = 0; i < digitButtonIds.length; i++) {
-            final int digit = i;
-            View button = channelJumpOverlay.findViewById(digitButtonIds[i]);
-            if (button != null) {
-                button.setOnClickListener(v -> appendChannelJumpDigit(digit));
-            }
-        }
-
-        channelJumpOverlay.setVisibility(View.GONE);
-        channelJumpOverlay.setAlpha(0f);
-        channelJumpOverlay.setOnKeyListener((v, keyCode, event) -> {
-            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
-                hideChannelJumpOverlay();
-                return true;
-            }
-            return false;
-        });
-
-        updateChannelJumpDisplay();
-    }
-
-    private void appendChannelJumpDigit(int digit) {
-        if (channelJumpBuffer.length() >= CHANNEL_JUMP_MAX_DIGITS) {
-            return;
-        }
-        channelJumpBuffer.append(digit);
-        updateChannelJumpDisplay();
-
-        // Smart auto-selection: check if there's only one possible match
-        checkAndAutoSelectChannel();
-    }
-
-    private void checkAndAutoSelectChannel() {
-        if (channelJumpBuffer.length() == 0 || channelDirectoryEntries.isEmpty()) {
+    private void setupUnifiedGuide(Intent intent) {
+        if (unifiedGuideOverlay == null || unifiedGuideSearch == null || unifiedGuideList == null) {
             return;
         }
 
-        String currentInput = channelJumpBuffer.toString();
-        int currentNumber;
-        try {
-            currentNumber = Integer.parseInt(currentInput);
-        } catch (NumberFormatException ex) {
-            return;
+        unifiedGuideOverlay.setVisibility(View.GONE);
+        unifiedGuideOverlay.setAlpha(0f);
+        unifiedGuideOverlay.setFocusable(true);
+        unifiedGuideOverlay.setFocusableInTouchMode(true);
+        unifiedGuideOverlay.setOnClickListener(v -> hideUnifiedGuide());
+
+        if (unifiedGuidePanel != null) {
+            // Consume clicks on panel to prevent propagation to overlay (which dismisses)
+            unifiedGuidePanel.setOnClickListener(v -> { /* consume click */ });
         }
 
-        // Find exact match
-        ChannelEntry exactMatch = null;
-        // Find if any channel number starts with current input (e.g., 221, 222 start with "22")
-        boolean hasLongerMatches = false;
-
-        for (ChannelEntry entry : channelDirectoryEntries) {
-            String channelNumStr = String.valueOf(entry.number);
-
-            if (entry.number == currentNumber) {
-                exactMatch = entry;
-            }
-
-            // Check if this channel number starts with our input but is longer
-            if (channelNumStr.startsWith(currentInput) && channelNumStr.length() > currentInput.length()) {
-                hasLongerMatches = true;
-            }
-        }
-
-        // Auto-select if: we have an exact match AND no longer possible matches
-        if (exactMatch != null && !hasLongerMatches) {
-            final ChannelEntry finalMatch = exactMatch; // Make it final for lambda
-            // Wait a tiny bit so user sees the number, then auto-jump
-            channelJumpInput.postDelayed(() -> {
-                if (channelJumpVisible) {
-                    hideChannelJumpOverlay();
-                    requestChannelByEntry(finalMatch);
-                }
-            }, 200);
-        }
-    }
-
-    private void removeChannelJumpDigit() {
-        if (channelJumpBuffer.length() == 0) {
-            return;
-        }
-        channelJumpBuffer.deleteCharAt(channelJumpBuffer.length() - 1);
-        updateChannelJumpDisplay();
-    }
-
-    private void clearChannelJumpInput() {
-        if (channelJumpBuffer.length() == 0) {
-            return;
-        }
-        channelJumpBuffer.setLength(0);
-        updateChannelJumpDisplay();
-    }
-
-    private void updateChannelJumpDisplay() {
-        if (channelJumpInput == null) {
-            return;
-        }
-        if (channelJumpBuffer.length() == 0) {
-            channelJumpInput.setText("_");
+        // Load channel directory from intent
+        ArrayList<Bundle> directoryBundles;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            directoryBundles = intent.getParcelableArrayListExtra("channelDirectory", Bundle.class);
         } else {
-            channelJumpInput.setText(channelJumpBuffer.toString());
+            directoryBundles = intent.getParcelableArrayListExtra("channelDirectory");
+        }
+
+        if (directoryBundles != null) {
+            for (int index = 0; index < directoryBundles.size(); index++) {
+                Bundle bundle = directoryBundles.get(index);
+                if (bundle == null) continue;
+                String id = safeString(bundle.get("id"));
+                if (id == null || id.isEmpty()) continue;
+                String name = safeString(bundle.get("name"));
+                int number = bundle.containsKey("channelNumber") ? bundle.getInt("channelNumber", -1) : -1;
+                boolean isCurrent = bundle.getBoolean("isCurrent", false);
+                if (currentChannelId != null && currentChannelId.equals(id)) {
+                    isCurrent = true;
+                    if (number > 0) currentChannelNumber = number;
+                }
+                channelDirectoryEntries.add(new ChannelEntry(id, name != null ? name : "", number, isCurrent, index));
+            }
+        }
+
+        if (currentChannelNumber <= 0 && currentChannelId != null) {
+            int lookedUp = resolveChannelNumberFromDirectory(currentChannelId);
+            if (lookedUp > 0) currentChannelNumber = lookedUp;
+        }
+
+        if (channelDirectoryEntries.isEmpty()) return;
+
+        filteredChannelEntries.clear();
+        filteredChannelEntries.addAll(channelDirectoryEntries);
+
+        // Setup adapter with new modern layout
+        unifiedGuideAdapter = new ChannelSearchAdapter(filteredChannelEntries, this::requestChannelByEntry);
+        unifiedGuideList.setLayoutManager(new LinearLayoutManager(this));
+        unifiedGuideList.setHasFixedSize(false);
+        unifiedGuideList.setItemAnimator(null);
+        unifiedGuideList.setAdapter(unifiedGuideAdapter);
+
+        // Setup search text watcher (store as field for cleanup in onDestroy)
+        if (unifiedGuideTextWatcher != null) {
+            unifiedGuideSearch.removeTextChangedListener(unifiedGuideTextWatcher);
+        }
+        unifiedGuideTextWatcher = new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
+            @Override
+            public void afterTextChanged(Editable s) {
+                filterChannels(s != null ? s.toString() : "");
+            }
+        };
+        unifiedGuideSearch.addTextChangedListener(unifiedGuideTextWatcher);
+
+        // Update channel count display
+        if (unifiedGuideChannelCount != null) {
+            unifiedGuideChannelCount.setText(channelDirectoryEntries.size() + " channels");
+        }
+
+        markUnifiedGuideCurrentChannel(currentChannelId);
+        if (unifiedGuideAdapter != null) {
+            unifiedGuideAdapter.notifyDataSetChanged();
         }
     }
 
-    private void showChannelJumpOverlay() {
-        if (channelJumpOverlay == null) {
+    private void showUnifiedGuide(boolean focusSearch) {
+        if (unifiedGuideOverlay == null || unifiedGuideSearch == null || unifiedGuideList == null) {
             return;
         }
         if (channelDirectoryEntries.isEmpty()) {
-            Toast.makeText(this, "Channel list unavailable", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Channel guide unavailable", Toast.LENGTH_SHORT).show();
             return;
         }
-        if (channelJumpVisible) {
-            return;
-        }
-        channelJumpVisible = true;
-        clearChannelJumpInput();
+        if (unifiedGuideVisible) return;
+
+        unifiedGuideVisible = true;
         hideControlsMenu();
-        channelJumpOverlay.setVisibility(View.VISIBLE);
-        channelJumpOverlay.setAlpha(0f);
-        channelJumpOverlay.animate()
-                .alpha(1f)
-                .setDuration(180L)
-                .start();
-        if (channelJumpDefaultFocus != null) {
-            channelJumpDefaultFocus.post(() -> {
-                if (channelJumpDefaultFocus != null) {
-                    channelJumpDefaultFocus.requestFocus();
+
+        // Update current channel display
+        if (unifiedGuideCurrentNumber != null) {
+            unifiedGuideCurrentNumber.setText(currentChannelNumber > 0 ? String.valueOf(currentChannelNumber) : "--");
+        }
+
+        // Filter/reset list
+        filterChannels(unifiedGuideSearch.getText() != null ? unifiedGuideSearch.getText().toString() : "");
+
+        // Cancel any ongoing animations to prevent race conditions
+        unifiedGuideOverlay.animate().cancel();
+        if (unifiedGuidePanel != null) {
+            unifiedGuidePanel.animate().cancel();
+        }
+
+        // Show with animation
+        unifiedGuideOverlay.setVisibility(View.VISIBLE);
+        unifiedGuideOverlay.setAlpha(0f);
+        unifiedGuideOverlay.bringToFront();
+        unifiedGuideOverlay.animate().alpha(1f).setDuration(200L).start();
+
+        if (unifiedGuidePanel != null) {
+            unifiedGuidePanel.setScaleX(0.95f);
+            unifiedGuidePanel.setScaleY(0.95f);
+            unifiedGuidePanel.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(200L)
+                    .start();
+        }
+
+        if (focusSearch) {
+            // Focus search bar (guide button triggered)
+            unifiedGuideSearch.requestFocus();
+            unifiedGuideSearch.post(() -> {
+                unifiedGuideSearch.selectAll();
+                showKeyboard(unifiedGuideSearch);
+            });
+        } else {
+            // Focus first list item (DPAD_UP triggered)
+            // Use post to ensure layout is complete before focusing
+            final RecyclerView listRef = unifiedGuideList;
+            listRef.post(() -> {
+                RecyclerView.LayoutManager lm = listRef.getLayoutManager();
+                if (lm != null && listRef.getAdapter() != null && listRef.getAdapter().getItemCount() > 0) {
+                    // Scroll to position 0 first, then focus the view
+                    lm.scrollToPosition(0);
+                    listRef.post(() -> {
+                        View first = lm.findViewByPosition(0);
+                        if (first != null) {
+                            first.requestFocus();
+                        } else if (listRef.getChildCount() > 0) {
+                            // Fallback: focus first visible child
+                            listRef.getChildAt(0).requestFocus();
+                        }
+                    });
                 }
             });
         }
     }
 
-    private void hideChannelJumpOverlay() {
-        if (channelJumpOverlay == null || !channelJumpVisible) {
+    private void hideUnifiedGuide() {
+        if (unifiedGuideOverlay == null || !unifiedGuideVisible) {
             return;
         }
-        channelJumpVisible = false;
-        channelJumpOverlay.animate()
+        // Guard against multiple calls during fade-out animation
+        if (unifiedGuideOverlay.getAlpha() < 1f) {
+            return;
+        }
+
+        hideKeyboard(unifiedGuideSearch);
+
+        // Cancel any ongoing animations to prevent race conditions
+        unifiedGuideOverlay.animate().cancel();
+        if (unifiedGuidePanel != null) {
+            unifiedGuidePanel.animate().cancel();
+        }
+
+        // Use final reference to avoid lambda capture issues
+        final View overlayRef = unifiedGuideOverlay;
+        overlayRef.animate()
                 .alpha(0f)
-                .setDuration(140L)
+                .setDuration(150L)
                 .withEndAction(() -> {
-                    if (channelJumpOverlay != null) {
-                        channelJumpOverlay.setVisibility(View.GONE);
-                        channelJumpOverlay.setAlpha(0f);
+                    // Only set flag to false after animation completes to prevent race condition
+                    unifiedGuideVisible = false;
+                    overlayRef.setVisibility(View.GONE);
+                    overlayRef.setAlpha(1f);
+                    // Restore focus to player view for proper TV D-pad navigation
+                    if (playerView != null) {
+                        playerView.requestFocus();
                     }
                 })
                 .start();
     }
 
-    private void submitChannelJump() {
-        if (channelJumpBuffer.length() == 0) {
-            Toast.makeText(this, "Enter channel number", Toast.LENGTH_SHORT).show();
-            return;
+    private boolean isUnifiedGuideVisible() {
+        return unifiedGuideVisible && unifiedGuideOverlay != null && unifiedGuideOverlay.getVisibility() == View.VISIBLE;
+    }
+
+    private void markUnifiedGuideCurrentChannel(@Nullable String channelId) {
+        if (channelId == null) return;
+        for (ChannelEntry entry : channelDirectoryEntries) {
+            entry.isCurrent = channelId.equals(entry.id);
         }
-        int number;
-        try {
-            number = Integer.parseInt(channelJumpBuffer.toString());
-        } catch (NumberFormatException ex) {
-            Toast.makeText(this, "Invalid number", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        ChannelEntry entry = findChannelEntryByNumber(number);
-        if (entry == null) {
-            Toast.makeText(this, "Channel " + number + " not found", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        hideChannelJumpOverlay();
-        requestChannelByEntry(entry);
     }
 
     @Nullable
@@ -2735,104 +2740,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
-    private void setupSearchOverlay(Intent intent) {
-        if (searchOverlay == null || searchInput == null || searchResultsView == null) {
-            return;
-        }
-
-        searchOverlay.setVisibility(View.GONE);
-        searchOverlay.setAlpha(0f);
-        searchOverlay.setFocusable(true);
-        searchOverlay.setFocusableInTouchMode(true);
-        searchOverlay.setOnClickListener(v -> hideSearchOverlay());
-        if (searchPanel != null) {
-            searchPanel.setClickable(true);
-        }
-
-        ArrayList<Bundle> directoryBundles;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            directoryBundles = intent.getParcelableArrayListExtra("channelDirectory", Bundle.class);
-        } else {
-            directoryBundles = intent.getParcelableArrayListExtra("channelDirectory");
-        }
-
-        if (directoryBundles != null) {
-            for (int index = 0; index < directoryBundles.size(); index++) {
-                Bundle bundle = directoryBundles.get(index);
-                if (bundle == null) {
-                    continue;
-                }
-                String id = safeString(bundle.get("id"));
-                if (id == null || id.isEmpty()) {
-                    continue;
-                }
-                String name = safeString(bundle.get("name"));
-                int number = bundle.containsKey("channelNumber")
-                        ? bundle.getInt("channelNumber", -1)
-                        : -1;
-                boolean isCurrent = bundle.getBoolean("isCurrent", false);
-                if (currentChannelId != null && currentChannelId.equals(id)) {
-                    isCurrent = true;
-                    if (number > 0) {
-                        currentChannelNumber = number;
-                    }
-                }
-                channelDirectoryEntries.add(new ChannelEntry(
-                        id,
-                        name != null ? name : "",
-                        number,
-                        isCurrent,
-                        index));
-            }
-        }
-
-        if (currentChannelNumber <= 0 && currentChannelId != null) {
-            int lookedUp = resolveChannelNumberFromDirectory(currentChannelId);
-            if (lookedUp > 0) {
-                currentChannelNumber = lookedUp;
-            }
-        }
-
-        if (channelDirectoryEntries.isEmpty()) {
-            return;
-        }
-
-        filteredChannelEntries.clear();
-        filteredChannelEntries.addAll(channelDirectoryEntries);
-
-        searchAdapter = new ChannelSearchAdapter(filteredChannelEntries, this::requestChannelByEntry);
-        searchResultsView.setLayoutManager(new LinearLayoutManager(this));
-        searchResultsView.setHasFixedSize(false);
-        searchResultsView.setItemAnimator(null);
-        searchResultsView.setAdapter(searchAdapter);
-
-        searchInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) { }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                filterChannels(s != null ? s.toString() : "");
-            }
-        });
-
-        searchInput.setOnKeyListener((v, keyCode, event) -> {
-            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
-                hideSearchOverlay();
-                return true;
-            }
-            return false;
-        });
-
-        markSearchCurrentChannelState(currentChannelId);
-        if (searchAdapter != null) {
-            searchAdapter.notifyDataSetChanged();
-        }
-    }
-
     private void filterChannels(@Nullable String query) {
         final String raw = query != null ? query.trim() : "";
         final String normalized = raw.toLowerCase(Locale.US);
@@ -2847,77 +2754,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 }
             }
         }
-        if (searchAdapter != null) {
-            searchAdapter.notifyDataSetChanged();
+        if (unifiedGuideAdapter != null) {
+            unifiedGuideAdapter.notifyDataSetChanged();
         }
-        if (!filteredChannelEntries.isEmpty() && searchResultsView != null) {
-            searchResultsView.post(() -> searchResultsView.scrollToPosition(0));
-        }
-    }
-
-    private void showSearchOverlay() {
-        if (searchOverlay == null || searchInput == null || searchResultsView == null) {
-            return;
-        }
-        if (channelDirectoryEntries.isEmpty()) {
-            return;
-        }
-        searchOverlayVisible = true;
-        filterChannels(searchInput.getText() != null ? searchInput.getText().toString() : "");
-
-        searchOverlay.setVisibility(View.VISIBLE);
-        searchOverlay.setAlpha(0f);
-        searchOverlay.bringToFront();
-        searchOverlay.animate().alpha(1f).setDuration(160L).start();
-
-        if (searchPanel != null) {
-            searchPanel.setScaleX(0.96f);
-            searchPanel.setScaleY(0.96f);
-            searchPanel.setAlpha(0.85f);
-            searchPanel.animate()
-                    .alpha(1f)
-                    .scaleX(1f)
-                    .scaleY(1f)
-                    .setDuration(200L)
-                    .start();
-        }
-
-        searchInput.requestFocus();
-        searchInput.post(() -> {
-            searchInput.selectAll();
-            showKeyboard(searchInput);
-        });
-
-        searchResultsView.post(() -> {
-            if (searchResultsView.getChildCount() > 0) {
-                View first = searchResultsView.getChildAt(0);
-                if (first != null) {
-                    first.requestFocus();
+        // Scroll to top after filter - capture reference for lambda safety
+        final RecyclerView listRef = unifiedGuideList;
+        if (!filteredChannelEntries.isEmpty() && listRef != null) {
+            listRef.post(() -> {
+                if (listRef.getAdapter() != null && listRef.getAdapter().getItemCount() > 0) {
+                    listRef.scrollToPosition(0);
                 }
-            }
-        });
-    }
-
-    private void hideSearchOverlay() {
-        if (searchOverlay == null || !isSearchOverlayVisible()) {
-            return;
+            });
         }
-        searchOverlayVisible = false;
-        hideKeyboard(searchInput);
-        searchOverlay.animate()
-                .alpha(0f)
-                .setDuration(140L)
-                .withEndAction(() -> {
-                    if (searchOverlay != null) {
-                        searchOverlay.setVisibility(View.GONE);
-                        searchOverlay.setAlpha(1f);
-                    }
-                })
-                .start();
-    }
-
-    private boolean isSearchOverlayVisible() {
-        return searchOverlayVisible && searchOverlay != null && searchOverlay.getVisibility() == View.VISIBLE;
     }
 
     private void showKeyboard(@Nullable View target) {
@@ -2942,14 +2790,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     }
 
-    private void markSearchCurrentChannelState(@Nullable String channelIdValue) {
-        if (channelDirectoryEntries.isEmpty()) {
-            return;
-        }
-        for (ChannelEntry entry : channelDirectoryEntries) {
-            entry.isCurrent = channelIdValue != null && channelIdValue.equals(entry.id);
-        }
-    }
 
     private int resolveChannelNumberFromDirectory(@Nullable String channelIdValue) {
         if (channelIdValue == null || channelDirectoryEntries.isEmpty()) {
@@ -3006,14 +2846,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         currentChannelName = resolvedName;
         currentChannelNumber = resolvedNumber != null ? resolvedNumber : -1;
-        markSearchCurrentChannelState(currentChannelId);
+        markUnifiedGuideCurrentChannel(currentChannelId);
 
         final String badgeName = currentChannelName;
-        final boolean hasAdapter = searchAdapter != null;
+        final boolean hasAdapter = unifiedGuideAdapter != null;
         runOnUiThread(() -> {
             updateChannelBadge(badgeName);
             if (hasAdapter) {
-                searchAdapter.notifyDataSetChanged();
+                unifiedGuideAdapter.notifyDataSetChanged();
             }
         });
 
@@ -3054,7 +2894,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
 
-        hideSearchOverlay();
+        hideUnifiedGuide();
         showLoadingBar(LoadingType.CHANNEL, entry.number > 0 ? entry.number : null, entry.name);
 
         lastChannelSwitchTime = now;
@@ -3193,7 +3033,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         @Override
         public ChannelViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.item_tv_channel_search, parent, false);
+                    .inflate(R.layout.item_unified_channel, parent, false);
             view.setFocusable(true);
             view.setFocusableInTouchMode(true);
             return new ChannelViewHolder(view);
@@ -3213,46 +3053,60 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         static class ChannelViewHolder extends RecyclerView.ViewHolder {
             private final TextView numberView;
             private final TextView nameView;
-            private final TextView keywordsView;
-            private final TextView statusView;
+            private final TextView subtitleView;
+            private final TextView nowBadge;
+            // Store current entry and listener to avoid creating new listeners on every bind
+            private ChannelEntry currentEntry;
+            private OnChannelClickListener currentListener;
 
             ChannelViewHolder(@NonNull View itemView) {
                 super(itemView);
-                numberView = itemView.findViewById(R.id.search_channel_number);
-                nameView = itemView.findViewById(R.id.search_channel_name);
-                keywordsView = itemView.findViewById(R.id.search_channel_keywords);
-                statusView = itemView.findViewById(R.id.search_channel_status);
+                numberView = itemView.findViewById(R.id.unified_channel_number);
+                nameView = itemView.findViewById(R.id.unified_channel_name);
+                subtitleView = itemView.findViewById(R.id.unified_channel_subtitle);
+                nowBadge = itemView.findViewById(R.id.unified_channel_now_badge);
+
+                // Set listeners once in constructor to prevent accumulation
+                itemView.setOnClickListener(v -> {
+                    if (currentEntry != null && currentListener != null) {
+                        currentListener.onChannelClicked(currentEntry);
+                    }
+                });
+                itemView.setOnFocusChangeListener((v, hasFocus) -> {
+                    v.animate().cancel(); // Cancel any ongoing animation
+                    if (hasFocus) {
+                        v.animate().scaleX(1.02f).scaleY(1.02f).setDuration(100L).start();
+                    } else {
+                        v.animate().scaleX(1f).scaleY(1f).setDuration(100L).start();
+                    }
+                });
             }
 
             void bind(ChannelEntry entry, OnChannelClickListener listener) {
-                String numberText = entry.number > 0
-                        ? String.format(Locale.US, "CH %02d", entry.number)
-                        : "AUTO";
-                numberView.setText(numberText);
-                nameView.setText(entry.nameUpper);
-                if (entry.isCurrent) {
-                    keywordsView.setText("Currently playing");
-                } else {
-                    keywordsView.setText("Press OK to tune instantly");
-                }
-                statusView.setVisibility(entry.isCurrent ? View.VISIBLE : View.INVISIBLE);
-                itemView.setBackgroundResource(entry.isCurrent
-                        ? R.drawable.tv_search_item_bg_active
-                        : R.drawable.tv_search_item_bg);
-                itemView.setAlpha(entry.isCurrent ? 1f : 0.86f);
+                this.currentEntry = entry;
+                this.currentListener = listener;
 
-                itemView.setOnClickListener(v -> listener.onChannelClicked(entry));
-                itemView.setOnFocusChangeListener((v, hasFocus) -> {
-                    if (hasFocus) {
-                        v.animate().scaleX(1.01f).scaleY(1.01f).setDuration(120L).start();
-                        v.setBackgroundResource(R.drawable.tv_search_item_bg_active);
-                    } else {
-                        v.animate().scaleX(1f).scaleY(1f).setDuration(120L).start();
-                        v.setBackgroundResource(entry.isCurrent
-                                ? R.drawable.tv_search_item_bg_active
-                                : R.drawable.tv_search_item_bg);
-                    }
-                });
+                // Modern clean format: just the number, no "CH" prefix
+                String numberText = entry.number > 0
+                        ? String.format(Locale.US, "%02d", entry.number)
+                        : "--";
+
+                // Null-safe view updates
+                if (numberView != null) {
+                    numberView.setText(numberText);
+                }
+                if (nameView != null) {
+                    nameView.setText(entry.nameUpper);
+                }
+                if (subtitleView != null) {
+                    subtitleView.setText(entry.isCurrent ? "Currently playing" : "Press OK to tune");
+                }
+                if (nowBadge != null) {
+                    nowBadge.setVisibility(entry.isCurrent ? View.VISIBLE : View.GONE);
+                }
+
+                // Background handled by drawable selector (unified_guide_item_bg.xml)
+                itemView.setAlpha(1f);
             }
         }
     }
@@ -3309,8 +3163,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                if (isSearchOverlayVisible()) {
-                    hideSearchOverlay();
+                if (isUnifiedGuideVisible()) {
+                    hideUnifiedGuide();
                     return;
                 }
 
@@ -3335,31 +3189,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
 
-        if (isSearchOverlayVisible()) {
+        // Unified Channel Guide is visible - handle keys
+        if (isUnifiedGuideVisible()) {
             if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
-                hideSearchOverlay();
+                hideUnifiedGuide();
                 return true;
             }
-            return super.dispatchKeyEvent(event);
-        }
-
-        if (channelJumpVisible) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_BACK) {
-                    hideChannelJumpOverlay();
-                    return true;
-                }
-                if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
-                    appendChannelJumpDigit(keyCode - KeyEvent.KEYCODE_0);
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DEL) {
-                    removeChannelJumpDigit();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_CLEAR) {
-                    clearChannelJumpInput();
-                    return true;
+            // Number keys go to search bar
+            if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && unifiedGuideSearch != null) {
+                    // Send key to search EditText
+                    unifiedGuideSearch.requestFocus();
+                    return unifiedGuideSearch.dispatchKeyEvent(event);
                 }
             }
             return super.dispatchKeyEvent(event);
@@ -3424,7 +3265,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                showChannelJumpOverlay();
+                showUnifiedGuide(false); // Open guide with list focused (not search)
             }
             return true;
         }
@@ -3501,6 +3342,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        // Clean up unified guide text watcher to prevent memory leak
+        if (unifiedGuideSearch != null && unifiedGuideTextWatcher != null) {
+            unifiedGuideSearch.removeTextChangedListener(unifiedGuideTextWatcher);
+            unifiedGuideTextWatcher = null;
+        }
+
         // Clean up seek feedback manager
         if (seekFeedbackManager != null) {
             seekFeedbackManager.destroy();

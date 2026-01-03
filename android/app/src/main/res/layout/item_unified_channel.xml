@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Modern Streaming - Clean channel list item -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/unified_guide_item_bg"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="16dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="4dp"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true">
+
+    <!-- Channel Number -->
+    <TextView
+        android:id="@+id/unified_channel_number"
+        android:layout_width="60dp"
+        android:layout_height="wrap_content"
+        android:text="01"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:fontFamily="sans-serif-bold"
+        android:gravity="start" />
+
+    <!-- Channel Info -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="12dp">
+
+        <TextView
+            android:id="@+id/unified_channel_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ACTION"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/unified_channel_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Press OK to tune"
+            android:textColor="#99FFFFFF"
+            android:textSize="13sp"
+            android:fontFamily="sans-serif"
+            android:layout_marginTop="2dp" />
+
+    </LinearLayout>
+
+    <!-- NOW Badge (visible only for current channel) -->
+    <TextView
+        android:id="@+id/unified_channel_now_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="NOW"
+        android:textColor="#E50914"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif-bold"
+        android:letterSpacing="0.08"
+        android:background="@drawable/unified_guide_current_badge_bg"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone" />
+
+</LinearLayout>

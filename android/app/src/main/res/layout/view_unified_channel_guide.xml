@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════════════
+     UNIFIED CHANNEL GUIDE - Modern Streaming Style (Netflix/Apple TV+)
+     Combines channel number pad and channel scanner into one elegant overlay
+     ═══════════════════════════════════════════════════════════════════════════════════ -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/unified_guide_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#B3000000"
+    android:visibility="gone"
+    android:clickable="true"
+    android:focusable="true"
+    android:elevation="200dp">
+
+    <!-- Center Panel Container -->
+    <LinearLayout
+        android:id="@+id/unified_guide_panel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:layout_marginStart="48dp"
+        android:layout_marginEnd="48dp"
+        android:layout_marginTop="32dp"
+        android:layout_marginBottom="32dp"
+        android:orientation="vertical"
+        android:background="@drawable/unified_guide_panel_bg"
+        android:padding="32dp"
+        android:elevation="16dp">
+
+        <!-- Header Row: Current Channel Badge + Title -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+
+            <!-- Current Channel Badge -->
+            <LinearLayout
+                android:id="@+id/unified_guide_current_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/unified_guide_current_badge_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/unified_guide_current_number"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="33"
+                    android:textColor="#FFFFFF"
+                    android:textSize="28sp"
+                    android:fontFamily="sans-serif-bold" />
+
+                <TextView
+                    android:id="@+id/unified_guide_current_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="NOW"
+                    android:textColor="#E50914"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.08" />
+
+            </LinearLayout>
+
+            <!-- Title -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CHANNEL GUIDE"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.04"
+                android:layout_marginStart="20dp" />
+
+            <!-- Spacer -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <!-- Channel Count (optional info) -->
+            <TextView
+                android:id="@+id/unified_guide_channel_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="42 channels"
+                android:textColor="#66FFFFFF"
+                android:textSize="14sp"
+                android:fontFamily="sans-serif" />
+
+        </LinearLayout>
+
+        <!-- Search Bar -->
+        <EditText
+            android:id="@+id/unified_guide_search"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@drawable/unified_guide_search_bg"
+            android:hint="Search or type channel number..."
+            android:textColorHint="#66FFFFFF"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:fontFamily="sans-serif"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:drawableStart="@drawable/ic_search"
+            android:drawablePadding="12dp"
+            android:drawableTint="#99FFFFFF"
+            android:inputType="text"
+            android:imeOptions="actionSearch"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusDown="@id/unified_guide_list"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Channel List -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/unified_guide_list"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:scrollbars="none"
+            android:overScrollMode="never"
+            android:nextFocusUp="@id/unified_guide_search"
+            android:descendantFocusability="afterDescendants" />
+
+        <!-- Footer Help Text -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="16dp"
+            android:paddingTop="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BACK to close"
+                android:textColor="#66FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="0.02" />
+
+            <View
+                android:layout_width="24dp"
+                android:layout_height="4dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:background="#33FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Use arrows to browse"
+                android:textColor="#66FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="0.02" />
+
+            <View
+                android:layout_width="24dp"
+                android:layout_height="4dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:background="#33FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Type # to jump"
+                android:textColor="#66FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="0.02" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>
