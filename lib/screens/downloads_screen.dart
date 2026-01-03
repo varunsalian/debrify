@@ -891,15 +891,22 @@ class TorrentMeta {
   final int? fileIndex;
   final String? restrictedLink;
   final String? apiKey;
+  final bool isTorbox;
+  final bool isTorboxZip;
 
   const TorrentMeta({
     this.torrentHash,
     this.fileIndex,
     this.restrictedLink,
     this.apiKey,
+    this.isTorbox = false,
+    this.isTorboxZip = false,
   });
 
   bool get hasHash => torrentHash != null && torrentHash!.isNotEmpty;
+
+  /// TorBox CDN doesn't support HTTP Range for individual files, but ZIP downloads do.
+  bool get isTorboxNonResumable => isTorbox && !isTorboxZip;
 }
 
 TorrentMeta parseTorrentMeta(String? meta) {
@@ -911,6 +918,8 @@ TorrentMeta parseTorrentMeta(String? meta) {
       int? fileIndex;
       String? restrictedLink;
       String? apiKey;
+      bool isTorbox = false;
+      bool isTorboxZip = false;
 
       final dynamic rawHash = decoded['torrentHash'];
       if (rawHash != null && rawHash.toString().isNotEmpty) {
@@ -934,11 +943,22 @@ TorrentMeta parseTorrentMeta(String? meta) {
         apiKey = rawApiKey.toString();
       }
 
+      // Check if this is a TorBox download (regular or web download)
+      if (decoded['torboxDownload'] == true || decoded['torboxWebDownload'] == true) {
+        isTorbox = true;
+        // ZIP downloads support HTTP Range requests
+        if (decoded['torboxZip'] == true) {
+          isTorboxZip = true;
+        }
+      }
+
       return TorrentMeta(
         torrentHash: hash,
         fileIndex: fileIndex,
         restrictedLink: restrictedLink,
         apiKey: apiKey,
+        isTorbox: isTorbox,
+        isTorboxZip: isTorboxZip,
       );
     }
   } catch (_) {}
@@ -1031,6 +1051,10 @@ class TorrentDownloadGroup {
 
   bool get hasActive =>
       runningFiles > 0 || queuedFiles > 0 || pausedFiles > 0 || waitingFiles > 0 || hasMoveInProgress;
+
+  /// TorBox CDN doesn't support HTTP Range for individual files, but ZIP downloads do.
+  /// Returns true if ANY item in this group is a non-resumable TorBox download.
+  bool get hasTorboxNonResumable => items.any((item) => item.meta.isTorboxNonResumable);
 }
 
 class _TorrentGroupBuilder {
@@ -1502,9 +1526,10 @@ class _TorrentGroupList extends StatelessWidget {
         final bool isBusy = busyGroupIds.contains(group.id);
         final bool isIOS = Platform.isIOS;
 
-        final bool canPause = !isIOS && !isFinishedTab && !isBusy && onPauseAll != null &&
+        // TorBox CDN doesn't support HTTP Range for individual files (but ZIP downloads do)
+        final bool canPause = !isIOS && !isFinishedTab && !isBusy && !group.hasTorboxNonResumable && onPauseAll != null &&
             (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
-        final bool canResume = !isIOS && !isFinishedTab && !isBusy && onResumeAll != null &&
+        final bool canResume = !isIOS && !isFinishedTab && !isBusy && !group.hasTorboxNonResumable && onResumeAll != null &&
             group.pausedFiles > 0;
         final bool canCancel = !isBusy && onCancelAll != null &&
             (group.hasActive || group.failedFiles > 0 || group.notFoundFiles > 0);
@@ -1512,6 +1537,12 @@ class _TorrentGroupList extends StatelessWidget {
         VoidCallback? pause = canPause ? () => onPauseAll!(group) : null;
         VoidCallback? resume = canResume ? () => onResumeAll!(group) : null;
         VoidCallback? cancel = canCancel ? () => onCancelAll!(group) : null;
+
+        // Show info when TorBox group is active but pause is unavailable
+        final bool showTorboxInfo = group.hasTorboxNonResumable &&
+            !isFinishedTab &&
+            !Platform.isIOS &&
+            (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
 
         return PressableScale(
           onTap: () => onOpenGroup(group),
@@ -1522,6 +1553,7 @@ class _TorrentGroupList extends StatelessWidget {
             onPauseAll: pause,
             onResumeAll: resume,
             onCancelAll: cancel,
+            showTorboxPauseInfo: showTorboxInfo,
           ),
         );
       },
@@ -1655,6 +1687,7 @@ class _TorrentGroupCard extends StatelessWidget {
   final VoidCallback? onPauseAll;
   final VoidCallback? onResumeAll;
   final VoidCallback? onCancelAll;
+  final bool showTorboxPauseInfo;
 
   const _TorrentGroupCard({
     required this.group,
@@ -1663,6 +1696,7 @@ class _TorrentGroupCard extends StatelessWidget {
     this.onPauseAll,
     this.onResumeAll,
     this.onCancelAll,
+    this.showTorboxPauseInfo = false,
   });
 
   @override
@@ -1880,14 +1914,32 @@ class _TorrentGroupCard extends StatelessWidget {
               runSpacing: 10,
               children: chips,
             ),
-            if (actions.isNotEmpty) ...[
+            if (actions.isNotEmpty || showTorboxPauseInfo) ...[
               const SizedBox(height: 16),
-              OverflowBar(
-                spacing: 12,
-                overflowSpacing: 12,
-                alignment: MainAxisAlignment.start,
-                children: actions,
-              ),
+              if (showTorboxPauseInfo)
+                Padding(
+                  padding: EdgeInsets.only(bottom: actions.isNotEmpty ? 8 : 0),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 14, color: Colors.white.withValues(alpha: 0.5)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Pause unavailable for TorBox',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (actions.isNotEmpty)
+                OverflowBar(
+                  spacing: 12,
+                  overflowSpacing: 12,
+                  alignment: MainAxisAlignment.start,
+                  children: actions,
+                ),
             ],
           ],
         ),
@@ -1965,6 +2017,7 @@ class _DownloadTile extends StatelessWidget {
   final Future<void> Function() onChanged;
   final int? rawBytes;
   final int? rawTotal;
+  final bool isTorboxNonResumable;
 
   const _DownloadTile({
     required this.record,
@@ -1974,6 +2027,7 @@ class _DownloadTile extends StatelessWidget {
     required this.moveFailed,
     this.rawBytes,
     this.rawTotal,
+    this.isTorboxNonResumable = false,
   });
 
   String _statusText(TaskStatus status) {
@@ -2163,7 +2217,8 @@ class _DownloadTile extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                if (record.task is DownloadTask && record.status == TaskStatus.running && !Platform.isIOS)
+                // TorBox CDN doesn't support HTTP Range for individual files (but ZIP downloads do)
+                if (record.task is DownloadTask && record.status == TaskStatus.running && !Platform.isIOS && !isTorboxNonResumable)
                   OutlinedButton.icon(
                     onPressed: () async {
                       await DownloadService.instance.pause(record.task);
@@ -2172,7 +2227,7 @@ class _DownloadTile extends StatelessWidget {
                     icon: const Icon(Icons.pause),
                     label: const Text('Pause'),
                   ),
-                if (record.task is DownloadTask && record.status == TaskStatus.paused && !Platform.isIOS)
+                if (record.task is DownloadTask && record.status == TaskStatus.paused && !Platform.isIOS && !isTorboxNonResumable)
                   FilledButton.tonalIcon(
                     onPressed: () async {
                       await DownloadService.instance.resume(record.task);
@@ -2526,6 +2581,7 @@ class _TorrentDownloadDetailScreenState extends State<TorrentDownloadDetailScree
               moveFailed: _moveFailed.contains(taskId),
               rawBytes: _bytesByTaskId[taskId]?.$1,
               rawTotal: _bytesByTaskId[taskId]?.$2,
+              isTorboxNonResumable: item.meta.isTorboxNonResumable,
             ),
           );
         },
