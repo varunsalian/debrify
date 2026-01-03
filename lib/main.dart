@@ -697,7 +697,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // Map tab indices to handler keys
     String? activeTabKey;
     switch (index) {
-      case 1:
+      case 4:
         activeTabKey = 'realdebrid';
         break;
       case 5:
