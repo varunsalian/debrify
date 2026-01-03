@@ -130,7 +130,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="SITCOMS"
-                android:textColor="#E50914"
+                android:textColor="#FFD700"
                 android:textSize="13sp"
                 android:fontFamily="sans-serif-bold"
                 android:letterSpacing="0.08"
@@ -425,18 +425,24 @@
     <!-- Seek Feedback Overlay -->
     <include layout="@layout/view_seek_feedback" />
 
-    <!-- Quality Watermark (Bottom-Right) - Subtle, minimal -->
+    <!-- Quality Watermark (Bottom-Right) - Subtle pill badge -->
     <TextView
         android:id="@+id/player_quality_watermark"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_marginEnd="12dp"
-        android:layout_marginBottom="12dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/quality_badge_bg"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
         android:text="4K"
-        android:textColor="#99FFFFFF"
+        android:textColor="#B3FFFFFF"
         android:textSize="11sp"
-        android:fontFamily="sans-serif"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.05"
         android:includeFontPadding="false"
         android:visibility="gone" />
 
