@@ -109,6 +109,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
   final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'rd-view-mode');
 
+  // Search state (for folder browsing mode)
+  bool _isSearchActive = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'rd-search');
+  final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'rd-search-button');
+  List<_RDSearchResult> _searchResults = [];
+
   @override
   void initState() {
     super.initState();
@@ -211,6 +218,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _backButtonFocusNode.dispose();
     _refreshButtonFocusNode.dispose();
     _viewModeDropdownFocusNode.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchButtonFocusNode.dispose();
 
     super.dispose();
   }
@@ -218,6 +228,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // Close search first if active
+    if (_isSearchActive) {
+      _toggleSearch();
+      return true;
+    }
+
     // If inside a folder within the torrent, navigate up
     if (_currentTorrentId != null && _folderPath.isNotEmpty) {
       _navigateUp();
@@ -1776,6 +1792,176 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     });
   }
 
+  // ============ Search Methods ============
+
+  /// Toggle search mode on/off
+  void _toggleSearch() {
+    setState(() {
+      _isSearchActive = !_isSearchActive;
+      if (!_isSearchActive) {
+        _searchController.clear();
+        _searchResults.clear();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _searchFocusNode.requestFocus();
+        });
+      }
+    });
+  }
+
+  /// Perform deep search across all files in current torrent
+  void _performSearch(String query) {
+    if (_currentFolderTree == null || query.isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+
+    final lowerQuery = query.toLowerCase();
+    final results = <_RDSearchResult>[];
+
+    void searchNode(RDFileNode node, List<String> path) {
+      if (!node.isFolder) {
+        if (FileUtils.isVideoFile(node.name) &&
+            node.name.toLowerCase().contains(lowerQuery)) {
+          results.add(_RDSearchResult(node: node, path: path.join(' / ')));
+        }
+      } else {
+        for (final child in node.children) {
+          searchNode(child, [...path, node.name]);
+        }
+      }
+    }
+
+    for (final child in _currentFolderTree!.children) {
+      searchNode(child, []);
+    }
+
+    setState(() => _searchResults = results);
+  }
+
+  /// Build the search bar widget
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search all files...',
+          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.grey),
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchResults.clear();
+                    });
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: const Color(0xFF1E293B),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        style: const TextStyle(color: Colors.white),
+        onChanged: _performSearch,
+        onSubmitted: (_) => _searchFocusNode.unfocus(),
+      ),
+    );
+  }
+
+  /// Build search results list
+  Widget _buildSearchResults() {
+    if (_searchController.text.isEmpty) {
+      return const Center(
+        child: Text('Type to search all files', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Text('No files found', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        return _buildSearchResultCard(result, index);
+      },
+    );
+  }
+
+  /// Build a card for a search result
+  Widget _buildSearchResultCard(_RDSearchResult result, int index) {
+    final node = result.node;
+    final borderColor = Colors.white.withValues(alpha: 0.08);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor, width: 1.2),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _playFile(node),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.play_circle_outline, color: Colors.blue, size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        node.name,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (result.path.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          result.path,
+                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (node.bytes != null)
+                        Text(
+                          Formatters.formatFileSize(node.bytes!),
+                          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // When pushed as a route and still at root, show loading state
@@ -1881,6 +2067,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   Widget _buildFolderBrowserScaffold() {
     // Back navigation is handled via MainPageBridge.handleBackNavigation
+    final currentMode = _getCurrentViewMode();
+    final showSearch = currentMode != _FolderViewMode.seriesArrange;
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -1890,6 +2079,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ),
         title: Text(_getCurrentFolderTitle()),
         actions: [
+          if (showSearch)
+            IconButton(
+              focusNode: _searchButtonFocusNode,
+              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+              onPressed: _toggleSearch,
+              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+            ),
           IconButton(
             focusNode: _refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
@@ -1902,10 +2098,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       body: Column(
         children: [
           _buildViewModeDropdown(),
+          if (_isSearchActive && showSearch) _buildSearchBar(),
           Expanded(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
-              child: _buildFolderContentsView(),
+              child: _isSearchActive ? _buildSearchResults() : _buildFolderContentsView(),
             ),
           ),
         ],
@@ -5618,4 +5815,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       _showError('Failed to open with external player: $e');
     }
   }
+}
+
+/// Helper class to hold search result with its folder path
+class _RDSearchResult {
+  final RDFileNode node;
+  final String path;
+
+  const _RDSearchResult({required this.node, required this.path});
 }

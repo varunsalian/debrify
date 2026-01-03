@@ -91,6 +91,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     debugLabel: 'pikpak-add-link',
   );
 
+  // Search state (for folder browsing mode)
+  bool _isSearchActive = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'pikpak-search');
+  final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'pikpak-search-button');
+  List<_PikPakSearchResult> _searchResults = [];
+
   @override
   void initState() {
     super.initState();
@@ -142,12 +149,21 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _settingsButtonFocusNode.dispose();
     _viewModeDropdownFocusNode.dispose();
     _addLinkButtonFocusNode.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchButtonFocusNode.dispose();
     super.dispose();
   }
 
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // Close search first if active
+    if (_isSearchActive) {
+      _toggleSearch();
+      return true;
+    }
+
     // If inside a virtual folder or subfolder, navigate up
     if (_isInVirtualFolder || _navigationStack.isNotEmpty ||
         (_restrictedFolderId != null && _currentFolderId != _restrictedFolderId)) {
@@ -1348,6 +1364,182 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     );
   }
 
+  // ============ Search Methods ============
+
+  /// Toggle search mode on/off
+  void _toggleSearch() {
+    setState(() {
+      _isSearchActive = !_isSearchActive;
+      if (!_isSearchActive) {
+        _searchController.clear();
+        _searchResults.clear();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _searchFocusNode.requestFocus();
+        });
+      }
+    });
+  }
+
+  /// Perform deep search across all files in current folder recursively
+  Future<void> _performSearch(String query) async {
+    if (query.isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+
+    final lowerQuery = query.toLowerCase();
+    final results = <_PikPakSearchResult>[];
+
+    // Get cached recursive files or fetch them
+    final folderId = _currentFolderId ?? '';
+    List<Map<String, dynamic>> allFiles;
+
+    if (_recursiveFileCache.containsKey(folderId)) {
+      allFiles = _recursiveFileCache[folderId]!;
+    } else {
+      // For search, we need to use the current files if recursive cache not available
+      allFiles = _files;
+    }
+
+    for (final file in allFiles) {
+      final name = file['name'] as String? ?? '';
+      final kind = file['kind'] as String? ?? '';
+      final isVideo = kind.contains('video') || FileUtils.isVideoFile(name);
+
+      if (isVideo && name.toLowerCase().contains(lowerQuery)) {
+        // Get path from file data if available
+        final parentPath = file['parent_name'] as String? ?? '';
+        results.add(_PikPakSearchResult(file: file, path: parentPath));
+      }
+    }
+
+    setState(() => _searchResults = results);
+  }
+
+  /// Build the search bar widget
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search files...',
+          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.grey),
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchResults.clear();
+                    });
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: const Color(0xFF1E293B),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        style: const TextStyle(color: Colors.white),
+        onChanged: _performSearch,
+        onSubmitted: (_) => _searchFocusNode.unfocus(),
+      ),
+    );
+  }
+
+  /// Build search results list
+  Widget _buildSearchResults() {
+    if (_searchController.text.isEmpty) {
+      return const Center(
+        child: Text('Type to search files', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Text('No files found', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        return _buildSearchResultCard(result);
+      },
+    );
+  }
+
+  /// Build a card for a search result
+  Widget _buildSearchResultCard(_PikPakSearchResult result) {
+    final file = result.file;
+    final name = file['name'] as String? ?? 'Unknown';
+    final size = file['size'] as String? ?? '0';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.2),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _playFile(file),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.play_circle_outline, color: Colors.blue, size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (result.path.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          result.path,
+                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      Text(
+                        Formatters.formatFileSize(int.tryParse(size) ?? 0),
+                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // When pushed as a route and still at root, show loading state
@@ -1390,6 +1582,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Check if we should show the view mode dropdown
     // Only show when navigated at least one level deep (inside a folder)
     final showViewModeDropdown = _navigationStack.isNotEmpty || _isInVirtualFolder;
+    final currentMode = _getCurrentViewMode();
+    final showSearch = showViewModeDropdown && currentMode != _FolderViewMode.seriesArrange && !_isInVirtualFolder;
 
     // Back navigation is handled via MainPageBridge.handleBackNavigation
     return Scaffold(
@@ -1417,6 +1611,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           ],
         ),
         actions: [
+          if (showSearch)
+            IconButton(
+              focusNode: _searchButtonFocusNode,
+              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+              onPressed: _toggleSearch,
+              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+            ),
           IconButton(
             focusNode: _addLinkButtonFocusNode,
             icon: const Icon(Icons.add_link),
@@ -1435,14 +1636,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         children: [
           // View mode dropdown (only shown when inside folders)
           if (showViewModeDropdown && !_isInVirtualFolder) _buildViewModeDropdown(),
+          if (_isSearchActive && showSearch) _buildSearchBar(),
           Expanded(
-            child: FocusTraversalGroup(
-              policy: OrderedTraversalPolicy(),
-              child: RefreshIndicator(
-                onRefresh: _refreshFiles,
-                child: _files.isEmpty ? _buildEmpty() : _buildFileList(),
-              ),
-            ),
+            child: _isSearchActive
+                ? _buildSearchResults()
+                : FocusTraversalGroup(
+                    policy: OrderedTraversalPolicy(),
+                    child: RefreshIndicator(
+                      onRefresh: _refreshFiles,
+                      child: _files.isEmpty ? _buildEmpty() : _buildFileList(),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -2613,4 +2817,12 @@ class _PikPakPlaylistItem {
     required this.seriesInfo,
     required this.displayName,
   });
+}
+
+/// Helper class to hold search result with its folder path
+class _PikPakSearchResult {
+  final Map<String, dynamic> file;
+  final String path;
+
+  const _PikPakSearchResult({required this.file, required this.path});
 }

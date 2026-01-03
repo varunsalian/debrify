@@ -90,6 +90,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   // Focus nodes for TV/DPAD navigation
   final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'torbox-view-mode');
 
+  // Search state (for folder browsing mode)
+  bool _isSearchActive = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'torbox-search');
+  final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'torbox-search-button');
+  List<_TorboxSearchResult> _searchResults = [];
+
   static const int _limit = 50;
 
   @override
@@ -834,12 +841,21 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _webNameController.dispose();
     _webPasswordController.dispose();
     _viewModeDropdownFocusNode.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchButtonFocusNode.dispose();
     super.dispose();
   }
 
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // Close search first if active
+    if (_isSearchActive) {
+      _toggleSearch();
+      return true;
+    }
+
     // If inside a subfolder within a torrent, navigate up
     if (!_isAtRoot && _navigationStack.length > 1) {
       _navigateUp();
@@ -5078,6 +5094,183 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
+  // ============ Search Methods ============
+
+  /// Toggle search mode on/off
+  void _toggleSearch() {
+    setState(() {
+      _isSearchActive = !_isSearchActive;
+      if (!_isSearchActive) {
+        _searchController.clear();
+        _searchResults.clear();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _searchFocusNode.requestFocus();
+        });
+      }
+    });
+  }
+
+  /// Perform deep search across all files in current torrent
+  void _performSearch(String query) {
+    // Get root folder node from navigation stack
+    if (_navigationStack.isEmpty || query.isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+
+    final rootEntry = _navigationStack.first;
+    final rootNode = rootEntry.node;
+    if (rootNode == null) {
+      setState(() => _searchResults = []);
+      return;
+    }
+
+    final lowerQuery = query.toLowerCase();
+    final results = <_TorboxSearchResult>[];
+
+    void searchNode(RDFileNode node, List<String> path) {
+      if (!node.isFolder) {
+        if (FileUtils.isVideoFile(node.name) &&
+            node.name.toLowerCase().contains(lowerQuery)) {
+          results.add(_TorboxSearchResult(node: node, path: path.join(' / ')));
+        }
+      } else {
+        for (final child in node.children) {
+          searchNode(child, [...path, node.name]);
+        }
+      }
+    }
+
+    for (final child in rootNode.children) {
+      searchNode(child, []);
+    }
+
+    setState(() => _searchResults = results);
+  }
+
+  /// Build the search bar widget
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search all files...',
+          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.grey),
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchResults.clear();
+                    });
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: const Color(0xFF1E293B),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        style: const TextStyle(color: Colors.white),
+        onChanged: _performSearch,
+        onSubmitted: (_) => _searchFocusNode.unfocus(),
+      ),
+    );
+  }
+
+  /// Build search results list
+  Widget _buildSearchResults() {
+    if (_searchController.text.isEmpty) {
+      return const Center(
+        child: Text('Type to search all files', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Text('No files found', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        return _buildSearchResultCard(result);
+      },
+    );
+  }
+
+  /// Build a card for a search result
+  Widget _buildSearchResultCard(_TorboxSearchResult result) {
+    final node = result.node;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.2),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _playVideoFile(node),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.play_circle_outline, color: Colors.blue, size: 32),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        node.name,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (result.path.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          result.path,
+                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (node.bytes != null)
+                        Text(
+                          Formatters.formatFileSize(node.bytes!),
+                          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Get items to display (torrents/web downloads or files/folders)
   List<dynamic> get _currentItems {
     if (_isAtRoot) {
@@ -5121,6 +5314,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       );
     }
 
+    final currentMode = _getCurrentViewMode();
+    final showSearch = !_isAtRoot && currentMode != _FolderViewMode.seriesArrange;
+
     return Scaffold(
       appBar: _isAtRoot ? null : AppBar(
         leading: IconButton(
@@ -5129,17 +5325,29 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           tooltip: 'Back',
         ),
         title: Text(_currentFolderName),
+        actions: [
+          if (showSearch)
+            IconButton(
+              focusNode: _searchButtonFocusNode,
+              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+              onPressed: _toggleSearch,
+              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+            ),
+        ],
       ),
       body: Column(
         children: [
           const SizedBox(height: 8),
           if (_isAtRoot) _buildToolbar(),
           if (!_isAtRoot) _buildViewModeDropdown(),
+          if (_isSearchActive && showSearch) _buildSearchBar(),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: _buildFilesFoldersList(),
-            ),
+            child: _isSearchActive
+                ? _buildSearchResults()
+                : RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: _buildFilesFoldersList(),
+                  ),
           ),
         ],
       ),
@@ -6163,4 +6371,12 @@ class _TorboxMoreOption {
   final Future<void> Function() onTap;
   final bool destructive;
   final bool enabled;
+}
+
+/// Helper class to hold search result with its folder path
+class _TorboxSearchResult {
+  final RDFileNode node;
+  final String path;
+
+  const _TorboxSearchResult({required this.node, required this.path});
 }
