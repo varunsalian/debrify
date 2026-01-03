@@ -74,6 +74,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
+            android:gravity="center_vertical"
             android:paddingStart="48dp"
             android:paddingEnd="48dp"
             android:paddingTop="16dp"
@@ -87,57 +88,20 @@
                 android:layout_weight="1"
                 android:orientation="vertical">
 
-                <!-- Top row: Badge + Rating -->
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <!-- Episode Badge -->
+                <TextView
+                    android:id="@+id/android_tv_ott_episode_badge"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <!-- Episode Badge -->
-                    <TextView
-                        android:id="@+id/android_tv_ott_episode_badge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/ott_episode_badge"
-                        android:paddingStart="8dp"
-                        android:paddingEnd="8dp"
-                        android:paddingTop="3dp"
-                        android:paddingBottom="3dp"
-                        android:textColor="#FFFFFF"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        android:fontFamily="sans-serif-medium" />
-
-                    <!-- IMDB Rating (compact, inline) -->
-                    <LinearLayout
-                        android:id="@+id/android_tv_ott_rating_container"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginStart="12dp"
-                        android:visibility="gone">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="★"
-                            android:textColor="#F5C518"
-                            android:textSize="12sp" />
-
-                        <TextView
-                            android:id="@+id/android_tv_ott_rating"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="3dp"
-                            android:textColor="#99FFFFFF"
-                            android:textSize="12sp"
-                            android:fontFamily="sans-serif-medium" />
-
-                    </LinearLayout>
-
-                </LinearLayout>
+                    android:background="@drawable/ott_episode_badge"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-medium" />
 
                 <!-- Episode Title (can wrap to 2 lines) -->
                 <TextView
@@ -155,6 +119,34 @@
                     android:shadowDx="0"
                     android:shadowDy="1"
                     android:shadowRadius="3" />
+
+            </LinearLayout>
+
+            <!-- Right: IMDB Rating -->
+            <LinearLayout
+                android:id="@+id/android_tv_ott_rating_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginStart="24dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="★"
+                    android:textColor="#F5C518"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/android_tv_ott_rating"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:fontFamily="sans-serif-medium" />
 
             </LinearLayout>
 
