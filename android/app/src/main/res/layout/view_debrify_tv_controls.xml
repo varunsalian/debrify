@@ -35,18 +35,17 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingTop="12dp"
-            android:paddingBottom="14dp">
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
 
-            <!-- LEFT SECTION: Time & Progress -->
+            <!-- LEFT SECTION: Time (Single Line) -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:minWidth="100dp">
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="12dp">
 
                 <!-- Current Time -->
                 <TextView
@@ -55,16 +54,15 @@
                     android:layout_height="wrap_content"
                     android:text="00:00"
                     android:textColor="#FFFFFF"
-                    android:textSize="18sp"
-                    android:fontFamily="sans-serif-bold"
-                    android:letterSpacing="0.02" />
+                    android:textSize="14sp"
+                    android:fontFamily="sans-serif-bold" />
 
-                <!-- Progress Bar -->
+                <!-- Progress Bar (Inline) -->
                 <FrameLayout
-                    android:layout_width="80dp"
-                    android:layout_height="4dp"
-                    android:layout_marginTop="6dp"
-                    android:layout_marginBottom="6dp">
+                    android:layout_width="60dp"
+                    android:layout_height="3dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp">
 
                     <View
                         android:layout_width="match_parent"
@@ -87,15 +85,14 @@
                     android:text="00:00"
                     android:textColor="#80FFFFFF"
                     android:textSize="12sp"
-                    android:fontFamily="sans-serif"
-                    android:letterSpacing="0.02" />
+                    android:fontFamily="sans-serif" />
 
             </LinearLayout>
 
             <!-- Section Divider -->
             <View
                 android:layout_width="1dp"
-                android:layout_height="50dp"
+                android:layout_height="24dp"
                 android:background="#33FFFFFF" />
 
             <!-- RIGHT SECTION: Control Buttons -->
@@ -112,10 +109,11 @@
                 <LinearLayout
                     android:id="@+id/debrify_audio_button"
                     style="@style/TvControlButton"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:src="@drawable/ic_audio"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -123,20 +121,20 @@
                         android:layout_height="wrap_content"
                         android:text="AUDIO"
                         android:textColor="#CCFFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <!-- Subtitles -->
                 <LinearLayout
                     android:id="@+id/debrify_subtitle_button"
                     style="@style/TvControlButton"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:src="@drawable/ic_subtitles"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -144,20 +142,20 @@
                         android:layout_height="wrap_content"
                         android:text="SUBS"
                         android:textColor="#CCFFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <!-- Aspect -->
                 <LinearLayout
                     android:id="@+id/debrify_aspect_button"
                     style="@style/TvControlButton"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:src="@drawable/ic_aspect"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -165,20 +163,20 @@
                         android:layout_height="wrap_content"
                         android:text="FILL"
                         android:textColor="#CCFFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <!-- Guide -->
                 <LinearLayout
                     android:id="@+id/debrify_guide_button"
                     style="@style/TvControlButton"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:src="@drawable/ic_guide"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -186,21 +184,21 @@
                         android:layout_height="wrap_content"
                         android:text="GUIDE"
                         android:textColor="#CCFFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <!-- PLAY/PAUSE (Center, Prominent) -->
                 <LinearLayout
                     android:id="@+id/debrify_pause_button"
                     style="@style/TvControlButtonPlay"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
                         android:id="@+id/debrify_pause_icon"
-                        android:layout_width="26dp"
-                        android:layout_height="26dp"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
                         android:src="@drawable/ic_pause"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -209,20 +207,20 @@
                         android:layout_height="wrap_content"
                         android:text="PAUSE"
                         android:textColor="#FFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-bold"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <!-- Next Stream -->
                 <LinearLayout
                     android:id="@+id/debrify_next_button"
                     style="@style/TvControlButton"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:src="@drawable/ic_next_stream"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -230,20 +228,20 @@
                         android:layout_height="wrap_content"
                         android:text="NEXT"
                         android:textColor="#CCFFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <!-- Next Channel -->
                 <LinearLayout
                     android:id="@+id/debrify_channel_next_button"
                     style="@style/TvControlButton"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:src="@drawable/ic_next_channel"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -251,20 +249,20 @@
                         android:layout_height="wrap_content"
                         android:text="CH+"
                         android:textColor="#CCFFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <!-- Speed -->
                 <LinearLayout
                     android:id="@+id/debrify_speed_button"
                     style="@style/TvControlButton"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:src="@drawable/ic_speed"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -272,20 +270,20 @@
                         android:layout_height="wrap_content"
                         android:text="SPEED"
                         android:textColor="#CCFFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <!-- Night Mode -->
                 <LinearLayout
                     android:id="@+id/debrify_night_mode_button"
                     style="@style/TvControlButton"
-                    android:orientation="vertical">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
                         android:src="@drawable/ic_night_mode"
                         android:tint="#FFFFFF" />
                     <TextView
@@ -293,10 +291,9 @@
                         android:layout_height="wrap_content"
                         android:text="NIGHT"
                         android:textColor="#CCFFFFFF"
-                        android:textSize="9sp"
+                        android:textSize="10sp"
                         android:fontFamily="sans-serif-medium"
-                        android:letterSpacing="0.05"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
             </LinearLayout>
