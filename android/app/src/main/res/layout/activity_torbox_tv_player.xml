@@ -60,106 +60,107 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- Broadcast-Style Lower-Third Bar (News/Sports Chyron) -->
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         TV BROADCAST MODE - Sports Style Channel Badge (Top Left)
+         ESPN/Fox Sports inspired - Bold channel indicator with accent stripe
+         ═══════════════════════════════════════════════════════════════════════ -->
     <LinearLayout
         android:id="@+id/player_broadcast_lower_third"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="0dp"
+        android:layout_marginTop="0dp"
         android:orientation="horizontal"
-        android:background="@drawable/broadcast_lower_third_bg"
+        android:background="#F0000000"
         android:elevation="16dp"
         android:visibility="gone">
 
-        <!-- Left accent stripe (RED like "LIVE" indicator) -->
+        <!-- Left Accent Stripe (Signature Red) -->
         <View
-            android:id="@+id/player_broadcast_accent_stripe"
             android:layout_width="5dp"
             android:layout_height="match_parent"
-            android:background="@drawable/broadcast_accent_stripe" />
+            android:background="#E50914" />
 
-        <!-- Channel info section -->
+        <!-- Content Section -->
         <LinearLayout
-            android:id="@+id/player_broadcast_channel_section"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:background="@drawable/broadcast_channel_box">
-
-            <!-- Channel label -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="CH"
-                android:textColor="#999999"
-                android:textSize="11sp"
-                android:fontFamily="sans-serif-medium"
-                android:letterSpacing="0.1"
-                android:includeFontPadding="false"
-                android:layout_marginEnd="4dp" />
-
-            <!-- Channel number -->
-            <TextView
-                android:id="@+id/player_channel_number"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="05"
-                android:textColor="#FFFFFF"
-                android:textSize="18sp"
-                android:fontFamily="sans-serif-black"
-                android:letterSpacing="0.05"
-                android:includeFontPadding="false" />
-
-        </LinearLayout>
-
-        <!-- Vertical divider -->
-        <View
-            android:layout_width="1dp"
-            android:layout_height="match_parent"
-            android:background="#33FFFFFF" />
-
-        <!-- Content info section -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingStart="16dp"
+            android:paddingStart="14dp"
             android:paddingEnd="20dp"
             android:paddingTop="10dp"
-            android:paddingBottom="10dp">
+            android:paddingBottom="12dp">
 
-            <!-- Channel name (small, uppercase) -->
-            <TextView
-                android:id="@+id/player_channel_name"
+            <!-- Top Row: CH + Number + Category -->
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="HBO MAX"
-                android:textColor="#CCCCCC"
-                android:textSize="10sp"
-                android:fontFamily="sans-serif-medium"
-                android:letterSpacing="0.15"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:includeFontPadding="false" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <!-- Now playing title (larger, scrollable) -->
+                <!-- "CH" Label -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CH"
+                    android:textColor="#80FFFFFF"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-bold"
+                    android:letterSpacing="0.1"
+                    android:includeFontPadding="false" />
+
+                <!-- Channel Number (Bold, Large) -->
+                <TextView
+                    android:id="@+id/player_channel_number"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="33"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp"
+                    android:fontFamily="sans-serif-black"
+                    android:letterSpacing="0.02"
+                    android:includeFontPadding="false" />
+
+                <!-- Vertical Divider -->
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:background="#40FFFFFF" />
+
+                <!-- Category/Channel Name (Uppercase) -->
+                <TextView
+                    android:id="@+id/player_channel_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SITCOMS"
+                    android:textColor="#E50914"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-bold"
+                    android:letterSpacing="0.1"
+                    android:textAllCaps="true"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:includeFontPadding="false" />
+
+            </LinearLayout>
+
+            <!-- Video Title (Below) -->
             <TextView
                 android:id="@+id/player_title_badge_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Stranger Things S01E01"
-                android:textColor="#FFFFFF"
-                android:textSize="14sp"
+                android:layout_marginTop="6dp"
+                android:text="Episode Title Here"
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp"
                 android:fontFamily="sans-serif-medium"
                 android:letterSpacing="0.01"
                 android:maxLines="1"
+                android:maxWidth="500dp"
                 android:ellipsize="marquee"
                 android:marqueeRepeatLimit="marquee_forever"
                 android:scrollHorizontally="true"

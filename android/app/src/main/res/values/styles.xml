@@ -139,4 +139,75 @@
         <item name="android:singleLine">true</item>
     </style>
 
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         STREAMING MODE - Modern Apple TV+ / Netflix Style Controls
+         ═══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Icon-only control button (Audio, Subs, Aspect, etc.) -->
+    <style name="StreamingIconButton">
+        <item name="android:background">@drawable/streaming_control_button_bg</item>
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:minHeight">40dp</item>
+        <item name="android:minWidth">40dp</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:tint">@color/streaming_icon_tint</item>
+        <item name="android:layout_marginStart">2dp</item>
+        <item name="android:layout_marginEnd">2dp</item>
+    </style>
+
+    <!-- Play/Pause button - Slightly larger with subtle idle highlight -->
+    <style name="StreamingPlayButton">
+        <item name="android:background">@drawable/streaming_play_button_bg</item>
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:minHeight">40dp</item>
+        <item name="android:minWidth">48dp</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:scaleType">fitCenter</item>
+        <item name="android:tint">@color/streaming_icon_tint</item>
+        <item name="android:layout_marginStart">6dp</item>
+        <item name="android:layout_marginEnd">6dp</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         TV BROADCAST MODE - Sports Channel Style Controls
+         ESPN/Fox Sports inspired - Bold graphics, chunky buttons with labels
+         ═══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Standard TV control button (icon + label, vertical stack) -->
+    <style name="TvControlButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:background">@drawable/tv_control_button_bg</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:clickable">true</item>
+    </style>
+
+    <!-- TV Play/Pause button - Larger, more prominent -->
+    <style name="TvControlButtonPlay">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:background">@drawable/tv_control_button_bg</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:clickable">true</item>
+    </style>
+
 </resources>

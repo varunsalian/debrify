@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sports Broadcast Style - Full Width TV Bar Background -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Main dark background -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#F2000000" />
+        </shape>
+    </item>
+
+    <!-- Top accent line (ESPN red style) -->
+    <item android:bottom="0dp" android:top="0dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#E50914" />
+            <size android:height="4dp" />
+        </shape>
+    </item>
+
+</layer-list>

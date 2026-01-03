@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sports Broadcast Style - Channel Badge (like ESPN channel indicator) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Main background -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#F0000000" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+
+    <!-- Left accent stripe (signature red) -->
+    <item android:right="0dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#E50914" />
+            <size android:width="5dp" />
+            <corners
+                android:topLeftRadius="4dp"
+                android:bottomLeftRadius="4dp" />
+        </shape>
+    </item>
+
+</layer-list>

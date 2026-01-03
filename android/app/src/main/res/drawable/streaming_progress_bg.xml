@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Progress bar background track -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!-- Subtle dark background -->
+    <solid android:color="#33FFFFFF" />
+
+    <!-- Rounded ends -->
+    <corners android:radius="2dp" />
+
+</shape>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icon tint for streaming control buttons - Dark when focused, white when idle -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Focused: Dark icon on white background -->
+    <item android:state_focused="true" android:color="#1A1A1A" />
+
+    <!-- Pressed: Dark icon -->
+    <item android:state_pressed="true" android:color="#1A1A1A" />
+
+    <!-- Default: White icon on transparent background -->
+    <item android:color="#E6FFFFFF" />
+
+</selector>

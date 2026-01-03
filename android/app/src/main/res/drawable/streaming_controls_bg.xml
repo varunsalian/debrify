@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Modern streaming-style floating controls bar - Glass pill effect -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!-- Semi-transparent dark glass background -->
+    <solid android:color="#E6101014" />
+
+    <!-- Full pill shape with large radius -->
+    <corners android:radius="100dp" />
+
+    <!-- Subtle border for depth -->
+    <stroke
+        android:width="1dp"
+        android:color="#26FFFFFF" />
+
+</shape>

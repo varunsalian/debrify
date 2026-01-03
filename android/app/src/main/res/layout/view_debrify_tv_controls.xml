@@ -1,121 +1,315 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════════════
+     SPORTS BROADCAST STYLE - Full Width TV Bar
+     ESPN/Fox Sports inspired - Bold graphics, wide ticker-style layout
+     ═══════════════════════════════════════════════════════════════════════════════════ -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/debrify_controls_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_gravity="bottom"
-    android:clipToPadding="false"
     android:visibility="gone">
 
+    <!-- Main TV Bar Container -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
+        android:layout_marginStart="0dp"
+        android:layout_marginEnd="0dp"
+        android:layout_marginBottom="0dp"
         android:orientation="vertical"
-        android:background="@drawable/debrify_tv_controls_scrim"
-        android:paddingStart="32dp"
-        android:paddingEnd="32dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="8dp"
-        android:clipToPadding="false"
-        android:elevation="100dp"
-        android:translationZ="10dp">
+        android:background="#F0000000"
+        android:elevation="16dp">
 
+        <!-- Top Accent Line (ESPN Red) -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:background="#E50914" />
+
+        <!-- Main Content Row -->
         <LinearLayout
             android:id="@+id/debrify_controls_buttons"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center"
-            android:clipToPadding="false"
-            android:paddingBottom="0dp">
+            android:gravity="center_vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="14dp">
 
-            <!-- Time Display -->
-            <TextView
-                android:id="@+id/debrify_time_display"
+            <!-- LEFT SECTION: Time & Progress -->
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/netflix_text_primary"
-                android:textSize="11sp"
-                android:fontFamily="sans-serif-light"
-                android:letterSpacing="0.02"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:minWidth="100dp">
+
+                <!-- Current Time -->
+                <TextView
+                    android:id="@+id/debrify_time_current"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:fontFamily="sans-serif-bold"
+                    android:letterSpacing="0.02" />
+
+                <!-- Progress Bar -->
+                <FrameLayout
+                    android:layout_width="80dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="6dp">
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/tv_progress_bar_bg" />
+
+                    <View
+                        android:id="@+id/debrify_progress_line"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/tv_progress_bar_fill" />
+
+                </FrameLayout>
+
+                <!-- Total Time -->
+                <TextView
+                    android:id="@+id/debrify_time_total"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00"
+                    android:textColor="#80FFFFFF"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif"
+                    android:letterSpacing="0.02" />
+
+            </LinearLayout>
+
+            <!-- Section Divider -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="50dp"
+                android:background="#33FFFFFF" />
+
+            <!-- RIGHT SECTION: Control Buttons -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
                 android:gravity="center"
                 android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:minWidth="96dp"
-                android:text="00:00 / 00:00" />
+                android:paddingEnd="16dp">
 
-            <!-- Left side controls -->
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_audio_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_audio"
-                android:text="Audio" />
+                <!-- Audio -->
+                <LinearLayout
+                    android:id="@+id/debrify_audio_button"
+                    style="@style/TvControlButton"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_audio"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="AUDIO"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_subtitle_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_subtitles"
-                android:text="Subtitles" />
+                <!-- Subtitles -->
+                <LinearLayout
+                    android:id="@+id/debrify_subtitle_button"
+                    style="@style/TvControlButton"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_subtitles"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SUBS"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_aspect_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_aspect"
-                android:text="Aspect" />
+                <!-- Aspect -->
+                <LinearLayout
+                    android:id="@+id/debrify_aspect_button"
+                    style="@style/TvControlButton"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_aspect"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="FILL"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_guide_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_guide"
-                android:text="Guide" />
+                <!-- Guide -->
+                <LinearLayout
+                    android:id="@+id/debrify_guide_button"
+                    style="@style/TvControlButton"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_guide"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="GUIDE"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-            <!-- Center: Pause/Play -->
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_pause_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_pause"
-                android:text="Pause" />
+                <!-- PLAY/PAUSE (Center, Prominent) -->
+                <LinearLayout
+                    android:id="@+id/debrify_pause_button"
+                    style="@style/TvControlButtonPlay"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:id="@+id/debrify_pause_icon"
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:src="@drawable/ic_pause"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:id="@+id/debrify_pause_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="PAUSE"
+                        android:textColor="#FFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-bold"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-            <!-- Right side controls -->
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_next_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_next_stream"
-                android:text="Next Stream" />
+                <!-- Next Stream -->
+                <LinearLayout
+                    android:id="@+id/debrify_next_button"
+                    style="@style/TvControlButton"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_next_stream"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="NEXT"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_channel_next_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_next_channel"
-                android:text="Next Ch" />
+                <!-- Next Channel -->
+                <LinearLayout
+                    android:id="@+id/debrify_channel_next_button"
+                    style="@style/TvControlButton"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_next_channel"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="CH+"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_speed_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_speed"
-                android:text="Speed" />
+                <!-- Speed -->
+                <LinearLayout
+                    android:id="@+id/debrify_speed_button"
+                    style="@style/TvControlButton"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_speed"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SPEED"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/debrify_night_mode_button"
-                style="@style/DebrifyTvChipButton"
-                android:drawableStart="@drawable/ic_night_mode"
-                android:text="Off"
-                android:singleLine="true"
-                android:layout_marginEnd="0dp" />
+                <!-- Night Mode -->
+                <LinearLayout
+                    android:id="@+id/debrify_night_mode_button"
+                    style="@style/TvControlButton"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_night_mode"
+                        android:tint="#FFFFFF" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="NIGHT"
+                        android:textColor="#CCFFFFFF"
+                        android:textSize="9sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
+
+            </LinearLayout>
 
         </LinearLayout>
 
     </LinearLayout>
 
-    <!-- Thin red progress line at the bottom of the menu -->
-    <View
-        android:id="@+id/debrify_progress_line"
+    <!-- Hidden time display for compatibility (Java code references this) -->
+    <TextView
+        android:id="@+id/debrify_time_display"
         android:layout_width="0dp"
-        android:layout_height="3dp"
-        android:layout_gravity="bottom"
-        android:background="#E50914"
-        android:elevation="101dp"
-        android:translationZ="11dp" />
+        android:layout_height="0dp"
+        android:visibility="gone" />
 
 </FrameLayout>

@@ -18,6 +18,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.media.audiofx.LoudnessEnhancer;
@@ -120,16 +122,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private TextView debrifyTimeDisplay;
     private View debrifyProgressLine;
     private View buttonsRow;
-    private AppCompatButton pauseButton;
-    private AppCompatButton audioButton;
-    private AppCompatButton subtitleButton;
-    private AppCompatButton aspectButton;
-    private AppCompatButton nightModeButton;
-    private AppCompatButton speedButton;
+    private View pauseButton;
+    private View audioButton;
+    private View subtitleButton;
+    private View aspectButton;
+    private View nightModeButton;
+    private View speedButton;
     private int nightModeIndex = 2;  // Medium by default
     private LoudnessEnhancer loudnessEnhancer = null;
-    private AppCompatButton guideButton;
-    private AppCompatButton channelNextButton;
+    private View guideButton;
+    private View channelNextButton;
+    private TextView debrifyTimeCurrent;
+    private TextView debrifyTimeTotal;
     private View nextOverlay;
     private TextView nextText;
     private TextView nextSubtext;
@@ -563,6 +567,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void setupControllerUi() {
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root);
         debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display);
+        debrifyTimeCurrent = playerView.findViewById(R.id.debrify_time_current);
+        debrifyTimeTotal = playerView.findViewById(R.id.debrify_time_total);
         debrifyProgressLine = playerView.findViewById(R.id.debrify_progress_line);
         buttonsRow = playerView.findViewById(R.id.debrify_controls_buttons);
         pauseButton = playerView.findViewById(R.id.debrify_pause_button);
@@ -697,22 +703,28 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         boolean playing = player != null && player.isPlaying();
-        pauseButton.setText(getString(playing
-                ? R.string.debrify_tv_control_pause_button
-                : R.string.debrify_tv_control_play_button));
         int iconRes = playing ? R.drawable.ic_pause : R.drawable.ic_play;
-        pauseButton.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0);
+        String labelText = playing ? "PAUSE" : "PLAY";
+
+        // TV broadcast style: button is a LinearLayout with ImageView and TextView children
+        ImageView pauseIcon = pauseButton.findViewById(R.id.debrify_pause_icon);
+        TextView pauseLabel = pauseButton.findViewById(R.id.debrify_pause_label);
+
+        if (pauseIcon != null) {
+            pauseIcon.setImageResource(iconRes);
+        }
+        if (pauseLabel != null) {
+            pauseLabel.setText(labelText);
+        }
     }
 
     private void updateAspectButtonLabel() {
-        if (aspectButton == null) {
-            return;
-        }
-        aspectButton.setText(resizeModeLabels[resizeModeIndex]);
+        // Icon-only design: no text label to update
+        // State is visual only through cycling
     }
 
     private void updateControlsMenuProgressBar() {
-        if (debrifyTimeDisplay == null || player == null) {
+        if (player == null) {
             return;
         }
 
@@ -723,8 +735,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
 
-        // Update time display in format "MM:SS / MM:SS"
-        debrifyTimeDisplay.setText(formatTime(currentPosition) + " / " + formatTime(duration));
+        // Update time displays (TV broadcast style: separate current and total)
+        if (debrifyTimeCurrent != null) {
+            debrifyTimeCurrent.setText(formatTime(currentPosition));
+        }
+        if (debrifyTimeTotal != null) {
+            debrifyTimeTotal.setText(formatTime(duration));
+        }
+        // Fallback for old combined display
+        if (debrifyTimeDisplay != null) {
+            debrifyTimeDisplay.setText(formatTime(currentPosition) + " / " + formatTime(duration));
+        }
 
         // Update progress line width
         if (debrifyProgressLine != null) {
@@ -1023,9 +1044,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void updateNightModeButtonLabel() {
-        if (nightModeButton != null) {
-            nightModeButton.setText(nightModeLabels[nightModeIndex]);
-        }
+        // Icon-only design: no text label to update
+        // State is communicated via toast when cycling
     }
 
     private void setupCustomSeekbar() {
