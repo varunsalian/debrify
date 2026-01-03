@@ -180,11 +180,13 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
     const double cardHeight = 270; // ~2:3 aspect ratio
 
     return SizedBox(
-      height: cardHeight,
+      height: cardHeight + 20, // Extra space for scale animation overflow
       child: ListView.builder(
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        clipBehavior: Clip.none, // Allow scale animation to overflow
+        cacheExtent: 500, // Pre-cache items for smoother scrolling
         itemCount: widget.items.length,
         itemBuilder: (context, index) {
           return Padding(
@@ -261,18 +263,23 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
 
   /// Scroll to make the focused item visible with some padding
   void _scrollToIndex(int index) {
+    // Guard against scroll controller not being attached
+    if (!_scrollController.hasClients) return;
+
     const double cardWidth = 180;
     const double spacing = 16;
     const double padding = 20;
 
-    final targetOffset = (index * (cardWidth + spacing)) + padding - 100;
+    // Calculate target to center the focused item
+    final viewportWidth = _scrollController.position.viewportDimension;
+    final targetOffset = (index * (cardWidth + spacing)) + padding - (viewportWidth / 2) + (cardWidth / 2);
     final maxScroll = _scrollController.position.maxScrollExtent;
     final clampedOffset = targetOffset.clamp(0.0, maxScroll);
 
     _scrollController.animateTo(
       clampedOffset,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 150), // Snappier animation
+      curve: Curves.easeOutCubic, // Smoother deceleration
     );
   }
 }

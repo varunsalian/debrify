@@ -223,23 +223,26 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
         },
         child: GestureDetector(
           onTap: () => _showActionMenu(context),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            transform: Matrix4.identity()
-              ..scale(isActive ? 1.05 : 1.0),
-            child: Container(
+          // Use AnimatedScale for GPU-accelerated smooth scaling
+          child: AnimatedScale(
+            scale: isActive ? 1.08 : 1.0,
+            duration: const Duration(milliseconds: 150), // Snappier
+            curve: Curves.easeOutCubic, // Smoother deceleration
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: isActive
                     ? [
+                        // Subtle glow effect
                         BoxShadow(
-                          color: const Color(0xFFE50914).withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+                          color: const Color(0xFFE50914).withValues(alpha: 0.4),
+                          blurRadius: 16,
+                          spreadRadius: 2,
                         ),
                       ]
-                    : null, // No shadow when not focused - reduces rendering overhead
+                    : null,
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -352,7 +355,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                       ),
                     ),
 
-                    // Focus/hover border
+                    // Focus/hover border with animated opacity
                     if (isActive)
                       Positioned.fill(
                         child: Container(
