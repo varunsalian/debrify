@@ -4096,7 +4096,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           _DebridActionTile(
                             icon: Icons.open_in_new,
                             color: const Color(0xFFF59E0B),
-                            title: 'Open in PikPak',
+                            title: 'Open',
                             subtitle: 'View folder in PikPak files tab',
                             enabled: true,
                             autofocus: true,
@@ -4346,7 +4346,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   _DebridActionTile(
                     icon: Icons.open_in_new,
                     color: const Color(0xFFF59E0B),
-                    title: 'Open in PikPak',
+                    title: 'Open',
                     subtitle: 'View folder in PikPak files tab',
                     enabled: true,
                     autofocus: true,
@@ -6049,7 +6049,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           _DebridActionTile(
                             icon: Icons.open_in_new,
                             color: const Color(0xFFF59E0B),
-                            title: 'Open in Torbox',
+                            title: 'Open',
                             subtitle: 'View this torrent in Torbox tab',
                             enabled: true,
                             autofocus: true,
@@ -7291,7 +7291,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               _DebridActionTile(
                                 icon: Icons.open_in_new,
                                 color: const Color(0xFFF59E0B),
-                                title: 'Open in Real-Debrid',
+                                title: 'Open',
                                 subtitle: isRarArchive
                                     ? 'Not available for RAR archives (not extracted by Real-Debrid)'
                                     : 'View this torrent in Real-Debrid tab',
