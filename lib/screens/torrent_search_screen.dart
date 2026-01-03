@@ -1863,12 +1863,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                 )
               : ListView.builder(
-                  shrinkWrap: true,
+                  // Removed shrinkWrap: true - parent has maxHeight constraint
+                  // shrinkWrap forces measuring all children, hurting performance
+                  padding: EdgeInsets.zero,
                   itemCount: _imdbAutocompleteResults.length,
                   itemBuilder: (context, index) {
                     final result = _imdbAutocompleteResults[index];
                     final focusNode = _autocompleteFocusNodes[index];
                     return _ImdbAutocompleteItem(
+                      key: ValueKey(result.imdbId), // Add key for efficient rebuilds
                       result: result,
                       focusNode: focusNode,
                       onSelected: () => _onImdbResultSelected(result),
@@ -11388,6 +11391,7 @@ class _ImdbAutocompleteItem extends StatefulWidget {
   final KeyEventResult Function(KeyEvent) onKeyEvent;
 
   const _ImdbAutocompleteItem({
+    super.key,
     required this.result,
     required this.focusNode,
     required this.onSelected,
@@ -11402,25 +11406,57 @@ class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
   bool _isFocused = false;
 
   @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChange);
+    _isFocused = widget.focusNode.hasFocus;
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ImdbAutocompleteItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.removeListener(_onFocusChange);
+      widget.focusNode.addListener(_onFocusChange);
+      _isFocused = widget.focusNode.hasFocus;
+    }
+  }
+
+  void _onFocusChange() {
+    if (!mounted) return;
+    final focused = widget.focusNode.hasFocus;
+    if (_isFocused != focused) {
+      setState(() {
+        _isFocused = focused;
+      });
+      // Scroll to visible AFTER the frame completes to avoid layout issues
+      if (focused) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final ctx = context;
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 100), // Faster scroll
+          );
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Focus(
       focusNode: widget.focusNode,
-      onFocusChange: (focused) {
-        setState(() {
-          _isFocused = focused;
-        });
-        if (focused) {
-          // Ensure focused item is visible
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            duration: const Duration(milliseconds: 200),
-          );
-        }
-      },
       onKeyEvent: (node, event) => widget.onKeyEvent(event),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      // Use Container instead of AnimatedContainer for instant feedback
+      child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         decoration: BoxDecoration(
           color: _isFocused
@@ -11444,6 +11480,9 @@ class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
                     width: 40,
                     height: 60,
                     fit: BoxFit.cover,
+                    // Add cacheWidth/cacheHeight to reduce memory usage
+                    cacheWidth: 80,
+                    cacheHeight: 120,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(
                         width: 40,
