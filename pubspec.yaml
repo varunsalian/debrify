@@ -50,6 +50,7 @@ dependencies:
   window_manager: ^0.3.8
   app_links: ^6.3.2
   crypto: ^3.0.3
+  flutter_sharing_intent: ^2.0.4
 
 
   

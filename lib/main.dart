@@ -551,7 +551,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  /// Initialize deep linking for magnet links
+  /// Initialize deep linking for magnet links and shared URLs
   void _initializeDeepLinking() {
     final deepLinkService = DeepLinkService();
 
@@ -595,6 +595,61 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
       // Handle the magnet link
       await handler.handleMagnetLink(magnetUri);
+    };
+
+    // Set the callback for handling shared URLs
+    deepLinkService.onUrlShared = (url) async {
+      if (!mounted) return;
+
+      // Create handler with callbacks for URL handling
+      final handler = MagnetLinkHandler(
+        context: context,
+        onRealDebridUrlResult: (result) {
+          // Show success message with download info
+          final filename = result['filename']?.toString() ?? 'Link';
+          final filesize = result['filesize'] as int?;
+          String message = 'Added to RealDebrid: $filename';
+          if (filesize != null && filesize > 0) {
+            final sizeMB = (filesize / (1024 * 1024)).toStringAsFixed(1);
+            message += ' ($sizeMB MB)';
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        },
+        onTorboxUrlResult: (webDownloadId, name) {
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Added to Torbox: $name'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        },
+        onPikPakResult: (fileId, fileName) async {
+          // Use the same post-action flow as torrent search
+          if (MainPageBridge.handlePikPakResult != null) {
+            await MainPageBridge.handlePikPakResult!(fileId, fileName);
+          } else {
+            await _handlePikPakPostActionFallback(context, fileId, fileName);
+          }
+        },
+        onPikPakAdded: () {
+          MainPageBridge.switchTab?.call(6); // PikPak tab index
+        },
+      );
+
+      // Handle the shared URL
+      await handler.handleSharedUrl(url);
     };
 
     // Initialize the service

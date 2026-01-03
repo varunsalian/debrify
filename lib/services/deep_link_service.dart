@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_sharing_intent/flutter_sharing_intent.dart';
+import 'package:flutter_sharing_intent/model/sharing_file.dart';
 import 'storage_service.dart';
 
 class DeepLinkService {
@@ -10,13 +12,18 @@ class DeepLinkService {
 
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSubscription;
+  StreamSubscription<List<SharedFile>>? _sharedMediaSubscription;
 
   // Callback function to handle magnet links
   // This will be set from the main app
   Future<void> Function(String magnetUri)? onMagnetLinkReceived;
 
-  // Track recently processed magnet links to avoid duplicates
+  // Callback function to handle shared URLs (http/https)
+  Future<void> Function(String url)? onUrlShared;
+
+  // Track recently processed links to avoid duplicates
   final Map<String, DateTime> _recentlyProcessedMagnets = {};
+  final Map<String, DateTime> _recentlyProcessedUrls = {};
   static const _deduplicationWindow = Duration(seconds: 30);
 
   /// Initialize deep link listening
@@ -40,9 +47,47 @@ class DeepLinkService {
         debugPrint('Deep link error: $err');
       },
     );
+
+    // Handle initial shared content if app was opened via share
+    try {
+      final initialShared = await FlutterSharingIntent.instance.getInitialSharing();
+      if (initialShared.isNotEmpty) {
+        _processSharedFiles(initialShared);
+      }
+    } catch (e) {
+      debugPrint('Failed to get initial shared content: $e');
+    }
+
+    // Listen for incoming shared content while app is running
+    _sharedMediaSubscription = FlutterSharingIntent.instance.getMediaStream().listen(
+      (List<SharedFile> files) {
+        _processSharedFiles(files);
+      },
+      onError: (err) {
+        debugPrint('Share intent error: $err');
+      },
+    );
   }
 
-  /// Handle incoming URI
+  /// Process shared files and extract text/URLs
+  void _processSharedFiles(List<SharedFile> files) {
+    for (final file in files) {
+      // The value property contains the shared content (text, URL, or file path)
+      final value = file.value;
+      if (value != null && value.isNotEmpty) {
+        // Check if it's a text share (URL or text content)
+        if (file.type == SharedMediaType.TEXT ||
+            file.type == SharedMediaType.URL ||
+            value.startsWith('http://') ||
+            value.startsWith('https://') ||
+            value.startsWith('magnet:')) {
+          _handleSharedText(value);
+        }
+      }
+    }
+  }
+
+  /// Handle incoming URI (magnet links)
   void _handleUri(Uri uri) {
     debugPrint('Received deep link: $uri');
 
@@ -83,6 +128,76 @@ class DeepLinkService {
         debugPrint('No magnet link handler registered');
       }
     }
+  }
+
+  /// Handle shared text (can contain URLs or magnet links)
+  void _handleSharedText(String text) {
+    debugPrint('Received shared text: $text');
+
+    // Extract URL from the shared text
+    final url = extractUrl(text);
+    if (url == null) {
+      debugPrint('No valid URL found in shared text');
+      return;
+    }
+
+    debugPrint('Extracted URL: $url');
+
+    // Check if it's a magnet link
+    if (url.startsWith('magnet:')) {
+      _handleUri(Uri.parse(url));
+      return;
+    }
+
+    // Check if it's an HTTP/HTTPS URL
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // Deduplication check
+      final now = DateTime.now();
+      final lastProcessed = _recentlyProcessedUrls[url];
+
+      if (lastProcessed != null) {
+        final timeSinceProcessed = now.difference(lastProcessed);
+        if (timeSinceProcessed < _deduplicationWindow) {
+          debugPrint('Ignoring duplicate URL (processed ${timeSinceProcessed.inSeconds}s ago)');
+          return;
+        }
+      }
+
+      // Clean up old entries
+      _recentlyProcessedUrls.removeWhere((key, value) {
+        return now.difference(value) > _deduplicationWindow;
+      });
+
+      // Mark as processed
+      _recentlyProcessedUrls[url] = now;
+
+      if (onUrlShared != null) {
+        onUrlShared!(url);
+      } else {
+        debugPrint('No URL share handler registered');
+      }
+    }
+  }
+
+  /// Extract URL from text (handles cases where URL is embedded in other text)
+  static String? extractUrl(String text) {
+    // Trim whitespace
+    text = text.trim();
+
+    // If the entire text is a URL, return it
+    if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('magnet:')) {
+      // Find the end of the URL (first whitespace or end of string)
+      final endIndex = text.indexOf(RegExp(r'\s'));
+      return endIndex == -1 ? text : text.substring(0, endIndex);
+    }
+
+    // Try to find a URL in the text using regex
+    final urlRegex = RegExp(
+      r'(https?://[^\s]+|magnet:\?[^\s]+)',
+      caseSensitive: false,
+    );
+    final match = urlRegex.firstMatch(text);
+    return match?.group(0);
   }
 
   /// Extract infohash from magnet URI
@@ -144,7 +259,10 @@ class DeepLinkService {
   void dispose() {
     _linkSubscription?.cancel();
     _linkSubscription = null;
+    _sharedMediaSubscription?.cancel();
+    _sharedMediaSubscription = null;
     _recentlyProcessedMagnets.clear();
+    _recentlyProcessedUrls.clear();
   }
 }
 
