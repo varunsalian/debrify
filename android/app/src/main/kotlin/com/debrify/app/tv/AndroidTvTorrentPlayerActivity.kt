@@ -626,18 +626,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun createSeasonTab(label: String, season: Int?, adapter: PlaylistAdapter): TextView {
         val tab = TextView(this)
         tab.text = label
-        tab.textSize = 14f
+        tab.textSize = 13f
         tab.setTextColor(0xFFFFFFFF.toInt())
-        tab.setPadding(32, 16, 32, 16)
+        tab.setPadding(28, 14, 28, 14)
         tab.setBackgroundResource(R.drawable.season_tab_selector)
         tab.isFocusable = true
         tab.isFocusableInTouchMode = true
+        tab.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
+        tab.letterSpacing = 0.04f
+        tab.elevation = 4f
 
         val params = android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
         )
-        params.marginEnd = 12
+        params.marginEnd = 10
         tab.layoutParams = params
 
         tab.setOnClickListener {
@@ -994,18 +997,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun createMovieTab(label: String, groupIndex: Int, groupName: String, adapter: MoviePlaylistAdapter): TextView {
         val tab = TextView(this)
         tab.text = label
-        tab.textSize = 14f
+        tab.textSize = 13f
         tab.setTextColor(0xFFFFFFFF.toInt())
-        tab.setPadding(32, 16, 32, 16)
+        tab.setPadding(28, 14, 28, 14)
         tab.setBackgroundResource(R.drawable.season_tab_selector)
         tab.isFocusable = true
         tab.isFocusableInTouchMode = true
+        tab.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
+        tab.letterSpacing = 0.04f
+        tab.elevation = 4f
 
         val params = android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
         )
-        params.marginEnd = 12
+        params.marginEnd = 10
         tab.layoutParams = params
 
         tab.setOnClickListener {
@@ -3189,40 +3195,63 @@ private class PlaylistAdapter(
         }
     }
 
-    // Episode ViewHolder with image loading
+    // Cinema Cards v2 - Episode ViewHolder
     class EpisodeViewHolder(
         itemView: View,
         private val onItemClick: (Int) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
+        // Container & focus elements
         private val container: View = itemView.findViewById(R.id.android_tv_playlist_item_container)
-        private val selectionOverlay: View? = itemView.findViewById(R.id.selection_overlay)
+        private val focusBorder: View? = itemView.findViewById(R.id.focus_border)
+        private val cardContent: View? = itemView.findViewById(R.id.card_content)
+
+        // Artwork elements
         private val posterImageView: android.widget.ImageView = itemView.findViewById(R.id.android_tv_playlist_item_poster)
+        private val shimmerOverlay: View? = itemView.findViewById(R.id.shimmer_overlay)
+        private val fallbackContainer: View? = itemView.findViewById(R.id.fallback_container)
+        private val fallbackBg: View? = itemView.findViewById(R.id.fallback_bg)
         private val fallbackTextView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_fallback)
         private val watchedOverlay: View = itemView.findViewById(R.id.android_tv_playlist_item_watched_overlay)
         private val watchedIcon: TextView = itemView.findViewById(R.id.android_tv_playlist_item_watched_icon)
         private val posterProgress: android.widget.ProgressBar = itemView.findViewById(R.id.android_tv_playlist_item_poster_progress)
+        private val nowPlayingRing: View? = itemView.findViewById(R.id.now_playing_ring)
+
+        // Info elements
         private val badgeView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_badge)
-        private val watchedView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_watched)
-        private val playingView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_playing)
-        private val titleView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_title)
-        private val descriptionView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_description)
-        private val progressContainer: View = itemView.findViewById(R.id.android_tv_playlist_item_progress_container)
-        private val progressText: TextView = itemView.findViewById(R.id.android_tv_playlist_item_progress_text)
         private val ratingBadge: View = itemView.findViewById(R.id.android_tv_playlist_item_rating_badge)
         private val ratingText: TextView = itemView.findViewById(R.id.android_tv_playlist_item_rating_text)
+        private val nowPlayingIndicator: View? = itemView.findViewById(R.id.now_playing_indicator)
+        private val nowPlayingDot: View? = itemView.findViewById(R.id.now_playing_dot)
+        private val titleView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_title)
+        private val descriptionView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_description)
         private val durationView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_duration)
+        private val metaSeparator: View? = itemView.findViewById(R.id.meta_separator)
+        private val progressText: TextView = itemView.findViewById(R.id.android_tv_playlist_item_progress_text)
+        private val watchedView: TextView = itemView.findViewById(R.id.android_tv_playlist_item_watched)
+
+        // Animators
+        private var pulseAnimator: android.animation.ObjectAnimator? = null
 
         fun bind(item: PlaybackItem, itemIndex: Int, isActive: Boolean) {
-            // Episode badge
-            val badge = item.seasonEpisodeLabel().ifEmpty { "EP ${itemIndex + 1}" }
+            // Episode badge with cleaner format
+            val seasonNum = item.season
+            val episodeNum = item.episode
+            val badge = when {
+                seasonNum != null && episodeNum != null -> "S${seasonNum.toString().padStart(2, '0')} E${episodeNum.toString().padStart(2, '0')}"
+                episodeNum != null -> "E${episodeNum.toString().padStart(2, '0')}"
+                else -> "E${(itemIndex + 1).toString().padStart(2, '0')}"
+            }
             badgeView.text = badge
 
-            // Title from TVMaze (or fallback to item title)
+            // Title
             titleView.text = item.title
 
-            // Description from TVMaze
-            if (!item.description.isNullOrBlank()) {
-                descriptionView.text = item.description
+            // Description - filter out "null" string bug
+            val cleanDescription = item.description
+                ?.trim()
+                ?.takeUnless { it.equals("null", ignoreCase = true) || it.isBlank() }
+            if (cleanDescription != null) {
+                descriptionView.text = cleanDescription
                 descriptionView.visibility = View.VISIBLE
             } else {
                 descriptionView.visibility = View.GONE
@@ -3236,111 +3265,175 @@ private class PlaylistAdapter(
                 ratingBadge.visibility = View.GONE
             }
 
-            // Duration (convert ms to minutes)
-            if (item.durationMs > 0) {
-                val durationMinutes = (item.durationMs / 60000).toInt()
-                durationView.text = "• ${durationMinutes}m"
+            // Duration
+            val hasDuration = item.durationMs > 0
+            if (hasDuration) {
+                val mins = (item.durationMs / 60000).toInt()
+                durationView.text = "${mins} min"
                 durationView.visibility = View.VISIBLE
             } else {
                 durationView.visibility = View.GONE
             }
 
-            // Calculate progress percentage
+            // Progress calculation
             val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
                 ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
-            } else {
-                0
-            }
+            } else 0
 
-            // Status indicators (Watched, Playing, or Progress)
             val isWatched = progressPercent >= 95
+            val hasProgress = progressPercent > 5 && progressPercent < 95
 
-            // Gray out watched episodes
-            container.alpha = if (isWatched && !isActive) 0.4f else 1.0f
-
-            // Hide overlay and icon (using gray out instead)
+            // Watched state - subtle dimming
+            container.alpha = if (isWatched && !isActive) 0.5f else 1.0f
             watchedOverlay.visibility = View.GONE
             watchedIcon.visibility = View.GONE
-
-            // Text badges
             watchedView.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
-            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
 
-            // Progress indicator
-            if (progressPercent > 5 && progressPercent < 95 && !isWatched) {
-                progressText.text = "$progressPercent% watched"
-                progressContainer.visibility = View.VISIBLE
+            // Now Playing state - simple, no fading animations
+            if (isActive) {
+                nowPlayingIndicator?.visibility = View.VISIBLE
+                nowPlayingRing?.visibility = View.VISIBLE
+                startDotPulse()
+            } else {
+                nowPlayingIndicator?.visibility = View.GONE
+                nowPlayingRing?.visibility = View.GONE
+                stopDotPulse()
+            }
 
-                // Show progress on poster too
+            // Progress display
+            if (hasProgress && !isWatched) {
+                progressText.text = "${progressPercent}%"
+                progressText.visibility = View.VISIBLE
+                metaSeparator?.visibility = if (hasDuration) View.VISIBLE else View.GONE
                 posterProgress.max = 100
                 posterProgress.progress = progressPercent
                 posterProgress.visibility = View.VISIBLE
+            } else if (isWatched) {
+                // Show 100% for watched
+                progressText.visibility = View.GONE
+                metaSeparator?.visibility = View.GONE
+                posterProgress.max = 100
+                posterProgress.progress = 100
+                posterProgress.visibility = View.VISIBLE
             } else {
-                progressContainer.visibility = View.GONE
+                progressText.visibility = View.GONE
+                metaSeparator?.visibility = View.GONE
                 posterProgress.visibility = View.GONE
             }
 
-            // Load poster image with Glide
+            // Load artwork
             loadPosterImage(item)
 
             // Selection state
             container.isSelected = isActive
 
-            // Click handling
-            container.isFocusable = true
-            container.setOnClickListener {
-                android.util.Log.d("AndroidTvPlayer", "Episode clicked - itemIndex: $itemIndex, title: ${item.title}, season: ${item.season}, episode: ${item.episode}, id: ${item.id}, url: ${item.url}")
-                onItemClick(itemIndex)
-            }
+            // Reset scale state
+            cardContent?.scaleX = 1.0f
+            cardContent?.scaleY = 1.0f
+            cardContent?.elevation = 8f
+            focusBorder?.visibility = View.GONE
 
-            // Focus handling for selection overlay
-            container.onFocusChangeListener = View.OnFocusChangeListener { view, hasFocus ->
-                android.util.Log.d("PlaylistNav", "EpisodeViewHolder focus changed - itemIndex=$itemIndex, hasFocus=$hasFocus, position=${bindingAdapterPosition}")
-                selectionOverlay?.visibility = if (hasFocus) View.VISIBLE else View.GONE
+            // Click handler - set on itemView for better touch handling
+            itemView.setOnClickListener { onItemClick(itemIndex) }
+
+            // Focus handling with scale + glow (no interference with navigation)
+            container.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) {
+                    // Focus animation - scale up, show border, raise elevation
+                    cardContent?.animate()
+                        ?.scaleX(1.08f)
+                        ?.scaleY(1.08f)
+                        ?.setDuration(150)
+                        ?.setInterpolator(android.view.animation.DecelerateInterpolator())
+                        ?.start()
+                    cardContent?.elevation = 16f
+                    focusBorder?.visibility = View.VISIBLE
+                } else {
+                    cardContent?.animate()
+                        ?.scaleX(1.0f)
+                        ?.scaleY(1.0f)
+                        ?.setDuration(100)
+                        ?.setInterpolator(android.view.animation.DecelerateInterpolator())
+                        ?.start()
+                    cardContent?.elevation = 8f
+                    focusBorder?.visibility = View.GONE
+                }
             }
         }
 
         fun updateProgress(item: PlaybackItem, isActive: Boolean) {
-            // Only update progress-related views, not the entire item
             val progressPercent = if (item.durationMs > 0 && item.resumePositionMs > 0) {
                 ((item.resumePositionMs.toDouble() / item.durationMs.toDouble()) * 100).toInt()
-            } else {
-                0
-            }
+            } else 0
 
             val isWatched = progressPercent >= 95
+            val hasProgress = progressPercent > 5 && progressPercent < 95
+            val hasDuration = item.durationMs > 0
 
-            // Update alpha for watched state
-            container.alpha = if (isWatched && !isActive) 0.4f else 1.0f
-
-            // Update status indicators
+            container.alpha = if (isWatched && !isActive) 0.5f else 1.0f
             watchedView.visibility = if (isWatched && !isActive) View.VISIBLE else View.GONE
-            playingView.visibility = if (isActive) View.VISIBLE else View.GONE
 
-            // Update progress indicator
-            if (progressPercent > 5 && progressPercent < 95 && !isWatched) {
-                progressText.text = "$progressPercent% watched"
-                progressContainer.visibility = View.VISIBLE
+            if (isActive) {
+                nowPlayingIndicator?.visibility = View.VISIBLE
+                nowPlayingRing?.visibility = View.VISIBLE
+                startDotPulse()
+            } else {
+                nowPlayingIndicator?.visibility = View.GONE
+                nowPlayingRing?.visibility = View.GONE
+                stopDotPulse()
+            }
 
+            if (hasProgress && !isWatched) {
+                progressText.text = "${progressPercent}%"
+                progressText.visibility = View.VISIBLE
+                metaSeparator?.visibility = if (hasDuration) View.VISIBLE else View.GONE
                 posterProgress.max = 100
                 posterProgress.progress = progressPercent
                 posterProgress.visibility = View.VISIBLE
+            } else if (isWatched) {
+                progressText.visibility = View.GONE
+                metaSeparator?.visibility = View.GONE
+                posterProgress.max = 100
+                posterProgress.progress = 100
+                posterProgress.visibility = View.VISIBLE
             } else {
-                progressContainer.visibility = View.GONE
+                progressText.visibility = View.GONE
+                metaSeparator?.visibility = View.GONE
                 posterProgress.visibility = View.GONE
             }
         }
 
-        private fun loadPosterImage(item: PlaybackItem) {
-            val artwork = item.artwork
+        private fun startDotPulse() {
+            if (pulseAnimator?.isRunning == true) return
+            nowPlayingDot?.let { dot ->
+                pulseAnimator = android.animation.ObjectAnimator.ofFloat(dot, "alpha", 1f, 0.3f, 1f).apply {
+                    duration = 1000
+                    repeatCount = android.animation.ObjectAnimator.INFINITE
+                    start()
+                }
+            }
+        }
 
-            if (!artwork.isNullOrBlank()) {
-                // Load image with Glide
+        private fun stopDotPulse() {
+            pulseAnimator?.cancel()
+            pulseAnimator = null
+            nowPlayingDot?.alpha = 1f
+        }
+
+        private fun loadPosterImage(item: PlaybackItem) {
+            val artwork = item.artwork?.takeUnless { it.equals("null", ignoreCase = true) || it.isBlank() }
+
+            if (artwork != null) {
+                // Prepare for image loading - show shimmer, hide fallback
+                fallbackContainer?.visibility = View.GONE
+                shimmerOverlay?.visibility = View.VISIBLE
+                // Keep poster visible but clear it - Glide will load into it
+                posterImageView.visibility = View.VISIBLE
+                posterImageView.setImageDrawable(null)
+
                 com.bumptech.glide.Glide.with(itemView.context)
                     .load(artwork)
                     .centerCrop()
-                    .placeholder(android.R.color.transparent)
-                    .error(android.R.color.transparent)
                     .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
                         override fun onLoadFailed(
                             e: com.bumptech.glide.load.engine.GlideException?,
@@ -3348,6 +3441,8 @@ private class PlaylistAdapter(
                             target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
                             isFirstResource: Boolean
                         ): Boolean {
+                            shimmerOverlay?.visibility = View.GONE
+                            posterImageView.visibility = View.GONE
                             showFallback(item)
                             return false
                         }
@@ -3359,40 +3454,43 @@ private class PlaylistAdapter(
                             dataSource: com.bumptech.glide.load.DataSource,
                             isFirstResource: Boolean
                         ): Boolean {
+                            shimmerOverlay?.visibility = View.GONE
                             posterImageView.visibility = View.VISIBLE
-                            fallbackTextView.visibility = View.GONE
+                            fallbackContainer?.visibility = View.GONE
                             return false
                         }
                     })
                     .into(posterImageView)
             } else {
+                posterImageView.visibility = View.GONE
+                shimmerOverlay?.visibility = View.GONE
                 showFallback(item)
             }
         }
 
         private fun showFallback(item: PlaybackItem) {
             posterImageView.visibility = View.GONE
-            fallbackTextView.visibility = View.VISIBLE
+            shimmerOverlay?.visibility = View.GONE
+            fallbackContainer?.visibility = View.VISIBLE
 
-            // Show episode number as fallback
-            val episodeNum = item.episode ?: (bindingAdapterPosition + 1)
-            fallbackTextView.text = "$episodeNum"
+            // Don't show episode number - just clean dark background
+            fallbackTextView.text = ""
+            fallbackTextView.visibility = View.GONE
 
-            // Color based on season
-            val seasonColor = getSeasonColor(item.season ?: 1)
-            fallbackTextView.setBackgroundColor(seasonColor)
+            // Dark cinematic background
+            fallbackBg?.setBackgroundColor(0xFF0D0D0D.toInt())
         }
 
-        private fun getSeasonColor(season: Int): Int {
+        private fun getSeasonGradient(season: Int): Int {
+            // Cinematic colors - more visible
             val colors = intArrayOf(
-                0xFF6366F1.toInt(), // Indigo
-                0xFF8B5CF6.toInt(), // Purple
-                0xFFEC4899.toInt(), // Pink
-                0xFFF59E0B.toInt(), // Amber
-                0xFF10B981.toInt(), // Emerald
-                0xFF06B6D4.toInt(), // Cyan
+                0xFF312E81.toInt(), // Indigo
+                0xFF581C87.toInt(), // Purple
+                0xFF831843.toInt(), // Rose
+                0xFF78350F.toInt(), // Amber
+                0xFF064E3B.toInt(), // Emerald
+                0xFF155E75.toInt(), // Cyan
             )
-            // Ensure season is at least 1 to avoid negative index
             val safeSeason = season.coerceAtLeast(1)
             return colors[(safeSeason - 1) % colors.size]
         }
