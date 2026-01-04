@@ -50,7 +50,7 @@ A modern debrid companion built with Flutter, featuring plugin-based torrent sea
 | iOS | ⚠️ Sideload | Unsigned IPA available; requires AltStore or Sideloadly ([guide](docs/iOS-Installation.md)) |
 | Windows | ✅ Usable | Installer maximizes into fullscreen and stores downloads in `~/Downloads/Debrify` |
 | macOS | ✅ Usable | DMG available; fullscreen & downloads behave similar to Windows |
-| Linux | ⚠️ Dev only | Run from source (`flutter run`) |
+| Linux | ✅ Usable | AppImage available; runs on any distro |
 | Web | ⚠️ Dev only | Build/run from source; some features (local downloads) disabled |
 
 ---
@@ -84,9 +84,16 @@ The app automatically detects Android TV and optimizes the UI for D-pad navigati
 ### macOS
 1. Download `debrify-<version>.dmg`
 2. Drag **Debrify** into **Applications**
-3. First launch may require Control+Open because the app isn’t notarized yet
+3. First launch may require Control+Open because the app isn't notarized yet
 
-### Linux & Web (from source)
+### Linux
+1. Download `debrify-<version>-x86_64.AppImage`
+2. Make it executable: `chmod +x debrify-*.AppImage`
+3. Run it: `./debrify-*.AppImage`
+
+> Works on any Linux distro. No installation needed - it's a single portable file.
+
+### Web (from source)
 ```bash
 git clone https://github.com/varunsalian/debrify.git
 cd debrify
@@ -98,9 +105,11 @@ flutter run
 
 ## 🛠️ Build & Release Notes
 - `flutter build apk --release` – local Android release build
+- `flutter build ios --release --no-codesign` – local iOS build (unsigned)
 - `flutter build macos --release` – produces `build/macos/Build/Products/Release/debrify.app`
 - `flutter build windows --release` – generates the runner binaries used by the Inno Setup installer
-- GitHub Actions workflow (`.github/workflows/build.yml`) builds all three artifacts on tagged releases and attaches them automatically.
+- `flutter build linux --release` – produces the Linux bundle
+- GitHub Actions workflow (`.github/workflows/build.yml`) builds APK, IPA, DMG, Windows installer, and Linux AppImage on tagged releases.
 
 ---
 
