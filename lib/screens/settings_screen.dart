@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/account_service.dart';
 import '../services/download_service.dart';
@@ -40,6 +42,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _pikpakConnected = false;
   String _pikpakStatus = 'Not connected';
   String _pikpakCaption = 'Tap to connect';
+
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -127,6 +131,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       pikpakCaption = 'Logged in';
     }
 
+    // Load app version
+    final packageInfo = await PackageInfo.fromPlatform();
+    final appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
+
     if (!mounted) return;
 
     setState(() {
@@ -139,6 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _pikpakConnected = pikpakConnected;
       _pikpakStatus = pikpakStatus;
       _pikpakCaption = pikpakCaption;
+      _appVersion = appVersion;
       _loading = false;
     });
   }
@@ -186,6 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
+      appVersion: _appVersion,
     );
   }
 
@@ -407,6 +417,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
+  final String appVersion;
 
   const _SettingsLayout({
     required this.connections,
@@ -419,6 +430,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onClearDownloads,
     required this.onClearPlayback,
     required this.onDangerAction,
+    required this.appVersion,
   });
 
   @override
@@ -514,6 +526,30 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Reset Debrify',
                 subtitle: 'Remove connections, preferences, and caches',
                 onTap: onDangerAction,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // About section
+          _SettingsSection(
+            title: 'About',
+            children: [
+              _SettingsTile(
+                icon: Icons.forum_rounded,
+                title: 'Reddit Community',
+                subtitle: 'r/debrify - Questions, tips, and discussion',
+                onTap: () => launchUrl(Uri.parse('https://www.reddit.com/r/debrify/')),
+              ),
+              _SettingsTile(
+                icon: Icons.code_rounded,
+                title: 'GitHub',
+                subtitle: 'Source code and contributions',
+                onTap: () => launchUrl(Uri.parse('https://github.com/varunsalian/debrify')),
+              ),
+              _InfoTile(
+                icon: Icons.info_outline_rounded,
+                title: 'Version',
+                value: appVersion,
               ),
             ],
           ),
@@ -747,7 +783,7 @@ class _ConnectionCard extends StatelessWidget {
 
 class _SettingsSection extends StatelessWidget {
   final String title;
-  final List<_SettingsTile> children;
+  final List<Widget> children;
   final Color? accentColor;
 
   const _SettingsSection({
@@ -881,6 +917,53 @@ class _SettingsTile extends StatelessWidget {
             const Icon(Icons.chevron_right_rounded),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+
+  const _InfoTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }

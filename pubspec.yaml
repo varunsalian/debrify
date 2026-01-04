@@ -68,6 +68,9 @@ dependencies:
   # Image caching for episode posters
   cached_network_image: ^3.3.1
 
+  # App version info
+  package_info_plus: ^8.0.0
+
   # Premium UI and animations
   google_fonts: ^6.2.1
   animations: ^2.0.11
