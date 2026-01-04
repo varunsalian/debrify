@@ -152,3 +152,36 @@ jobs:
         files: build/windows/installer/debrify-${{ github.event.release.tag_name }}-setup.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  ios:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.8'
+        channel: 'stable'
+
+    - name: Get dependencies
+      run: flutter pub get
+
+    - name: Build iOS (unsigned)
+      run: flutter build ios --release --no-codesign
+
+    - name: Create unsigned IPA
+      run: |
+        cd build/ios/iphoneos
+        mkdir -p Payload
+        cp -R Runner.app Payload/
+        zip -r debrify-${{ github.event.release.tag_name }}-unsigned.ipa Payload
+        rm -rf Payload
+
+    - name: Upload IPA to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/ios/iphoneos/debrify-${{ github.event.release.tag_name }}-unsigned.ipa
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

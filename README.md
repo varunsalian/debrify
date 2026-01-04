@@ -1,7 +1,7 @@
 # Debrify
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.8+-blue?logo=flutter&logoColor=white)
-![Platforms](https://img.shields.io/badge/Platforms-Android%20%7C%20Android%20TV%20%7C%20Windows%20%7C%20macOS%20%7C%20Web-lightgrey)
+![Platforms](https://img.shields.io/badge/Platforms-Android%20%7C%20Android%20TV%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 > Built as a personal “vibe coded” spare-time project—open-sourced so others can test-drive it or take it further. Most polish currently targets **Android**; the desktop builds work, but expect the occasional rough edge.
@@ -47,6 +47,7 @@ A modern debrid companion built with Flutter, featuring plugin-based torrent sea
 |----------|--------|-------|
 | Android | ✅ Stable | Primary target; APK ships with each release |
 | Android TV | ✅ Stable | Full TV mode support with D-pad navigation and remote controls |
+| iOS | ⚠️ Sideload | Unsigned IPA available; requires AltStore or Sideloadly ([guide](docs/iOS-Installation.md)) |
 | Windows | ✅ Usable | Installer maximizes into fullscreen and stores downloads in `~/Downloads/Debrify` |
 | macOS | ✅ Usable | DMG available; fullscreen & downloads behave similar to Windows |
 | Linux | ⚠️ Dev only | Run from source (`flutter run`) |
@@ -67,6 +68,13 @@ A modern debrid companion built with Flutter, featuring plugin-based torrent sea
 2. Install the APK on your Android device (you can use file managers like Downloader or X-plore for TV, or install via ADB)
 
 The app automatically detects Android TV and optimizes the UI for D-pad navigation and remote controls.
+
+### iOS (iPhone/iPad)
+1. Download the unsigned IPA from the [GitHub Releases page](https://github.com/varunsalian/debrify/releases)
+2. Install using **AltStore** (recommended) or **Sideloadly**
+3. See the full [iOS Installation Guide](docs/iOS-Installation.md) for detailed instructions
+
+> Note: Sideloaded apps expire after 7 days due to Apple restrictions. AltStore can auto-refresh if your computer is on the same network.
 
 ### Windows
 1. Download `debrify-<version>-setup.exe`
@@ -140,7 +148,7 @@ Have ideas? [Open an issue](../../issues) or send a PR.
 
 ## 💬 Support
 - Found a bug? [File an issue](../../issues/new/choose)
-- Questions? Start a discussion or ping via issues
+- Questions or discussion? Join [r/debrify](https://www.reddit.com/r/debrify/) on Reddit
 - Want to collaborate? PRs are welcome; please include a short summary + testing notes
 
 ---
