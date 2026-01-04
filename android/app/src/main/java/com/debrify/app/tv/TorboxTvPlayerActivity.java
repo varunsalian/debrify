@@ -109,6 +109,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private RenderersFactory renderersFactory;
     private DefaultBandwidthMeter bandwidthMeter;
     private Player.Listener subtitleListener; // Track subtitle listener for proper cleanup
+    private Player.Listener trackChangeListener; // Track listener for proper cleanup on channel switch
     private long currentTargetBufferMs = DEFAULT_TARGET_BUFFER_MS;
     private TextView titleView;
     private TextView hintView;
@@ -449,6 +450,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         if (player != null) {
             player.removeListener(playbackListener);
+            // Clear track change listener reference (old player is being released)
+            trackChangeListener = null;
             player.release();
         }
         player = new ExoPlayer.Builder(this, renderersFactory)
@@ -1816,6 +1819,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
 
+        // Clean up from previous channel/stream
+        cancelPikPakRetry(); // Cancel any ongoing PikPak retry operations
+
+        // Remove old track change listener to prevent accumulation
+        if (trackChangeListener != null) {
+            player.removeListener(trackChangeListener);
+            trackChangeListener = null;
+        }
+
         // Store current stream info for retry logic
         currentStreamUrl = url;
         currentStreamTitle = title;
@@ -1860,13 +1872,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         player.play();
         playedCount += 1;
         updateTitle(title);
-        player.addListener(new Player.Listener() {
+
+        // Store listener reference for cleanup on channel switch
+        trackChangeListener = new Player.Listener() {
             @Override
             public void onTracksChanged(Tracks tracks) {
-                player.removeListener(this);
+                // Self-remove after first track change
+                if (trackChangeListener == this) {
+                    player.removeListener(this);
+                    trackChangeListener = null;
+                }
                 ensureDefaultSubtitleSelected();
             }
-        });
+        };
+        player.addListener(trackChangeListener);
     }
 
     private void updateTitle(@Nullable String title) {
@@ -3389,6 +3408,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             if (subtitleListener != null) {
                 player.removeListener(subtitleListener);
                 subtitleListener = null;
+            }
+            // Remove track change listener to prevent memory leaks
+            if (trackChangeListener != null) {
+                player.removeListener(trackChangeListener);
+                trackChangeListener = null;
             }
             player.stop();
             player.release();
