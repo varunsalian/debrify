@@ -24,34 +24,44 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
   // Track current focused index for visual feedback
   int _focusedIndex = 0;
 
+  // Listener references for proper cleanup
+  late final VoidCallback _deviceListener;
+  late final VoidCallback _linkListener;
+  late final VoidCallback _communityListener;
+  late final VoidCallback _cancelListener;
+
   @override
   void initState() {
     super.initState();
 
-    // Set up focus listeners
-    _deviceFocusNode.addListener(() {
+    // Set up focus listeners with saved references
+    _deviceListener = () {
       if (_deviceFocusNode.hasFocus) {
         setState(() => _focusedIndex = 0);
       }
-    });
+    };
+    _deviceFocusNode.addListener(_deviceListener);
 
-    _linkFocusNode.addListener(() {
+    _linkListener = () {
       if (_linkFocusNode.hasFocus) {
         setState(() => _focusedIndex = 1);
       }
-    });
+    };
+    _linkFocusNode.addListener(_linkListener);
 
-    _communityFocusNode.addListener(() {
+    _communityListener = () {
       if (_communityFocusNode.hasFocus) {
         setState(() => _focusedIndex = 2);
       }
-    });
+    };
+    _communityFocusNode.addListener(_communityListener);
 
-    _cancelFocusNode.addListener(() {
+    _cancelListener = () {
       if (_cancelFocusNode.hasFocus) {
         setState(() => _focusedIndex = 3);
       }
-    });
+    };
+    _cancelFocusNode.addListener(_cancelListener);
 
     // Auto-focus first option for TV
     if (widget.isAndroidTv) {
@@ -63,6 +73,12 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
 
   @override
   void dispose() {
+    // Remove listeners before disposing
+    _deviceFocusNode.removeListener(_deviceListener);
+    _linkFocusNode.removeListener(_linkListener);
+    _communityFocusNode.removeListener(_communityListener);
+    _cancelFocusNode.removeListener(_cancelListener);
+    // Dispose focus nodes
     _deviceFocusNode.dispose();
     _linkFocusNode.dispose();
     _communityFocusNode.dispose();

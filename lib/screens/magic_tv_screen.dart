@@ -7117,10 +7117,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         itemBuilder: (context, index) {
                           if (index == filteredChannels.length) {
                             // "Add Channel" card at the end
-                            return _buildTvAddChannelCard();
+                            return KeyedSubtree(
+                              key: const ValueKey('add_channel_card'),
+                              child: _buildTvAddChannelCard(),
+                            );
                           }
                           final channel = filteredChannels[index];
-                          return _buildTvChannelCard(channel);
+                          return KeyedSubtree(
+                            key: ValueKey('channel_${channel.id}'),
+                            child: _buildTvChannelCard(channel),
+                          );
                         },
                       );
                     },
@@ -7171,16 +7177,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV Channel Card (Grid item)
   Widget _buildTvChannelCard(DebrifyTvChannel channel) {
-    print('[TV] Building TV channel card for: ${channel.name}');
     return TvFocusableCard(
       onPressed: () {
-        print('[TV] Card onPressed for channel: ${channel.name}');
         _watchChannel(channel);
       },
       onLongPress: () {
-        print(
-          '[TV] Card onLongPress callback triggered for channel: ${channel.name}',
-        );
         _showTvChannelOptionsMenu(channel);
       },
       showLongPressHint: _isAndroidTv, // Only show hint on Android TV
@@ -7296,11 +7297,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV Channel Options Menu (Edit/Delete)
   Future<void> _showTvChannelOptionsMenu(DebrifyTvChannel channel) async {
-    print('[TV] _showTvChannelOptionsMenu called for channel: ${channel.name}');
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        print('[TV] Building options dialog for channel: ${channel.name}');
         return AlertDialog(
           backgroundColor: const Color(0xFF0F0F0F),
           shape: RoundedRectangleBorder(

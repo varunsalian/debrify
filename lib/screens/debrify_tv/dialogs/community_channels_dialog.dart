@@ -371,8 +371,13 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
   }
 
   void _setupChannelFocusNavigation(List<CommunityChannel> channels) {
-    for (int i = 0; i < channels.length; i++) {
-      final channel = channels[i];
+    // Capture the channels list for use in closures
+    final channelsList = channels;
+
+    for (int i = 0; i < channelsList.length; i++) {
+      // Capture loop variables explicitly for closure safety
+      final currentIndex = i;
+      final channel = channelsList[currentIndex];
       final node = _channelFocusNodes[channel.id];
       if (node == null) continue;
 
@@ -383,8 +388,8 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
 
         // Navigate up
         if (key == LogicalKeyboardKey.arrowUp) {
-          if (i > 0) {
-            _channelFocusNodes[channels[i - 1].id]?.requestFocus();
+          if (currentIndex > 0) {
+            _channelFocusNodes[channelsList[currentIndex - 1].id]?.requestFocus();
           } else {
             _selectAllFocusNode.requestFocus();
           }
@@ -393,8 +398,8 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
 
         // Navigate down
         if (key == LogicalKeyboardKey.arrowDown) {
-          if (i < channels.length - 1) {
-            _channelFocusNodes[channels[i + 1].id]?.requestFocus();
+          if (currentIndex < channelsList.length - 1) {
+            _channelFocusNodes[channelsList[currentIndex + 1].id]?.requestFocus();
           } else {
             _cancelButtonFocusNode.requestFocus();
           }
