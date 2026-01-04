@@ -246,8 +246,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_android_tv_torrent_player)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // Parse payload
-        val rawPayload = intent.getStringExtra(PAYLOAD_KEY)
+        // Parse payload from temp file (avoids Android's ~1MB Intent size limit)
+        val payloadPath = intent.getStringExtra("payloadPath")
+        val rawPayload = if (payloadPath != null) {
+            try {
+                val file = java.io.File(payloadPath)
+                val content = file.readText()
+                file.delete() // Clean up temp file after reading
+                android.util.Log.d("AndroidTvPlayer", "Read payload from file: $payloadPath (${content.length} bytes)")
+                content
+            } catch (e: Exception) {
+                android.util.Log.e("AndroidTvPlayer", "Failed to read payload file: $payloadPath", e)
+                null
+            }
+        } else {
+            // Fallback to legacy Intent extra for backward compatibility
+            intent.getStringExtra(PAYLOAD_KEY)
+        }
         if (rawPayload.isNullOrEmpty()) {
             finish()
             return

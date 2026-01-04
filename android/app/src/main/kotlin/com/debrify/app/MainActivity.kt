@@ -378,12 +378,19 @@ class MainActivity : FlutterActivity() {
 
         try {
             val payloadJson = mapToJson(payload).toString()
+
+            // Write payload to temp file to avoid Android's Intent size limit (~1MB)
+            // This allows playlists with 500+ items without TransactionTooLargeException
+            val tempFile = java.io.File(cacheDir, "torrent_payload_${System.currentTimeMillis()}.json")
+            tempFile.writeText(payloadJson)
+            android.util.Log.d("DebrifyTV", "MainActivity: Wrote payload to temp file: ${tempFile.absolutePath} (${payloadJson.length} bytes)")
+
             val intent = Intent().apply {
                 setClassName(
                     this@MainActivity,
                     "com.debrify.app.tv.AndroidTvTorrentPlayerActivity",
                 )
-                putExtra("payload", payloadJson)
+                putExtra("payloadPath", tempFile.absolutePath)
             }
             startActivity(intent)
             result.success(true)
