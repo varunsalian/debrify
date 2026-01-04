@@ -9680,8 +9680,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       ),
         ),
-        // Bulk Add Floating Action Button
-        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
+        // Bulk Add Floating Action Button (only show if PikPak is enabled)
+        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision && _pikpakEnabled)
           Positioned(
             right: 16,
             bottom: 16,
