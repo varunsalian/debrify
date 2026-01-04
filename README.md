@@ -2,7 +2,7 @@
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.8+-blue?logo=flutter&logoColor=white)
 ![Platforms](https://img.shields.io/badge/Platforms-Android%20%7C%20Android%20TV%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS-lightgrey)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-Polyform%20NC-blue)
 
 > Built as a personal “vibe coded” spare-time project—open-sourced so others can test-drive it or take it further. Most polish currently targets **Android**; the desktop builds work, but expect the occasional rough edge.
 
@@ -163,7 +163,7 @@ Have ideas? [Open an issue](../../issues) or send a PR.
 ---
 
 ## 📄 License
-Debrify is released under the [MIT License](LICENSE).
+Debrify is released under the [Polyform Noncommercial License 1.0.0](LICENSE). You can use, modify, and share for personal/noncommercial purposes. Commercial use is not permitted.
 
 ---
 
