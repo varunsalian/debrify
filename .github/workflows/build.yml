@@ -23,6 +23,7 @@ permissions:
 
 jobs:
   android:
+    if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'android'
     runs-on: ubuntu-latest
 
     steps:
@@ -82,6 +83,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   macos:
+    if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'macos'
     runs-on: macos-latest
     steps:
     - name: Checkout code
@@ -131,6 +133,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows:
+    if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'windows'
     runs-on: windows-latest
     steps:
     - name: Checkout code
@@ -168,6 +171,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   ios:
+    if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'ios'
     runs-on: macos-latest
     steps:
     - name: Checkout code
@@ -201,6 +205,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   linux:
+    if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'linux'
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
