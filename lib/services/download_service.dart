@@ -1924,18 +1924,38 @@ class DownloadService {
           // Build headers for Range resume based on partial size and validators
           Map<String, String> headers = _buildResumeHeaders(finalPath, p.headers, rec);
 
-          final (BaseDirectory baseDir, String relativeDir, String relFilename) = await Task.split(filePath: finalPath);
-          final task = DownloadTask(
-            url: finalUrl,
-            headers: headers.isEmpty ? null : headers,
-            filename: relFilename,
-            directory: relativeDir,
-            baseDirectory: baseDir,
-            updates: Updates.statusAndProgress,
-            requiresWiFi: p.wifiOnly,
-            retries: p.retries,
-            allowPause: true,
-          );
+          // On Windows, Task.split() strips the drive letter when falling back to BaseDirectory.root,
+          // causing the file to be saved to a relative path instead of the absolute path.
+          // We bypass Task.split() on Windows and manually use BaseDirectory.root with the full path.
+          final DownloadTask task;
+          if (Platform.isWindows) {
+            final directory = path.dirname(finalPath);
+            final filename = path.basename(finalPath);
+            task = DownloadTask(
+              url: finalUrl,
+              headers: headers.isEmpty ? null : headers,
+              filename: filename,
+              directory: directory,
+              baseDirectory: BaseDirectory.root,
+              updates: Updates.statusAndProgress,
+              requiresWiFi: p.wifiOnly,
+              retries: p.retries,
+              allowPause: true,
+            );
+          } else {
+            final (BaseDirectory baseDir, String relativeDir, String relFilename) = await Task.split(filePath: finalPath);
+            task = DownloadTask(
+              url: finalUrl,
+              headers: headers.isEmpty ? null : headers,
+              filename: relFilename,
+              directory: relativeDir,
+              baseDirectory: baseDir,
+              updates: Updates.statusAndProgress,
+              requiresWiFi: p.wifiOnly,
+              retries: p.retries,
+              allowPause: true,
+            );
+          }
           final bool ok = await FileDownloader().enqueue(task);
           if (!ok) {
             throw Exception('Failed to enqueue download');
@@ -1944,7 +1964,7 @@ class DownloadService {
             'state': 'running',
             'pluginTaskId': task.taskId,
             'url': finalUrl,
-            'displayName': relFilename,
+            'displayName': task.filename,
           });
           // capture validators for the refreshed URL
           unawaited(_captureValidatorsAndSave(p.queuedId, finalUrl));

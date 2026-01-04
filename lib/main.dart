@@ -29,6 +29,7 @@ import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
 import 'services/magnet_link_handler.dart';
 import 'widgets/auto_launch_overlay.dart';
+import 'widgets/window_drag_area.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
 
@@ -1179,15 +1180,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             child: Scaffold(
               backgroundColor: Colors.transparent,
               appBar: AppBar(
-                title: PremiumTopNav(
-                  currentIndex: currentNavIndex,
-                  items: navItems,
-                  onTap: (relativeIndex) {
-                    final actualIndex = visibleIndices[relativeIndex];
-                    _onItemTapped(actualIndex);
-                  },
-                  badges: navBadges,
-                  haptics: true,
+                title: WindowDragArea(
+                  child: PremiumTopNav(
+                    currentIndex: currentNavIndex,
+                    items: navItems,
+                    onTap: (relativeIndex) {
+                      final actualIndex = visibleIndices[relativeIndex];
+                      _onItemTapped(actualIndex);
+                    },
+                    badges: navBadges,
+                    haptics: true,
+                  ),
                 ),
                 automaticallyImplyLeading: false,
               ),

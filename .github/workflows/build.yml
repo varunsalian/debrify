@@ -72,15 +72,24 @@ jobs:
     - name: Build APK
       run: flutter build apk --release
 
-    - name: Rename APK
+    - name: Rename APK (release)
+      if: github.event_name == 'release'
       run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/debrify-${{ github.event.release.tag_name }}.apk
 
     - name: Attach APK to GitHub Release
+      if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
         files: build/app/outputs/flutter-apk/debrify-${{ github.event.release.tag_name }}.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload APK as artifact (manual)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-android
+        path: build/app/outputs/flutter-apk/app-release.apk
 
   macos:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'macos'
@@ -109,10 +118,10 @@ jobs:
         cd build/macos/Build/Products/Release
         rm -rf dmg-root
         mkdir -p dmg-root
-        rm -f debrify-${{ github.event.release.tag_name }}.dmg
         cp -R debrify.app dmg-root/Debrify.app
 
-    - name: Create DMG
+    - name: Create DMG (release)
+      if: github.event_name == 'release'
       run: |
         cd build/macos/Build/Products/Release
         create-dmg \
@@ -125,12 +134,34 @@ jobs:
           debrify-${{ github.event.release.tag_name }}.dmg \
           dmg-root
 
+    - name: Create DMG (manual)
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        cd build/macos/Build/Products/Release
+        create-dmg \
+          --volname "Debrify" \
+          --window-pos 200 120 \
+          --window-size 520 360 \
+          --icon-size 120 \
+          --icon "Debrify.app" 120 180 \
+          --app-drop-link 400 180 \
+          debrify.dmg \
+          dmg-root
+
     - name: Upload DMG to Release
+      if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
         files: build/macos/Build/Products/Release/debrify-${{ github.event.release.tag_name }}.dmg
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload DMG as artifact (manual)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-macos
+        path: build/macos/Build/Products/Release/debrify.dmg
 
   windows:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'windows'
@@ -160,15 +191,23 @@ jobs:
     - name: Build Windows installer
       shell: pwsh
       run: |
-        $env:DEBRIFY_VERSION = '${{ github.event.release.tag_name }}'
+        $env:DEBRIFY_VERSION = '${{ github.event.release.tag_name || 'dev' }}'
         & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows\installer.iss
 
     - name: Upload Windows installer to Release
+      if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
         files: build/windows/installer/debrify-${{ github.event.release.tag_name }}-setup.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Windows installer as artifact (manual)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-windows
+        path: build/windows/installer/debrify-dev-setup.exe
 
   ios:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'ios'
@@ -189,7 +228,8 @@ jobs:
     - name: Build iOS (unsigned)
       run: flutter build ios --release --no-codesign
 
-    - name: Create unsigned IPA
+    - name: Create unsigned IPA (release)
+      if: github.event_name == 'release'
       run: |
         cd build/ios/iphoneos
         mkdir -p Payload
@@ -197,12 +237,29 @@ jobs:
         zip -r debrify-${{ github.event.release.tag_name }}-unsigned.ipa Payload
         rm -rf Payload
 
+    - name: Create unsigned IPA (manual)
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        cd build/ios/iphoneos
+        mkdir -p Payload
+        cp -R Runner.app Payload/
+        zip -r debrify-unsigned.ipa Payload
+        rm -rf Payload
+
     - name: Upload IPA to Release
+      if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
         files: build/ios/iphoneos/debrify-${{ github.event.release.tag_name }}-unsigned.ipa
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload IPA as artifact (manual)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-ios
+        path: build/ios/iphoneos/debrify-unsigned.ipa
 
   linux:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'linux'
@@ -274,11 +331,21 @@ jobs:
         chmod +x AppDir/AppRun
 
         # Build AppImage
-        ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir debrify-${{ github.event.release.tag_name }}-x86_64.AppImage
+        VERSION="${{ github.event.release.tag_name }}"
+        if [ -z "$VERSION" ]; then VERSION="dev"; fi
+        ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir debrify-${VERSION}-x86_64.AppImage
 
     - name: Upload AppImage to Release
+      if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
         files: debrify-${{ github.event.release.tag_name }}-x86_64.AppImage
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload AppImage as artifact (manual)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-linux
+        path: debrify-dev-x86_64.AppImage
