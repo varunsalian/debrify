@@ -1383,6 +1383,102 @@ class StorageService {
     await prefs.remove(_playlistKey);
   }
 
+  /// Clear all playlist-related metadata (view modes, favorites, poster overrides)
+  static Future<void> clearAllPlaylistMetadata() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_playlistViewModesKey);
+    await prefs.remove(_playlistFavoritesKey);
+    await prefs.remove(_playlistPosterOverridesKey);
+    await prefs.remove(_tvMazeSeriesMappingKey);
+  }
+
+  /// Clear all startup settings (auto-launch, channel/playlist references)
+  static Future<void> clearAllStartupSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_startupAutoLaunchEnabledKey);
+    await prefs.remove(_startupChannelIdKey);
+    await prefs.remove(_startupModeKey);
+    await prefs.remove(_startupPlaylistItemIdKey);
+  }
+
+  /// Clear integration enabled states (RD, TorBox)
+  static Future<void> clearAllIntegrationStates() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_realDebridIntegrationEnabledKey);
+    await prefs.remove(_realDebridHiddenFromNavKey);
+    await prefs.remove(_torboxIntegrationEnabledKey);
+    await prefs.remove(_torboxHiddenFromNavKey);
+  }
+
+  /// Clear Debrify TV provider and legacy channels key
+  static Future<void> clearDebrifyTvProviderAndLegacy() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_debrifyTvProviderKey);
+    await prefs.remove(_debrifyTvChannelsKey);
+  }
+
+  /// Clear filter settings (qualities, rip sources, languages)
+  static Future<void> clearAllFilterSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_defaultFilterQualitiesKey);
+    await prefs.remove(_defaultFilterRipSourcesKey);
+    await prefs.remove(_defaultFilterLanguagesKey);
+  }
+
+  /// Clear torrent engine toggles and limits
+  static Future<void> clearAllTorrentEngineSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_defaultTorrentsCsvEnabledKey);
+    await prefs.remove(_defaultPirateBayEnabledKey);
+    await prefs.remove(_defaultYtsEnabledKey);
+    await prefs.remove(_defaultSolidTorrentsEnabledKey);
+    await prefs.remove(_maxTorrentsCsvResultsKey);
+    await prefs.remove(_maxSolidTorrentsResultsKey);
+  }
+
+  /// Clear post-torrent action preferences
+  static Future<void> clearAllPostTorrentActions() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_postTorrentActionKey);
+    await prefs.remove(_torboxPostTorrentActionKey);
+    await prefs.remove(_pikpakPostTorrentActionKey);
+  }
+
+  /// Clear all Debrify TV display and engine settings
+  static Future<void> clearAllDebrifyTvSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Display settings
+    await prefs.remove(_debrifyTvStartRandomKey);
+    await prefs.remove(_debrifyTvHideSeekbarKey);
+    await prefs.remove(_debrifyTvShowChannelNameKey);
+    await prefs.remove(_debrifyTvShowVideoTitleKey);
+    await prefs.remove(_debrifyTvHideOptionsKey);
+    await prefs.remove(_debrifyTvHideBackButtonKey);
+    await prefs.remove(_debrifyTvAvoidNsfwKey);
+    await prefs.remove(_debrifyTvRandomStartPercentKey);
+    // Engine toggles
+    await prefs.remove(_debrifyTvUseTorrentsCsvKey);
+    await prefs.remove(_debrifyTvUsePirateBayKey);
+    await prefs.remove(_debrifyTvUseYtsKey);
+    await prefs.remove(_debrifyTvUseSolidTorrentsKey);
+    // Channel limits
+    await prefs.remove(_debrifyTvChannelSmallTorrentsCsvMaxKey);
+    await prefs.remove(_debrifyTvChannelSmallSolidTorrentsMaxKey);
+    await prefs.remove(_debrifyTvChannelSmallYtsMaxKey);
+    await prefs.remove(_debrifyTvChannelLargeTorrentsCsvMaxKey);
+    await prefs.remove(_debrifyTvChannelLargeSolidTorrentsMaxKey);
+    await prefs.remove(_debrifyTvChannelLargeYtsMaxKey);
+    // QuickPlay limits
+    await prefs.remove(_debrifyTvQuickPlayTorrentsCsvMaxKey);
+    await prefs.remove(_debrifyTvQuickPlaySolidTorrentsMaxKey);
+    await prefs.remove(_debrifyTvQuickPlayYtsMaxKey);
+    await prefs.remove(_debrifyTvQuickPlayMaxKeywordsKey);
+    // Advanced settings
+    await prefs.remove(_debrifyTvChannelBatchSizeKey);
+    await prefs.remove(_debrifyTvKeywordThresholdKey);
+    await prefs.remove(_debrifyTvMinTorrentsPerKeywordKey);
+  }
+
   /// Update an existing playlist item with poster URL
   /// Supports both RealDebrid (rdTorrentId) and PikPak (pikpakCollectionId)
   static Future<bool> updatePlaylistItemPoster(
