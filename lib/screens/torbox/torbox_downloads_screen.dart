@@ -95,6 +95,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'torbox-search');
   final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'torbox-search-button');
+  final FocusNode _searchClearFocusNode = FocusNode(debugLabel: 'torbox-search-clear');
   List<_TorboxSearchResult> _searchResults = [];
 
   static const int _limit = 50;
@@ -844,6 +845,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
+    _searchClearFocusNode.dispose();
     super.dispose();
   }
 
@@ -5151,37 +5153,129 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
+    final hasText = _searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: TextField(
-        controller: _searchController,
-        focusNode: _searchFocusNode,
-        textInputAction: TextInputAction.search,
-        decoration: InputDecoration(
-          hintText: 'Search all files...',
-          prefixIcon: const Icon(Icons.search, color: Colors.grey),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.grey),
-                  onPressed: () {
+      child: Row(
+        children: [
+          Expanded(
+            child: Focus(
+              // D-pad navigation handler for Android TV
+              onKeyEvent: (node, event) {
+                if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                final key = event.logicalKey;
+                final textLength = _searchController.text.length;
+                final selection = _searchController.selection;
+                final isTextEmpty = textLength == 0;
+                final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+                final isAtStart = !isSelectionValid ||
+                    (selection.baseOffset == 0 && selection.extentOffset == 0);
+                final isAtEnd = !isSelectionValid ||
+                    (selection.baseOffset == textLength && selection.extentOffset == textLength);
+
+                // Arrow Up at start/empty: exit TextField
+                if (key == LogicalKeyboardKey.arrowUp) {
+                  if (isTextEmpty || isAtStart) {
+                    _searchFocusNode.unfocus();
+                    return KeyEventResult.handled;
+                  }
+                }
+
+                // Arrow Down at end/empty: exit TextField to results
+                if (key == LogicalKeyboardKey.arrowDown) {
+                  if (isTextEmpty || isAtEnd) {
+                    _searchFocusNode.unfocus();
+                    return KeyEventResult.handled;
+                  }
+                }
+
+                // Arrow Right at end: move to clear button if visible
+                if (key == LogicalKeyboardKey.arrowRight) {
+                  if (hasText && (isTextEmpty || isAtEnd)) {
+                    _searchClearFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                }
+
+                return KeyEventResult.ignored;
+              },
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Search all files...',
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                style: const TextStyle(color: Colors.white),
+                onChanged: _performSearch,
+                onSubmitted: (_) => _searchFocusNode.unfocus(),
+              ),
+            ),
+          ),
+          // Clear button - separate focusable widget for D-pad navigation
+          if (hasText)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Focus(
+                focusNode: _searchClearFocusNode,
+                onKeyEvent: (node, event) {
+                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                  final key = event.logicalKey;
+
+                  // Select/Enter: clear search
+                  if (key == LogicalKeyboardKey.select ||
+                      key == LogicalKeyboardKey.enter) {
                     setState(() {
                       _searchController.clear();
                       _searchResults.clear();
                     });
+                    _searchFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+
+                  // Arrow Left: go back to TextField
+                  if (key == LogicalKeyboardKey.arrowLeft) {
+                    _searchFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    final isFocused = Focus.of(context).hasFocus;
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(8),
+                        border: isFocused
+                            ? Border.all(color: Colors.white, width: 2)
+                            : null,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchResults.clear();
+                          });
+                          _searchFocusNode.requestFocus();
+                        },
+                      ),
+                    );
                   },
-                )
-              : null,
-          filled: true,
-          fillColor: const Color(0xFF1E293B),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-        style: const TextStyle(color: Colors.white),
-        onChanged: _performSearch,
-        onSubmitted: (_) => _searchFocusNode.unfocus(),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
