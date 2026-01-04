@@ -168,4 +168,4 @@ Debrify is released under the [MIT License](LICENSE).
 ---
 
 ## 📌 Version
-Current release: **0.1.0** (see [`pubspec.yaml`](pubspec.yaml))
+Current release: **0.2.0** (see [`pubspec.yaml`](pubspec.yaml))
