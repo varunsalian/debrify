@@ -2313,6 +2313,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             });
 
             return KeyEventResult.handled;
+          } else if (event is KeyRepeatEvent) {
+            // Ignore key repeat events - don't restart the timer
+            return KeyEventResult.handled;
           } else if (event is KeyUpEvent) {
             _episodeLongPressTimer?.cancel();
 
@@ -2354,8 +2357,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       : BorderSide.none,
                 ),
                 child: InkWell(
-                  onTap: () => _playEpisode(episode),
-                  onLongPress: () => _toggleWatchedState(episode),
+                  onTap: _isAndroidTv ? null : () => _playEpisode(episode),
+                  onLongPress:
+                      _isAndroidTv ? null : () => _toggleWatchedState(episode),
                   child: isMobile
                       ? _buildMobileEpisodeCard(
                           episode,
