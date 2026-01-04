@@ -12,6 +12,7 @@ import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/main_page_bridge.dart';
+import '../services/android_native_downloader.dart';
 import '../services/episode_info_service.dart';
 import '../services/tvmaze_service.dart';
 import '../utils/series_parser.dart';
@@ -88,9 +89,17 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   final FocusNode _searchClearFocusNode = FocusNode(debugLabel: 'playlist-search-clear');
   List<_SearchResult> _searchResults = [];
 
+  // Long-press state for episode cards (Android TV D-pad)
+  Timer? _episodeLongPressTimer;
+  bool _episodeLongPressTriggered = false;
+  DateTime? _lastEpisodeLongPressTime;
+  bool _episodeKeyDownReceived = false;
+  bool _isAndroidTv = false;
+
   @override
   void initState() {
     super.initState();
+    _checkIfAndroidTv();
     _initializeScreen();
 
     // Register back navigation handler for folder navigation (pushed route)
@@ -137,6 +146,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         ?.cancel(); // Cancel any pending scroll retry to prevent memory leaks
     _ottViewAutoSwitchTimer
         ?.cancel(); // Cancel OTT view auto-switch timer to prevent memory leaks
+    _episodeLongPressTimer?.cancel(); // Cancel any pending long press timer
     _viewModeDropdownFocusNode.dispose();
     _backButtonFocusNode.dispose();
     _episodeListScrollController.dispose();
@@ -145,6 +155,20 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     _searchButtonFocusNode.dispose();
     _searchClearFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Check if running on Android TV
+  Future<void> _checkIfAndroidTv() async {
+    try {
+      final isTv = await AndroidNativeDownloader.isTelevision();
+      if (mounted) {
+        setState(() {
+          _isAndroidTv = isTv;
+        });
+      }
+    } catch (e) {
+      // Ignore errors, default to false
+    }
   }
 
   /// Handle back navigation for folder browsing.
@@ -2263,41 +2287,127 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
 
-    return FocusableActionDetector(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+    return Focus(
+      onFocusChange: (focused) {
+        if (!focused) {
+          // Clean up long press state when losing focus
+          _episodeLongPressTimer?.cancel();
+          _episodeLongPressTriggered = false;
+          _episodeKeyDownReceived = false;
+        }
       },
-      actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (intent) {
-            _playEpisode(episode);
-            return null;
-          },
-        ),
+      onKeyEvent: (node, event) {
+        // Handle Select/Enter button press for D-pad long press detection
+        if (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          if (event is KeyDownEvent) {
+            _episodeKeyDownReceived = true;
+            _episodeLongPressTriggered = false;
+
+            // Start timer for long press (800ms) - marks as watched
+            _episodeLongPressTimer?.cancel();
+            _episodeLongPressTimer = Timer(const Duration(milliseconds: 800), () {
+              _episodeLongPressTriggered = true;
+              _lastEpisodeLongPressTime = DateTime.now();
+              _toggleWatchedState(episode);
+            });
+
+            return KeyEventResult.handled;
+          } else if (event is KeyUpEvent) {
+            _episodeLongPressTimer?.cancel();
+
+            // Only process KeyUp if we received KeyDown while focused
+            if (!_episodeKeyDownReceived) {
+              return KeyEventResult.handled;
+            }
+
+            // Check if we recently triggered a long press
+            final timeSinceLongPress = _lastEpisodeLongPressTime != null
+                ? DateTime.now().difference(_lastEpisodeLongPressTime!).inMilliseconds
+                : 999999;
+
+            // Short press - play episode
+            if (!_episodeLongPressTriggered && timeSinceLongPress > 300) {
+              _playEpisode(episode);
+            }
+            _episodeLongPressTriggered = false;
+            _episodeKeyDownReceived = false;
+
+            return KeyEventResult.handled;
+          }
+        }
+
+        return KeyEventResult.ignored;
       },
-      child: Card(
-        color: const Color(0xFF1E293B),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => _playEpisode(episode),
-          child: isMobile
-              ? _buildMobileEpisodeCard(
-                  episode,
-                  progress,
-                  isFinished,
-                  hasMetadata,
-                  episodeInfo,
-                )
-              : _buildDesktopEpisodeCard(
-                  episode,
-                  progress,
-                  isFinished,
-                  hasMetadata,
-                  episodeInfo,
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return Stack(
+            children: [
+              Card(
+                color: const Color(0xFF1E293B),
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: isFocused
+                      ? const BorderSide(color: Colors.white, width: 2)
+                      : BorderSide.none,
                 ),
-        ),
+                child: InkWell(
+                  onTap: () => _playEpisode(episode),
+                  onLongPress: () => _toggleWatchedState(episode),
+                  child: isMobile
+                      ? _buildMobileEpisodeCard(
+                          episode,
+                          progress,
+                          isFinished,
+                          hasMetadata,
+                          episodeInfo,
+                        )
+                      : _buildDesktopEpisodeCard(
+                          episode,
+                          progress,
+                          isFinished,
+                          hasMetadata,
+                          episodeInfo,
+                        ),
+                ),
+              ),
+              // Long press hint for Android TV (bottom-right when focused)
+              if (_isAndroidTv && isFocused)
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isFinished ? Icons.remove_done : Icons.done_all,
+                          size: 14,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isFinished ? 'Hold to unmark' : 'Hold to mark watched',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
