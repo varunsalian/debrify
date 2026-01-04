@@ -8732,21 +8732,48 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Derives a short name (2-4 chars) from an engine ID.
+  ///
+  /// Logic:
+  /// - Multi-word (has underscore): for each part, use whole part if ≤3 chars,
+  ///   else just first letter. E.g., 'torrents_csv' → 'TCSV', 'solid_torrents' → 'ST'
+  /// - Single word ≤ 4 chars: use whole word (e.g., 'yts' → 'YTS')
+  /// - Single word > 4 chars: first letter + last 2 letters (e.g., 'torrentio' → 'TIO')
+  String _deriveEngineShortName(String engineId) {
+    if (engineId.contains('_')) {
+      // Multi-word: short parts kept whole, long parts abbreviated
+      final parts = engineId.split('_');
+      final buffer = StringBuffer();
+      for (final part in parts) {
+        if (part.isEmpty) continue;
+        if (part.length <= 3) {
+          buffer.write(part.toUpperCase());
+        } else {
+          buffer.write(part[0].toUpperCase());
+        }
+      }
+      return buffer.toString();
+    } else if (engineId.length <= 4) {
+      // Short single word: use as-is
+      return engineId.toUpperCase();
+    } else {
+      // Long single word: first letter + last 2 letters
+      return (engineId[0] + engineId.substring(engineId.length - 2)).toUpperCase();
+    }
+  }
+
   Widget _buildEngineStatusChips(BuildContext context) {
     final List<Widget> chips = [];
 
-    final engines = [
-      {'key': 'torrents_csv', 'short': 'TCSV', 'name': 'Torrents CSV'},
-      {'key': 'pirate_bay', 'short': 'TPB', 'name': 'Pirate Bay'},
-      {'key': 'yts', 'short': 'YTS', 'name': 'YTS'},
-      {'key': 'solid_torrents', 'short': 'ST', 'name': 'SolidTorrents'},
-      {'key': 'torrentio', 'short': 'TIO', 'name': 'Torrentio'},
-      {'key': 'knaben', 'short': 'KNB', 'name': 'Knaben'},
-    ];
+    // Get all unique engine keys from counts and errors (dynamic, not hardcoded)
+    final allEngineKeys = <String>{
+      ..._engineCounts.keys,
+      ..._engineErrors.keys,
+    }.toList()
+      ..sort(); // Sort for consistent ordering
 
-    for (final engine in engines) {
-      final key = engine['key'] as String;
-      final short = engine['short'] as String;
+    for (final key in allEngineKeys) {
+      final short = _deriveEngineShortName(key);
       final count = _engineCounts[key] ?? 0;
       final hasError = _engineErrors.containsKey(key);
 
