@@ -1161,40 +1161,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Derives a friendly display name from an engine ID.
+  ///
+  /// E.g., 'pirate_bay' → 'Pirate Bay', 'torrents_csv' → 'Torrents CSV'
   String _friendlyEngineName(String name) {
-    switch (name) {
-      case 'torrents_csv':
-        return 'Torrents CSV';
-      case 'pirate_bay':
-        return 'The Pirate Bay';
-      case 'yts':
-        return 'YTS';
-      case 'solid_torrents':
-        return 'SolidTorrents';
-      case 'torrentio':
-        return 'Torrentio';
-      default:
-        return name;
-    }
+    if (name.isEmpty) return name;
+
+    // Common acronyms that should stay uppercase
+    const acronyms = {'csv', 'yts', 'api', 'url', 'id', 'tv', 'hd'};
+
+    final parts = name.split('_');
+    return parts.map((part) {
+      if (part.isEmpty) return '';
+      if (acronyms.contains(part.toLowerCase())) {
+        return part.toUpperCase();
+      }
+      // Capitalize first letter, rest lowercase
+      return part[0].toUpperCase() + part.substring(1).toLowerCase();
+    }).join(' ');
   }
 
+  /// Returns a short label for the source tag.
+  /// Uses the same derivation logic as engine status chips.
   String? _sourceTagLabel(String rawSource) {
-    switch (rawSource.trim().toLowerCase()) {
-      case 'yts':
-        return 'YTS';
-      case 'pirate_bay':
-        return 'TPB';
-      case 'torrents_csv':
-        return 'TCSV';
-      case 'solid_torrents':
-        return 'ST';
-      case 'torrentio':
-        return 'TIO';
-      case 'knaben':
-        return 'KNB';
-      default:
-        return null;
-    }
+    final trimmed = rawSource.trim();
+    if (trimmed.isEmpty) return null;
+    return _deriveEngineShortName(trimmed.toLowerCase());
   }
 
   Widget? _buildSourceTag(String rawSource) {
@@ -1245,11 +1237,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  /// Palette of distinct, vibrant colors for engine sources.
+  static const _sourceColorPalette = [
+    Color(0xFF10B981), // Emerald 500
+    Color(0xFFF59E0B), // Amber 500
+    Color(0xFF3B82F6), // Blue 500
+    Color(0xFFEF4444), // Red 500
+    Color(0xFF8B5CF6), // Violet 500
+    Color(0xFFEC4899), // Pink 500
+    Color(0xFF06B6D4), // Cyan 500
+    Color(0xFFF97316), // Orange 500
+    Color(0xFF84CC16), // Lime 500
+    Color(0xFF6366F1), // Indigo 500
+  ];
+
+  /// Returns a consistent color for an engine based on its ID.
+  /// Same ID always returns the same color.
+  Color _getEngineColor(String engineId) {
+    if (engineId.isEmpty) return const Color(0xFF6B7280); // Gray 500
+    final hash = engineId.hashCode.abs();
+    return _sourceColorPalette[hash % _sourceColorPalette.length];
+  }
+
   // Build source chip for stats row - compact version matching StatChip style
   Widget _buildSourceStatChip(String rawSource) {
     final label = _sourceTagLabel(rawSource);
     if (label == null) {
-      // Return a default source chip if no label
       return StatChip(
         icon: Icons.source_rounded,
         text: 'Unknown',
@@ -1257,36 +1270,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       );
     }
 
-    // Determine color based on source
-    Color sourceColor;
-    switch (rawSource.trim().toLowerCase()) {
-      case 'yts':
-        sourceColor = const Color(0xFF10B981); // Emerald 500
-        break;
-      case 'pirate_bay':
-        sourceColor = const Color(0xFFF59E0B); // Amber 500 (keeping original yellow tone)
-        break;
-      case 'torrents_csv':
-        sourceColor = const Color(0xFF3B82F6); // Blue 500
-        break;
-      case 'solid_torrents':
-        sourceColor = const Color(0xFFEF4444); // Red 500
-        break;
-      case 'torrentio':
-        sourceColor = const Color(0xFF8B5CF6); // Violet 500
-        break;
-      case 'knaben':
-        sourceColor = const Color(0xFFEC4899); // Pink 500
-        break;
-      default:
-        sourceColor = const Color(0xFF6B7280); // Gray 500
-        break;
-    }
-
     return StatChip(
       icon: Icons.source_rounded,
       text: label,
-      color: sourceColor,
+      color: _getEngineColor(rawSource.trim().toLowerCase()),
     );
   }
 
