@@ -688,7 +688,7 @@ class TorboxService {
     };
 
     final body = json.encode({
-      'webdownload_id': webId,
+      'webdl_id': webId,
       'operation': 'delete',
     });
 

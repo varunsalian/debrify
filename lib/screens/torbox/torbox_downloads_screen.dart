@@ -6173,16 +6173,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 visualDensity: VisualDensity.compact,
               ),
             ),
-            const SizedBox(width: 8),
-            Tooltip(
-              message: 'Delete all torrents',
-              child: IconButton(
-                onPressed: _torrents.isEmpty ? null : _confirmDeleteAll,
-                icon: const Icon(Icons.delete_sweep),
-                color: const Color(0xFFEF4444),
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
           ] else ...[
             Tooltip(
               message: 'Add web download',
