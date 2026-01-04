@@ -3,6 +3,20 @@ name: Build Release Artifacts
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Job to run (or all)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - macos
+          - windows
+          - ios
+          - linux
 
 permissions:
   contents: write
@@ -195,7 +209,7 @@ jobs:
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev
+        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libmpv-dev
 
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
