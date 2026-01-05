@@ -88,10 +88,17 @@ The app automatically detects Android TV and optimizes the UI for D-pad navigati
 
 ### Linux
 1. Download `debrify-<version>-x86_64.AppImage`
-2. Make it executable: `chmod +x debrify-*.AppImage`
-3. Run it: `./debrify-*.AppImage`
+2. Install the required dependency:
+   ```bash
+   sudo apt install libmpv2        # Ubuntu 24.04+
+   sudo apt install libmpv1        # Ubuntu 22.04 / Debian
+   sudo dnf install mpv-libs       # Fedora
+   sudo pacman -S mpv              # Arch
+   ```
+3. Make it executable: `chmod +x debrify-*.AppImage`
+4. Run it: `./debrify-*.AppImage`
 
-> Works on any Linux distro. No installation needed - it's a single portable file.
+> ⚠️ **Note:** Linux builds are untested. If you encounter issues, please [open an issue](../../issues).
 
 ### Web (from source)
 ```bash
