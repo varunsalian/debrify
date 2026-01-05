@@ -1,4 +1,5 @@
 import 'torrent.dart';
+import '../utils/file_utils.dart';
 
 class DebrifyTvCacheStatus {
   static const String warming = 'warming';
@@ -41,7 +42,7 @@ class CachedTorrent {
     return CachedTorrent(
       rowid: torrent.rowid,
       infohash: torrent.infohash,
-      name: torrent.name,
+      name: FileUtils.cleanPlaylistTitle(torrent.name),
       sizeBytes: torrent.sizeBytes,
       createdUnix: torrent.createdUnix,
       seeders: torrent.seeders,
