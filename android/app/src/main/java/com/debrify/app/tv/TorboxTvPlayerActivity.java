@@ -204,8 +204,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private int playbackSpeedIndex = 2; // Default to 1.0x
     private final float[] playbackSpeeds = new float[] {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
     private final String[] playbackSpeedLabels = new String[] {"0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x"};
-    private final int[] nightModeGains = new int[] {0, 500, 1000, 1500};  // millibels
-    private final String[] nightModeLabels = new String[] {"Off", "Low", "Med", "High"};
+    private final int[] nightModeGains = new int[] {0, 500, 1000, 1500, 2000, 2500, 3000, 5000};  // millibels
+    private final String[] nightModeLabels = new String[] {"Off", "Low", "Medium", "High", "Higher", "Extreme", "Max", "Sleeping Baby"};
 
     private final ArrayList<ChannelEntry> channelDirectoryEntries = new ArrayList<>();
     private final ArrayList<ChannelEntry> filteredChannelEntries = new ArrayList<>();
@@ -630,11 +630,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (nightModeButton != null) {
             nightModeButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             nightModeButton.setOnClickListener(v -> {
-                cycleNightMode();
-                scheduleHideControlsMenu();
+                showNightModeDialog();
             });
             nightModeButton.setOnFocusChangeListener(extendTimerOnFocus);
-            updateNightModeButtonLabel();
         }
 
         if (audioButton != null) {
@@ -1021,8 +1019,21 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     }
 
-    private void cycleNightMode() {
-        nightModeIndex = (nightModeIndex + 1) % nightModeGains.length;
+    private void showNightModeDialog() {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Night Mode")
+                .setSingleChoiceItems(nightModeLabels, nightModeIndex, (d, which) -> {
+                    applyNightMode(which);
+                    d.dismiss();
+                })
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.show();
+    }
+
+    private void applyNightMode(int index) {
+        nightModeIndex = index;
 
         if (nightModeIndex == 0) {
             // Turn off
@@ -1041,13 +1052,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
         }
 
-        updateNightModeButtonLabel();
         showToast("Night Mode: " + nightModeLabels[nightModeIndex]);
-    }
-
-    private void updateNightModeButtonLabel() {
-        // Icon-only design: no text label to update
-        // State is communicated via toast when cycling
     }
 
     private void setupCustomSeekbar() {

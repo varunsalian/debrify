@@ -148,8 +148,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val playbackSpeeds = arrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     private val playbackSpeedLabels = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x")
 
-    private val nightModeGains = arrayOf(0, 500, 1000, 1500)  // millibels
-    private val nightModeLabels = arrayOf("Off", "Low", "Med", "High")
+    private val nightModeGains = arrayOf(0, 500, 1000, 1500, 2000, 2500, 3000, 5000)  // millibels
+    private val nightModeLabels = arrayOf("Off", "Low", "Medium", "High", "Higher", "Extreme", "Max", "Sleeping Baby")
 
     // Handlers
     private val progressHandler = Handler(Looper.getMainLooper())
@@ -1158,8 +1158,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pauseButton?.onFocusChangeListener = extendTimerOnFocus
 
         nightModeButton?.setOnClickListener {
-            cycleNightMode()
-            scheduleHideControlsMenu()
+            showNightModeDialog()
         }
         nightModeButton?.onFocusChangeListener = extendTimerOnFocus
         updateNightModeButtonLabel()
@@ -2747,8 +2746,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         loudnessEnhancer = null
     }
 
-    private fun cycleNightMode() {
-        nightModeIndex = (nightModeIndex + 1) % nightModeGains.size
+    private fun showNightModeDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Night Mode")
+            .setSingleChoiceItems(nightModeLabels, nightModeIndex) { dialog, which ->
+                applyNightMode(which)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun applyNightMode(index: Int) {
+        nightModeIndex = index
 
         if (nightModeIndex == 0) {
             // Turn off
