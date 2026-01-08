@@ -284,4 +284,7 @@
     <!-- Seek Feedback Overlay -->
     <include layout="@layout/view_seek_feedback" />
 
+    <!-- Subtitle Settings Panel -->
+    <include layout="@layout/view_subtitle_settings_panel" />
+
 </FrameLayout>

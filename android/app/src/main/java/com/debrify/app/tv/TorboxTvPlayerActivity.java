@@ -58,6 +58,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
+import com.debrify.app.util.SubtitleSettings;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -262,6 +263,25 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View pikPakRetryOverlay;
     private TextView pikPakRetryText;
 
+    // Subtitle Settings Panel
+    private View subtitleSettingsRoot;
+    private boolean subtitleSettingsVisible = false;
+    private View subtitleColumnTrack;
+    private View subtitleColumnSize;
+    private View subtitleColumnStyle;
+    private View subtitleColumnColor;
+    private View subtitleColumnBg;
+    private View subtitleResetButton;
+    private TextView subtitleValueTrack;
+    private TextView subtitleValueSize;
+    private TextView subtitleValueStyle;
+    private TextView subtitleValueColor;
+    private TextView subtitleValueBg;
+    private View subtitleColorSwatch;
+    private TextView subtitlePreviewText;
+    private final ArrayList<TrackOption> subtitleTrackOptions = new ArrayList<>();
+    private int currentSubtitleTrackIndex = 0;
+
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
     private final Runnable hideNextOverlayRunnable = this::performHideNextOverlay;
@@ -350,6 +370,22 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         seekbarCurrentTime = findViewById(R.id.seekbar_current_time);
         seekbarTotalTime = findViewById(R.id.seekbar_total_time);
         seekbarSpeedIndicator = findViewById(R.id.seekbar_speed_indicator);
+
+        // Initialize Subtitle Settings Panel Views
+        subtitleSettingsRoot = findViewById(R.id.subtitle_settings_root);
+        subtitleColumnTrack = findViewById(R.id.subtitle_column_track);
+        subtitleColumnSize = findViewById(R.id.subtitle_column_size);
+        subtitleColumnStyle = findViewById(R.id.subtitle_column_style);
+        subtitleColumnColor = findViewById(R.id.subtitle_column_color);
+        subtitleColumnBg = findViewById(R.id.subtitle_column_bg);
+        subtitleValueTrack = findViewById(R.id.subtitle_value_track);
+        subtitleValueSize = findViewById(R.id.subtitle_value_size);
+        subtitleValueStyle = findViewById(R.id.subtitle_value_style);
+        subtitleValueColor = findViewById(R.id.subtitle_value_color);
+        subtitleValueBg = findViewById(R.id.subtitle_value_bg);
+        subtitleColorSwatch = findViewById(R.id.subtitle_color_swatch);
+        subtitlePreviewText = findViewById(R.id.subtitle_preview_text);
+        subtitleResetButton = findViewById(R.id.subtitle_reset_button);
 
         Intent intent = getIntent();
         
@@ -496,15 +532,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleOverlay.setApplyEmbeddedFontSizes(false);
             // No padding fraction - using XML padding for fixed screen-bottom positioning
             subtitleOverlay.setBottomPaddingFraction(0.0f);
-            // Text size: 16sp for TV viewing (comfortable size)
-            subtitleOverlay.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
-            subtitleOverlay.setStyle(new CaptionStyleCompat(
-                    Color.WHITE,
-                    Color.TRANSPARENT,
-                    Color.TRANSPARENT,
-                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                    Color.BLACK,
-                    Typeface.create("sans-serif", Typeface.NORMAL)));
+            // Apply subtitle settings from preferences
+            applySubtitleSettings();
         }
         playerView.requestFocus();
 
@@ -647,8 +676,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (subtitleButton != null) {
             subtitleButton.setVisibility(hideOptions ? View.GONE : View.VISIBLE);
             subtitleButton.setOnClickListener(v -> {
-                showSubtitleSelectionDialog();
-                scheduleHideControlsMenu();
+                hideControlsMenu();
+                showSubtitleSettingsPanel();
             });
             subtitleButton.setOnFocusChangeListener(extendTimerOnFocus);
         }
@@ -2696,6 +2725,253 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         showToast("Subtitles: " + option.label);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SUBTITLE SETTINGS PANEL
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private void showSubtitleSettingsPanel() {
+        // Collect available subtitle tracks
+        subtitleTrackOptions.clear();
+        currentSubtitleTrackIndex = 0;
+
+        List<TrackOption> tracks = collectTrackOptions(C.TRACK_TYPE_TEXT);
+        subtitleTrackOptions.addAll(tracks);
+
+        // Determine currently selected track index
+        boolean hasSelectedSubtitle = false;
+        if (!tracks.isEmpty()) {
+            Tracks currentTracks = player != null ? player.getCurrentTracks() : null;
+            if (currentTracks != null) {
+                for (int i = 0; i < tracks.size(); i++) {
+                    TrackOption opt = tracks.get(i);
+                    if (opt.group.isTrackSelected(opt.trackIndex)) {
+                        currentSubtitleTrackIndex = i;
+                        hasSelectedSubtitle = true;
+                        break;
+                    }
+                }
+            }
+        }
+        // If no track selected, set to -1 (Off)
+        if (!hasSelectedSubtitle) {
+            currentSubtitleTrackIndex = -1;
+        }
+
+        // Update UI values
+        updateSubtitlePanelValues();
+
+        // Show panel
+        if (subtitleSettingsRoot != null) {
+            subtitleSettingsRoot.setVisibility(View.VISIBLE);
+        }
+        subtitleSettingsVisible = true;
+
+        // Focus first column
+        if (subtitleColumnTrack != null) {
+            subtitleColumnTrack.requestFocus();
+        }
+    }
+
+    private void hideSubtitleSettingsPanel() {
+        if (subtitleSettingsRoot != null) {
+            subtitleSettingsRoot.setVisibility(View.GONE);
+        }
+        subtitleSettingsVisible = false;
+        if (playerView != null) {
+            playerView.requestFocus();
+        }
+    }
+
+    private void updateSubtitlePanelValues() {
+        // Track
+        if (subtitleValueTrack != null) {
+            if (currentSubtitleTrackIndex < 0 || subtitleTrackOptions.isEmpty()) {
+                subtitleValueTrack.setText("Off");
+            } else if (currentSubtitleTrackIndex < subtitleTrackOptions.size()) {
+                subtitleValueTrack.setText(subtitleTrackOptions.get(currentSubtitleTrackIndex).label);
+            } else {
+                subtitleValueTrack.setText("Off");
+            }
+        }
+
+        // Size
+        if (subtitleValueSize != null) {
+            subtitleValueSize.setText(SubtitleSettings.getCurrentSize(this).getLabel());
+        }
+
+        // Style
+        if (subtitleValueStyle != null) {
+            subtitleValueStyle.setText(SubtitleSettings.getCurrentStyle(this).getLabel());
+        }
+
+        // Color
+        SubtitleSettings.ColorOption colorOption = SubtitleSettings.getCurrentColor(this);
+        if (subtitleValueColor != null) {
+            subtitleValueColor.setText(colorOption.getLabel());
+        }
+        if (subtitleColorSwatch != null) {
+            subtitleColorSwatch.setBackgroundTintList(
+                    android.content.res.ColorStateList.valueOf(colorOption.getColor()));
+        }
+
+        // Background
+        if (subtitleValueBg != null) {
+            subtitleValueBg.setText(SubtitleSettings.getCurrentBg(this).getLabel());
+        }
+
+        // Update preview
+        updateSubtitlePreview();
+    }
+
+    private void updateSubtitlePreview() {
+        if (subtitlePreviewText == null) return;
+
+        SubtitleSettings.ColorOption colorOption = SubtitleSettings.getCurrentColor(this);
+        SubtitleSettings.StyleOption styleOption = SubtitleSettings.getCurrentStyle(this);
+        SubtitleSettings.SizeOption sizeOption = SubtitleSettings.getCurrentSize(this);
+        SubtitleSettings.BgOption bgOption = SubtitleSettings.getCurrentBg(this);
+
+        subtitlePreviewText.setTextColor(colorOption.getColor());
+        subtitlePreviewText.setTextSize(sizeOption.getSizeSp());
+
+        // Apply shadow based on edge style
+        switch (styleOption.getEdgeType()) {
+            case CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW:
+                subtitlePreviewText.setShadowLayer(4f, 2f, 2f, Color.BLACK);
+                break;
+            case CaptionStyleCompat.EDGE_TYPE_OUTLINE:
+                subtitlePreviewText.setShadowLayer(2f, 1f, 1f, Color.BLACK);
+                break;
+            default:
+                subtitlePreviewText.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT);
+                break;
+        }
+
+        // Background
+        if (bgOption.getColor() != Color.TRANSPARENT) {
+            subtitlePreviewText.setBackgroundColor(bgOption.getColor());
+            subtitlePreviewText.setPadding(8, 4, 8, 4);
+        } else {
+            subtitlePreviewText.setBackgroundColor(Color.TRANSPARENT);
+            subtitlePreviewText.setPadding(0, 0, 0, 0);
+        }
+    }
+
+    private void cycleSubtitleValueUp() {
+        View focusedView = getCurrentFocus();
+        if (focusedView == null) return;
+
+        int viewId = focusedView.getId();
+        if (viewId == R.id.subtitle_column_track) {
+            // Track uses dialog, no cycling
+            return;
+        } else if (viewId == R.id.subtitle_column_size) {
+            SubtitleSettings.cycleSizeUp(this);
+        } else if (viewId == R.id.subtitle_column_style) {
+            SubtitleSettings.cycleStyleUp(this);
+        } else if (viewId == R.id.subtitle_column_color) {
+            SubtitleSettings.cycleColorUp(this);
+        } else if (viewId == R.id.subtitle_column_bg) {
+            SubtitleSettings.cycleBgUp(this);
+        } else if (viewId == R.id.subtitle_reset_button) {
+            // Reset button doesn't cycle
+            return;
+        }
+
+        updateSubtitlePanelValues();
+        applySubtitleSettings();
+    }
+
+    private void cycleSubtitleValueDown() {
+        View focusedView = getCurrentFocus();
+        if (focusedView == null) return;
+
+        int viewId = focusedView.getId();
+        if (viewId == R.id.subtitle_column_track) {
+            // Track uses dialog, no cycling
+            return;
+        } else if (viewId == R.id.subtitle_column_size) {
+            SubtitleSettings.cycleSizeDown(this);
+        } else if (viewId == R.id.subtitle_column_style) {
+            SubtitleSettings.cycleStyleDown(this);
+        } else if (viewId == R.id.subtitle_column_color) {
+            SubtitleSettings.cycleColorDown(this);
+        } else if (viewId == R.id.subtitle_column_bg) {
+            SubtitleSettings.cycleBgDown(this);
+        } else if (viewId == R.id.subtitle_reset_button) {
+            // Reset button doesn't cycle
+            return;
+        }
+
+        updateSubtitlePanelValues();
+        applySubtitleSettings();
+    }
+
+    private void handleSubtitlePanelSelect() {
+        View focusedView = getCurrentFocus();
+        if (focusedView == null) return;
+
+        int viewId = focusedView.getId();
+        if (viewId == R.id.subtitle_column_track) {
+            showSubtitleTrackSelectionDialogFromPanel();
+        } else if (viewId == R.id.subtitle_reset_button) {
+            resetSubtitleSettingsFromPanel();
+        }
+    }
+
+    private void showSubtitleTrackSelectionDialogFromPanel() {
+        // Build labels array including "Off" option
+        List<String> labels = new ArrayList<>();
+        labels.add("Off");
+        for (TrackOption opt : subtitleTrackOptions) {
+            labels.add(opt.label);
+        }
+
+        // Adjust selected index (+1 because "Off" is at index 0)
+        int selectedIndex = currentSubtitleTrackIndex + 1;
+        if (selectedIndex < 0) selectedIndex = 0;
+
+        String[] labelsArray = labels.toArray(new String[0]);
+        new AlertDialog.Builder(this)
+                .setTitle("Select Subtitle Track")
+                .setSingleChoiceItems(labelsArray, selectedIndex, (dialog, which) -> {
+                    if (which == 0) {
+                        currentSubtitleTrackIndex = -1; // Off
+                    } else {
+                        currentSubtitleTrackIndex = which - 1;
+                    }
+                    applySelectedSubtitleTrackFromPanel();
+                    updateSubtitlePanelValues();
+                    dialog.dismiss();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void resetSubtitleSettingsFromPanel() {
+        SubtitleSettings.resetToDefaults(this);
+        updateSubtitlePanelValues();
+        applySubtitleSettings();
+        showToast("Subtitle settings reset to defaults");
+    }
+
+    private void applySelectedSubtitleTrackFromPanel() {
+        if (currentSubtitleTrackIndex < 0 || currentSubtitleTrackIndex >= subtitleTrackOptions.size()) {
+            applySubtitleTrack(null); // Off
+        } else {
+            applySubtitleTrack(subtitleTrackOptions.get(currentSubtitleTrackIndex));
+        }
+    }
+
+    private void applySubtitleSettings() {
+        if (subtitleOverlay != null) {
+            subtitleOverlay.setFixedTextSize(
+                    TypedValue.COMPLEX_UNIT_SP,
+                    SubtitleSettings.getFontSizeSp(this));
+            subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this));
+        }
+    }
+
     private void cycleAspectRatio() {
         resizeModeIndex = (resizeModeIndex + 1) % resizeModes.length;
         if (playerView != null) {
@@ -3227,6 +3503,27 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     return unifiedGuideSearch.dispatchKeyEvent(event);
                 }
             }
+            return super.dispatchKeyEvent(event);
+        }
+
+        // Subtitle Settings Panel is visible - handle keys
+        if (subtitleSettingsVisible) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_BACK) {
+                    hideSubtitleSettingsPanel();
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    cycleSubtitleValueUp();
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    cycleSubtitleValueDown();
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    handleSubtitlePanelSelect();
+                    return true;
+                }
+            }
+            // Let left/right navigation work normally for focus
             return super.dispatchKeyEvent(event);
         }
 

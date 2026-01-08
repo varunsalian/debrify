@@ -446,4 +446,7 @@
         android:includeFontPadding="false"
         android:visibility="gone" />
 
+    <!-- Subtitle Settings Panel -->
+    <include layout="@layout/view_subtitle_settings_panel" />
+
 </FrameLayout>
