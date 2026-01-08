@@ -48,6 +48,7 @@ import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/models/channel_entry.dart';
+import 'video_player/services/subtitle_settings_service.dart';
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
@@ -254,6 +255,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _showChannelGuide = false;
   List<ChannelEntry> _channelEntries = [];
 
+  // Subtitle style settings
+  SubtitleSettingsData? _subtitleSettings;
+
   // media_kit state
   bool _isReady = false;
   bool _isPlaying = false;
@@ -353,6 +357,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _currentChannelNumber = widget.channelNumber;
     _parseChannelDirectory();
+    _loadSubtitleSettings();
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // Default to landscape when entering the player
@@ -1117,6 +1122,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       return entry;
     }).toList();
+  }
+
+  /// Load subtitle style settings
+  Future<void> _loadSubtitleSettings() async {
+    final settings = await SubtitleSettingsService.instance.loadAll();
+    if (mounted) {
+      setState(() {
+        _subtitleSettings = settings;
+      });
+    }
+  }
+
+  /// Update subtitle style settings
+  void _onSubtitleStyleChanged(SubtitleSettingsData settings) {
+    setState(() {
+      _subtitleSettings = settings;
+    });
   }
 
   /// Show channel guide overlay
@@ -2820,12 +2842,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   BoxFit _currentFit() => AspectModeUtils.getBoxFitForMode(_aspectMode);
 
+  // Build subtitle view configuration from settings
+  mkv.SubtitleViewConfiguration _buildSubtitleViewConfig() {
+    final settings = _subtitleSettings;
+    if (settings == null) {
+      return const mkv.SubtitleViewConfiguration();
+    }
+
+    return mkv.SubtitleViewConfiguration(
+      style: settings.buildTextStyle(),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 48),
+    );
+  }
+
   // Build video with custom aspect ratio
   Widget _buildCustomAspectRatioVideo() {
     return AspectRatioVideo(
       videoController: _videoController,
       customAspectRatio: _getCustomAspectRatio(),
       currentFit: _currentFit(),
+      subtitleViewConfiguration: _buildSubtitleViewConfig(),
     );
   }
 
@@ -3063,6 +3099,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         controller: _videoController,
                         controls: null,
                         fit: _currentFit(),
+                        subtitleViewConfiguration: _buildSubtitleViewConfig(),
                       )
               else if (_isTransitioning)
                 // Black screen during transitions to hide previous frame
@@ -3304,6 +3341,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onTrackChanged: (audioId, subtitleId) async {
         await _persistTrackChoice(audioId, subtitleId);
       },
+      onSubtitleStyleChanged: _onSubtitleStyleChanged,
     );
   }
 

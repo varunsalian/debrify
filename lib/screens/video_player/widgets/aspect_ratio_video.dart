@@ -5,12 +5,14 @@ class AspectRatioVideo extends StatelessWidget {
   final mkv.VideoController videoController;
   final double? customAspectRatio;
   final BoxFit currentFit;
+  final mkv.SubtitleViewConfiguration? subtitleViewConfiguration;
 
   const AspectRatioVideo({
     Key? key,
     required this.videoController,
     required this.customAspectRatio,
     required this.currentFit,
+    this.subtitleViewConfiguration,
   }) : super(key: key);
 
   @override
@@ -21,6 +23,8 @@ class AspectRatioVideo extends StatelessWidget {
         controller: videoController,
         controls: null,
         fit: currentFit,
+        subtitleViewConfiguration:
+            subtitleViewConfiguration ?? const mkv.SubtitleViewConfiguration(),
       );
     }
 
@@ -32,6 +36,8 @@ class AspectRatioVideo extends StatelessWidget {
           controller: videoController,
           controls: null,
           fit: BoxFit.cover,
+          subtitleViewConfiguration:
+              subtitleViewConfiguration ?? const mkv.SubtitleViewConfiguration(),
         ),
       ),
     );
