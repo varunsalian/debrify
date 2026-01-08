@@ -46,9 +46,12 @@ import 'video_player/widgets/transition_overlay.dart';
 import 'video_player/widgets/pikpak_retry_overlay.dart';
 import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/playlist_sheet.dart';
+import 'video_player/widgets/channel_guide.dart';
+import 'video_player/models/channel_entry.dart';
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
+export 'video_player/models/channel_entry.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
 /// 
@@ -75,6 +78,11 @@ class VideoPlayerScreen extends StatefulWidget {
   final Future<Map<String, String>?> Function()? requestMagicNext;
   // Optional: Debrify TV channel switcher (firstUrl, firstTitle, channel metadata)
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
+  // Optional: Switch to a specific channel by ID
+  final Future<Map<String, dynamic>?> Function(String channelId)?
+      requestChannelById;
+  // Optional: Channel directory for channel guide
+  final List<Map<String, dynamic>>? channelDirectory;
   // Advanced: start each video at a random timestamp
   final bool startFromRandom;
   final int randomStartMaxPercent;
@@ -109,6 +117,8 @@ class VideoPlayerScreen extends StatefulWidget {
     this.pikpakCollectionId,
     this.requestMagicNext,
     this.requestNextChannel,
+    this.requestChannelById,
+    this.channelDirectory,
     this.startFromRandom = false,
     this.randomStartMaxPercent = 40,
     this.hideSeekbar = false,
@@ -238,6 +248,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Channel metadata for Debrify TV flows
   String? _currentChannelName;
   int? _currentChannelNumber;
+  String? _currentChannelId;
+
+  // Channel guide state
+  bool _showChannelGuide = false;
+  List<ChannelEntry> _channelEntries = [];
 
   // media_kit state
   bool _isReady = false;
@@ -337,6 +352,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _currentChannelName = widget.channelName;
     }
     _currentChannelNumber = widget.channelNumber;
+    _parseChannelDirectory();
     mk.MediaKit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // Default to landscape when entering the player
@@ -1084,6 +1100,160 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// Parse channel directory from widget params into ChannelEntry list
+  void _parseChannelDirectory() {
+    final directory = widget.channelDirectory;
+    if (directory == null || directory.isEmpty) {
+      _channelEntries = [];
+      return;
+    }
+
+    _channelEntries = directory.asMap().entries.map((e) {
+      final entry = ChannelEntry.fromMap(e.value, order: e.key);
+      // Check if this is the current channel
+      if (entry.isCurrent && _currentChannelId == null) {
+        _currentChannelId = entry.id;
+        if (entry.number != null) _currentChannelNumber = entry.number;
+      }
+      return entry;
+    }).toList();
+  }
+
+  /// Show channel guide overlay
+  void _showChannelGuideOverlay() {
+    if (_channelEntries.isEmpty) {
+      debugPrint('Player: No channels available for guide');
+      return;
+    }
+    setState(() {
+      _showChannelGuide = true;
+      _controlsVisible.value = false;
+    });
+  }
+
+  /// Hide channel guide overlay
+  void _hideChannelGuideOverlay() {
+    setState(() {
+      _showChannelGuide = false;
+    });
+  }
+
+  /// Switch to a specific channel by ID (from channel guide)
+  Future<void> _goToChannelById(ChannelEntry channel) async {
+    _hideChannelGuideOverlay();
+
+    final request = widget.requestChannelById;
+    if (request == null) {
+      debugPrint('Player: requestChannelById not provided');
+      return;
+    }
+
+    setState(() {
+      _isTransitioning = true;
+      _currentChannelId = channel.id;
+      _currentChannelName = channel.name;
+      if (channel.number != null) {
+        _currentChannelNumber = channel.number;
+      }
+    });
+    _startTransitionOverlay();
+
+    try {
+      await _player.pause();
+    } catch (_) {}
+
+    Map<String, dynamic>? payload;
+    try {
+      payload = await request(channel.id);
+    } catch (e) {
+      debugPrint('Player: Channel switch by ID failed: $e');
+    }
+
+    if (!mounted) return;
+
+    if (payload == null) {
+      setState(() {
+        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
+        _tvStaticSubtext = '';
+        _isTransitioning = false;
+      });
+      return;
+    }
+
+    final dynamic rawUrl = payload['firstUrl'] ?? payload['url'];
+    final dynamic rawTitle = payload['firstTitle'] ?? payload['title'];
+    final String nextUrl = rawUrl is String ? rawUrl : '';
+    final String nextTitle = rawTitle is String ? rawTitle : '';
+
+    // Update channel metadata from payload if provided
+    final String? payloadChannelName = payload['channelName'] is String
+        ? (payload['channelName'] as String)
+        : null;
+    final String? payloadChannelId = payload['channelId'] is String
+        ? (payload['channelId'] as String)
+        : null;
+    final dynamic channelNumberRaw = payload['channelNumber'];
+    int? payloadChannelNumber;
+    if (channelNumberRaw is int) {
+      payloadChannelNumber = channelNumberRaw;
+    } else if (channelNumberRaw is String) {
+      payloadChannelNumber = int.tryParse(channelNumberRaw);
+    }
+
+    setState(() {
+      if (payloadChannelId != null) _currentChannelId = payloadChannelId;
+      if (payloadChannelName != null && payloadChannelName.trim().isNotEmpty) {
+        _currentChannelName = payloadChannelName;
+      }
+      if (payloadChannelNumber != null) {
+        _currentChannelNumber = payloadChannelNumber;
+      }
+    });
+
+    // Show channel badge
+    if (widget.showChannelName && _channelBadgeText != null) {
+      _showChannelBadgeWithTimer();
+    }
+
+    if (nextUrl.isEmpty) {
+      setState(() {
+        _tvStaticMessage = '⚠ CHANNEL HAS NO STREAMS';
+        _tvStaticSubtext = '';
+        _isTransitioning = false;
+      });
+      return;
+    }
+
+    if (nextTitle.isNotEmpty) {
+      setState(() {
+        _tvStaticMessage = '📺 SIGNAL ACQUIRED';
+        _tvStaticSubtext = '▶ ${nextTitle.toUpperCase()}';
+      });
+    }
+
+    try {
+      _pikPakRetryId++;
+      await _player.open(
+          mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
+          play: true);
+      _currentStreamUrl = nextUrl;
+    } catch (e) {
+      debugPrint('Player: Failed to open channel stream: $e');
+      setState(() {
+        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
+        _tvStaticSubtext = '';
+        _isTransitioning = false;
+      });
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isTransitioning = false;
+      });
+    }
+  }
+
   /// Switch to the next Debrify TV channel (MediaKit fallback)
   Future<void> _goToNextChannel() async {
     final request = widget.requestNextChannel;
@@ -1128,6 +1298,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final String? channelName = payload['channelName'] is String
         ? (payload['channelName'] as String)
         : null;
+    final String? channelId = payload['channelId'] is String
+        ? (payload['channelId'] as String)
+        : null;
     final dynamic channelNumberRaw = payload['channelNumber'];
     int? channelNumber;
     if (channelNumberRaw is int) {
@@ -1137,8 +1310,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     if ((channelName != null && channelName.trim().isNotEmpty) ||
-        channelNumber != null) {
+        channelNumber != null ||
+        channelId != null) {
       setState(() {
+        if (channelId != null) {
+          _currentChannelId = channelId;
+        }
         if (channelName != null && channelName.trim().isNotEmpty) {
           _currentChannelName = channelName;
         }
@@ -2705,10 +2882,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
             final key = event.logicalKey;
 
+            // Channel guide is open - handle its keys first
+            if (_showChannelGuide) {
+              if (key == LogicalKeyboardKey.escape ||
+                  key == LogicalKeyboardKey.goBack) {
+                _hideChannelGuideOverlay();
+                return KeyEventResult.handled;
+              }
+              // Let channel guide handle other keys
+              return KeyEventResult.ignored;
+            }
+
             // A -> Aspect ratio
             if (key == LogicalKeyboardKey.keyA) {
               _cycleAspectMode();
               return KeyEventResult.handled;
+            }
+
+            // G -> Channel guide
+            if (key == LogicalKeyboardKey.keyG) {
+              if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
+                _showChannelGuideOverlay();
+                return KeyEventResult.handled;
+              }
             }
 
             // Space -> Pause resume
@@ -2717,9 +2913,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               return KeyEventResult.handled;
             }
 
-            // Up/Down arrow -> Volume
+            // Up arrow -> Channel guide (if channels available) or Volume
             if (key == LogicalKeyboardKey.arrowUp) {
-              // Show controls first
+              // If channels are available, show channel guide
+              if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
+                _showChannelGuideOverlay();
+                return KeyEventResult.handled;
+              }
+
+              // Otherwise, control volume
               _controlsVisible.value = true;
               _scheduleAutoHide();
 
@@ -3026,6 +3228,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               _hasNextEpisode() ||
                               widget.requestMagicNext != null,
                           hasNextChannel: widget.requestNextChannel != null,
+                          hasGuide: _channelEntries.isNotEmpty && widget.requestChannelById != null,
+                          onShowGuide: _channelEntries.isNotEmpty && widget.requestChannelById != null
+                              ? _showChannelGuideOverlay
+                              : null,
                           hasPrevious: _hasPreviousEpisode(),
                           hideSeekbar: widget.hideSeekbar,
                           hideOptions: widget.hideOptions,
@@ -3073,6 +3279,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // PikPak retry overlay - non-blocking, positioned at bottom right
               if (_isPikPakRetrying && _pikPakRetryMessage != null)
                 PikPakRetryOverlay(message: _pikPakRetryMessage!),
+              // Channel guide overlay
+              if (_showChannelGuide && _channelEntries.isNotEmpty)
+                Positioned.fill(
+                  child: ChannelGuide(
+                    channels: _channelEntries,
+                    currentChannelId: _currentChannelId,
+                    currentChannelNumber: _currentChannelNumber,
+                    onChannelSelected: _goToChannelById,
+                    onClose: _hideChannelGuideOverlay,
+                  ),
+                ),
             ],
           ),
         ),

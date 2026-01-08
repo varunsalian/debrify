@@ -4248,6 +4248,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                     _quickProvider == _providerPikPak)
                             ? _requestNextChannel
                             : null,
+                        channelDirectory: activeChannelDirectory,
+                        requestChannelById: _channels.length > 1 ? _requestChannelById : null,
                       ),
                     ),
                   );
@@ -4568,6 +4570,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _quickProvider == _providerPikPak)
                 ? _requestNextChannel
                 : null,
+            channelDirectory: quickChannelDirectory,
+            requestChannelById: _channels.length > 1 ? _requestChannelById : null,
           ),
         ),
       );
@@ -5496,6 +5500,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _provider == _providerPikPak)
                 ? _requestNextChannel
                 : null,
+            channelDirectory: channelDirectory,
+            requestChannelById: _channels.length > 1 ? _requestChannelById : null,
           ),
         ),
       );
@@ -6408,6 +6414,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _provider == _providerPikPak)
                 ? _requestNextChannel
                 : null,
+            channelDirectory: channelDirectory,
+            requestChannelById: _channels.length > 1 ? _requestChannelById : null,
           ),
         ),
       );
@@ -6568,6 +6576,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         _provider == _providerPikPak)
                 ? _requestNextChannel
                 : null,
+            channelDirectory: channelDirectory,
+            requestChannelById: _channels.length > 1 ? _requestChannelById : null,
           ),
         ),
       );

@@ -26,9 +26,11 @@ class Controls extends StatelessWidget {
   final VoidCallback onSeekBarChangeEnd;
   final VoidCallback? onNext;
   final VoidCallback? onNextChannel;
+  final VoidCallback? onShowGuide;
   final VoidCallback? onPrevious;
   final bool hasNext;
   final bool hasNextChannel;
+  final bool hasGuide;
   final bool hasPrevious;
   final bool hideSeekbar;
   final bool hideOptions;
@@ -60,9 +62,11 @@ class Controls extends StatelessWidget {
     required this.onSeekBarChangeEnd,
     this.onNext,
     this.onNextChannel,
+    this.onShowGuide,
     this.onPrevious,
     this.hasNext = false,
     this.hasNextChannel = false,
+    this.hasGuide = false,
     this.hasPrevious = false,
     required this.hideSeekbar,
     required this.hideOptions,
@@ -345,6 +349,15 @@ class Controls extends StatelessWidget {
                                 icon: Icons.tv_rounded,
                                 label: 'Next Channel',
                                 onPressed: onNextChannel!,
+                                isCompact: true,
+                              ),
+
+                            // Channel guide button
+                            if (hasGuide && onShowGuide != null)
+                              NetflixControlButton(
+                                icon: Icons.grid_view_rounded,
+                                label: 'Guide',
+                                onPressed: onShowGuide!,
                                 isCompact: true,
                               ),
 
