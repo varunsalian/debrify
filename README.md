@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon.png" alt="Debrify" width="120" height="120">
+  <img src="assets/app_icon.png" alt="Debrify" width="120" height="120">
 </p>
 
 <h1 align="center">Debrify</h1>
