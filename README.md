@@ -106,13 +106,17 @@ A dedicated lean-back experience for your living room.
 </p>
 
 <p align="center">
+  <img src="assets/screenshots/tv-subtitles.png" alt="TV Subtitle Settings" width="70%">
+</p>
+
+<p align="center">
   <img src="assets/screenshots/tv-channels.png" alt="TV Channels" width="49%">
   <img src="assets/screenshots/tv-guide.png" alt="TV Guide" width="49%">
 </p>
 
 - **Remote-friendly player** — Full playback controls with D-pad navigation
+- **Subtitle customization** — Size, style, color, and background options
 - **Channel mode** — Watch content like cable TV with channel numbers
-- **Channel-based browsing** — Organize content into genre channels
 - **Quick channel guide** — Switch channels on the fly
 
 ---
