@@ -1,106 +1,154 @@
-# Debrify
+<p align="center">
+  <img src="assets/icon.png" alt="Debrify" width="120" height="120">
+</p>
 
-![Flutter](https://img.shields.io/badge/Flutter-3.8+-blue?logo=flutter&logoColor=white)
-![Platforms](https://img.shields.io/badge/Platforms-Android%20%7C%20Android%20TV%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS-lightgrey)
-![License](https://img.shields.io/badge/License-Polyform%20NC-blue)
+<h1 align="center">Debrify</h1>
 
-> Built as a personal “vibe coded” spare-time project—open-sourced so others can test-drive it or take it further. Most polish currently targets **Android**; the desktop builds work, but expect the occasional rough edge.
+<p align="center">
+  <strong>The all-in-one debrid manager</strong><br>
+  Stream and download your debrid content across all your devices
+</p>
 
-A modern debrid companion built with Flutter, featuring plugin-based torrent search, a powerful search UI, lean-back Android TV mode, advanced player, and persistent playlists. Supports Real-Debrid and Torbox.
+<p align="center">
+  <img src="https://img.shields.io/badge/Flutter-3.8+-02569B?logo=flutter&logoColor=white" alt="Flutter">
+  <img src="https://img.shields.io/badge/Real--Debrid-Supported-00C853" alt="Real-Debrid">
+  <img src="https://img.shields.io/badge/Torbox-Supported-00C853" alt="Torbox">
+  <img src="https://img.shields.io/badge/PikPak-Supported-00C853" alt="PikPak">
+  <img src="https://img.shields.io/badge/License-Polyform%20NC-blue" alt="License">
+</p>
+
+<p align="center">
+  <a href="https://github.com/varunsalian/debrify/releases">Download</a> &bull;
+  <a href="#-features">Features</a> &bull;
+  <a href="#-supported-platforms">Platforms</a> &bull;
+  <a href="https://www.reddit.com/r/debrify/">Reddit</a> &bull;
+  <a href="https://discord.gg/nay3FVtAp">Discord</a>
+</p>
 
 ---
 
-## Table of Contents
-- [✨ Features](#-features)
-- [🧭 Platform Snapshot](#-platform-snapshot)
-- [🚀 Quick Start](#-quick-start)
-- [📦 Installation Details](#-installation-details)
-- [🛠️ Build & Release Notes](#️-build--release-notes)
-- [📺 Episode Tracking Deep-Dive](#-episode-tracking-deep-dive)
-- [🧱 Tech Stack](#-tech-stack)
-- [🗺️ Roadmap](#️-roadmap)
-- [🤝 Contributing](#-contributing)
-- [💬 Support](#-support)
-- [📄 License](#-license)
+## What is Debrify?
+
+Debrify is a **debrid manager** that lets you browse, stream, and download content from your debrid accounts—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, and an **optional plugin system** for torrent search engines.
+
+> **No torrenting on your device.** Debrify connects to debrid services that handle everything server-side. You just stream or download the finished files.
 
 ---
 
 ## ✨ Features
-- 🔍 **Multi-source torrent search** with engine toggles, live counts, and smart sorting
-- 🔐 **Debrid service integration** (Real-Debrid & Torbox) for API validation, file-selection defaults, and account snapshot
-- 📥 **Smart-ish download manager** (still evolving) with queue persistence, pause/resume, and grouped actions
-- 📺 **Debrify TV mode** with Android TV support for lean-back autoplay, keyword queues, and remote-friendly controls
-- 🎬 **Advanced player** powered by `media_kit`: gestures, audio/subtitle tracks, resume points, and Debrify TV overlays
-- 🧠 **Episode intelligence** via TVMaze enrichment, per-season progress, and resume-last logic
-- 🎞️ **Personal playlists** that recover restricted links, order multi-episode packs, and remember Real-Debrid torrents
-- 🎨 **Material 3 UI** with dark theme, animated navigation, and Android TV aware orientation
 
-> ⚠️ **Heads-up:** Desktop builds are convenient ports of the Android flow. Windows, macOS, and web are fully usable but not yet as polished.
+<table>
+<tr>
+<td width="50%">
 
-> ℹ️ **Note:** Downloads are not yet supported for Torbox. Streaming and playlist features work fully with both Real-Debrid and Torbox.
+### Debrid Management
+- **Multi-provider support** — Real-Debrid, Torbox, and PikPak
+- **Full feature parity** — Stream, download, and manage files across all providers
+- **Account dashboard** — View status, expiration, and usage at a glance
+- **File browser** — Browse and manage your debrid cloud storage
+
+</td>
+<td width="50%">
+
+### Built-in Player
+- **Native playback** — Powered by media_kit/libmpv
+- **Track selection** — Switch audio and subtitle tracks on the fly
+- **Resume playback** — Picks up where you left off, always
+- **TV-optimized** — Gesture controls on mobile, remote-friendly on TV
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Download Manager
+- **Background downloads** — Queue files and let them download
+- **Pause & resume** — Full control over your download queue
+- **Batch operations** — Select multiple files, download all at once
+- **Cross-platform** — Works on mobile and desktop
+
+</td>
+<td width="50%">
+
+### Search Plugins *(Optional)*
+- **Engine marketplace** — Import community-built torrent search engines
+- **Multi-engine search** — Query multiple sources simultaneously
+- **Smart filtering** — Filter by quality, size, seeders, and more
+- **One-click add** — Send results directly to your debrid provider
+
+</td>
+</tr>
+</table>
+
+### Additional Features
+- **Playlists** — Organize content with auto-ordering for TV episodes
+- **Episode tracking** — TVMaze integration for series progress
+- **Debrify TV Mode** — Lean-back interface for Android TV with autoplay queues
+- **Material 3 UI** — Modern dark theme with smooth animations
 
 ---
 
-## 🧭 Platform Snapshot
+## 📱 Supported Platforms
 
-| Platform | Status | Notes |
-|----------|--------|-------|
-| Android | ✅ Stable | Primary target; APK ships with each release |
-| Android TV | ✅ Stable | Full TV mode support with D-pad navigation and remote controls |
-| iOS | ⚠️ Sideload | Unsigned IPA available; requires AltStore or Sideloadly ([guide](docs/iOS-Installation.md)) |
-| Windows | ✅ Usable | Installer maximizes into fullscreen and stores downloads in `~/Downloads/Debrify` |
-| macOS | ✅ Usable | DMG available; fullscreen & downloads behave similar to Windows |
-| Linux | ✅ Usable | AppImage available; runs on any distro |
-| Web | ⚠️ Dev only | Build/run from source; some features (local downloads) disabled |
+Debrify runs everywhere. One codebase, full feature support across all platforms.
 
----
-
-## 🚀 Quick Start
-- **Prefer the easy route?** Grab the latest release artifacts (APK / DMG / Windows setup) from the [GitHub Releases page](https://github.com/varunsalian/debrify/releases).
-- **Want to tinker?** Clone the repo and run `flutter run` on your target device.
+| Platform | Download | Notes |
+|:---------|:---------|:------|
+| **Android** | [APK](https://github.com/varunsalian/debrify/releases) | Phones and tablets |
+| **Android TV** | [APK](https://github.com/varunsalian/debrify/releases) | Full D-pad navigation and remote support |
+| **Windows** | [Installer](https://github.com/varunsalian/debrify/releases) | Windows 10/11 |
+| **macOS** | [DMG](https://github.com/varunsalian/debrify/releases) | Intel and Apple Silicon |
+| **Linux** | [AppImage](https://github.com/varunsalian/debrify/releases) | Requires libmpv ([see install notes](#linux)) |
+| **iOS** | [IPA](https://github.com/varunsalian/debrify/releases) | Unsigned — requires sideloading ([guide](docs/iOS-Installation.md)) |
 
 ---
 
-## 📦 Installation Details
+## 🚀 Installation
 
-### Android Phone/TV
-1. Download the APK from the [GitHub Releases page](https://github.com/varunsalian/debrify/releases)
-2. Install the APK on your Android device (you can use file managers like Downloader or X-plore for TV, or install via ADB)
-
-The app automatically detects Android TV and optimizes the UI for D-pad navigation and remote controls.
-
-### iOS (iPhone/iPad)
-1. Download the unsigned IPA from the [GitHub Releases page](https://github.com/varunsalian/debrify/releases)
-2. Install using **AltStore** (recommended) or **Sideloadly**
-3. See the full [iOS Installation Guide](docs/iOS-Installation.md) for detailed instructions
-
-> Note: Sideloaded apps expire after 7 days due to Apple restrictions. AltStore can auto-refresh if your computer is on the same network.
+### Android / Android TV
+Download the APK from [Releases](https://github.com/varunsalian/debrify/releases) and install. On TV, use a file manager app like Downloader or install via ADB.
 
 ### Windows
-1. Download `debrify-<version>-setup.exe`
-2. Run the installer (expect SmartScreen on first run since it’s self-signed)
-3. Launch from Start Menu; downloads land in `C:\Users\<you>\Downloads\Debrify`
+Download the installer, run it, and launch from the Start Menu. First run may trigger SmartScreen—click "More info" → "Run anyway".
 
 ### macOS
-1. Download `debrify-<version>.dmg`
-2. Drag **Debrify** into **Applications**
-3. First launch may require Control+Open because the app isn't notarized yet
+Download the DMG, drag Debrify to Applications. First launch: right-click → Open (app is not notarized).
 
 ### Linux
-1. Download `debrify-<version>-x86_64.AppImage`
-2. Install the required dependency:
-   ```bash
-   sudo apt install libmpv2        # Ubuntu 24.04+
-   sudo apt install libmpv1        # Ubuntu 22.04 / Debian
-   sudo dnf install mpv-libs       # Fedora
-   sudo pacman -S mpv              # Arch
-   ```
-3. Make it executable: `chmod +x debrify-*.AppImage`
-4. Run it: `./debrify-*.AppImage`
+```bash
+# Install libmpv (required)
+sudo apt install libmpv2        # Ubuntu 24.04+
+sudo apt install libmpv1        # Ubuntu 22.04 / Debian
+sudo dnf install mpv-libs       # Fedora
+sudo pacman -S mpv              # Arch
 
-> ⚠️ **Note:** Linux builds are untested. If you encounter issues, please [open an issue](../../issues).
+# Run the AppImage
+chmod +x debrify-*.AppImage
+./debrify-*.AppImage
+```
 
-### Web (from source)
+### iOS
+Download the unsigned IPA and sideload using **AltStore** or **Sideloadly**. See the [iOS Installation Guide](docs/iOS-Installation.md) for step-by-step instructions.
+
+> **Note:** Sideloaded apps require re-signing every 7 days. AltStore can handle this automatically.
+
+---
+
+## 🔌 Provider Support
+
+| Feature | Real-Debrid | Torbox | PikPak |
+|:--------|:-----------:|:------:|:------:|
+| Stream files | ✅ | ✅ | ✅ |
+| Download files | ✅ | ✅ | ✅ |
+| Browse cloud storage | ✅ | ✅ | ✅ |
+| Add magnets/links | ✅ | ✅ | ✅ |
+| Playlists | ✅ | ✅ | ✅ |
+| Episode tracking | ✅ | ✅ | ✅ |
+
+---
+
+## 🛠️ Building from Source
+
 ```bash
 git clone https://github.com/varunsalian/debrify.git
 cd debrify
@@ -108,71 +156,50 @@ flutter pub get
 flutter run
 ```
 
----
-
-## 🛠️ Build & Release Notes
-- `flutter build apk --release` – local Android release build
-- `flutter build ios --release --no-codesign` – local iOS build (unsigned)
-- `flutter build macos --release` – produces `build/macos/Build/Products/Release/debrify.app`
-- `flutter build windows --release` – generates the runner binaries used by the Inno Setup installer
-- `flutter build linux --release` – produces the Linux bundle
-- GitHub Actions workflow (`.github/workflows/build.yml`) builds APK, IPA, DMG, Windows installer, and Linux AppImage on tagged releases.
-
----
-
-## 📺 Episode Tracking Deep-Dive
-- ✅ **Automatic detection** of finished episodes with persistent markers
-- 🎯 **State restoration** for current, last played, and completed content
-- 📂 **Playlist integration** showing progress across different entry points
-- 🗂️ **Season-aware storage** so you can jump between seasons without losing place
-
-Under the hood, progress is stored via `StorageService` and enriched by `EpisodeInfoService` (TVMaze).
-
----
-
-## 🧱 Tech Stack
-- **Flutter** (Material 3, Google Fonts, Animations)
-- **media_kit / media_kit_video** for the player
-- **background_downloader** + custom queue logic for downloads
-- **Real-Debrid & Torbox APIs** wrapped in `DebridService`
-- **Provider** for lightweight state management
-- **window_manager** (desktop) for window control
+**Build commands:**
+```bash
+flutter build apk --release              # Android
+flutter build ios --release --no-codesign # iOS (unsigned)
+flutter build windows --release          # Windows
+flutter build macos --release            # macOS
+flutter build linux --release            # Linux
+```
 
 ---
 
 ## 🗺️ Roadmap
-- [ ] Polish desktop UX (window chrome, settings panels)
-- [ ] Expand download manager reliability on Windows/macOS
-- [ ] Add in-app release notes and update prompts
-- [ ] Bundle optional analytics/telemetry toggle for debugging
-- [ ] Improve automated tests and CI coverage
 
-Have ideas? [Open an issue](../../issues) or send a PR.
+- [ ] Enhanced desktop UX
+- [ ] In-app update notifications
+- [ ] More search engine plugins
+- [ ] Improved test coverage
 
 ---
 
 ## 🤝 Contributing
-1. Fork the repo
-2. Create a branch (`git checkout -b feature/amazing-idea`)
-3. Commit your changes (`git commit -am 'feat: add amazing idea'`)
-4. Push (`git push origin feature/amazing-idea`)
-5. Open a pull request 🚀
 
-> Tip: Attach screenshots or screen captures when tweaking UI/UX—they help reviewers a ton.
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit changes: `git commit -am 'Add my feature'`
+4. Push: `git push origin feature/my-feature`
+5. Open a pull request
 
 ---
 
-## 💬 Support
-- Found a bug? [File an issue](../../issues/new/choose)
-- Questions or discussion? Join [r/debrify](https://www.reddit.com/r/debrify/) on Reddit
-- Want to collaborate? PRs are welcome; please include a short summary + testing notes
+## 💬 Community
+
+- **Reddit** — [r/debrify](https://www.reddit.com/r/debrify/) for discussion and tips
+- **Discord** — [Join the server](https://discord.gg/nay3FVtAp) for help and updates
+- **Issues** — [Report bugs](https://github.com/varunsalian/debrify/issues) or request features
 
 ---
 
 ## 📄 License
-Debrify is released under the [Polyform Noncommercial License 1.0.0](LICENSE). You can use, modify, and share for personal/noncommercial purposes. Commercial use is not permitted.
+
+Debrify is released under the [Polyform Noncommercial License 1.0.0](LICENSE). Free for personal use. Commercial use is not permitted.
 
 ---
 
-## 📌 Version
-Current release: **0.2.0** (see [`pubspec.yaml`](pubspec.yaml))
+<p align="center">
+  <sub>Current version: <strong>0.2.1</strong></sub>
+</p>
