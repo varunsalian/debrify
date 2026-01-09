@@ -7320,7 +7320,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 enabled: hasAnyVideo,
                                 autofocus: isRarArchive && hasAnyVideo,
                                 onTap: () async {
-                                  Navigator.of(ctx).pop();
+                                  // Don't pop - let dialog stay so it's visible when user returns from player
                                   await _playFromResult(
                                     links: links,
                                     files: files,
