@@ -541,6 +541,12 @@ class _SettingsLayout extends StatelessWidget {
                 onTap: () => launchUrl(Uri.parse('https://www.reddit.com/r/debrify/')),
               ),
               _SettingsTile(
+                icon: Icons.chat_rounded,
+                title: 'Discord',
+                subtitle: 'Join for help, updates, and discussion',
+                onTap: () => launchUrl(Uri.parse('https://discord.gg/nay3FVtAp')),
+              ),
+              _SettingsTile(
                 icon: Icons.code_rounded,
                 title: 'GitHub',
                 subtitle: 'Source code and contributions',
