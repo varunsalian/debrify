@@ -27,6 +27,17 @@
 
 ---
 
+<p align="center">
+  <img src="assets/screenshots/search.png" alt="Search" width="49%">
+  <img src="assets/screenshots/downloads.png" alt="Downloads" width="49%">
+</p>
+<p align="center">
+  <img src="assets/screenshots/player.png" alt="Player" width="49%">
+  <img src="assets/screenshots/episodes.png" alt="Episodes" width="49%">
+</p>
+
+---
+
 ## What is Debrify?
 
 Debrify is a **debrid manager** that lets you browse, stream, and download content from your debrid accounts—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, and an **optional plugin system** for torrent search engines.
@@ -80,11 +91,29 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 </tr>
 </table>
 
-### Additional Features
-- **Playlists** — Organize content with auto-ordering for TV episodes
-- **Episode tracking** — TVMaze integration for series progress
-- **Debrify TV Mode** — Lean-back interface for Android TV with autoplay queues
-- **Material 3 UI** — Modern dark theme with smooth animations
+---
+
+## 📺 Android TV Mode
+
+A dedicated lean-back experience for your living room.
+
+<p align="center">
+  <img src="assets/screenshots/tv-player.png" alt="TV Player" width="70%">
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/tv-player-channel.png" alt="TV Player Channel Mode" width="70%">
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/tv-channels.png" alt="TV Channels" width="49%">
+  <img src="assets/screenshots/tv-guide.png" alt="TV Guide" width="49%">
+</p>
+
+- **Remote-friendly player** — Full playback controls with D-pad navigation
+- **Channel mode** — Watch content like cable TV with channel numbers
+- **Channel-based browsing** — Organize content into genre channels
+- **Quick channel guide** — Switch channels on the fly
 
 ---
 
