@@ -201,5 +201,5 @@ Debrify is released under the [Polyform Noncommercial License 1.0.0](LICENSE). F
 ---
 
 <p align="center">
-  <sub>Current version: <strong>0.2.1</strong></sub>
+  <sub>Current version: <strong>0.2.2</strong></sub>
 </p>
