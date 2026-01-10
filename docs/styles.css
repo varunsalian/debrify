@@ -282,10 +282,10 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 }
 
 .hero .container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 60px;
+    display: flex;
+    flex-direction: column;
     align-items: center;
+    text-align: center;
 }
 
 .hero-content {
@@ -314,12 +314,15 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
     font-size: 1.25rem;
     color: var(--text-muted);
     margin-bottom: 40px;
-    max-width: 540px;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .hero-buttons {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 16px;
     margin-bottom: 48px;
 }
@@ -327,6 +330,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 .hero-platforms {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 16px;
 }
 
