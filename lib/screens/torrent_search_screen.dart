@@ -907,7 +907,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Use IMDB search when we have an advanced selection, otherwise keyword search
       if (selection != null && selection.imdbId.trim().isNotEmpty) {
         debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}, isMovie=${!selection.isSeries}, title=${selection.title}');
-        result = await TorrentService.searchByImdb(
+        result = await TorrentService.searchByImdbWithStremio(
           selection.imdbId,
           engineStates: _engineStates,
           isMovie: !selection.isSeries,

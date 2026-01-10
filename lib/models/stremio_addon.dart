@@ -1,0 +1,338 @@
+/// Represents a Stremio addon that can be used for torrent search.
+///
+/// Stremio addons follow a standard protocol where:
+/// - `/manifest.json` describes the addon capabilities
+/// - `/stream/{type}/{id}.json` returns torrent streams for content
+///
+/// The manifest URL contains all configuration (debrid keys, filters, etc.)
+/// already embedded, so we just store and use the full URL.
+class StremioAddon {
+  /// Unique identifier for this addon (derived from manifest id)
+  final String id;
+
+  /// Human-readable name from manifest
+  final String name;
+
+  /// The full manifest URL (includes any configuration)
+  final String manifestUrl;
+
+  /// Base URL derived from manifest URL (without /manifest.json)
+  final String baseUrl;
+
+  /// Optional description from manifest
+  final String? description;
+
+  /// Optional version from manifest
+  final String? version;
+
+  /// Whether this addon is enabled for searches
+  final bool enabled;
+
+  /// Content types this addon supports (e.g., 'movie', 'series')
+  final List<String> types;
+
+  /// Resources this addon provides (e.g., 'stream', 'catalog')
+  final List<String> resources;
+
+  /// Optional ID prefixes this addon handles (e.g., 'tt' for IMDB)
+  final List<String>? idPrefixes;
+
+  /// When this addon was added
+  final DateTime addedAt;
+
+  /// Last time the manifest was fetched/validated
+  final DateTime? lastChecked;
+
+  StremioAddon({
+    required this.id,
+    required this.name,
+    required this.manifestUrl,
+    required this.baseUrl,
+    this.description,
+    this.version,
+    this.enabled = true,
+    this.types = const [],
+    this.resources = const [],
+    this.idPrefixes,
+    DateTime? addedAt,
+    this.lastChecked,
+  }) : addedAt = addedAt ?? DateTime.now();
+
+  /// Whether this addon supports streaming (has 'stream' resource)
+  bool get supportsStreams => resources.contains('stream');
+
+  /// Whether this addon supports movies
+  bool get supportsMovies => types.contains('movie');
+
+  /// Whether this addon supports series/TV shows
+  bool get supportsSeries => types.contains('series');
+
+  /// Whether this addon handles IMDB IDs
+  bool get handlesImdbIds =>
+      idPrefixes == null ||
+      idPrefixes!.isEmpty ||
+      idPrefixes!.any((p) => p == 'tt' || p.startsWith('tt'));
+
+  /// Create from manifest JSON response
+  factory StremioAddon.fromManifest(
+    Map<String, dynamic> manifest,
+    String manifestUrl,
+  ) {
+    final id = manifest['id'] as String? ?? 'unknown';
+    final name = manifest['name'] as String? ?? 'Unknown Addon';
+    final description = manifest['description'] as String?;
+    final version = manifest['version'] as String?;
+
+    // Parse types
+    final typesRaw = manifest['types'];
+    final types = <String>[];
+    if (typesRaw is List) {
+      for (final t in typesRaw) {
+        if (t is String) types.add(t);
+      }
+    }
+
+    // Parse resources - can be list of strings or list of objects
+    final resourcesRaw = manifest['resources'];
+    final resources = <String>[];
+    if (resourcesRaw is List) {
+      for (final r in resourcesRaw) {
+        if (r is String) {
+          resources.add(r);
+        } else if (r is Map) {
+          final name = r['name'] as String?;
+          if (name != null) resources.add(name);
+        }
+      }
+    }
+
+    // Parse idPrefixes
+    final idPrefixesRaw = manifest['idPrefixes'];
+    List<String>? idPrefixes;
+    if (idPrefixesRaw is List) {
+      idPrefixes = [];
+      for (final p in idPrefixesRaw) {
+        if (p is String) idPrefixes.add(p);
+      }
+    }
+
+    // Derive base URL from manifest URL
+    String baseUrl = manifestUrl;
+    if (baseUrl.endsWith('/manifest.json')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - '/manifest.json'.length);
+    }
+
+    return StremioAddon(
+      id: id,
+      name: name,
+      manifestUrl: manifestUrl,
+      baseUrl: baseUrl,
+      description: description,
+      version: version,
+      types: types,
+      resources: resources,
+      idPrefixes: idPrefixes,
+      lastChecked: DateTime.now(),
+    );
+  }
+
+  /// Create from stored JSON
+  factory StremioAddon.fromJson(Map<String, dynamic> json) {
+    return StremioAddon(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      manifestUrl: json['manifest_url'] as String,
+      baseUrl: json['base_url'] as String,
+      description: json['description'] as String?,
+      version: json['version'] as String?,
+      enabled: json['enabled'] as bool? ?? true,
+      types: (json['types'] as List<dynamic>?)?.cast<String>() ?? [],
+      resources: (json['resources'] as List<dynamic>?)?.cast<String>() ?? [],
+      idPrefixes: (json['id_prefixes'] as List<dynamic>?)?.cast<String>(),
+      addedAt: json['added_at'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['added_at'] as int)
+          : DateTime.now(),
+      lastChecked: json['last_checked'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['last_checked'] as int)
+          : null,
+    );
+  }
+
+  /// Convert to JSON for storage
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'manifest_url': manifestUrl,
+      'base_url': baseUrl,
+      if (description != null) 'description': description,
+      if (version != null) 'version': version,
+      'enabled': enabled,
+      'types': types,
+      'resources': resources,
+      if (idPrefixes != null) 'id_prefixes': idPrefixes,
+      'added_at': addedAt.millisecondsSinceEpoch,
+      if (lastChecked != null)
+        'last_checked': lastChecked!.millisecondsSinceEpoch,
+    };
+  }
+
+  /// Create a copy with updated fields
+  StremioAddon copyWith({
+    String? id,
+    String? name,
+    String? manifestUrl,
+    String? baseUrl,
+    String? description,
+    String? version,
+    bool? enabled,
+    List<String>? types,
+    List<String>? resources,
+    List<String>? idPrefixes,
+    DateTime? addedAt,
+    DateTime? lastChecked,
+  }) {
+    return StremioAddon(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      manifestUrl: manifestUrl ?? this.manifestUrl,
+      baseUrl: baseUrl ?? this.baseUrl,
+      description: description ?? this.description,
+      version: version ?? this.version,
+      enabled: enabled ?? this.enabled,
+      types: types ?? this.types,
+      resources: resources ?? this.resources,
+      idPrefixes: idPrefixes ?? this.idPrefixes,
+      addedAt: addedAt ?? this.addedAt,
+      lastChecked: lastChecked ?? this.lastChecked,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'StremioAddon(id: $id, name: $name, enabled: $enabled, '
+        'types: $types, resources: $resources)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is StremioAddon &&
+        other.id == id &&
+        other.manifestUrl == manifestUrl;
+  }
+
+  @override
+  int get hashCode => id.hashCode ^ manifestUrl.hashCode;
+}
+
+/// Represents a stream result from a Stremio addon
+class StremioStream {
+  /// Torrent info hash (if available)
+  final String? infoHash;
+
+  /// Magnet URI (if available)
+  final String? magnetUri;
+
+  /// Direct URL (for non-torrent streams)
+  final String? url;
+
+  /// Stream title/name
+  final String? title;
+
+  /// File index within the torrent (for multi-file torrents)
+  final int? fileIdx;
+
+  /// Optional behavior hints
+  final Map<String, dynamic>? behaviorHints;
+
+  /// Source addon name
+  final String source;
+
+  StremioStream({
+    this.infoHash,
+    this.magnetUri,
+    this.url,
+    this.title,
+    this.fileIdx,
+    this.behaviorHints,
+    required this.source,
+  });
+
+  /// Whether this is a torrent stream (has infoHash or debrid URL)
+  bool get isTorrent =>
+      (infoHash != null && infoHash!.isNotEmpty) ||
+      (url != null && url!.isNotEmpty);
+
+  /// Extract seeders from title if available (common pattern: "seeders: 123")
+  int? get seedersFromTitle {
+    if (title == null) return null;
+    // Common patterns: "👤 123", "S: 123", "seeders: 123"
+    final patterns = [
+      RegExp(r'👤\s*(\d+)'),
+      RegExp(r'\bS:\s*(\d+)'),
+      RegExp(r'seeders?:\s*(\d+)', caseSensitive: false),
+      RegExp(r'\[(\d+)\s*seeds?\]', caseSensitive: false),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(title!);
+      if (match != null) {
+        return int.tryParse(match.group(1) ?? '');
+      }
+    }
+    return null;
+  }
+
+  /// Extract size from title if available
+  String? get sizeFromTitle {
+    if (title == null) return null;
+    // Common patterns: "💾 1.5 GB", "Size: 1.5GB"
+    final pattern = RegExp(
+      r'(?:💾|size:?)\s*([\d.]+\s*(?:GB|MB|TB|KB))',
+      caseSensitive: false,
+    );
+    final match = pattern.firstMatch(title!);
+    return match?.group(1)?.trim();
+  }
+
+  factory StremioStream.fromJson(Map<String, dynamic> json, String source) {
+    String? infoHash = json['infoHash'] as String?;
+    final behaviorHints = json['behaviorHints'] as Map<String, dynamic>?;
+
+    // Try to extract infoHash from behaviorHints.bingeGroup (format: "addon|hash")
+    if (infoHash == null && behaviorHints != null) {
+      final bingeGroup = behaviorHints['bingeGroup'] as String?;
+      if (bingeGroup != null && bingeGroup.contains('|')) {
+        final parts = bingeGroup.split('|');
+        if (parts.length >= 2) {
+          final potentialHash = parts[1];
+          // Validate it looks like a hash (40 hex chars for SHA1)
+          if (potentialHash.length == 40 &&
+              RegExp(r'^[a-fA-F0-9]+$').hasMatch(potentialHash)) {
+            infoHash = potentialHash;
+          }
+        }
+      }
+    }
+
+    // Get title - try description first (Comet uses this), then name, then title
+    String? title = json['description'] as String? ??
+        json['name'] as String? ??
+        json['title'] as String?;
+
+    return StremioStream(
+      infoHash: infoHash,
+      magnetUri: json['magnetUri'] as String? ?? json['magnet'] as String?,
+      url: json['url'] as String?,
+      title: title,
+      fileIdx: json['fileIdx'] as int?,
+      behaviorHints: behaviorHints,
+      source: source,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'StremioStream(infoHash: $infoHash, title: $title, source: $source)';
+  }
+}

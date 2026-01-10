@@ -109,7 +109,6 @@ class TorrentCoverageDetector {
       episodeIdentifier: episodeIdentifier,
     );
 
-    debugPrint('TorrentCoverageDetector: $result');
     return result;
   }
 

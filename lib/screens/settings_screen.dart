@@ -8,6 +8,7 @@ import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/debrify_tv_repository.dart';
+import '../services/stremio_service.dart';
 import '../widgets/shimmer.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/pikpak_settings_page.dart';
@@ -17,6 +18,7 @@ import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
 import 'settings/filter_settings_page.dart';
 import 'settings/engine_import_page.dart';
+import 'settings/stremio_addons_page.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -192,6 +194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenStartupSettings: _openStartupSettings,
       onOpenEngineImportSettings: _openEngineImportSettings,
+      onOpenStremioAddonsSettings: _openStremioAddonsSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
@@ -246,6 +249,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const EngineImportPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openStremioAddonsSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const StremioAddonsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -381,6 +392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearAllPostTorrentActions();
     await StorageService.clearAllDebrifyTvSettings();
     await DebrifyTvRepository.instance.clearAll();
+    await StremioService.instance.clearAllAddons();
     await StorageService.setInitialSetupComplete(false);
     if (!mounted) return;
 
@@ -414,6 +426,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenStartupSettings;
   final Future<void> Function() onOpenEngineImportSettings;
+  final Future<void> Function() onOpenStremioAddonsSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
@@ -427,6 +440,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenPikPakSettings,
     required this.onOpenStartupSettings,
     required this.onOpenEngineImportSettings,
+    required this.onOpenStremioAddonsSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
     required this.onDangerAction,
@@ -467,6 +481,12 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Import Engines',
                 subtitle: 'Import and manage torrent search engines',
                 onTap: onOpenEngineImportSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.stream_rounded,
+                title: 'Stremio Addons',
+                subtitle: 'Connect Stremio addons for more sources',
+                onTap: onOpenStremioAddonsSettings,
               ),
             ],
           ),

@@ -366,13 +366,7 @@ class SeriesParser {
     // VALIDATION
     // If result is empty or too short (likely all metadata), return original
     if (cleaned.isEmpty || cleaned.length < 2) {
-      debugPrint('SeriesParser: cleanCollectionTitle - result too short, returning original: "$originalTitle"');
       return originalTitle;
-    }
-
-    // Log the cleaning if anything changed
-    if (cleaned != originalTitle) {
-      debugPrint('SeriesParser: cleanCollectionTitle - "$originalTitle" → "$cleaned"');
     }
 
     return cleaned;

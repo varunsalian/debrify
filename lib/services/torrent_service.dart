@@ -4,6 +4,7 @@ import '../models/torrent.dart';
 import 'engine/engine_registry.dart';
 import 'engine/dynamic_engine.dart';
 import 'engine/settings_manager.dart';
+import 'stremio_service.dart';
 
 /// Service for searching torrents across multiple dynamic engines.
 ///
@@ -344,6 +345,180 @@ class TorrentService {
       'engineCounts': engineCounts,
       'engineErrors': engineErrors,
     };
+  }
+
+  // ============================================================
+  // Combined Search (Engines + Stremio Addons)
+  // ============================================================
+
+  /// Search by IMDB ID using both YAML engines and Stremio addons.
+  ///
+  /// This combines results from the traditional YAML-based engines and
+  /// any configured Stremio addons for comprehensive torrent discovery.
+  ///
+  /// Parameters:
+  /// - [imdbId]: The IMDB ID (e.g., 'tt1234567')
+  /// - [engineStates]: Optional map of engine ID to enabled state
+  /// - [isMovie]: True for movies, false for TV series
+  /// - [season]: Season number for TV series (optional)
+  /// - [episode]: Episode number for TV series (optional)
+  /// - [includeStremio]: Whether to include Stremio addon results (default: true)
+  ///
+  /// Returns the same format as [searchByImdb] with additional Stremio sources.
+  static Future<Map<String, dynamic>> searchByImdbWithStremio(
+    String imdbId, {
+    Map<String, bool>? engineStates,
+    bool isMovie = true,
+    int? season,
+    int? episode,
+    bool includeStremio = true,
+  }) async {
+    // Start both searches in parallel
+    final List<Future<Map<String, dynamic>>> searchFutures = [
+      // Traditional engine search
+      searchByImdb(
+        imdbId,
+        engineStates: engineStates,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+      ),
+    ];
+
+    // Add Stremio search if enabled
+    if (includeStremio) {
+      searchFutures.add(
+        _searchStremioAddons(
+          imdbId: imdbId,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+        ),
+      );
+    }
+
+    final results = await Future.wait(searchFutures);
+
+    // Combine results
+    final Map<String, int> combinedCounts = {};
+    final Map<String, String> combinedErrors = {};
+    final List<List<Torrent>> allTorrentLists = [];
+
+    for (final result in results) {
+      final torrents = result['torrents'] as List<Torrent>? ?? [];
+      final counts = result['engineCounts'] as Map<String, int>? ?? {};
+      final errors = result['engineErrors'] as Map<String, String>? ??
+          result['addonErrors'] as Map<String, String>? ??
+          {};
+
+      allTorrentLists.add(torrents);
+      combinedCounts.addAll(counts);
+
+      // Also add addon counts if present
+      final addonCounts = result['addonCounts'] as Map<String, int>?;
+      if (addonCounts != null) {
+        combinedCounts.addAll(addonCounts);
+      }
+
+      combinedErrors.addAll(errors);
+    }
+
+    // Log pre-deduplication counts
+    debugPrint('TorrentService: Pre-dedup counts: $combinedCounts');
+
+    // Count total torrents before dedup
+    int totalPreDedup = 0;
+    for (final list in allTorrentLists) {
+      totalPreDedup += list.length;
+    }
+    debugPrint('TorrentService: Total torrents before dedup: $totalPreDedup');
+
+    // Deduplicate and sort all results together
+    final torrents = _deduplicateAndSort(allTorrentLists);
+
+    debugPrint('TorrentService: Total torrents after dedup: ${torrents.length}');
+
+    // Recalculate counts based on actual deduplicated results
+    // This ensures filter counts match what's actually available
+    final Map<String, int> actualCounts = {};
+    for (final torrent in torrents) {
+      final source = torrent.source;
+      actualCounts[source] = (actualCounts[source] ?? 0) + 1;
+    }
+
+    debugPrint('TorrentService: Post-dedup counts by source: $actualCounts');
+
+    // Log the difference
+    for (final key in combinedCounts.keys) {
+      final pre = combinedCounts[key] ?? 0;
+      final post = actualCounts[key] ?? 0;
+      if (pre != post) {
+        debugPrint('TorrentService: $key: $pre -> $post (${post - pre})');
+      }
+    }
+
+    debugPrint(
+      'TorrentService: Combined search returned ${torrents.length} unique torrents '
+      'from ${actualCounts.length} sources',
+    );
+
+    return {
+      'torrents': torrents,
+      'engineCounts': actualCounts,
+      'engineErrors': combinedErrors,
+    };
+  }
+
+  /// Search Stremio addons for streams
+  static Future<Map<String, dynamic>> _searchStremioAddons({
+    required String imdbId,
+    required bool isMovie,
+    int? season,
+    int? episode,
+  }) async {
+    try {
+      final stremioService = StremioService.instance;
+      final hasAddons = await stremioService.hasEnabledAddons();
+
+      if (!hasAddons) {
+        return {
+          'torrents': <Torrent>[],
+          'addonCounts': <String, int>{},
+          'addonErrors': <String, String>{},
+        };
+      }
+
+      final type = isMovie ? 'movie' : 'series';
+      final result = await stremioService.searchStreams(
+        type: type,
+        imdbId: imdbId,
+        season: season,
+        episode: episode,
+      );
+
+      return {
+        'torrents': result['torrents'] as List<Torrent>? ?? [],
+        'addonCounts': result['addonCounts'] as Map<String, int>? ?? {},
+        'addonErrors': result['addonErrors'] as Map<String, String>? ?? {},
+      };
+    } catch (e) {
+      debugPrint('TorrentService: Stremio addon search error: $e');
+      return {
+        'torrents': <Torrent>[],
+        'addonCounts': <String, int>{},
+        'addonErrors': <String, String>{'Stremio': e.toString()},
+      };
+    }
+  }
+
+  /// Check if any Stremio addons are configured
+  static Future<bool> hasStremioAddons() async {
+    return StremioService.instance.hasEnabledAddons();
+  }
+
+  /// Get count of enabled Stremio addons
+  static Future<int> getStremioAddonCount() async {
+    return StremioService.instance.getEnabledAddonCount();
   }
 
   // ============================================================
