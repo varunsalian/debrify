@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debrify - Stream & Download from Your Debrid Accounts</title>
+    <meta name="description" content="Debrify is a cross-platform debrid manager for Real-Debrid, Torbox, and PikPak. Stream and download content on Android, iOS, Windows, macOS, Linux, and Android TV.">
+    <meta name="keywords" content="debrid manager, Real-Debrid app, Torbox app, PikPak, streaming app, torrent streaming, Android TV debrid, debrid media manager">
+    <meta name="author" content="Debrify">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Debrify - Stream & Download from Your Debrid Accounts">
+    <meta property="og:description" content="The all-in-one debrid manager for Real-Debrid, Torbox, and PikPak. Works on all your devices.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="assets/screenshots/search-desktop.png">
+
+    <!-- Favicon (placeholder - replace with actual favicon) -->
+    <link rel="icon" type="image/png" href="assets/favicon.png">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="#" class="logo">
+                <span class="logo-text">Debrify</span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#screenshots">Screenshots</a>
+                <a href="#platforms">Platforms</a>
+                <a href="#download" class="btn btn-primary btn-sm">Download</a>
+            </div>
+            <button class="mobile-menu-btn" aria-label="Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-bg"></div>
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-badge">Works with Real-Debrid, Torbox & PikPak</div>
+                <h1>Stream & Download<br><span class="gradient-text">Effortlessly</span></h1>
+                <p class="hero-subtitle">Debrify connects to your debrid accounts and lets you browse, stream, and download content across all your devices. No seedbox needed.</p>
+                <div class="hero-buttons">
+                    <a href="#download" class="btn btn-primary btn-lg">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download Now
+                    </a>
+                    <a href="https://github.com/varunsalian/debrify" target="_blank" class="btn btn-secondary btn-lg">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                        View on GitHub
+                    </a>
+                </div>
+                <div class="hero-platforms">
+                    <span>Available on:</span>
+                    <div class="platform-icons">
+                        <div class="platform-icon" title="Android">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4483-.9993.9993-.9993c.5511 0 .9993.4483.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4483.9993.9993 0 .5511-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3435-4.1021-2.6892-7.5743-6.1185-9.4396"/></svg>
+                        </div>
+                        <div class="platform-icon" title="Android TV">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+                        </div>
+                        <div class="platform-icon" title="Windows">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                        </div>
+                        <div class="platform-icon" title="macOS">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                        </div>
+                        <div class="platform-icon" title="Linux">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12.504 0c-.155 0-.311.003-.467.008a7.143 7.143 0 00-.378.022c-.249.019-.498.05-.747.094a4.967 4.967 0 00-1.373.452c-.278.131-.552.288-.815.47-.257.178-.503.381-.739.607-.236.226-.456.476-.659.746-.191.258-.366.536-.52.831a4.89 4.89 0 00-.366.913c-.094.3-.17.608-.227.92a6.71 6.71 0 00-.112.979 7.03 7.03 0 00.003.686c.021.255.057.508.106.757.051.256.115.507.19.752.079.253.172.499.277.736.111.251.238.494.376.726.148.247.312.483.49.706.192.241.401.468.625.678.239.223.495.427.766.609.294.195.605.366.928.51.356.158.73.281 1.116.363.432.092.879.137 1.326.134.428-.002.857-.044 1.281-.13.38-.075.753-.189 1.114-.34a5.55 5.55 0 00.928-.5c.27-.178.526-.38.766-.605.226-.212.437-.443.632-.687.181-.225.347-.464.497-.714.14-.236.269-.483.382-.738.106-.238.2-.486.28-.74.076-.247.14-.501.191-.758.049-.25.085-.504.106-.76a7.09 7.09 0 00.003-.687 6.717 6.717 0 00-.113-.98 5.688 5.688 0 00-.227-.919 4.875 4.875 0 00-.366-.912c-.154-.295-.33-.573-.52-.83a5.023 5.023 0 00-.66-.747 5.2 5.2 0 00-.739-.606 4.86 4.86 0 00-.815-.47 4.957 4.957 0 00-1.373-.452 6.296 6.296 0 00-.747-.094 7.163 7.163 0 00-.378-.022A8.053 8.053 0 0012.504 0zm.196 1.593a5.33 5.33 0 01.329.006c.087.003.174.008.26.016.084.008.167.02.25.034a3.4 3.4 0 01.942.312c.19.09.374.2.547.325.168.122.327.26.476.412.149.152.286.318.41.497.115.167.218.346.305.535.08.174.146.357.197.546.046.172.08.35.1.53.017.164.025.332.023.501a5.23 5.23 0 01-.021.418c-.013.155-.036.309-.067.462a3.81 3.81 0 01-.138.521c-.061.192-.136.378-.223.557a3.63 3.63 0 01-.294.492c-.115.176-.245.34-.387.493a3.76 3.76 0 01-.476.435c-.174.141-.36.265-.556.372a3.7 3.7 0 01-.628.26c-.232.073-.475.117-.723.134a4.98 4.98 0 01-.745-.006 3.685 3.685 0 01-.644-.102 3.638 3.638 0 01-.591-.207 3.51 3.51 0 01-.54-.308 3.647 3.647 0 01-.473-.397 3.79 3.79 0 01-.404-.466 3.64 3.64 0 01-.317-.518 3.706 3.706 0 01-.224-.555 3.82 3.82 0 01-.134-.574 4.17 4.17 0 01-.053-.501 4.55 4.55 0 01.011-.501c.018-.18.048-.359.09-.535.045-.19.104-.375.175-.554.077-.192.169-.377.272-.553.113-.191.24-.371.38-.538.152-.181.318-.349.497-.502.194-.165.402-.313.622-.441a3.84 3.84 0 01.69-.298 3.75 3.75 0 01.754-.143zm-2.406 5.42c-.08.134-.138.285-.172.445a1.91 1.91 0 00-.032.507c.014.194.063.385.146.561.09.191.219.36.381.495.178.148.39.255.62.315.251.065.518.073.773.024a1.82 1.82 0 00.692-.307c.188-.144.341-.33.448-.543a1.71 1.71 0 00.165-.639 1.79 1.79 0 00-.066-.564 1.668 1.668 0 00-.236-.489 1.682 1.682 0 00-.399-.389 1.727 1.727 0 00-.526-.246 1.83 1.83 0 00-.586-.068c-.212.01-.42.057-.615.139-.185.077-.357.19-.507.332-.139.132-.255.288-.345.46zm4.87.007a1.657 1.657 0 00-.345.465 1.67 1.67 0 00-.236.489 1.79 1.79 0 00-.066.564c.012.222.07.44.165.639.107.213.26.399.448.543.195.153.427.259.673.311.269.057.55.049.815-.023.23-.061.442-.168.62-.315.162-.135.291-.304.38-.495a1.67 1.67 0 00.147-.561 1.89 1.89 0 00-.033-.507 1.54 1.54 0 00-.172-.445 1.673 1.673 0 00-.507-.527 1.728 1.728 0 00-.615-.246 1.83 1.83 0 00-.586.007c-.212.03-.416.096-.602.192-.186.095-.352.224-.49.378-.127.142-.231.303-.307.48zm-5.446 3.196c-.238.276-.437.583-.593.913a4.28 4.28 0 00-.35 1.029 4.47 4.47 0 00-.088 1.088c.016.38.08.758.19 1.123.121.402.296.785.52 1.14.24.38.53.725.864 1.027.358.323.763.593 1.2.802a5.61 5.61 0 001.37.478c.498.102 1.01.131 1.519.086a5.55 5.55 0 001.475-.32 5.27 5.27 0 001.3-.65 5.01 5.01 0 001.05-.958c.296-.342.548-.72.748-1.124.184-.373.323-.77.413-1.18a4.52 4.52 0 00.105-1.165 4.32 4.32 0 00-.167-1.059 4.15 4.15 0 00-.394-.955 3.84 3.84 0 00-.553-.8c.08.347.124.705.132 1.066.007.347-.023.695-.09 1.037-.071.362-.183.715-.335 1.05-.162.358-.368.694-.614 1.002-.259.326-.563.615-.902.859a4.64 4.64 0 01-1.101.575 4.96 4.96 0 01-1.22.3 5.27 5.27 0 01-1.266-.003 4.93 4.93 0 01-1.21-.286 4.6 4.6 0 01-1.11-.566 4.326 4.326 0 01-.919-.862 4.08 4.08 0 01-.624-1.09 4.11 4.11 0 01-.268-1.206 4.21 4.21 0 01.06-1.06c.063-.34.167-.671.31-.987z"/></svg>
+                        </div>
+                        <div class="platform-icon" title="iOS">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-image">
+                <div class="hero-screenshot-wrapper">
+                    <img src="assets/screenshots/search-desktop.png" alt="Debrify Desktop App - Torrent Search" class="hero-screenshot">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Providers Section -->
+    <section class="providers">
+        <div class="container">
+            <div class="providers-grid">
+                <div class="provider-card">
+                    <div class="provider-logo rd">RD</div>
+                    <h3>Real-Debrid</h3>
+                    <p>Full integration with torrents, downloads, and streaming</p>
+                </div>
+                <div class="provider-card">
+                    <div class="provider-logo tb">TB</div>
+                    <h3>Torbox</h3>
+                    <p>Complete support for all Torbox features</p>
+                </div>
+                <div class="provider-card">
+                    <div class="provider-logo pp">PP</div>
+                    <h3>PikPak</h3>
+                    <p>Cloud storage integration with streaming</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>Everything You Need</h2>
+                <p>One app to manage all your debrid content</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </div>
+                    <h3>Torrent Search</h3>
+                    <p>Search multiple sources with IMDB integration. Filter by quality, size, and seeders. One-click add to any provider.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                    </div>
+                    <h3>Built-in Player</h3>
+                    <p>Native video playback with resume support, subtitle customization, audio track selection, and gesture controls.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    </div>
+                    <h3>Download Manager</h3>
+                    <p>Background downloads with pause and resume. Queue multiple files and track progress in real-time.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                            <polyline points="17 2 12 7 7 2"></polyline>
+                        </svg>
+                    </div>
+                    <h3>Magic TV Mode</h3>
+                    <p>Purpose-built Android TV experience with channel mode, D-pad navigation, and a lean-back interface.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="8" y1="6" x2="21" y2="6"></line>
+                            <line x1="8" y1="12" x2="21" y2="12"></line>
+                            <line x1="8" y1="18" x2="21" y2="18"></line>
+                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                    </div>
+                    <h3>Playlists & Series</h3>
+                    <p>Organize content into playlists. Auto-track episode progress and continue where you left off.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                        </svg>
+                    </div>
+                    <h3>Plugin System</h3>
+                    <p>Extensible search with YAML-based engines and Stremio addon support. Community-built plugins available.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Screenshots Section -->
+    <section id="screenshots" class="screenshots">
+        <div class="container">
+            <div class="section-header">
+                <h2>See It In Action</h2>
+                <p>Desktop, mobile, and TV - all from one codebase</p>
+            </div>
+
+            <div class="screenshot-tabs">
+                <button class="tab-btn active" data-tab="desktop">Desktop</button>
+                <button class="tab-btn" data-tab="tv">Android TV</button>
+            </div>
+
+            <div class="screenshot-content">
+                <!-- Desktop Screenshots -->
+                <div class="tab-panel active" id="desktop">
+                    <div class="screenshot-gallery">
+                        <div class="screenshot-item" data-title="Torrent Search">
+                            <img src="assets/screenshots/search-desktop.png" alt="Torrent Search with multiple providers">
+                            <div class="screenshot-label">Search torrents across multiple providers</div>
+                        </div>
+                        <div class="screenshot-item" data-title="IMDB Integration">
+                            <img src="assets/screenshots/imdb-search.png" alt="IMDB movie search">
+                            <div class="screenshot-label">Search by movie or TV show name</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Download Manager">
+                            <img src="assets/screenshots/downloads.png" alt="Download manager">
+                            <div class="screenshot-label">Track downloads with pause & resume</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Video Player">
+                            <img src="assets/screenshots/video-player.png" alt="Built-in video player">
+                            <div class="screenshot-label">Built-in player with full controls</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Series View">
+                            <img src="assets/screenshots/series-view.png" alt="Series episode view">
+                            <div class="screenshot-label">Browse series with episode details</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Playlist">
+                            <img src="assets/screenshots/playlist.png" alt="Playlist view">
+                            <div class="screenshot-label">Organize favorites into playlists</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Cloud Storage">
+                            <img src="assets/screenshots/real-debrid.png" alt="Real-Debrid cloud view">
+                            <div class="screenshot-label">Browse your debrid cloud storage</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Episode Picker">
+                            <img src="assets/screenshots/episode-picker.png" alt="Episode selection modal">
+                            <div class="screenshot-label">Easy episode selection</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TV Screenshots -->
+                <div class="tab-panel" id="tv">
+                    <div class="screenshot-gallery">
+                        <div class="screenshot-item" data-title="TV Channels">
+                            <img src="assets/screenshots/tv-channels.png" alt="Magic TV channel grid">
+                            <div class="screenshot-label">Channel grid - like cable TV</div>
+                        </div>
+                        <div class="screenshot-item" data-title="TV Player">
+                            <img src="assets/screenshots/tv-player.png" alt="TV video player controls">
+                            <div class="screenshot-label">Remote-friendly player controls</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Channel Mode">
+                            <img src="assets/screenshots/tv-channel-mode.png" alt="Channel mode playback">
+                            <div class="screenshot-label">Watch with channel numbers</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Channel Guide">
+                            <img src="assets/screenshots/tv-guide.png" alt="TV channel guide">
+                            <div class="screenshot-label">Quick channel switching</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Episode Browser">
+                            <img src="assets/screenshots/tv-episodes.png" alt="TV episode browser">
+                            <div class="screenshot-label">Browse episodes with D-pad</div>
+                        </div>
+                        <div class="screenshot-item" data-title="Subtitle Settings">
+                            <img src="assets/screenshots/tv-subtitles.png" alt="Subtitle customization">
+                            <div class="screenshot-label">Customize subtitle appearance</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Platforms Section -->
+    <section id="platforms" class="platforms">
+        <div class="container">
+            <div class="section-header">
+                <h2>One App, All Platforms</h2>
+                <p>Built with Flutter for true cross-platform support</p>
+            </div>
+            <div class="platforms-grid">
+                <div class="platform-card">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4483-.9993.9993-.9993c.5511 0 .9993.4483.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4483.9993.9993 0 .5511-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3435-4.1021-2.6892-7.5743-6.1185-9.4396"/></svg>
+                    <h3>Android</h3>
+                    <p>Phones & Tablets</p>
+                </div>
+                <div class="platform-card">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
+                    <h3>Android TV</h3>
+                    <p>Living Room Ready</p>
+                </div>
+                <div class="platform-card">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                    <h3>Windows</h3>
+                    <p>Windows 10/11</p>
+                </div>
+                <div class="platform-card">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                    <h3>macOS</h3>
+                    <p>Intel & Apple Silicon</p>
+                </div>
+                <div class="platform-card">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M12.504 0c-.155 0-.311.003-.467.008-.147.005-.294.013-.44.024-.249.019-.498.05-.747.094a4.967 4.967 0 00-1.373.452c-.278.131-.552.288-.815.47-.257.178-.503.381-.739.607-.236.226-.456.476-.659.746-.191.258-.366.536-.52.831a4.89 4.89 0 00-.366.913c-.094.3-.17.608-.227.92a6.71 6.71 0 00-.112.979 7.03 7.03 0 00.003.686c.021.255.057.508.106.757.051.256.115.507.19.752.079.253.172.499.277.736.111.251.238.494.376.726.148.247.312.483.49.706.192.241.401.468.625.678.239.223.495.427.766.609.294.195.605.366.928.51.356.158.73.281 1.116.363.432.092.879.137 1.326.134.428-.002.857-.044 1.281-.13.38-.075.753-.189 1.114-.34a5.55 5.55 0 00.928-.5c.27-.178.526-.38.766-.605.226-.212.437-.443.632-.687.181-.225.347-.464.497-.714.14-.236.269-.483.382-.738.106-.238.2-.486.28-.74.076-.247.14-.501.191-.758.049-.25.085-.504.106-.76a7.09 7.09 0 00.003-.687 6.717 6.717 0 00-.113-.98 5.688 5.688 0 00-.227-.919 4.875 4.875 0 00-.366-.912c-.154-.295-.33-.573-.52-.83a5.023 5.023 0 00-.66-.747 5.2 5.2 0 00-.739-.606 4.86 4.86 0 00-.815-.47 4.957 4.957 0 00-1.373-.452 6.296 6.296 0 00-.747-.094 7.163 7.163 0 00-.44-.024A8.053 8.053 0 0012.504 0zm-.001 1.5c.14 0 .279.002.419.007.131.005.263.012.394.023.247.02.494.054.739.102.267.052.529.126.784.222.267.1.524.224.77.37.258.153.501.332.726.533.237.212.455.448.651.703.208.27.392.563.55.873.169.332.304.684.402 1.048.106.393.175.8.206 1.212.034.458.029.923-.016 1.384a7.18 7.18 0 01-.219 1.225 6.13 6.13 0 01-.39 1.076c-.16.328-.354.636-.578.92a5.13 5.13 0 01-.718.773 5.3 5.3 0 01-.845.625c-.302.183-.624.333-.96.45a5.85 5.85 0 01-1.067.26 6.98 6.98 0 01-1.14.068 6.4 6.4 0 01-1.098-.116 5.78 5.78 0 01-1.018-.32 5.24 5.24 0 01-.897-.5 5.07 5.07 0 01-.772-.656 5.02 5.02 0 01-.617-.785 4.94 4.94 0 01-.443-.883 5.24 5.24 0 01-.273-1.006 5.97 5.97 0 01-.091-1.037c.002-.372.034-.744.096-1.11a5.1 5.1 0 01.279-.972 4.59 4.59 0 01.457-.88c.186-.283.404-.543.65-.777.259-.247.546-.463.857-.645.324-.19.67-.343 1.032-.458a5.27 5.27 0 011.144-.227c.2-.018.402-.027.604-.027z"/></svg>
+                    <h3>Linux</h3>
+                    <p>AppImage</p>
+                </div>
+                <div class="platform-card">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                    <h3>iOS</h3>
+                    <p>Sideload via AltStore</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download">
+        <div class="container">
+            <div class="download-content">
+                <h2>Ready to Get Started?</h2>
+                <p>Download Debrify for your platform and start streaming in minutes.</p>
+                <div class="download-buttons">
+                    <a href="https://github.com/varunsalian/debrify/releases/latest" target="_blank" class="btn btn-primary btn-xl">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                        Download from GitHub
+                    </a>
+                </div>
+                <p class="download-note">Available for Android, Android TV, Windows, macOS, Linux, and iOS</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Community Section -->
+    <section class="community">
+        <div class="container">
+            <div class="community-grid">
+                <a href="https://github.com/varunsalian/debrify" target="_blank" class="community-card">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <h3>GitHub</h3>
+                    <p>Star & contribute</p>
+                </a>
+                <a href="https://reddit.com/r/debrify" target="_blank" class="community-card">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+                    </svg>
+                    <h3>Reddit</h3>
+                    <p>Join the community</p>
+                </a>
+                <a href="https://discord.gg/debrify" target="_blank" class="community-card">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/>
+                    </svg>
+                    <h3>Discord</h3>
+                    <p>Chat with us</p>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-text">Debrify</span>
+                    <p>Stream and download from your debrid accounts.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/varunsalian/debrify" target="_blank">GitHub</a>
+                    <a href="https://github.com/varunsalian/debrify/releases" target="_blank">Releases</a>
+                    <a href="https://github.com/varunsalian/debrify/issues" target="_blank">Report Issue</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Debrify. Free for personal use.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
