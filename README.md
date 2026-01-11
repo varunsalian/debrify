@@ -5,20 +5,21 @@
 <h1 align="center">Debrify</h1>
 
 <p align="center">
-  <strong>The all-in-one debrid manager</strong><br>
-  Stream and download your debrid content across all your devices
+  <strong>Stream & Download — Effortlessly</strong><br>
+  The all-in-one debrid manager for Real-Debrid, Torbox, and PikPak
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Flutter-3.8+-02569B?logo=flutter&logoColor=white" alt="Flutter">
-  <img src="https://img.shields.io/badge/Real--Debrid-Supported-00C853" alt="Real-Debrid">
-  <img src="https://img.shields.io/badge/Torbox-Supported-00C853" alt="Torbox">
-  <img src="https://img.shields.io/badge/PikPak-Supported-00C853" alt="PikPak">
-  <img src="https://img.shields.io/badge/License-Polyform%20NC-blue" alt="License">
+  <a href="https://github.com/varunsalian/debrify/releases"><img src="https://img.shields.io/github/v/release/varunsalian/debrify?style=flat-square&color=6366f1" alt="Release"></a>
+  <a href="https://github.com/varunsalian/debrify/stargazers"><img src="https://img.shields.io/github/stars/varunsalian/debrify?style=flat-square&color=f59e0b" alt="Stars"></a>
+  <a href="https://github.com/varunsalian/debrify/releases"><img src="https://img.shields.io/github/downloads/varunsalian/debrify/total?style=flat-square&color=22c55e" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/Flutter-3.8+-02569B?style=flat-square&logo=flutter&logoColor=white" alt="Flutter">
+  <img src="https://img.shields.io/badge/License-Polyform%20NC-blue?style=flat-square" alt="License">
 </p>
 
 <p align="center">
-  <a href="https://github.com/varunsalian/debrify/releases">Download</a> &bull;
+  <a href="https://varunsalian.github.io/debrify/"><strong>Website</strong></a> &bull;
+  <a href="https://github.com/varunsalian/debrify/releases"><strong>Download</strong></a> &bull;
   <a href="#-features">Features</a> &bull;
   <a href="#-supported-platforms">Platforms</a> &bull;
   <a href="https://www.reddit.com/r/debrify/">Reddit</a> &bull;
@@ -34,6 +35,12 @@
 <p align="center">
   <img src="assets/screenshots/player.png" alt="Player" width="49%">
   <img src="assets/screenshots/episodes.png" alt="Episodes" width="49%">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Real--Debrid-Supported-4ade80?style=for-the-badge" alt="Real-Debrid">
+  <img src="https://img.shields.io/badge/Torbox-Supported-8b5cf6?style=for-the-badge" alt="Torbox">
+  <img src="https://img.shields.io/badge/PikPak-Supported-0ea5e9?style=for-the-badge" alt="PikPak">
 </p>
 
 ---
@@ -234,5 +241,11 @@ Debrify is released under the [Polyform Noncommercial License 1.0.0](LICENSE). F
 ---
 
 <p align="center">
-  <sub>Current version: <strong>0.2.2</strong></sub>
+  <a href="https://varunsalian.github.io/debrify/">
+    <img src="https://img.shields.io/badge/Visit_Website-varunsalian.github.io/debrify-6366f1?style=for-the-badge" alt="Website">
+  </a>
+</p>
+
+<p align="center">
+  <sub>Made with Flutter. Free for personal use.</sub>
 </p>
