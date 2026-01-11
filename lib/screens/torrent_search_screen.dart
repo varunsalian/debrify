@@ -8723,14 +8723,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   /// Derives a short name (2-4 chars) from an engine ID.
   ///
   /// Logic:
+  /// - Stremio addons: strip 'stremio:' prefix first (e.g., 'stremio:comet' → 'CMT')
   /// - Multi-word (has underscore): for each part, use whole part if ≤3 chars,
   ///   else just first letter. E.g., 'torrents_csv' → 'TCSV', 'solid_torrents' → 'ST'
   /// - Single word ≤ 4 chars: use whole word (e.g., 'yts' → 'YTS')
   /// - Single word > 4 chars: first letter + last 2 letters (e.g., 'torrentio' → 'TIO')
   String _deriveEngineShortName(String engineId) {
-    if (engineId.contains('_')) {
+    // Strip 'stremio:' prefix for Stremio addons
+    String name = engineId;
+    if (name.startsWith('stremio:')) {
+      name = name.substring(8); // Remove 'stremio:' prefix
+    }
+
+    if (name.contains('_')) {
       // Multi-word: short parts kept whole, long parts abbreviated
-      final parts = engineId.split('_');
+      final parts = name.split('_');
       final buffer = StringBuffer();
       for (final part in parts) {
         if (part.isEmpty) continue;
@@ -8741,12 +8748,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
       }
       return buffer.toString();
-    } else if (engineId.length <= 4) {
+    } else if (name.length <= 4) {
       // Short single word: use as-is
-      return engineId.toUpperCase();
+      return name.toUpperCase();
     } else {
       // Long single word: first letter + last 2 letters
-      return (engineId[0] + engineId.substring(engineId.length - 2)).toUpperCase();
+      return (name[0] + name.substring(name.length - 2)).toUpperCase();
     }
   }
 
