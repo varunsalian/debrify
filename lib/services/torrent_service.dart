@@ -248,6 +248,7 @@ class TorrentService {
   /// - [isMovie]: True for movies, false for TV series
   /// - [season]: Season number for TV series (optional)
   /// - [episode]: Episode number for TV series (optional)
+  /// - [availableSeasons]: Known seasons from IMDbbot API for optimized probing
   ///
   /// Returns the same format as [searchAllEngines].
   static Future<Map<String, dynamic>> searchByImdb(
@@ -256,6 +257,7 @@ class TorrentService {
     bool isMovie = true,
     int? season,
     int? episode,
+    List<int>? availableSeasons,
   }) async {
     await ensureInitialized();
 
@@ -321,6 +323,7 @@ class TorrentService {
           season: (!isMovie && engine.supportsSeriesSearch) ? season : null,
           episode: (!isMovie && engine.supportsSeriesSearch) ? episode : null,
           maxResults: maxResults,
+          availableSeasons: (!isMovie && engine.supportsSeriesSearch) ? availableSeasons : null,
         ).then((results) {
           engineCounts[engineId] = results.length;
           debugPrint(
@@ -363,6 +366,7 @@ class TorrentService {
   /// - [season]: Season number for TV series (optional)
   /// - [episode]: Episode number for TV series (optional)
   /// - [includeStremio]: Whether to include Stremio addon results (default: true)
+  /// - [availableSeasons]: Known seasons from IMDbbot API for optimized probing
   ///
   /// Returns the same format as [searchByImdb] with additional Stremio sources.
   static Future<Map<String, dynamic>> searchByImdbWithStremio(
@@ -372,6 +376,7 @@ class TorrentService {
     int? season,
     int? episode,
     bool includeStremio = true,
+    List<int>? availableSeasons,
   }) async {
     // Start both searches in parallel
     final List<Future<Map<String, dynamic>>> searchFutures = [
@@ -382,6 +387,7 @@ class TorrentService {
         isMovie: isMovie,
         season: season,
         episode: episode,
+        availableSeasons: availableSeasons,
       ),
     ];
 

@@ -198,20 +198,38 @@ class DynamicEngine extends SearchEngine {
   /// Probe multiple seasons to find all available content.
   ///
   /// This is useful for engines like Torrentio where season must be specified.
-  /// The probing stops when a season returns 0 results.
+  ///
+  /// If [availableSeasons] is provided (from IMDbbot API), iterates only over
+  /// those known seasons. Otherwise falls back to probing 1 to maxSeasonProbes.
+  ///
+  /// Stops early if 3 consecutive seasons return 0 results.
   Future<List<Torrent>> _probeSeasons(
     String imdbId,
     SeriesConfig seriesConfig,
-    int? episode,
-  ) async {
+    int? episode, {
+    List<int>? availableSeasons,
+  }) async {
     final List<Torrent> allResults = [];
-    final int maxProbes = seriesConfig.maxSeasonProbes;
     final int defaultEpisode = seriesConfig.defaultEpisode;
 
-    debugPrint(
-        'DynamicEngine[$name]: Probing up to $maxProbes seasons');
+    // Use available seasons if provided and non-empty, otherwise fallback to 1..maxProbes
+    final bool hasSeasonData = availableSeasons != null && availableSeasons.isNotEmpty;
+    final List<int> seasonsToProbe = hasSeasonData
+        ? availableSeasons!
+        : List.generate(seriesConfig.maxSeasonProbes, (i) => i + 1);
 
-    for (int seasonNum = 1; seasonNum <= maxProbes; seasonNum++) {
+    if (hasSeasonData) {
+      debugPrint(
+          'DynamicEngine[$name]: Probing ${seasonsToProbe.length} known seasons: $seasonsToProbe');
+    } else {
+      debugPrint(
+          'DynamicEngine[$name]: No season data, probing up to ${seriesConfig.maxSeasonProbes} seasons');
+    }
+
+    int consecutiveEmpty = 0;
+    const int maxConsecutiveEmpty = 3;
+
+    for (final seasonNum in seasonsToProbe) {
       try {
         final List<Torrent> seasonResults = await _executor.execute(
           config: config,
@@ -226,21 +244,34 @@ class DynamicEngine extends SearchEngine {
         );
 
         if (seasonResults.isEmpty) {
+          consecutiveEmpty++;
           debugPrint(
-              'DynamicEngine[$name]: Season $seasonNum returned 0 results, stopping probe');
-          break;
-        }
+              'DynamicEngine[$name]: Season $seasonNum returned 0 results (consecutive empty: $consecutiveEmpty)');
 
-        debugPrint(
-            'DynamicEngine[$name]: Season $seasonNum returned ${seasonResults.length} results');
-        allResults.addAll(seasonResults);
+          if (consecutiveEmpty >= maxConsecutiveEmpty) {
+            debugPrint(
+                'DynamicEngine[$name]: $maxConsecutiveEmpty consecutive empty seasons, stopping probe');
+            break;
+          }
+        } else {
+          consecutiveEmpty = 0; // Reset counter on success
+          debugPrint(
+              'DynamicEngine[$name]: Season $seasonNum returned ${seasonResults.length} results');
+          allResults.addAll(seasonResults);
+        }
 
         // Add a small delay between season probes
         await Future.delayed(const Duration(milliseconds: 100));
       } catch (e) {
         debugPrint(
             'DynamicEngine[$name]: Error probing season $seasonNum: $e');
-        // Continue to next season on error
+        // Count errors as empty for consecutive check
+        consecutiveEmpty++;
+        if (consecutiveEmpty >= maxConsecutiveEmpty) {
+          debugPrint(
+              'DynamicEngine[$name]: $maxConsecutiveEmpty consecutive failures, stopping probe');
+          break;
+        }
       }
     }
 
@@ -305,6 +336,7 @@ class DynamicEngine extends SearchEngine {
   /// - Custom max results
   /// - Custom delay between requests
   /// - Season probing for series without specific season
+  /// - [availableSeasons]: Known seasons from IMDbbot API for optimized probing
   Future<List<Torrent>> executeSearch({
     String? query,
     String? imdbId,
@@ -313,6 +345,7 @@ class DynamicEngine extends SearchEngine {
     int? episode,
     int? maxResults,
     Duration? betweenPageRequests,
+    List<int>? availableSeasons,
   }) async {
     // Normalize IMDB ID if provided
     String? normalizedImdbId;
@@ -335,6 +368,7 @@ class DynamicEngine extends SearchEngine {
         normalizedImdbId,
         config.request.seriesConfig!,
         episode,
+        availableSeasons: availableSeasons,
       );
     }
 

@@ -913,6 +913,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           isMovie: !selection.isSeries,
           season: selection.season,
           episode: selection.episode,
+          availableSeasons: selection.isSeries ? _availableSeasons : null,
         );
       } else {
         debugPrint('TorrentSearchScreen: Using KEYWORD search (no advanced selection) for query: $query');
