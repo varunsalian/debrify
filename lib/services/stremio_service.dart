@@ -204,6 +204,12 @@ class StremioService {
   /// - [imdbId]: IMDB ID (e.g., 'tt1234567')
   /// - [season]: Season number for series (optional)
   /// - [episode]: Episode number for series (optional)
+  /// - [availableSeasons]: Known seasons from IMDbbot API for smart fallback
+  ///
+  /// For series without specific season/episode:
+  /// 1. First tries bare IMDB ID (returns complete series packs)
+  /// 2. If results < 5, falls back to season probing (S1E1, S2E1, etc.)
+  /// 3. Fallback results are filtered to keep only season/series packs
   ///
   /// Returns a map with:
   /// - 'torrents': List<Torrent> - deduplicated and sorted by seeders
@@ -214,6 +220,7 @@ class StremioService {
     required String imdbId,
     int? season,
     int? episode,
+    List<int>? availableSeasons,
   }) async {
     final Map<String, int> addonCounts = {};
     final Map<String, String> addonErrors = {};
@@ -245,6 +252,21 @@ class StremioService {
       };
     }
 
+    // Check if this is a series search without specific season/episode
+    // In this case, use smart fallback logic
+    final bool needsSmartFallback = type == 'series' && season == null && episode == null;
+
+    if (needsSmartFallback) {
+      return _searchStreamsWithSmartFallback(
+        applicableAddons: applicableAddons,
+        imdbId: imdbId,
+        availableSeasons: availableSeasons,
+        addonCounts: addonCounts,
+        addonErrors: addonErrors,
+      );
+    }
+
+    // Standard search with specific season/episode or for movies
     // Build stream ID
     final streamId = _buildStreamId(imdbId, season, episode);
 
@@ -286,6 +308,248 @@ class StremioService {
       'addonCounts': addonCounts,
       'addonErrors': addonErrors,
     };
+  }
+
+  /// Smart fallback for series search without specific season/episode
+  ///
+  /// 1. First tries bare IMDB ID
+  /// 2. Filters to packs only - if >= 5, done
+  /// 3. If < 5 packs, falls back to season probing
+  /// 4. Combines and filters to packs - if >= 5, done
+  /// 5. If still < 5 packs, returns unfiltered (shows episodes)
+  Future<Map<String, dynamic>> _searchStreamsWithSmartFallback({
+    required List<StremioAddon> applicableAddons,
+    required String imdbId,
+    required Map<String, int> addonCounts,
+    required Map<String, String> addonErrors,
+    List<int>? availableSeasons,
+  }) async {
+    const int minResultsThreshold = 5;
+    const int maxConsecutiveEmpty = 3;
+
+    debugPrint('StremioService: Using smart fallback for series search');
+
+    // Step 1: Try bare IMDB ID first
+    final List<StremioStream> initialStreams = [];
+
+    for (final addon in applicableAddons) {
+      final sourceKey = 'stremio:${addon.name}'.toLowerCase();
+      try {
+        final streams = await _fetchStreamsFromAddon(addon, 'series', imdbId);
+        addonCounts[sourceKey] = streams.length;
+        initialStreams.addAll(streams);
+        debugPrint(
+          'StremioService: ${addon.name} (bare IMDB) returned ${streams.length} streams',
+        );
+      } catch (e) {
+        addonCounts[sourceKey] = 0;
+        addonErrors[sourceKey] = e.toString();
+        debugPrint('StremioService: ${addon.name} (bare IMDB) error: $e');
+      }
+    }
+
+    // Convert initial streams to torrents
+    List<Torrent> allTorrents = _convertToTorrents(initialStreams);
+    debugPrint('StremioService: Bare IMDB returned ${allTorrents.length} torrents');
+
+    // Step 2: Filter to packs only
+    List<Torrent> filteredTorrents = _filterToPacksOnly(allTorrents);
+    debugPrint(
+      'StremioService: After filtering bare IMDB to packs: ${filteredTorrents.length} torrents',
+    );
+
+    // If we have enough packs, return them
+    if (filteredTorrents.length >= minResultsThreshold) {
+      debugPrint(
+        'StremioService: Have ${filteredTorrents.length} packs (>= $minResultsThreshold), returning packs only',
+      );
+      _updateAddonCounts(addonCounts, filteredTorrents);
+      return {
+        'torrents': filteredTorrents,
+        'addonCounts': addonCounts,
+        'addonErrors': addonErrors,
+      };
+    }
+
+    // Step 3: Not enough packs, fallback to season probing
+    debugPrint(
+      'StremioService: Only ${filteredTorrents.length} packs (< $minResultsThreshold), '
+      'falling back to season probing',
+    );
+
+    // Determine seasons to probe
+    final List<int> seasonsToProbe =
+        (availableSeasons != null && availableSeasons.isNotEmpty)
+            ? availableSeasons
+            : List.generate(5, (i) => i + 1); // Default to seasons 1-5
+
+    debugPrint(
+      'StremioService: Probing ${seasonsToProbe.length} seasons: $seasonsToProbe',
+    );
+
+    final List<StremioStream> fallbackStreams = [];
+    int consecutiveEmpty = 0;
+
+    for (final seasonNum in seasonsToProbe) {
+      final streamId = _buildStreamId(imdbId, seasonNum, 1); // S{n}E1
+      int seasonTotalStreams = 0;
+
+      for (final addon in applicableAddons) {
+        try {
+          final streams = await _fetchStreamsFromAddon(addon, 'series', streamId);
+          seasonTotalStreams += streams.length;
+          fallbackStreams.addAll(streams);
+        } catch (e) {
+          debugPrint(
+            'StremioService: ${addon.name} error probing S${seasonNum}E1: $e',
+          );
+        }
+      }
+
+      debugPrint(
+        'StremioService: Season $seasonNum probe returned $seasonTotalStreams streams',
+      );
+
+      // Track consecutive empty seasons
+      if (seasonTotalStreams == 0) {
+        consecutiveEmpty++;
+        if (consecutiveEmpty >= maxConsecutiveEmpty) {
+          debugPrint(
+            'StremioService: $maxConsecutiveEmpty consecutive empty seasons, stopping probe',
+          );
+          break;
+        }
+      } else {
+        consecutiveEmpty = 0;
+      }
+
+      // Small delay between season probes
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    // Convert fallback streams to torrents
+    final fallbackTorrents = _convertToTorrents(fallbackStreams);
+    debugPrint(
+      'StremioService: Season probing returned ${fallbackTorrents.length} torrents',
+    );
+
+    // Step 4: Combine all torrents and filter to packs
+    final Map<String, Torrent> uniqueTorrents = {};
+
+    // Add initial torrents
+    for (final torrent in allTorrents) {
+      uniqueTorrents[torrent.infohash] = torrent;
+    }
+
+    // Add fallback torrents
+    for (final torrent in fallbackTorrents) {
+      if (!uniqueTorrents.containsKey(torrent.infohash)) {
+        uniqueTorrents[torrent.infohash] = torrent;
+      }
+    }
+
+    allTorrents = uniqueTorrents.values.toList();
+    debugPrint('StremioService: Combined total: ${allTorrents.length} unique torrents');
+
+    // Filter combined results to packs only
+    filteredTorrents = _filterToPacksOnly(allTorrents);
+    debugPrint(
+      'StremioService: After filtering combined to packs: ${filteredTorrents.length} torrents',
+    );
+
+    // Step 5: If we have enough packs now, return them
+    if (filteredTorrents.length >= minResultsThreshold) {
+      debugPrint(
+        'StremioService: Have ${filteredTorrents.length} packs after probing, returning packs only',
+      );
+      filteredTorrents.sort((a, b) => b.seeders.compareTo(a.seeders));
+      _updateAddonCounts(addonCounts, filteredTorrents);
+      return {
+        'torrents': filteredTorrents,
+        'addonCounts': addonCounts,
+        'addonErrors': addonErrors,
+      };
+    }
+
+    // Step 6: Still not enough packs, return all unfiltered (show episodes)
+    debugPrint(
+      'StremioService: Only ${filteredTorrents.length} packs after probing, '
+      'returning all ${allTorrents.length} torrents (including episodes)',
+    );
+    allTorrents.sort((a, b) => b.seeders.compareTo(a.seeders));
+    _updateAddonCounts(addonCounts, allTorrents);
+
+    return {
+      'torrents': allTorrents,
+      'addonCounts': addonCounts,
+      'addonErrors': addonErrors,
+    };
+  }
+
+  /// Update addon counts based on the final torrent list
+  void _updateAddonCounts(Map<String, int> addonCounts, List<Torrent> torrents) {
+    for (final key in addonCounts.keys.toList()) {
+      addonCounts[key] = torrents.where((t) => t.source.toLowerCase() == key).length;
+    }
+  }
+
+  /// Filter torrents to keep only season packs and complete series packs
+  /// Removes individual episode torrents
+  List<Torrent> _filterToPacksOnly(List<Torrent> torrents) {
+    return torrents.where((torrent) {
+      final name = torrent.name.toLowerCase();
+
+      // Check for individual episode patterns (filter these OUT)
+      // Matches: S01E01, S1E1, 1x01, etc.
+      final episodePattern = RegExp(
+        r's\d{1,2}e\d{1,3}|\d{1,2}x\d{1,3}',
+        caseSensitive: false,
+      );
+
+      // Check for season pack patterns (keep these)
+      // Matches: S01, Season 1, S01-S03, Complete, etc.
+      final seasonPackPattern = RegExp(
+        r'\.s\d{1,2}\.|season\s*\d+|s\d{1,2}-s\d{1,2}|complete|full.series',
+        caseSensitive: false,
+      );
+
+      // If it has episode pattern like S01E01, it's an individual episode
+      if (episodePattern.hasMatch(name)) {
+        // But check if it's actually a season pack that happens to mention an episode
+        // e.g., "From.S01.E01-E10" is a season pack
+        final multiEpisodePattern = RegExp(
+          r'e\d{1,3}-e\d{1,3}|e\d{1,3}\.?-\.?\d{1,3}',
+          caseSensitive: false,
+        );
+        if (multiEpisodePattern.hasMatch(name)) {
+          return true; // It's a pack like E01-E10
+        }
+
+        // Check if it also has season pack indicators
+        if (seasonPackPattern.hasMatch(name)) {
+          // Has both episode and season pack patterns - likely a season pack
+          // e.g., "Show.S01.Complete.S01E01.mkv" (filename from pack)
+          return true;
+        }
+
+        // Individual episode - filter out
+        return false;
+      }
+
+      // No episode pattern, check if it has season pack indicators
+      if (seasonPackPattern.hasMatch(name)) {
+        return true;
+      }
+
+      // Fallback: check for S01 without E pattern
+      final seasonOnlyPattern = RegExp(r'\.s\d{1,2}\.', caseSensitive: false);
+      if (seasonOnlyPattern.hasMatch(name)) {
+        return true;
+      }
+
+      // When in doubt, keep it (might be a pack with unusual naming)
+      return true;
+    }).toList();
   }
 
   /// Search for movie streams

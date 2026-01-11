@@ -399,6 +399,7 @@ class TorrentService {
           isMovie: isMovie,
           season: season,
           episode: episode,
+          availableSeasons: availableSeasons,
         ),
       );
     }
@@ -481,6 +482,7 @@ class TorrentService {
     required bool isMovie,
     int? season,
     int? episode,
+    List<int>? availableSeasons,
   }) async {
     try {
       final stremioService = StremioService.instance;
@@ -500,6 +502,7 @@ class TorrentService {
         imdbId: imdbId,
         season: season,
         episode: episode,
+        availableSeasons: availableSeasons,
       );
 
       return {
