@@ -739,6 +739,263 @@ class StremioService {
   }
 
   // ============================================================
+  // Catalog Methods (Content Discovery)
+  // ============================================================
+
+  /// Get all enabled addons that support catalogs
+  Future<List<StremioAddon>> getCatalogAddons() async {
+    final addons = await getEnabledAddons();
+    return addons.where((a) => a.supportsCatalogs).toList();
+  }
+
+  /// Get all available catalogs from all enabled catalog addons
+  ///
+  /// Returns a list of (addon, catalog) pairs for UI display
+  Future<List<({StremioAddon addon, StremioAddonCatalog catalog})>>
+      getAllCatalogs() async {
+    final catalogAddons = await getCatalogAddons();
+    final result = <({StremioAddon addon, StremioAddonCatalog catalog})>[];
+
+    for (final addon in catalogAddons) {
+      for (final catalog in addon.catalogs) {
+        result.add((addon: addon, catalog: catalog));
+      }
+    }
+
+    return result;
+  }
+
+  /// Fetch content from a specific catalog
+  ///
+  /// Parameters:
+  /// - [addon]: The addon to fetch from
+  /// - [catalog]: The catalog to fetch
+  /// - [skip]: Number of items to skip (for pagination)
+  ///
+  /// Returns a list of StremioMeta items
+  Future<List<StremioMeta>> fetchCatalog(
+    StremioAddon addon,
+    StremioAddonCatalog catalog, {
+    int skip = 0,
+  }) async {
+    // Build catalog URL: {baseUrl}/catalog/{type}/{catalogId}.json
+    // With optional skip parameter: {baseUrl}/catalog/{type}/{catalogId}/skip={skip}.json
+    String url = '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}';
+    if (skip > 0) {
+      url += '/skip=$skip';
+    }
+    url += '.json';
+
+    debugPrint('StremioService: Fetching catalog from $url');
+
+    try {
+      // Use a client that follows redirects
+      final client = http.Client();
+      try {
+        final request = http.Request('GET', Uri.parse(url));
+        request.followRedirects = true;
+        request.maxRedirects = 5;
+
+        final streamedResponse = await client.send(request).timeout(_requestTimeout);
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode != 200) {
+          debugPrint('StremioService: Catalog fetch failed: HTTP ${response.statusCode}');
+          return [];
+        }
+
+        final Map<String, dynamic> data = json.decode(response.body);
+        final metasRaw = data['metas'] as List<dynamic>?;
+
+        if (metasRaw == null || metasRaw.isEmpty) {
+          debugPrint('StremioService: Catalog returned no items');
+          return [];
+        }
+
+        final metas = metasRaw
+            .map((m) => StremioMeta.fromJson(m as Map<String, dynamic>))
+            .where((m) => m.hasValidImdbId) // Only keep items with valid IMDB IDs
+            .toList();
+
+        debugPrint('StremioService: Catalog returned ${metas.length} valid items');
+        return metas;
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      debugPrint('StremioService: Error fetching catalog: $e');
+      return [];
+    }
+  }
+
+  /// Fetch content from multiple catalogs at once
+  ///
+  /// Useful for "Browse" mode to show content from all catalog sources
+  Future<Map<String, List<StremioMeta>>> fetchAllCatalogs({
+    String? type, // Filter by type ('movie' or 'series')
+    int limit = 20, // Limit per catalog
+  }) async {
+    final catalogAddons = await getCatalogAddons();
+    final results = <String, List<StremioMeta>>{};
+
+    for (final addon in catalogAddons) {
+      for (final catalog in addon.catalogs) {
+        // Skip if type filter is set and doesn't match
+        if (type != null && catalog.type != type) continue;
+
+        final key = '${addon.name}: ${catalog.name}';
+        try {
+          final metas = await fetchCatalog(addon, catalog);
+          if (metas.isNotEmpty) {
+            results[key] = metas.take(limit).toList();
+          }
+        } catch (e) {
+          debugPrint('StremioService: Error fetching $key: $e');
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /// Search across all IMDB-compatible catalogs that support search
+  ///
+  /// Returns deduplicated results by IMDB ID, keeping the best metadata
+  Future<List<StremioMeta>> searchCatalogs(String query) async {
+    if (query.trim().isEmpty) return [];
+
+    final encodedQuery = Uri.encodeComponent(query.trim());
+    final catalogAddons = await getCatalogAddons();
+
+    // Filter to IMDB-compatible addons only
+    final imdbAddons = catalogAddons.where((a) => a.handlesImdbIds).toList();
+
+    if (imdbAddons.isEmpty) {
+      debugPrint('StremioService: No IMDB-compatible catalog addons found');
+      return [];
+    }
+
+    // Collect all (addon, catalog) pairs that support search
+    final searchableCatalogs = <({StremioAddon addon, StremioAddonCatalog catalog})>[];
+    for (final addon in imdbAddons) {
+      for (final catalog in addon.catalogs) {
+        if (catalog.supportsSearch) {
+          searchableCatalogs.add((addon: addon, catalog: catalog));
+        }
+      }
+    }
+
+    if (searchableCatalogs.isEmpty) {
+      debugPrint('StremioService: No catalogs support search');
+      return [];
+    }
+
+    debugPrint(
+      'StremioService: Searching ${searchableCatalogs.length} catalogs for "$query"',
+    );
+
+    // Search all catalogs in parallel
+    final futures = <Future<List<StremioMeta>>>[];
+
+    for (final entry in searchableCatalogs) {
+      futures.add(_searchSingleCatalog(entry.addon, entry.catalog, encodedQuery));
+    }
+
+    final allResults = await Future.wait(futures);
+
+    // Flatten and deduplicate by IMDB ID
+    final Map<String, StremioMeta> uniqueResults = {};
+
+    for (final results in allResults) {
+      for (final meta in results) {
+        if (!meta.hasValidImdbId) continue;
+
+        final existing = uniqueResults[meta.id];
+        if (existing == null) {
+          uniqueResults[meta.id] = meta;
+        } else {
+          // Keep the one with better metadata (prefer one with poster and rating)
+          final existingScore = _metadataScore(existing);
+          final newScore = _metadataScore(meta);
+          if (newScore > existingScore) {
+            uniqueResults[meta.id] = meta;
+          }
+        }
+      }
+    }
+
+    final results = uniqueResults.values.toList();
+    debugPrint('StremioService: Catalog search returned ${results.length} unique results');
+
+    return results;
+  }
+
+  /// Search a single catalog
+  Future<List<StremioMeta>> _searchSingleCatalog(
+    StremioAddon addon,
+    StremioAddonCatalog catalog,
+    String encodedQuery,
+  ) async {
+    // Build search URL: {baseUrl}/catalog/{type}/{id}/search={query}.json
+    final url =
+        '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}/search=$encodedQuery.json';
+
+    debugPrint('StremioService: Searching catalog ${addon.name}/${catalog.name}');
+
+    try {
+      final client = http.Client();
+      try {
+        final request = http.Request('GET', Uri.parse(url));
+        request.followRedirects = true;
+        request.maxRedirects = 5;
+
+        final streamedResponse = await client.send(request).timeout(_requestTimeout);
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode != 200) {
+          debugPrint(
+            'StremioService: ${addon.name}/${catalog.name} search failed: HTTP ${response.statusCode}',
+          );
+          return [];
+        }
+
+        final Map<String, dynamic> data = json.decode(response.body);
+        final metasRaw = data['metas'] as List<dynamic>?;
+
+        if (metasRaw == null || metasRaw.isEmpty) {
+          return [];
+        }
+
+        final metas = metasRaw
+            .map((m) => StremioMeta.fromJson(m as Map<String, dynamic>))
+            .where((m) => m.hasValidImdbId)
+            .toList();
+
+        debugPrint(
+          'StremioService: ${addon.name}/${catalog.name} returned ${metas.length} results',
+        );
+
+        return metas;
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      debugPrint('StremioService: ${addon.name}/${catalog.name} search error: $e');
+      return [];
+    }
+  }
+
+  /// Calculate metadata quality score (higher = better)
+  int _metadataScore(StremioMeta meta) {
+    int score = 0;
+    if (meta.poster != null) score += 2;
+    if (meta.imdbRating != null) score += 2;
+    if (meta.year != null) score += 1;
+    if (meta.description != null) score += 1;
+    return score;
+  }
+
+  // ============================================================
   // Utility Methods
   // ============================================================
 

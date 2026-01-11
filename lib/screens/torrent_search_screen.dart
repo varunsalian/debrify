@@ -36,10 +36,12 @@ import '../models/debrify_tv_cache.dart';
 import '../widgets/advanced_search_sheet.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../services/imdb_lookup_service.dart';
+import '../services/stremio_service.dart';
+import '../models/stremio_addon.dart';
 import 'dart:async';
 
 // Search mode for torrent search
-enum SearchMode { keyword, imdb }
+enum SearchMode { keyword, imdb, browse }
 
 class TorrentSearchScreen extends StatefulWidget {
   const TorrentSearchScreen({super.key});
@@ -199,6 +201,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Season dropdown state (for simplified season selector)
   List<int>? _availableSeasons; // List of season numbers from IMDbbot API, null for movies
   int? _selectedSeason; // null means "All Seasons" selected
+
+  // Browse mode state (content discovery)
+  List<({StremioAddon addon, StremioAddonCatalog catalog})> _availableCatalogs = [];
+  ({StremioAddon addon, StremioAddonCatalog catalog})? _selectedCatalog;
+  List<StremioMeta> _catalogItems = [];
+  bool _isLoadingCatalogs = false;
+  bool _isLoadingCatalogItems = false;
+  String? _catalogError;
 
   // Sorting options
   String _sortBy = 'relevance'; // relevance, name, size, seeders, date
@@ -1439,6 +1449,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 _seasonController.clear();
                 _episodeController.clear();
               }
+              if (mode == SearchMode.browse) {
+                // Load catalogs when entering browse mode
+                _loadCatalogs();
+              }
             });
             // Reload engines for the new search mode
             _loadDefaultSettings();
@@ -1496,28 +1510,62 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 ],
               ),
             ),
+            PopupMenuItem(
+              value: SearchMode.browse,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.explore_outlined,
+                    size: 18,
+                    color: _searchMode == SearchMode.browse
+                        ? const Color(0xFF7C3AED)
+                        : Colors.white70,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Browse',
+                    style: TextStyle(
+                      color: _searchMode == SearchMode.browse
+                          ? const Color(0xFF7C3AED)
+                          : Colors.white,
+                      fontWeight: _searchMode == SearchMode.browse
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: _searchMode == SearchMode.imdb
-                  ? const Color(0xFF7C3AED)
-                  : const Color(0xFF1E3A8A),
+              color: _searchMode == SearchMode.browse
+                  ? const Color(0xFF059669) // Green for browse
+                  : _searchMode == SearchMode.imdb
+                      ? const Color(0xFF7C3AED)
+                      : const Color(0xFF1E3A8A),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _searchMode == SearchMode.imdb
-                      ? Icons.auto_awesome_outlined
-                      : Icons.search_rounded,
+                  _searchMode == SearchMode.browse
+                      ? Icons.explore_outlined
+                      : _searchMode == SearchMode.imdb
+                          ? Icons.auto_awesome_outlined
+                          : Icons.search_rounded,
                   size: 16,
                   color: Colors.white,
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _searchMode == SearchMode.imdb ? 'IMDB' : 'Keyword',
+                  _searchMode == SearchMode.browse
+                      ? 'Browse'
+                      : _searchMode == SearchMode.imdb
+                          ? 'IMDB'
+                          : 'Keyword',
                   style: const TextStyle(fontSize: 12, color: Colors.white),
                 ),
                 const SizedBox(width: 4),
@@ -1536,8 +1584,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   void _toggleSearchMode() {
     setState(() {
-      _searchMode =
-          _searchMode == SearchMode.keyword ? SearchMode.imdb : SearchMode.keyword;
+      // Cycle through modes: keyword -> imdb -> browse -> keyword
+      _searchMode = switch (_searchMode) {
+        SearchMode.keyword => SearchMode.imdb,
+        SearchMode.imdb => SearchMode.browse,
+        SearchMode.browse => SearchMode.keyword,
+      };
       _imdbAutocompleteResults.clear();
       _selectedImdbTitle = null;
       _imdbSearchError = null;
@@ -1548,9 +1600,448 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _seasonController.clear();
         _episodeController.clear();
       }
+      if (_searchMode == SearchMode.browse) {
+        // Load catalogs when entering browse mode
+        _loadCatalogs();
+      }
     });
     // Reload engines for the new search mode
     _loadDefaultSettings();
+  }
+
+  // Load available catalogs from Stremio addons
+  Future<void> _loadCatalogs() async {
+    setState(() {
+      _isLoadingCatalogs = true;
+      _catalogError = null;
+    });
+
+    try {
+      final stremioService = StremioService();
+      final catalogs = await stremioService.getAllCatalogs();
+
+      setState(() {
+        _availableCatalogs = catalogs;
+        _isLoadingCatalogs = false;
+        // Auto-select first catalog if available
+        if (catalogs.isNotEmpty && _selectedCatalog == null) {
+          _selectedCatalog = catalogs.first;
+          _fetchCatalogItems(_selectedCatalog!);
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingCatalogs = false;
+        _catalogError = 'Failed to load catalogs: $e';
+      });
+    }
+  }
+
+  // Fetch items from selected catalog
+  Future<void> _fetchCatalogItems(
+    ({StremioAddon addon, StremioAddonCatalog catalog}) catalogEntry,
+  ) async {
+    setState(() {
+      _isLoadingCatalogItems = true;
+      _catalogItems.clear();
+    });
+
+    try {
+      final stremioService = StremioService();
+      final items = await stremioService.fetchCatalog(
+        catalogEntry.addon,
+        catalogEntry.catalog,
+      );
+
+      setState(() {
+        _catalogItems = items;
+        _isLoadingCatalogItems = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingCatalogItems = false;
+        _catalogError = 'Failed to fetch catalog: $e';
+      });
+    }
+  }
+
+  // Handle catalog item selection - triggers torrent search
+  void _onCatalogItemSelected(StremioMeta item) {
+    // Convert StremioMeta to ImdbTitleResult format and trigger search
+    final imdbResult = ImdbTitleResult(
+      imdbId: item.id,
+      title: item.name,
+      year: item.year,
+      posterUrl: item.poster,
+    );
+
+    // Switch to IMDB mode and select the title
+    setState(() {
+      _searchMode = SearchMode.imdb;
+      _selectedImdbTitle = imdbResult;
+      _isSeries = item.type == 'series';
+    });
+
+    // Trigger the IMDB selection flow
+    _onImdbResultSelected(imdbResult);
+  }
+
+  // Build catalog selector for browse mode
+  Widget _buildBrowseCatalogSelector() {
+    if (_isLoadingCatalogs) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    if (_availableCatalogs.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.only(top: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.explore_off_outlined,
+              color: Colors.white54,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'No catalog addons found',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add a Stremio addon with catalog support\n(e.g., Cinemeta, TMDB)',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 40,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _availableCatalogs.length,
+            itemBuilder: (context, index) {
+              final entry = _availableCatalogs[index];
+              final isSelected = _selectedCatalog?.catalog.id == entry.catalog.id &&
+                  _selectedCatalog?.catalog.type == entry.catalog.type &&
+                  _selectedCatalog?.addon.id == entry.addon.id;
+
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: 8,
+                  left: index == 0 ? 0 : 0,
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedCatalog = entry;
+                      });
+                      _fetchCatalogItems(entry);
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF059669)
+                            : const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF059669)
+                              : Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            entry.catalog.type == 'movie'
+                                ? Icons.movie_outlined
+                                : Icons.tv_outlined,
+                            size: 16,
+                            color: isSelected ? Colors.white : Colors.white70,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${entry.catalog.name} (${entry.catalog.type == 'movie' ? 'Movies' : 'Series'})',
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.white70,
+                              fontSize: 13,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Build browse content grid
+  Widget _buildBrowseContent() {
+    if (_isLoadingCatalogs) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Loading catalogs...',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_availableCatalogs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.explore_off_outlined,
+              color: Colors.white.withValues(alpha: 0.3),
+              size: 80,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No catalog addons configured',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Go to Settings → Stremio Addons and add\na catalog addon like Cinemeta or TMDB',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_isLoadingCatalogItems) {
+      return GridView.builder(
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          childAspectRatio: 0.65,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: 9,
+        itemBuilder: (context, index) {
+          return Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Shimmer(width: double.infinity, height: double.infinity),
+          );
+        },
+      );
+    }
+
+    if (_catalogItems.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inbox_outlined,
+              color: Colors.white.withValues(alpha: 0.3),
+              size: 64,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No items in this catalog',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: _isTelevision ? 5 : 3,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: _catalogItems.length,
+      itemBuilder: (context, index) {
+        final item = _catalogItems[index];
+        return _buildCatalogItemCard(item);
+      },
+    );
+  }
+
+  // Build individual catalog item card
+  Widget _buildCatalogItemCard(StremioMeta item) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _onCatalogItemSelected(item),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Poster
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
+                  child: item.poster != null
+                      ? Image.network(
+                          item.poster!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: const Color(0xFF0F172A),
+                            child: const Icon(
+                              Icons.movie_outlined,
+                              color: Colors.white24,
+                              size: 48,
+                            ),
+                          ),
+                        )
+                      : Container(
+                          color: const Color(0xFF0F172A),
+                          child: const Icon(
+                            Icons.movie_outlined,
+                            color: Colors.white24,
+                            size: 48,
+                          ),
+                        ),
+                ),
+              ),
+              // Info
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (item.year != null) ...[
+                          Text(
+                            item.year!,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Icon(
+                          item.type == 'series'
+                              ? Icons.tv_outlined
+                              : Icons.movie_outlined,
+                          size: 12,
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                        if (item.imdbRating != null) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.star,
+                            size: 12,
+                            color: Colors.amber.withValues(alpha: 0.8),
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            item.imdbRating!.toStringAsFixed(1),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // IMDB autocomplete search with debouncing
@@ -1595,7 +2086,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Future<void> _performImdbAutocompleteSearch(String query, int requestId) async {
     try {
-      final results = await ImdbLookupService.searchTitles(query);
+      // Search both IMDbbot and Stremio catalogs in parallel
+      // Wrap each in error handling so one failure doesn't affect the other
+      final stremioService = StremioService();
+
+      final imdbFuture = ImdbLookupService.searchTitles(query).catchError((e) {
+        debugPrint('IMDB search error: $e');
+        return <ImdbTitleResult>[];
+      });
+
+      final stremioFuture = stremioService.searchCatalogs(query).catchError((e) {
+        debugPrint('Stremio catalog search error: $e');
+        return <StremioMeta>[];
+      });
+
+      final futures = await Future.wait([imdbFuture, stremioFuture]);
 
       // Check if this is still the latest request
       if (requestId != _imdbRequestId) {
@@ -1604,13 +2109,43 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       if (!mounted) return;
 
+      final imdbResults = futures[0] as List<ImdbTitleResult>;
+      final stremioResults = futures[1] as List<StremioMeta>;
+
+      // Convert Stremio results to ImdbTitleResult format
+      final stremioConverted = stremioResults
+          .where((meta) => meta.hasValidImdbId)
+          .map((meta) => ImdbTitleResult(
+                imdbId: meta.id,
+                title: meta.name,
+                year: meta.year,
+                posterUrl: meta.poster,
+              ))
+          .toList();
+
+      // Merge and deduplicate by IMDB ID (IMDbbot results take priority)
+      final Map<String, ImdbTitleResult> resultMap = {};
+
+      // Add Stremio results first (lower priority)
+      for (final result in stremioConverted) {
+        resultMap[result.imdbId] = result;
+      }
+
+      // Add IMDbbot results (higher priority, will overwrite Stremio)
+      for (final result in imdbResults) {
+        resultMap[result.imdbId] = result;
+      }
+
+      final mergedResults = resultMap.values.toList();
+
       if (kDebugMode) {
-        debugPrint('IMDB search completed: "$query" (requestId: $requestId, results: ${results.length})');
+        debugPrint('IMDB search completed: "$query" (requestId: $requestId, '
+            'imdb: ${imdbResults.length}, stremio: ${stremioConverted.length}, merged: ${mergedResults.length})');
       }
 
       // Focus nodes are now pooled - no need to create/dispose on each search
       // Just limit results to pool size
-      final limitedResults = results.take(_autocompleteFocusNodePoolSize).toList();
+      final limitedResults = mergedResults.take(_autocompleteFocusNodePoolSize).toList();
 
       setState(() {
         _imdbAutocompleteResults = limitedResults;
@@ -9045,9 +9580,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       _buildImdbTypeAndEpisodeControls(),
                     ],
 
-                    // Search Engine Toggles
-                    const SizedBox(height: 16),
-                    _buildProvidersAccordion(context),
+                    // Browse Mode UI components
+                    if (_searchMode == SearchMode.browse) ...[
+                      _buildBrowseCatalogSelector(),
+                    ],
+
+                    // Search Engine Toggles (hide in browse mode)
+                    if (_searchMode != SearchMode.browse) ...[
+                      const SizedBox(height: 16),
+                      _buildProvidersAccordion(context),
+                    ],
                   ],
                 ),
               ),
@@ -9056,6 +9598,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               Expanded(
                 child: Builder(
                   builder: (context) {
+                    // Browse mode content
+                    if (_searchMode == SearchMode.browse) {
+                      return _buildBrowseContent();
+                    }
+
                     if (_isLoading) {
                       return ListView.builder(
                         padding: const EdgeInsets.only(

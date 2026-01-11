@@ -1,8 +1,155 @@
+/// Represents a catalog definition from a Stremio addon manifest
+class StremioAddonCatalog {
+  /// Unique ID for this catalog (e.g., 'trending', 'top')
+  final String id;
+
+  /// Content type (e.g., 'movie', 'series')
+  final String type;
+
+  /// Human-readable name (e.g., 'Trending Movies')
+  final String name;
+
+  /// Optional extra parameters supported (e.g., search, genre, skip)
+  final List<String>? extraSupported;
+
+  const StremioAddonCatalog({
+    required this.id,
+    required this.type,
+    required this.name,
+    this.extraSupported,
+  });
+
+  /// Check if this catalog supports search
+  bool get supportsSearch => extraSupported?.contains('search') ?? false;
+
+  factory StremioAddonCatalog.fromJson(Map<String, dynamic> json) {
+    // Parse extraSupported - can be in 'extraSupported' or derived from 'extra'
+    List<String>? extraSupported;
+
+    // Try extraSupported first
+    final extraSupportedRaw = json['extraSupported'] as List<dynamic>?;
+    if (extraSupportedRaw != null) {
+      extraSupported = extraSupportedRaw.cast<String>();
+    } else {
+      // Fall back to parsing 'extra' array for names
+      final extraRaw = json['extra'] as List<dynamic>?;
+      if (extraRaw != null) {
+        extraSupported = extraRaw
+            .map((e) {
+              if (e is String) return e;
+              if (e is Map) return e['name'] as String?;
+              return null;
+            })
+            .whereType<String>()
+            .toList();
+      }
+    }
+
+    return StremioAddonCatalog(
+      id: json['id'] as String? ?? 'unknown',
+      type: json['type'] as String? ?? 'movie',
+      name: json['name'] as String? ?? 'Unknown Catalog',
+      extraSupported: extraSupported,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'name': name,
+        if (extraSupported != null) 'extraSupported': extraSupported,
+      };
+
+  @override
+  String toString() => 'StremioAddonCatalog(id: $id, type: $type, name: $name)';
+}
+
+/// Represents a meta item (movie/series) from a Stremio catalog
+class StremioMeta {
+  /// IMDB ID (e.g., 'tt1234567')
+  final String id;
+
+  /// Content type ('movie' or 'series')
+  final String type;
+
+  /// Title
+  final String name;
+
+  /// Poster image URL
+  final String? poster;
+
+  /// Background image URL
+  final String? background;
+
+  /// Description/overview
+  final String? description;
+
+  /// Release year
+  final String? year;
+
+  /// IMDb rating
+  final double? imdbRating;
+
+  /// Genres
+  final List<String>? genres;
+
+  const StremioMeta({
+    required this.id,
+    required this.type,
+    required this.name,
+    this.poster,
+    this.background,
+    this.description,
+    this.year,
+    this.imdbRating,
+    this.genres,
+  });
+
+  factory StremioMeta.fromJson(Map<String, dynamic> json) {
+    // Handle rating - can be string or number
+    double? rating;
+    final ratingRaw = json['imdbRating'] ?? json['rating'];
+    if (ratingRaw is num) {
+      rating = ratingRaw.toDouble();
+    } else if (ratingRaw is String) {
+      rating = double.tryParse(ratingRaw);
+    }
+
+    // Handle year - can be string or number
+    String? year;
+    final yearRaw = json['year'] ?? json['releaseInfo'];
+    if (yearRaw is int) {
+      year = yearRaw.toString();
+    } else if (yearRaw is String) {
+      year = yearRaw;
+    }
+
+    return StremioMeta(
+      id: json['id'] as String? ?? json['imdb_id'] as String? ?? '',
+      type: json['type'] as String? ?? 'movie',
+      name: json['name'] as String? ?? json['title'] as String? ?? 'Unknown',
+      poster: json['poster'] as String?,
+      background: json['background'] as String? ?? json['fanart'] as String?,
+      description: json['description'] as String? ?? json['overview'] as String?,
+      year: year,
+      imdbRating: rating,
+      genres: (json['genres'] as List<dynamic>?)?.cast<String>(),
+    );
+  }
+
+  /// Check if this is a valid IMDB ID
+  bool get hasValidImdbId => id.startsWith('tt') && id.length >= 9;
+
+  @override
+  String toString() => 'StremioMeta(id: $id, name: $name, year: $year)';
+}
+
 /// Represents a Stremio addon that can be used for torrent search.
 ///
 /// Stremio addons follow a standard protocol where:
 /// - `/manifest.json` describes the addon capabilities
 /// - `/stream/{type}/{id}.json` returns torrent streams for content
+/// - `/catalog/{type}/{id}.json` returns content catalogs for discovery
 ///
 /// The manifest URL contains all configuration (debrid keys, filters, etc.)
 /// already embedded, so we just store and use the full URL.
@@ -37,6 +184,9 @@ class StremioAddon {
   /// Optional ID prefixes this addon handles (e.g., 'tt' for IMDB)
   final List<String>? idPrefixes;
 
+  /// Catalogs provided by this addon (for content discovery)
+  final List<StremioAddonCatalog> catalogs;
+
   /// When this addon was added
   final DateTime addedAt;
 
@@ -54,12 +204,17 @@ class StremioAddon {
     this.types = const [],
     this.resources = const [],
     this.idPrefixes,
+    this.catalogs = const [],
     DateTime? addedAt,
     this.lastChecked,
   }) : addedAt = addedAt ?? DateTime.now();
 
   /// Whether this addon supports streaming (has 'stream' resource)
   bool get supportsStreams => resources.contains('stream');
+
+  /// Whether this addon supports catalogs (has 'catalog' resource)
+  bool get supportsCatalogs =>
+      resources.contains('catalog') && catalogs.isNotEmpty;
 
   /// Whether this addon supports movies
   bool get supportsMovies => types.contains('movie');
@@ -116,6 +271,17 @@ class StremioAddon {
       }
     }
 
+    // Parse catalogs
+    final catalogsRaw = manifest['catalogs'];
+    final catalogs = <StremioAddonCatalog>[];
+    if (catalogsRaw is List) {
+      for (final c in catalogsRaw) {
+        if (c is Map<String, dynamic>) {
+          catalogs.add(StremioAddonCatalog.fromJson(c));
+        }
+      }
+    }
+
     // Derive base URL from manifest URL
     String baseUrl = manifestUrl;
     if (baseUrl.endsWith('/manifest.json')) {
@@ -132,12 +298,24 @@ class StremioAddon {
       types: types,
       resources: resources,
       idPrefixes: idPrefixes,
+      catalogs: catalogs,
       lastChecked: DateTime.now(),
     );
   }
 
   /// Create from stored JSON
   factory StremioAddon.fromJson(Map<String, dynamic> json) {
+    // Parse catalogs
+    final catalogsRaw = json['catalogs'] as List<dynamic>?;
+    final catalogs = <StremioAddonCatalog>[];
+    if (catalogsRaw != null) {
+      for (final c in catalogsRaw) {
+        if (c is Map<String, dynamic>) {
+          catalogs.add(StremioAddonCatalog.fromJson(c));
+        }
+      }
+    }
+
     return StremioAddon(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -149,6 +327,7 @@ class StremioAddon {
       types: (json['types'] as List<dynamic>?)?.cast<String>() ?? [],
       resources: (json['resources'] as List<dynamic>?)?.cast<String>() ?? [],
       idPrefixes: (json['id_prefixes'] as List<dynamic>?)?.cast<String>(),
+      catalogs: catalogs,
       addedAt: json['added_at'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['added_at'] as int)
           : DateTime.now(),
@@ -171,6 +350,8 @@ class StremioAddon {
       'types': types,
       'resources': resources,
       if (idPrefixes != null) 'id_prefixes': idPrefixes,
+      if (catalogs.isNotEmpty)
+        'catalogs': catalogs.map((c) => c.toJson()).toList(),
       'added_at': addedAt.millisecondsSinceEpoch,
       if (lastChecked != null)
         'last_checked': lastChecked!.millisecondsSinceEpoch,
@@ -189,6 +370,7 @@ class StremioAddon {
     List<String>? types,
     List<String>? resources,
     List<String>? idPrefixes,
+    List<StremioAddonCatalog>? catalogs,
     DateTime? addedAt,
     DateTime? lastChecked,
   }) {
@@ -203,6 +385,7 @@ class StremioAddon {
       types: types ?? this.types,
       resources: resources ?? this.resources,
       idPrefixes: idPrefixes ?? this.idPrefixes,
+      catalogs: catalogs ?? this.catalogs,
       addedAt: addedAt ?? this.addedAt,
       lastChecked: lastChecked ?? this.lastChecked,
     );
