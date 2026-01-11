@@ -101,9 +101,11 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
       }
     } catch (e) {
       if (mounted) {
+        // Clean up error message - remove "Exception: " prefix
+        final errorMessage = e.toString().replaceFirst('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to add addon: $e'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );

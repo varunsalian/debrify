@@ -101,6 +101,12 @@ class StremioService {
     // Fetch and parse manifest
     final addon = await fetchManifest(manifestUrl);
 
+    // Validate IMDB support - Debrify only works with IMDB-based content
+    final validationError = _validateAddonForImdb(addon);
+    if (validationError != null) {
+      throw Exception(validationError);
+    }
+
     // Check for duplicate by ID
     final duplicateById = existingAddons.where((a) => a.id == addon.id);
     if (duplicateById.isNotEmpty) {
@@ -993,6 +999,42 @@ class StremioService {
     if (meta.year != null) score += 1;
     if (meta.description != null) score += 1;
     return score;
+  }
+
+  // ============================================================
+  // Validation Methods
+  // ============================================================
+
+  /// Validate that an addon supports IMDB IDs
+  ///
+  /// Returns null if valid, or an error message if invalid.
+  /// Debrify only works with IMDB-based content, so we reject addons that don't support it.
+  String? _validateAddonForImdb(StremioAddon addon) {
+    final hasStreams = addon.supportsStreams;
+    final hasCatalogs = addon.supportsCatalogs;
+
+    // Must have at least one useful resource
+    if (!hasStreams && !hasCatalogs) {
+      return 'This addon doesn\'t provide streams or catalogs. '
+          'Debrify requires addons with stream or catalog support.';
+    }
+
+    // Check IMDB support
+    if (!addon.handlesImdbIds) {
+      return 'This addon doesn\'t support IMDB IDs. '
+          'Debrify only works with IMDB-based content (movies and TV shows).';
+    }
+
+    // For catalog addons, check if at least one catalog supports search
+    if (hasCatalogs && !hasStreams) {
+      final hasSearchableCatalog = addon.catalogs.any((c) => c.supportsSearch);
+      if (!hasSearchableCatalog) {
+        return 'This catalog addon doesn\'t support search. '
+            'Debrify requires catalog addons with search functionality.';
+      }
+    }
+
+    return null; // Valid
   }
 
   // ============================================================
