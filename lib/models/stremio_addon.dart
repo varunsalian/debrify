@@ -301,6 +301,56 @@ class StremioAddon {
       idPrefixes!.isEmpty ||
       idPrefixes!.any((p) => p == 'tt' || p.startsWith('tt'));
 
+  /// Extract the prefix from a content ID dynamically.
+  ///
+  /// Handles various ID formats:
+  /// - Colon-separated: "kitsu:1234" → "kitsu", "mal:5678" → "mal"
+  /// - IMDB format: "tt1234567" → "tt"
+  /// - Unknown: returns null if no recognizable prefix
+  static String? extractIdPrefix(String contentId) {
+    if (contentId.isEmpty) return null;
+
+    // Check for colon-separated format (kitsu:1234, mal:5678, etc.)
+    final colonIndex = contentId.indexOf(':');
+    if (colonIndex > 0) {
+      return contentId.substring(0, colonIndex);
+    }
+
+    // Check for IMDB format (tt followed by digits)
+    if (contentId.startsWith('tt') && contentId.length > 2) {
+      return 'tt';
+    }
+
+    // Try to extract alphabetic prefix before digits
+    final prefixMatch = RegExp(r'^([a-zA-Z]+)').firstMatch(contentId);
+    if (prefixMatch != null) {
+      return prefixMatch.group(1);
+    }
+
+    return null;
+  }
+
+  /// Check if this addon supports a given content ID.
+  ///
+  /// Returns true if:
+  /// - The addon has no idPrefixes restriction (null or empty), OR
+  /// - The addon's idPrefixes contains the prefix extracted from contentId
+  bool supportsContentId(String contentId) {
+    // No restriction means addon accepts all IDs
+    if (idPrefixes == null || idPrefixes!.isEmpty) {
+      return true;
+    }
+
+    final prefix = extractIdPrefix(contentId);
+    if (prefix == null) {
+      // Can't determine prefix - let addon try anyway
+      return true;
+    }
+
+    // Check if any of the addon's idPrefixes match (exact match only)
+    return idPrefixes!.any((p) => p == prefix);
+  }
+
   /// Create from manifest JSON response
   factory StremioAddon.fromManifest(
     Map<String, dynamic> manifest,

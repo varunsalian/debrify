@@ -263,15 +263,24 @@ class StremioService {
       };
     }
 
-    // Filter addons that support the content type
+    // Filter addons that support the content type AND the content ID prefix
     final applicableAddons = addons.where((a) {
-      if (type == 'movie') return a.supportsMovies;
-      if (type == 'series') return a.supportsSeries;
-      return true; // Unknown type, try anyway
+      // Check content type support
+      bool supportsType = true;
+      if (type == 'movie') supportsType = a.supportsMovies;
+      else if (type == 'series') supportsType = a.supportsSeries;
+      // For other types (anime, tv, channel, etc.), allow if addon declares that type
+      else supportsType = a.types.contains(type) || a.types.isEmpty;
+
+      // Check if addon supports the content ID prefix (smart routing)
+      final supportsId = a.supportsContentId(imdbId);
+
+      return supportsType && supportsId;
     }).toList();
 
     if (applicableAddons.isEmpty) {
-      debugPrint('StremioService: No addons support type: $type');
+      final prefix = StremioAddon.extractIdPrefix(imdbId);
+      debugPrint('StremioService: No addons support type: $type with ID prefix: $prefix');
       return {
         'torrents': <Torrent>[],
         'addonCounts': addonCounts,
