@@ -18,6 +18,11 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
   final FocusNode _urlFieldFocusNode = FocusNode(debugLabel: 'url-field');
   final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'add-button');
 
+  // Quick add chip focus nodes
+  final FocusNode _torrentioChipFocusNode = FocusNode(debugLabel: 'torrentio-chip');
+  final FocusNode _piratebayChipFocusNode = FocusNode(debugLabel: 'piratebay-chip');
+  final FocusNode _cometChipFocusNode = FocusNode(debugLabel: 'comet-chip');
+
   bool _isLoading = true;
   bool _isAdding = false;
   String? _error;
@@ -26,17 +31,31 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
   // Focus nodes for addon tiles
   final Map<String, FocusNode> _addonFocusNodes = {};
 
+  // Track focus state for URL field
+  bool _urlFieldFocused = false;
+
   @override
   void initState() {
     super.initState();
+    _urlFieldFocusNode.addListener(_onUrlFieldFocusChanged);
     _loadAddons();
+  }
+
+  void _onUrlFieldFocusChanged() {
+    setState(() {
+      _urlFieldFocused = _urlFieldFocusNode.hasFocus;
+    });
   }
 
   @override
   void dispose() {
     _urlController.dispose();
+    _urlFieldFocusNode.removeListener(_onUrlFieldFocusChanged);
     _urlFieldFocusNode.dispose();
     _addButtonFocusNode.dispose();
+    _torrentioChipFocusNode.dispose();
+    _piratebayChipFocusNode.dispose();
+    _cometChipFocusNode.dispose();
     for (final node in _addonFocusNodes.values) {
       node.dispose();
     }
@@ -354,38 +373,26 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
           Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _urlController,
-                  focusNode: _urlFieldFocusNode,
-                  decoration: const InputDecoration(
-                    hintText: 'https://addon.example.com/manifest.json',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 14,
-                    ),
-                  ),
-                  keyboardType: TextInputType.url,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _addAddon(),
-                  enabled: !_isAdding,
-                ),
+                child: _buildUrlTextField(),
               ),
               const SizedBox(width: 12),
-              FilledButton.icon(
-                focusNode: _addButtonFocusNode,
-                onPressed: _isAdding ? null : _addAddon,
-                icon: _isAdding
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.add),
-                label: const Text('Add'),
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(1),
+                child: FilledButton.icon(
+                  focusNode: _addButtonFocusNode,
+                  onPressed: _isAdding ? null : _addAddon,
+                  icon: _isAdding
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.add),
+                  label: const Text('Add'),
+                ),
               ),
             ],
           ),
@@ -395,32 +402,100 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _QuickAddChip(
-                label: 'Torrentio',
-                onTap: () => _openQuickAddInfo(
-                  'Torrentio',
-                  'https://torrentio.strem.fun/configure',
-                  'Configure your debrid service and preferences, then copy the manifest URL.',
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(2),
+                child: _QuickAddChip(
+                  label: 'Torrentio',
+                  focusNode: _torrentioChipFocusNode,
+                  onTap: () => _openQuickAddInfo(
+                    'Torrentio',
+                    'https://torrentio.strem.fun/configure',
+                    'Configure your debrid service and preferences, then copy the manifest URL.',
+                  ),
                 ),
               ),
-              _QuickAddChip(
-                label: 'ThePirateBay+',
-                onTap: () {
-                  _urlController.text =
-                      'https://thepiratebay-plus.strem.fun/manifest.json';
-                },
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(3),
+                child: _QuickAddChip(
+                  label: 'ThePirateBay+',
+                  focusNode: _piratebayChipFocusNode,
+                  onTap: () {
+                    _urlController.text =
+                        'https://thepiratebay-plus.strem.fun/manifest.json';
+                    _urlFieldFocusNode.requestFocus();
+                  },
+                ),
               ),
-              _QuickAddChip(
-                label: 'Comet',
-                onTap: () => _openQuickAddInfo(
-                  'Comet',
-                  'https://comet.elfhosted.com/configure',
-                  'Configure your debrid service, then copy the manifest URL.',
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(4),
+                child: _QuickAddChip(
+                  label: 'Comet',
+                  focusNode: _cometChipFocusNode,
+                  onTap: () => _openQuickAddInfo(
+                    'Comet',
+                    'https://comet.elfhosted.com/configure',
+                    'Configure your debrid service, then copy the manifest URL.',
+                  ),
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUrlTextField() {
+    return FocusTraversalOrder(
+      order: const NumericFocusOrder(0),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: _urlFieldFocused
+              ? Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 2,
+                )
+              : null,
+        ),
+        child: Shortcuts(
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+            SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+          },
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              NextFocusIntent: CallbackAction<NextFocusIntent>(
+                onInvoke: (intent) {
+                  _addButtonFocusNode.requestFocus();
+                  return null;
+                },
+              ),
+              PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+                onInvoke: (intent) {
+                  FocusScope.of(context).previousFocus();
+                  return null;
+                },
+              ),
+            },
+            child: TextField(
+              controller: _urlController,
+              focusNode: _urlFieldFocusNode,
+              decoration: const InputDecoration(
+                hintText: 'https://addon.example.com/manifest.json',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 14,
+                ),
+              ),
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _addAddon(),
+              enabled: !_isAdding,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -599,107 +674,63 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
         }
 
         final addon = _addons[index - 1];
-        return _buildAddonTile(addon, index - 1);
+        return _AddonTile(
+          addon: addon,
+          index: index - 1,
+          focusNode: _addonFocusNodes[addon.manifestUrl]!,
+          onTap: () => _showAddonDetails(addon),
+          onToggle: () => _toggleAddon(addon),
+          onRefresh: () => _refreshAddon(addon),
+          onDelete: () => _deleteAddon(addon),
+        );
       },
     );
   }
+}
 
-  Widget _buildAddonTile(StremioAddon addon, int index) {
-    final focusNode = _addonFocusNodes[addon.manifestUrl];
-    final theme = Theme.of(context);
+/// Addon tile with DPAD focus support
+class _AddonTile extends StatefulWidget {
+  final StremioAddon addon;
+  final int index;
+  final FocusNode focusNode;
+  final VoidCallback onTap;
+  final VoidCallback onToggle;
+  final VoidCallback onRefresh;
+  final VoidCallback onDelete;
 
-    return FocusTraversalOrder(
-      order: NumericFocusOrder(index.toDouble()),
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: InkWell(
-          focusNode: focusNode,
-          onTap: () => _showAddonDetails(addon),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Icon
-                CircleAvatar(
-                  backgroundColor: addon.enabled
-                      ? theme.colorScheme.primaryContainer
-                      : theme.colorScheme.surfaceContainerHighest,
-                  child: Icon(
-                    _getIconForAddon(addon),
-                    color: addon.enabled
-                        ? theme.colorScheme.onPrimaryContainer
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        addon.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: addon.enabled
-                              ? null
-                              : theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _getAddonSubtitle(addon),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Actions
-                IconButton(
-                  onPressed: () => _refreshAddon(addon),
-                  icon: const Icon(Icons.refresh, size: 20),
-                  tooltip: 'Refresh',
-                ),
-                Switch(
-                  value: addon.enabled,
-                  onChanged: (_) => _toggleAddon(addon),
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      _deleteAddon(addon);
-                    } else if (value == 'details') {
-                      _showAddonDetails(addon);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'details',
-                      child: ListTile(
-                        leading: Icon(Icons.info_outline),
-                        title: Text('Details'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: ListTile(
-                        leading: Icon(Icons.delete_outline, color: Colors.red),
-                        title: Text('Remove', style: TextStyle(color: Colors.red)),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+  const _AddonTile({
+    required this.addon,
+    required this.index,
+    required this.focusNode,
+    required this.onTap,
+    required this.onToggle,
+    required this.onRefresh,
+    required this.onDelete,
+  });
+
+  @override
+  State<_AddonTile> createState() => _AddonTileState();
+}
+
+class _AddonTileState extends State<_AddonTile> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChanged);
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    setState(() {
+      _isFocused = widget.focusNode.hasFocus;
+    });
   }
 
   IconData _getIconForAddon(StremioAddon addon) {
@@ -728,6 +759,134 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
     }
 
     return parts.join(' - ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return FocusTraversalOrder(
+      order: NumericFocusOrder((widget.index + 5).toDouble()), // Start after chips
+      child: Focus(
+        focusNode: widget.focusNode,
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+          // Handle Enter/Select to show details
+          if (event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.select) {
+            widget.onTap();
+            return KeyEventResult.handled;
+          }
+
+          return KeyEventResult.ignored;
+        },
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: _isFocused
+                ? BorderSide(
+                    color: theme.colorScheme.primary,
+                    width: 2,
+                  )
+                : BorderSide.none,
+          ),
+          elevation: _isFocused ? 8 : 1,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              decoration: _isFocused
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    )
+                  : null,
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  // Icon
+                  CircleAvatar(
+                    backgroundColor: widget.addon.enabled
+                        ? theme.colorScheme.primaryContainer
+                        : theme.colorScheme.surfaceContainerHighest,
+                    child: Icon(
+                      _getIconForAddon(widget.addon),
+                      color: widget.addon.enabled
+                          ? theme.colorScheme.onPrimaryContainer
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.addon.name,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: widget.addon.enabled
+                                ? null
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _getAddonSubtitle(widget.addon),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Actions
+                  IconButton(
+                    onPressed: widget.onRefresh,
+                    icon: const Icon(Icons.refresh, size: 20),
+                    tooltip: 'Refresh',
+                  ),
+                  Switch(
+                    value: widget.addon.enabled,
+                    onChanged: (_) => widget.onToggle(),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'delete') {
+                        widget.onDelete();
+                      } else if (value == 'details') {
+                        widget.onTap();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'details',
+                        child: ListTile(
+                          leading: Icon(Icons.info_outline),
+                          title: Text('Details'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          leading: Icon(Icons.delete_outline, color: Colors.red),
+                          title: Text('Remove', style: TextStyle(color: Colors.red)),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -760,18 +919,71 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _QuickAddChip extends StatelessWidget {
+class _QuickAddChip extends StatefulWidget {
   final String label;
+  final FocusNode focusNode;
   final VoidCallback onTap;
 
-  const _QuickAddChip({required this.label, required this.onTap});
+  const _QuickAddChip({
+    required this.label,
+    required this.focusNode,
+    required this.onTap,
+  });
+
+  @override
+  State<_QuickAddChip> createState() => _QuickAddChipState();
+}
+
+class _QuickAddChipState extends State<_QuickAddChip> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChanged);
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    setState(() {
+      _isFocused = widget.focusNode.hasFocus;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ActionChip(
-      label: Text(label),
-      avatar: const Icon(Icons.add, size: 16),
-      onPressed: onTap,
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+        if (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.select) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
+      },
+      child: ActionChip(
+        label: Text(widget.label),
+        avatar: const Icon(Icons.add, size: 16),
+        onPressed: widget.onTap,
+        side: _isFocused
+            ? BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              )
+            : null,
+        backgroundColor: _isFocused
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+            : null,
+      ),
     );
   }
 }
