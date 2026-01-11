@@ -1,3 +1,10 @@
+/// Stream type for Stremio streams
+enum StreamType {
+  torrent,    // Has infoHash, needs debrid
+  directUrl,  // Direct playable URL, no debrid needed
+  externalUrl // Opens in browser/external app
+}
+
 class Torrent {
   final int rowid;
   final String infohash;
@@ -10,6 +17,12 @@ class Torrent {
   final int scrapedDate;
   final String? category; // Optional: PirateBay category (5xx = NSFW)
   final String source;
+
+  // Stream type for Stremio streams (torrent, directUrl, externalUrl)
+  final StreamType streamType;
+
+  // Direct URL for non-torrent streams (directUrl or externalUrl types)
+  final String? directUrl;
 
   // Coverage detection fields
   final String? coverageType; // 'completeSeries', 'multiSeasonPack', 'seasonPack', 'singleEpisode'
@@ -31,6 +44,8 @@ class Torrent {
     required this.scrapedDate,
     this.category,
     String? source,
+    this.streamType = StreamType.torrent,
+    this.directUrl,
     this.coverageType,
     this.startSeason,
     this.endSeason,
@@ -39,12 +54,28 @@ class Torrent {
     this.episodeIdentifier,
   }) : source = (source ?? '').trim().toLowerCase();
 
+  /// Whether this is a direct playable stream (not torrent)
+  bool get isDirectStream => streamType == StreamType.directUrl;
+
+  /// Whether this opens in external browser/app
+  bool get isExternalStream => streamType == StreamType.externalUrl;
+
   factory Torrent.fromJson(
     Map<String, dynamic> json, {
     String? source,
   }) {
     final dynamic rawSource =
         json['source'] ?? json['provider'] ?? json['engine'] ?? source;
+
+    // Parse stream type
+    StreamType streamType = StreamType.torrent;
+    final streamTypeStr = json['stream_type'] as String?;
+    if (streamTypeStr == 'directUrl') {
+      streamType = StreamType.directUrl;
+    } else if (streamTypeStr == 'externalUrl') {
+      streamType = StreamType.externalUrl;
+    }
+
     return Torrent(
       rowid: json['rowid'] ?? 0,
       infohash: json['infohash'] ?? '',
@@ -57,6 +88,8 @@ class Torrent {
       scrapedDate: json['scraped_date'] ?? 0,
       category: json['category']?.toString(),
       source: rawSource?.toString(),
+      streamType: streamType,
+      directUrl: json['direct_url'] as String?,
       coverageType: json['coverage_type']?.toString(),
       startSeason: json['start_season'] as int?,
       endSeason: json['end_season'] as int?,
@@ -79,6 +112,8 @@ class Torrent {
       'scraped_date': scrapedDate,
       if (category != null) 'category': category,
       if (source.isNotEmpty) 'source': source,
+      if (streamType != StreamType.torrent) 'stream_type': streamType.name,
+      if (directUrl != null) 'direct_url': directUrl,
       if (coverageType != null) 'coverage_type': coverageType,
       if (startSeason != null) 'start_season': startSeason,
       if (endSeason != null) 'end_season': endSeason,

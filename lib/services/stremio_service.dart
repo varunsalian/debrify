@@ -122,8 +122,8 @@ class StremioService {
     // Fetch and parse manifest
     final addon = await fetchManifest(manifestUrl);
 
-    // Validate IMDB support - Debrify only works with IMDB-based content
-    final validationError = _validateAddonForImdb(addon);
+    // Validate addon has useful resources (streams or catalogs)
+    final validationError = _validateAddon(addon);
     if (validationError != null) {
       throw Exception(validationError);
     }
@@ -636,7 +636,7 @@ class StremioService {
                 s as Map<String, dynamic>,
                 addon.name,
               ))
-          .where((s) => s.isTorrent) // Only keep torrent streams
+          .where((s) => s.isUsable) // Keep all usable streams (torrent, direct, external)
           .toList();
     } catch (e) {
       debugPrint('StremioService: Error fetching from ${addon.name}: $e');
@@ -645,30 +645,43 @@ class StremioService {
   }
 
   /// Convert Stremio streams to Torrent objects
+  /// Handles all stream types: torrent (infoHash), direct URL, and external URL
   List<Torrent> _convertToTorrents(List<StremioStream> streams) {
     final Map<String, Torrent> uniqueTorrents = {};
     int withInfoHash = 0;
-    int withUrlOnly = 0;
+    int withDirectUrl = 0;
+    int withExternalUrl = 0;
     int skipped = 0;
 
     for (final stream in streams) {
-      // Get unique key - prefer infoHash, fall back to URL hash
+      // Determine stream type and get unique key
       String? uniqueKey;
-      if (stream.infoHash != null && stream.infoHash!.isNotEmpty) {
-        uniqueKey = stream.infoHash!.toLowerCase();
-        withInfoHash++;
-      } else if (stream.url != null && stream.url!.isNotEmpty) {
-        // Use URL hash as unique key for debrid streams
-        uniqueKey = stream.url.hashCode.toRadixString(16).padLeft(40, '0');
-        withUrlOnly++;
-      }
+      StreamType streamType;
+      String? directUrl;
 
-      if (uniqueKey == null) {
+      if (stream.isTorrent) {
+        // Torrent stream - has infoHash
+        uniqueKey = stream.infoHash!.toLowerCase();
+        streamType = StreamType.torrent;
+        withInfoHash++;
+      } else if (stream.isExternalUrl) {
+        // External URL - opens in browser
+        uniqueKey = 'ext:${stream.externalUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
+        streamType = StreamType.externalUrl;
+        directUrl = stream.externalUrl;
+        withExternalUrl++;
+      } else if (stream.isDirectUrl) {
+        // Direct URL - playable without debrid
+        uniqueKey = 'url:${stream.url.hashCode.toRadixString(16).padLeft(40, '0')}';
+        streamType = StreamType.directUrl;
+        directUrl = stream.url;
+        withDirectUrl++;
+      } else {
         skipped++;
         continue;
       }
 
-      // Parse seeders from title
+      // Parse seeders from title (only relevant for torrents, but parse anyway)
       final seeders = stream.seedersFromTitle ?? 0;
 
       // Parse size - try behaviorHints.videoSize first, then title
@@ -697,7 +710,7 @@ class StremioService {
         }
       }
 
-      // Create torrent object
+      // Create torrent object with stream type info
       final torrent = Torrent(
         rowid: 0,
         infohash: stream.infoHash?.toLowerCase() ?? uniqueKey,
@@ -709,32 +722,44 @@ class StremioService {
         completed: 0,
         scrapedDate: 0,
         source: 'stremio:${stream.source}',
+        streamType: streamType,
+        directUrl: directUrl,
       );
 
-      // Deduplicate by unique key, keeping highest seeder count
+      // Deduplicate by unique key, keeping highest seeder count (for torrents)
+      // For direct/external URLs, just keep first occurrence
       final existing = uniqueTorrents[uniqueKey];
-      if (existing == null || torrent.seeders > existing.seeders) {
+      if (existing == null ||
+          (streamType == StreamType.torrent && torrent.seeders > existing.seeders)) {
         uniqueTorrents[uniqueKey] = torrent;
       }
     }
 
-    // Sort by seeders descending
+    // Sort: torrents first (by seeders), then direct URLs, then external URLs
     final results = uniqueTorrents.values.toList();
-    results.sort((a, b) => b.seeders.compareTo(a.seeders));
+    results.sort((a, b) {
+      // First sort by stream type priority (torrent > direct > external)
+      final typeCompare = a.streamType.index.compareTo(b.streamType.index);
+      if (typeCompare != 0) return typeCompare;
+      // Then by seeders (descending)
+      return b.seeders.compareTo(a.seeders);
+    });
 
     debugPrint(
       'StremioService: Converted ${streams.length} streams to '
-      '${results.length} unique torrents',
+      '${results.length} unique items',
     );
     debugPrint(
-      'StremioService: Stream breakdown - withInfoHash: $withInfoHash, '
-      'withUrlOnly: $withUrlOnly, skipped: $skipped',
+      'StremioService: Stream breakdown - torrents: $withInfoHash, '
+      'directUrl: $withDirectUrl, externalUrl: $withExternalUrl, skipped: $skipped',
     );
 
-    // Log a few sample infohashes for debugging
+    // Log a few samples for debugging
     if (results.isNotEmpty) {
-      final samples = results.take(3).map((t) => '${t.infohash.substring(0, 8)}... (${t.source})').toList();
-      debugPrint('StremioService: Sample infohashes: $samples');
+      final samples = results.take(3).map((t) =>
+        '${t.streamType.name}:${t.infohash.substring(0, 8)}... (${t.source})'
+      ).toList();
+      debugPrint('StremioService: Samples: $samples');
     }
 
     return results;
@@ -798,18 +823,38 @@ class StremioService {
   /// - [addon]: The addon to fetch from
   /// - [catalog]: The catalog to fetch
   /// - [skip]: Number of items to skip (for pagination)
+  /// - [genre]: Optional genre filter
+  /// - [extras]: Additional extra parameters as key-value pairs
   ///
   /// Returns a list of StremioMeta items
   Future<List<StremioMeta>> fetchCatalog(
     StremioAddon addon,
     StremioAddonCatalog catalog, {
     int skip = 0,
+    String? genre,
+    Map<String, String>? extras,
   }) async {
     // Build catalog URL: {baseUrl}/catalog/{type}/{catalogId}.json
-    // With optional skip parameter: {baseUrl}/catalog/{type}/{catalogId}/skip={skip}.json
+    // With extra parameters: {baseUrl}/catalog/{type}/{catalogId}/genre=Action.json
+    // Multiple extras are joined with &: /genre=Action&skip=20.json
     String url = '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}';
+
+    // Build extra parameters
+    final List<String> extraParts = [];
+    if (genre != null && genre.isNotEmpty) {
+      extraParts.add('genre=${Uri.encodeComponent(genre)}');
+    }
     if (skip > 0) {
-      url += '/skip=$skip';
+      extraParts.add('skip=$skip');
+    }
+    if (extras != null) {
+      for (final entry in extras.entries) {
+        extraParts.add('${entry.key}=${Uri.encodeComponent(entry.value)}');
+      }
+    }
+
+    if (extraParts.isNotEmpty) {
+      url += '/${extraParts.join("&")}';
     }
     url += '.json';
 
@@ -839,9 +884,10 @@ class StremioService {
           return [];
         }
 
+        // Keep all items with valid ID (not just IMDB) - supports TV channels, etc.
         final metas = metasRaw
             .map((m) => StremioMeta.fromJson(m as Map<String, dynamic>))
-            .where((m) => m.hasValidImdbId) // Only keep items with valid IMDB IDs
+            .where((m) => m.hasValidId)
             .toList();
 
         debugPrint('StremioService: Catalog returned ${metas.length} valid items');
@@ -885,26 +931,25 @@ class StremioService {
     return results;
   }
 
-  /// Search across all IMDB-compatible catalogs that support search
+  /// Search across all catalogs that support search
   ///
-  /// Returns deduplicated results by IMDB ID, keeping the best metadata
+  /// Returns deduplicated results by ID, keeping the best metadata.
+  /// Supports all content types: movies, series, TV channels, anime, etc.
   Future<List<StremioMeta>> searchCatalogs(String query) async {
     if (query.trim().isEmpty) return [];
 
     final encodedQuery = Uri.encodeComponent(query.trim());
     final catalogAddons = await getCatalogAddons();
 
-    // Filter to IMDB-compatible addons only
-    final imdbAddons = catalogAddons.where((a) => a.handlesImdbIds).toList();
-
-    if (imdbAddons.isEmpty) {
-      debugPrint('StremioService: No IMDB-compatible catalog addons found');
+    if (catalogAddons.isEmpty) {
+      debugPrint('StremioService: No catalog addons found');
       return [];
     }
 
     // Collect all (addon, catalog) pairs that support search
+    // Search ALL addons, not just IMDB ones - supports TV channels, anime, etc.
     final searchableCatalogs = <({StremioAddon addon, StremioAddonCatalog catalog})>[];
-    for (final addon in imdbAddons) {
+    for (final addon in catalogAddons) {
       for (final catalog in addon.catalogs) {
         if (catalog.supportsSearch) {
           searchableCatalogs.add((addon: addon, catalog: catalog));
@@ -930,12 +975,13 @@ class StremioService {
 
     final allResults = await Future.wait(futures);
 
-    // Flatten and deduplicate by IMDB ID
+    // Flatten and deduplicate by ID (supports any ID format - IMDB, TV channels, etc.)
     final Map<String, StremioMeta> uniqueResults = {};
 
     for (final results in allResults) {
       for (final meta in results) {
-        if (!meta.hasValidImdbId) continue;
+        // Skip results without valid ID
+        if (meta.id.isEmpty) continue;
 
         final existing = uniqueResults[meta.id];
         if (existing == null) {
@@ -993,9 +1039,10 @@ class StremioService {
           return [];
         }
 
+        // Keep all items with valid ID (not just IMDB) - supports TV channels, etc.
         final metas = metasRaw
             .map((m) => StremioMeta.fromJson(m as Map<String, dynamic>))
-            .where((m) => m.hasValidImdbId)
+            .where((m) => m.hasValidId)
             .toList();
 
         debugPrint(
@@ -1026,11 +1073,11 @@ class StremioService {
   // Validation Methods
   // ============================================================
 
-  /// Validate that an addon supports IMDB IDs
+  /// Validate that an addon has useful resources
   ///
   /// Returns null if valid, or an error message if invalid.
-  /// Debrify only works with IMDB-based content, so we reject addons that don't support it.
-  String? _validateAddonForImdb(StremioAddon addon) {
+  /// Accepts any addon that provides streams or catalogs.
+  String? _validateAddon(StremioAddon addon) {
     final hasStreams = addon.supportsStreams;
     final hasCatalogs = addon.supportsCatalogs;
 
@@ -1038,21 +1085,6 @@ class StremioService {
     if (!hasStreams && !hasCatalogs) {
       return 'This addon doesn\'t provide streams or catalogs. '
           'Debrify requires addons with stream or catalog support.';
-    }
-
-    // Check IMDB support
-    if (!addon.handlesImdbIds) {
-      return 'This addon doesn\'t support IMDB IDs. '
-          'Debrify only works with IMDB-based content (movies and TV shows).';
-    }
-
-    // For catalog addons, check if at least one catalog supports search
-    if (hasCatalogs && !hasStreams) {
-      final hasSearchableCatalog = addon.catalogs.any((c) => c.supportsSearch);
-      if (!hasSearchableCatalog) {
-        return 'This catalog addon doesn\'t support search. '
-            'Debrify requires catalog addons with search functionality.';
-      }
     }
 
     return null; // Valid

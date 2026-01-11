@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/torrent.dart';
 import '../models/advanced_search_selection.dart';
@@ -35,13 +36,14 @@ import '../services/debrify_tv_cache_service.dart';
 import '../models/debrify_tv_cache.dart';
 import '../widgets/advanced_search_sheet.dart';
 import '../widgets/torrent_filters_sheet.dart';
+import '../widgets/catalog_browser.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
 import '../models/stremio_addon.dart';
 import 'dart:async';
 
 // Search mode for torrent search
-enum SearchMode { keyword, catalog }
+enum SearchMode { keyword, catalog, browse }
 
 class TorrentSearchScreen extends StatefulWidget {
   const TorrentSearchScreen({super.key});
@@ -427,6 +429,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _handleTorrentCardActivated(Torrent torrent, int index) {
+    // Handle different stream types
+    if (torrent.isDirectStream) {
+      // Direct URL - play directly without debrid
+      _playDirectStream(torrent);
+      return;
+    } else if (torrent.isExternalStream) {
+      // External URL - open in browser
+      _openExternalStream(torrent);
+      return;
+    }
+
+    // Torrent stream - needs debrid service
     if (_multipleServicesEnabled) {
       // Show dialog to choose service
       _showServiceSelectionDialog(torrent, index);
@@ -446,6 +460,54 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           content: Text('Please configure Real-Debrid, Torbox, or PikPak in Settings'),
         ),
       );
+    }
+  }
+
+  /// Play a direct stream URL without going through debrid
+  void _playDirectStream(Torrent torrent) {
+    if (torrent.directUrl == null || torrent.directUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No stream URL available')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => VideoPlayerScreen(
+          videoUrl: torrent.directUrl!,
+          title: torrent.displayTitle,
+        ),
+      ),
+    );
+  }
+
+  /// Open an external URL in browser
+  Future<void> _openExternalStream(Torrent torrent) async {
+    if (torrent.directUrl == null || torrent.directUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No external URL available')),
+      );
+      return;
+    }
+
+    final uri = Uri.tryParse(torrent.directUrl!);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid URL')),
+      );
+      return;
+    }
+
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open URL: $e')),
+        );
+      }
     }
   }
 
@@ -908,7 +970,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Use IMDB search when we have an advanced selection, otherwise keyword search
       if (selection != null && selection.imdbId.trim().isNotEmpty) {
-        debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}, isMovie=${!selection.isSeries}, title=${selection.title}');
+        debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}, isMovie=${!selection.isSeries}, title=${selection.title}, contentType=${selection.contentType}');
         result = await TorrentService.searchByImdbWithStremio(
           selection.imdbId,
           engineStates: _engineStates,
@@ -916,6 +978,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           season: selection.season,
           episode: selection.episode,
           availableSeasons: selection.isSeries ? _availableSeasons : null,
+          contentType: selection.contentType,
         );
       } else {
         debugPrint('TorrentSearchScreen: Using KEYWORD search (no advanced selection) for query: $query');
@@ -1280,6 +1343,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  // Build stream type chip for non-torrent streams (direct/external)
+  Widget? _buildStreamTypeChip(Torrent torrent) {
+    if (torrent.streamType == StreamType.torrent) {
+      return null; // No chip needed for torrents
+    }
+
+    if (torrent.isDirectStream) {
+      return StatChip(
+        icon: Icons.play_circle_outline_rounded,
+        text: 'Direct',
+        color: const Color(0xFF10B981), // Emerald 500 - indicates direct play
+      );
+    } else if (torrent.isExternalStream) {
+      return StatChip(
+        icon: Icons.open_in_new_rounded,
+        text: 'External',
+        color: const Color(0xFF6366F1), // Indigo 500 - indicates opens externally
+      );
+    }
+
+    return null;
+  }
+
   void _setEngineEnabled(String engineId, bool value) {
     if (_engineStates[engineId] == value) return;
     setState(() {
@@ -1498,28 +1584,62 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 ],
               ),
             ),
+            PopupMenuItem(
+              value: SearchMode.browse,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.explore_outlined,
+                    size: 18,
+                    color: _searchMode == SearchMode.browse
+                        ? const Color(0xFF7C3AED)
+                        : Colors.white70,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Browse',
+                    style: TextStyle(
+                      color: _searchMode == SearchMode.browse
+                          ? const Color(0xFF7C3AED)
+                          : Colors.white,
+                      fontWeight: _searchMode == SearchMode.browse
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: _searchMode == SearchMode.catalog
-                  ? const Color(0xFF7C3AED)
-                  : const Color(0xFF1E3A8A),
+              color: _searchMode == SearchMode.browse
+                  ? const Color(0xFF059669)
+                  : _searchMode == SearchMode.catalog
+                      ? const Color(0xFF7C3AED)
+                      : const Color(0xFF1E3A8A),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _searchMode == SearchMode.catalog
-                      ? Icons.auto_awesome_outlined
-                      : Icons.search_rounded,
+                  _searchMode == SearchMode.browse
+                      ? Icons.explore_outlined
+                      : _searchMode == SearchMode.catalog
+                          ? Icons.auto_awesome_outlined
+                          : Icons.search_rounded,
                   size: 16,
                   color: Colors.white,
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _searchMode == SearchMode.catalog ? 'Catalog' : 'Keyword',
+                  _searchMode == SearchMode.browse
+                      ? 'Browse'
+                      : _searchMode == SearchMode.catalog
+                          ? 'Catalog'
+                          : 'Keyword',
                   style: const TextStyle(fontSize: 12, color: Colors.white),
                 ),
                 const SizedBox(width: 4),
@@ -1538,8 +1658,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   void _toggleSearchMode() {
     setState(() {
-      _searchMode =
-          _searchMode == SearchMode.keyword ? SearchMode.catalog : SearchMode.keyword;
+      // Cycle through modes: keyword -> catalog -> browse -> keyword
+      switch (_searchMode) {
+        case SearchMode.keyword:
+          _searchMode = SearchMode.catalog;
+          break;
+        case SearchMode.catalog:
+          _searchMode = SearchMode.browse;
+          break;
+        case SearchMode.browse:
+          _searchMode = SearchMode.keyword;
+          break;
+      }
       _imdbAutocompleteResults.clear();
       _selectedImdbTitle = null;
       _imdbSearchError = null;
@@ -1623,26 +1753,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final imdbResults = futures[0] as List<ImdbTitleResult>;
       final stremioResults = futures[1] as List<StremioMeta>;
 
-      // Convert Stremio results to ImdbTitleResult format
+      // Convert Stremio results to ImdbTitleResult format (supports all content types)
       final stremioConverted = stremioResults
-          .where((meta) => meta.hasValidImdbId)
-          .map((meta) => ImdbTitleResult(
-                imdbId: meta.id,
-                title: meta.name,
-                year: meta.year,
-                posterUrl: meta.poster,
-              ))
+          .where((meta) => meta.id.isNotEmpty)
+          .map((meta) => ImdbTitleResult.fromStremioMeta(meta))
           .toList();
 
-      // Merge and deduplicate by IMDB ID (IMDbbot results take priority)
+      // Merge and deduplicate by ID (IMDbbot results take priority for IMDB content)
       final Map<String, ImdbTitleResult> resultMap = {};
 
-      // Add Stremio results first (lower priority)
+      // Add Stremio results first (lower priority for IMDB, only source for non-IMDB)
       for (final result in stremioConverted) {
         resultMap[result.imdbId] = result;
       }
 
-      // Add IMDbbot results (higher priority, will overwrite Stremio)
+      // Add IMDbbot results (higher priority, will overwrite Stremio for IMDB content)
       for (final result in imdbResults) {
         resultMap[result.imdbId] = result;
       }
@@ -1831,9 +1956,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       year: _selectedImdbTitle!.year,
       season: season,
       episode: episode,
+      contentType: _selectedImdbTitle!.contentType,
     );
 
-    debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}, season=$season, episode=$episode');
+    debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}, season=$season, episode=$episode, contentType=${selection.contentType}');
 
     setState(() {
       _activeAdvancedSelection = selection;
@@ -8960,6 +9086,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Browse mode: just show mode selector
+                    if (_searchMode == SearchMode.browse) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.explore_rounded,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Browse Catalogs',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          _buildModeSelector(),
+                        ],
+                      ),
+                    ] else ...[
                     // Search Input + Advanced action
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -9094,6 +9244,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     // Search Engine Toggles
                     const SizedBox(height: 16),
                     _buildProvidersAccordion(context),
+                    ], // end else (non-browse mode)
                   ],
                 ),
               ),
@@ -9102,6 +9253,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               Expanded(
                 child: Builder(
                   builder: (context) {
+                    // Browse mode - show catalog browser
+                    if (_searchMode == SearchMode.browse) {
+                      return CatalogBrowser(
+                        onItemSelected: (selection) {
+                          // Switch to catalog mode and trigger search
+                          setState(() {
+                            _searchMode = SearchMode.catalog;
+                            _selectedImdbTitle = ImdbTitleResult(
+                              imdbId: selection.imdbId,
+                              title: selection.title,
+                              year: selection.year,
+                              contentType: selection.contentType,
+                            );
+                            _isSeries = selection.isSeries;
+                            _searchController.text = selection.title;
+                            _activeAdvancedSelection = selection;
+                            // Clear autocomplete results since we have a selection
+                            _imdbAutocompleteResults.clear();
+                            _imdbSearchError = null;
+                            _seriesControlsExpanded = selection.isSeries;
+                          });
+                          _createAdvancedSelectionAndSearch();
+                        },
+                      );
+                    }
+
                     if (_isLoading) {
                       return ListView.builder(
                         padding: const EdgeInsets.only(
@@ -9988,6 +10165,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         onShowFileSelection: _showFileSelectionDialog,
         buildSizeOrPackChip: _buildSizeOrPackChip,
         buildSourceStatChip: _buildSourceStatChip,
+        buildStreamTypeChip: _buildStreamTypeChip,
         torboxResultIsCached: _torboxResultIsCached,
         searchFocusNode: _searchFocusNode,
         episodeInputFocusNode: _episodeInputFocusNode,
@@ -10165,6 +10343,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         onShowFileSelection: _showFileSelectionDialog,
         buildSizeOrPackChip: _buildSizeOrPackChip,
         buildSourceStatChip: _buildSourceStatChip,
+        buildStreamTypeChip: _buildStreamTypeChip,
         torboxResultIsCached: _torboxResultIsCached,
         searchFocusNode: _searchFocusNode,
         episodeInputFocusNode: _episodeInputFocusNode,
@@ -10217,23 +10396,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () => _copyMagnetLink(torrent.infohash),
-                  tooltip: 'Copy magnet link',
-                  icon: const Icon(Icons.copy_rounded, size: 18),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFF1D2A3F),
-                    foregroundColor: const Color(0xFF60A5FA),
-                    padding: const EdgeInsets.all(10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                // Only show copy magnet button for torrent streams
+                if (torrent.streamType == StreamType.torrent) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => _copyMagnetLink(torrent.infohash),
+                    tooltip: 'Copy magnet link',
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFF1D2A3F),
+                      foregroundColor: const Color(0xFF60A5FA),
+                      padding: const EdgeInsets.all(10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 12),
@@ -10244,17 +10426,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               runSpacing: 6,
               children: [
                 _buildSizeOrPackChip(torrent),
-                StatChip(
-                  icon: Icons.upload_rounded,
-                  text: '${torrent.seeders}',
-                  color: const Color(0xFF22C55E),
-                ),
-                StatChip(
-                  icon: Icons.download_rounded,
-                  text: '${torrent.leechers}',
-                  color: const Color(0xFFF59E0B),
-                ),
+                // Only show seeders/leechers for torrent streams
+                if (torrent.streamType == StreamType.torrent) ...[
+                  StatChip(
+                    icon: Icons.upload_rounded,
+                    text: '${torrent.seeders}',
+                    color: const Color(0xFF22C55E),
+                  ),
+                  StatChip(
+                    icon: Icons.download_rounded,
+                    text: '${torrent.leechers}',
+                    color: const Color(0xFFF59E0B),
+                  ),
+                ],
                 _buildSourceStatChip(torrent.source),
+                // Show stream type chip for direct/external streams
+                if (_buildStreamTypeChip(torrent) != null)
+                  _buildStreamTypeChip(torrent)!,
               ],
             ),
             const SizedBox(height: 10),
@@ -10291,6 +10479,66 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompactLayout = constraints.maxWidth < 360;
+
+        // For direct/external streams, show a Play button instead of debrid buttons
+        if (torrent.isDirectStream || torrent.isExternalStream) {
+          return SizedBox(
+            width: double.infinity,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
+                onTap: () => _handleTorrentCardActivated(torrent, index),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: torrent.isDirectStream
+                          ? const [Color(0xFF059669), Color(0xFF10B981)]
+                          : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (torrent.isDirectStream
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFF6366F1)).withValues(alpha: 0.4),
+                        spreadRadius: 0,
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        torrent.isDirectStream
+                            ? Icons.play_circle_filled_rounded
+                            : Icons.open_in_new_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        torrent.isDirectStream ? 'Play Stream' : 'Open Link',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
 
         Widget buildTorboxButton() {
           final bool isCached = _torboxResultIsCached(torrent.infohash);
@@ -10548,6 +10796,7 @@ class _TorrentCard extends StatefulWidget {
     required this.onShowFileSelection,
     required this.buildSizeOrPackChip,
     required this.buildSourceStatChip,
+    required this.buildStreamTypeChip,
     required this.torboxResultIsCached,
     required this.searchFocusNode,
     required this.episodeInputFocusNode,
@@ -10578,6 +10827,7 @@ class _TorrentCard extends StatefulWidget {
   final void Function(String infohash, String name, int index) onShowFileSelection;
   final Widget Function(Torrent) buildSizeOrPackChip;
   final Widget Function(String) buildSourceStatChip;
+  final Widget? Function(Torrent) buildStreamTypeChip;
   final bool Function(String) torboxResultIsCached;
   final FocusNode searchFocusNode;
   final FocusNode episodeInputFocusNode;
@@ -10725,7 +10975,8 @@ class _TorrentCardState extends State<_TorrentCard> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (!widget.isTelevision) ...[
+                // Only show copy magnet button for torrent streams on non-TV
+                if (!widget.isTelevision && widget.torrent.streamType == StreamType.torrent) ...[
                   const SizedBox(width: 8),
                   IconButton(
                     onPressed: widget.onCopyMagnet,
@@ -10748,23 +10999,29 @@ class _TorrentCardState extends State<_TorrentCard> {
             ),
             const SizedBox(height: 12),
 
-            // Stats Grid - Now includes source instead of completed
+            // Stats Grid - Now includes source and stream type
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: [
                 widget.buildSizeOrPackChip(widget.torrent),
-                StatChip(
-                  icon: Icons.upload_rounded,
-                  text: '${widget.torrent.seeders}',
-                  color: const Color(0xFF22C55E), // Green 500 - Fresh green
-                ),
-                StatChip(
-                  icon: Icons.download_rounded,
-                  text: '${widget.torrent.leechers}',
-                  color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
-                ),
+                // Only show seeders/leechers for torrent streams
+                if (widget.torrent.streamType == StreamType.torrent) ...[
+                  StatChip(
+                    icon: Icons.upload_rounded,
+                    text: '${widget.torrent.seeders}',
+                    color: const Color(0xFF22C55E), // Green 500 - Fresh green
+                  ),
+                  StatChip(
+                    icon: Icons.download_rounded,
+                    text: '${widget.torrent.leechers}',
+                    color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
+                  ),
+                ],
                 widget.buildSourceStatChip(widget.torrent.source),
+                // Show stream type chip for direct/external streams
+                if (widget.buildStreamTypeChip(widget.torrent) != null)
+                  widget.buildStreamTypeChip(widget.torrent)!,
               ],
             ),
             const SizedBox(height: 10),
@@ -10794,6 +11051,66 @@ class _TorrentCardState extends State<_TorrentCard> {
             LayoutBuilder(
               builder: (context, constraints) {
               final isCompactLayout = constraints.maxWidth < 360;
+
+              // For direct/external streams, show a Play button instead of debrid buttons
+              if (widget.torrent.isDirectStream || widget.torrent.isExternalStream) {
+                return SizedBox(
+                  width: double.infinity,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
+                      onTap: widget.onCardActivated,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: LinearGradient(
+                            colors: widget.torrent.isDirectStream
+                                ? const [Color(0xFF059669), Color(0xFF10B981)]
+                                : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (widget.torrent.isDirectStream
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF6366F1)).withValues(alpha: 0.4),
+                              spreadRadius: 0,
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              widget.torrent.isDirectStream
+                                  ? Icons.play_circle_filled_rounded
+                                  : Icons.open_in_new_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.torrent.isDirectStream ? 'Play Stream' : 'Open Link',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
 
               Widget buildTorboxButton() {
                 final bool isCached = widget.torboxResultIsCached(widget.torrent.infohash);

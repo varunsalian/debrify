@@ -377,19 +377,27 @@ class TorrentService {
     int? episode,
     bool includeStremio = true,
     List<int>? availableSeasons,
+    String? contentType, // Optional explicit content type (for TV channels, etc.)
   }) async {
-    // Start both searches in parallel
-    final List<Future<Map<String, dynamic>>> searchFutures = [
-      // Traditional engine search
-      searchByImdb(
-        imdbId,
-        engineStates: engineStates,
-        isMovie: isMovie,
-        season: season,
-        episode: episode,
-        availableSeasons: availableSeasons,
-      ),
-    ];
+    // For non-IMDB content types (TV channels, etc.), skip traditional engine search
+    final isNonImdbContent = contentType != null && contentType != 'movie' && contentType != 'series';
+
+    // Start searches in parallel
+    final List<Future<Map<String, dynamic>>> searchFutures = [];
+
+    // Traditional engine search only for movie/series (IMDB content)
+    if (!isNonImdbContent) {
+      searchFutures.add(
+        searchByImdb(
+          imdbId,
+          engineStates: engineStates,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+          availableSeasons: availableSeasons,
+        ),
+      );
+    }
 
     // Add Stremio search if enabled
     if (includeStremio) {
@@ -400,6 +408,7 @@ class TorrentService {
           season: season,
           episode: episode,
           availableSeasons: availableSeasons,
+          contentType: contentType,
         ),
       );
     }
@@ -483,6 +492,7 @@ class TorrentService {
     int? season,
     int? episode,
     List<int>? availableSeasons,
+    String? contentType, // Optional explicit content type (for TV channels, etc.)
   }) async {
     try {
       final stremioService = StremioService.instance;
@@ -496,7 +506,8 @@ class TorrentService {
         };
       }
 
-      final type = isMovie ? 'movie' : 'series';
+      // Use explicit contentType if provided, otherwise infer from isMovie
+      final type = contentType ?? (isMovie ? 'movie' : 'series');
       final result = await stremioService.searchStreams(
         type: type,
         imdbId: imdbId,

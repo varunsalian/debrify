@@ -1,3 +1,51 @@
+/// Represents an extra parameter for a catalog (e.g., genre, search, skip)
+class StremioExtraParam {
+  /// Parameter name (e.g., 'genre', 'search', 'skip')
+  final String name;
+
+  /// Whether this parameter is required
+  final bool isRequired;
+
+  /// Available options for this parameter (e.g., genre list)
+  final List<String>? options;
+
+  /// Options limit (max selections)
+  final int? optionsLimit;
+
+  const StremioExtraParam({
+    required this.name,
+    this.isRequired = false,
+    this.options,
+    this.optionsLimit,
+  });
+
+  factory StremioExtraParam.fromJson(dynamic json) {
+    if (json is String) {
+      return StremioExtraParam(name: json);
+    }
+    if (json is Map) {
+      return StremioExtraParam(
+        name: json['name'] as String? ?? 'unknown',
+        isRequired: json['isRequired'] as bool? ?? false,
+        options: (json['options'] as List<dynamic>?)?.cast<String>(),
+        optionsLimit: json['optionsLimit'] as int?,
+      );
+    }
+    return const StremioExtraParam(name: 'unknown');
+  }
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        if (isRequired) 'isRequired': isRequired,
+        if (options != null) 'options': options,
+        if (optionsLimit != null) 'optionsLimit': optionsLimit,
+      };
+
+  @override
+  String toString() =>
+      'StremioExtraParam(name: $name, options: ${options?.length ?? 0})';
+}
+
 /// Represents a catalog definition from a Stremio addon manifest
 class StremioAddonCatalog {
   /// Unique ID for this catalog (e.g., 'trending', 'top')
@@ -12,36 +60,53 @@ class StremioAddonCatalog {
   /// Optional extra parameters supported (e.g., search, genre, skip)
   final List<String>? extraSupported;
 
+  /// Full extra parameter configuration with options
+  final List<StremioExtraParam> extras;
+
   const StremioAddonCatalog({
     required this.id,
     required this.type,
     required this.name,
     this.extraSupported,
+    this.extras = const [],
   });
 
   /// Check if this catalog supports search
   bool get supportsSearch => extraSupported?.contains('search') ?? false;
 
+  /// Check if this catalog supports genre filter
+  bool get supportsGenre => extraSupported?.contains('genre') ?? false;
+
+  /// Get the genre extra param if available (for options)
+  StremioExtraParam? get genreParam =>
+      extras.cast<StremioExtraParam?>().firstWhere(
+            (e) => e?.name == 'genre',
+            orElse: () => null,
+          );
+
+  /// Get available genre options
+  List<String> get genreOptions => genreParam?.options ?? [];
+
   factory StremioAddonCatalog.fromJson(Map<String, dynamic> json) {
     // Parse extraSupported - can be in 'extraSupported' or derived from 'extra'
     List<String>? extraSupported;
+    final List<StremioExtraParam> extras = [];
 
     // Try extraSupported first
     final extraSupportedRaw = json['extraSupported'] as List<dynamic>?;
     if (extraSupportedRaw != null) {
       extraSupported = extraSupportedRaw.cast<String>();
-    } else {
-      // Fall back to parsing 'extra' array for names
-      final extraRaw = json['extra'] as List<dynamic>?;
-      if (extraRaw != null) {
-        extraSupported = extraRaw
-            .map((e) {
-              if (e is String) return e;
-              if (e is Map) return e['name'] as String?;
-              return null;
-            })
-            .whereType<String>()
-            .toList();
+    }
+
+    // Parse full 'extra' array for names and options
+    final extraRaw = json['extra'] as List<dynamic>?;
+    if (extraRaw != null) {
+      for (final e in extraRaw) {
+        extras.add(StremioExtraParam.fromJson(e));
+      }
+      // Also extract names for extraSupported if not already set
+      if (extraSupported == null) {
+        extraSupported = extras.map((e) => e.name).toList();
       }
     }
 
@@ -50,6 +115,7 @@ class StremioAddonCatalog {
       type: json['type'] as String? ?? 'movie',
       name: json['name'] as String? ?? 'Unknown Catalog',
       extraSupported: extraSupported,
+      extras: extras,
     );
   }
 
@@ -58,6 +124,7 @@ class StremioAddonCatalog {
         'type': type,
         'name': name,
         if (extraSupported != null) 'extraSupported': extraSupported,
+        if (extras.isNotEmpty) 'extra': extras.map((e) => e.toJson()).toList(),
       };
 
   @override
@@ -139,6 +206,12 @@ class StremioMeta {
 
   /// Check if this is a valid IMDB ID
   bool get hasValidImdbId => id.startsWith('tt') && id.length >= 9;
+
+  /// Check if this has a valid ID (any non-empty ID, not just IMDB)
+  bool get hasValidId => id.isNotEmpty;
+
+  /// Check if this is a non-IMDB content type (TV channel, etc.)
+  bool get isNonImdb => !hasValidImdbId && hasValidId;
 
   @override
   String toString() => 'StremioMeta(id: $id, name: $name, year: $year)';
@@ -417,8 +490,11 @@ class StremioStream {
   /// Magnet URI (if available)
   final String? magnetUri;
 
-  /// Direct URL (for non-torrent streams)
+  /// Direct URL (for non-torrent streams - playable URLs)
   final String? url;
+
+  /// External URL (opens in browser/external app - e.g., Netflix link)
+  final String? externalUrl;
 
   /// Stream title/name
   final String? title;
@@ -436,16 +512,25 @@ class StremioStream {
     this.infoHash,
     this.magnetUri,
     this.url,
+    this.externalUrl,
     this.title,
     this.fileIdx,
     this.behaviorHints,
     required this.source,
   });
 
-  /// Whether this is a torrent stream (has infoHash or debrid URL)
-  bool get isTorrent =>
-      (infoHash != null && infoHash!.isNotEmpty) ||
-      (url != null && url!.isNotEmpty);
+  /// Whether this is a torrent stream (has infoHash)
+  bool get isTorrent => infoHash != null && infoHash!.isNotEmpty;
+
+  /// Whether this is a direct URL stream (has url but no infoHash)
+  bool get isDirectUrl =>
+      !isTorrent && url != null && url!.isNotEmpty;
+
+  /// Whether this is an external URL stream (opens in browser)
+  bool get isExternalUrl => externalUrl != null && externalUrl!.isNotEmpty;
+
+  /// Whether this stream is usable (has any playable source)
+  bool get isUsable => isTorrent || isDirectUrl || isExternalUrl;
 
   /// Extract seeders from title if available (common pattern: "seeders: 123")
   int? get seedersFromTitle {
@@ -507,6 +592,7 @@ class StremioStream {
       infoHash: infoHash,
       magnetUri: json['magnetUri'] as String? ?? json['magnet'] as String?,
       url: json['url'] as String?,
+      externalUrl: json['externalUrl'] as String?,
       title: title,
       fileIdx: json['fileIdx'] as int?,
       behaviorHints: behaviorHints,
