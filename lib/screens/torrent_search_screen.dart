@@ -464,7 +464,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Play a direct stream URL without going through debrid
-  void _playDirectStream(Torrent torrent) {
+  Future<void> _playDirectStream(Torrent torrent) async {
     if (torrent.directUrl == null || torrent.directUrl!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No stream URL available')),
@@ -472,13 +472,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    Navigator.push(
+    // Use VideoPlayerLauncher to handle player selection (VLC, MX Player, etc.)
+    await VideoPlayerLauncher.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => VideoPlayerScreen(
-          videoUrl: torrent.directUrl!,
-          title: torrent.displayTitle,
-        ),
+      VideoPlayerLaunchArgs(
+        videoUrl: torrent.directUrl!,
+        title: torrent.displayTitle,
+        subtitle: torrent.source,
       ),
     );
   }
