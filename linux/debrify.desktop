@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Debrify
+Comment=Debrid client for torrents and streaming
+Exec=debrify %u
+Icon=debrify
+Terminal=false
+Categories=Network;AudioVideo;
+MimeType=x-scheme-handler/stremio;x-scheme-handler/magnet;
+StartupNotify=true

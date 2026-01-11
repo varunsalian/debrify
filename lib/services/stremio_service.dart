@@ -26,6 +26,26 @@ class StremioService {
   // In-memory cache of addons
   List<StremioAddon>? _addonsCache;
 
+  // Listeners for addon changes (used to refresh UI when addons are added via deep link)
+  final List<VoidCallback> _addonsChangedListeners = [];
+
+  /// Add a listener to be notified when addons change
+  void addAddonsChangedListener(VoidCallback listener) {
+    _addonsChangedListeners.add(listener);
+  }
+
+  /// Remove an addons changed listener
+  void removeAddonsChangedListener(VoidCallback listener) {
+    _addonsChangedListeners.remove(listener);
+  }
+
+  /// Notify all listeners that addons have changed
+  void _notifyAddonsChanged() {
+    for (final listener in _addonsChangedListeners) {
+      listener();
+    }
+  }
+
   // ============================================================
   // Addon Management
   // ============================================================
@@ -73,6 +93,7 @@ class StremioService {
     final jsonString = json.encode(addons.map((a) => a.toJson()).toList());
     await prefs.setString(_addonsKey, jsonString);
     _addonsCache = addons;
+    _notifyAddonsChanged();
   }
 
   /// Add a new addon by manifest URL

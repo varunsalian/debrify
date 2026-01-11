@@ -28,6 +28,7 @@ import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
 import 'services/magnet_link_handler.dart';
+import 'services/stremio_service.dart';
 import 'widgets/auto_launch_overlay.dart';
 import 'widgets/window_drag_area.dart';
 
@@ -651,6 +652,58 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
       // Handle the shared URL
       await handler.handleSharedUrl(url);
+    };
+
+    // Set the callback for handling Stremio addon URLs
+    deepLinkService.onStremioAddonReceived = (manifestUrl) async {
+      if (!mounted) return;
+
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              SizedBox(width: 12),
+              Text('Installing Stremio addon...'),
+            ],
+          ),
+          duration: Duration(seconds: 10),
+        ),
+      );
+
+      try {
+        // Add the addon using StremioService
+        final addon = await StremioService.instance.addAddon(manifestUrl);
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added Stremio addon: ${addon.name}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add addon: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     };
 
     // Initialize the service

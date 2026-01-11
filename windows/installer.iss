@@ -35,5 +35,16 @@ Source: "..\\build\\windows\\x64\\runner\\Release\\*"; DestDir: "{app}"; Flags: 
 Name: "{group}\\Debrify"; Filename: "{app}\\debrify.exe"
 Name: "{autodesktop}\\Debrify"; Filename: "{app}\\debrify.exe"; Tasks: desktopicon
 
+[Registry]
+; Register stremio:// URL protocol
+Root: HKCU; Subkey: "Software\\Classes\\stremio"; ValueType: string; ValueData: "URL:Stremio Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\\Classes\\stremio"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\\Classes\\stremio\\shell\\open\\command"; ValueType: string; ValueData: """{app}\\debrify.exe"" ""%1"""
+
+; Register magnet:// URL protocol
+Root: HKCU; Subkey: "Software\\Classes\\magnet"; ValueType: string; ValueData: "URL:Magnet Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\\Classes\\magnet"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\\Classes\\magnet\\shell\\open\\command"; ValueType: string; ValueData: """{app}\\debrify.exe"" ""%1"""
+
 [Run]
 Filename: "{app}\\debrify.exe"; Description: "Launch Debrify"; Flags: nowait postinstall skipifsilent

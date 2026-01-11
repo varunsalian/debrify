@@ -21,6 +21,9 @@ class DeepLinkService {
   // Callback function to handle shared URLs (http/https)
   Future<void> Function(String url)? onUrlShared;
 
+  // Callback function to handle Stremio addon URLs
+  Future<void> Function(String manifestUrl)? onStremioAddonReceived;
+
   // Track recently processed links to avoid duplicates
   final Map<String, DateTime> _recentlyProcessedMagnets = {};
   final Map<String, DateTime> _recentlyProcessedUrls = {};
@@ -80,53 +83,147 @@ class DeepLinkService {
             file.type == SharedMediaType.URL ||
             value.startsWith('http://') ||
             value.startsWith('https://') ||
-            value.startsWith('magnet:')) {
+            value.startsWith('magnet:') ||
+            value.startsWith('stremio://')) {
           _handleSharedText(value);
         }
       }
     }
   }
 
-  /// Handle incoming URI (magnet links)
+  /// Handle incoming URI (magnet links, stremio addons)
   void _handleUri(Uri uri) {
     debugPrint('Received deep link: $uri');
 
     if (uri.scheme == 'magnet') {
-      final magnetUri = uri.toString();
-      debugPrint('Magnet link detected: $magnetUri');
+      _handleMagnetUri(uri);
+    } else if (uri.scheme == 'stremio') {
+      _handleStremioUri(uri);
+    } else if (uri.scheme == 'https' || uri.scheme == 'http') {
+      // Check if it's a Stremio manifest URL
+      if (uri.path.endsWith('manifest.json')) {
+        _handleStremioManifestUrl(uri.toString());
+      }
+    }
+  }
 
-      // Extract infohash for deduplication (same torrent can have different magnet URIs)
-      final infohash = extractInfohash(magnetUri);
-      if (infohash == null) {
-        debugPrint('Could not extract infohash from magnet link');
+  /// Handle magnet URI
+  void _handleMagnetUri(Uri uri) {
+    final magnetUri = uri.toString();
+    debugPrint('Magnet link detected: $magnetUri');
+
+    // Extract infohash for deduplication (same torrent can have different magnet URIs)
+    final infohash = extractInfohash(magnetUri);
+    if (infohash == null) {
+      debugPrint('Could not extract infohash from magnet link');
+      return;
+    }
+
+    // Check if we've already processed this infohash recently
+    final now = DateTime.now();
+    final lastProcessed = _recentlyProcessedMagnets[infohash];
+
+    if (lastProcessed != null) {
+      final timeSinceProcessed = now.difference(lastProcessed);
+      if (timeSinceProcessed < _deduplicationWindow) {
+        debugPrint('Ignoring duplicate magnet link (infohash: $infohash, processed ${timeSinceProcessed.inSeconds}s ago)');
         return;
       }
+    }
 
-      // Check if we've already processed this infohash recently
-      final now = DateTime.now();
-      final lastProcessed = _recentlyProcessedMagnets[infohash];
+    // Clean up old entries from the tracking map
+    _recentlyProcessedMagnets.removeWhere((key, value) {
+      return now.difference(value) > _deduplicationWindow;
+    });
 
-      if (lastProcessed != null) {
-        final timeSinceProcessed = now.difference(lastProcessed);
-        if (timeSinceProcessed < _deduplicationWindow) {
-          debugPrint('Ignoring duplicate magnet link (infohash: $infohash, processed ${timeSinceProcessed.inSeconds}s ago)');
-          return;
+    // Mark this infohash as processed
+    _recentlyProcessedMagnets[infohash] = now;
+
+    if (onMagnetLinkReceived != null) {
+      onMagnetLinkReceived!(magnetUri);
+    } else {
+      debugPrint('No magnet link handler registered');
+    }
+  }
+
+  /// Handle Stremio addon URI (stremio://...)
+  void _handleStremioUri(Uri uri) {
+    debugPrint('Stremio addon link detected: $uri');
+
+    // Extract manifest URL from stremio:// URI
+    // Format can be:
+    // - stremio://addon/https%3A%2F%2Fexample.com%2Fmanifest.json
+    // - stremio://example.com/manifest.json
+    // - stremio://addon?url=https://example.com/manifest.json
+
+    String? manifestUrl;
+
+    // Try to extract from path (URL-encoded manifest URL after /addon/)
+    final path = uri.path;
+    if (path.startsWith('/addon/') || path.startsWith('addon/')) {
+      final encodedUrl = path.replaceFirst(RegExp(r'^/?addon/'), '');
+      manifestUrl = Uri.decodeComponent(encodedUrl);
+    } else if (path.startsWith('/')) {
+      // Direct path format: stremio://example.com/path/manifest.json
+      // Reconstruct as https URL
+      final host = uri.host;
+      if (host.isNotEmpty) {
+        manifestUrl = 'https://$host$path';
+      }
+    }
+
+    // Try query parameter format
+    if (manifestUrl == null || manifestUrl.isEmpty) {
+      manifestUrl = uri.queryParameters['url'];
+    }
+
+    // Fallback: try the whole thing after stremio://
+    if (manifestUrl == null || manifestUrl.isEmpty) {
+      final fullPath = uri.toString().replaceFirst('stremio://', '');
+      if (fullPath.contains('manifest.json')) {
+        // Decode and ensure it's a proper URL
+        manifestUrl = Uri.decodeComponent(fullPath);
+        if (!manifestUrl.startsWith('http')) {
+          manifestUrl = 'https://$manifestUrl';
         }
       }
+    }
 
-      // Clean up old entries from the tracking map
-      _recentlyProcessedMagnets.removeWhere((key, value) {
-        return now.difference(value) > _deduplicationWindow;
-      });
+    if (manifestUrl != null && manifestUrl.isNotEmpty) {
+      _handleStremioManifestUrl(manifestUrl);
+    } else {
+      debugPrint('Could not extract manifest URL from Stremio link: $uri');
+    }
+  }
 
-      // Mark this infohash as processed
-      _recentlyProcessedMagnets[infohash] = now;
+  /// Handle Stremio manifest URL
+  void _handleStremioManifestUrl(String manifestUrl) {
+    debugPrint('Processing Stremio manifest URL: $manifestUrl');
 
-      if (onMagnetLinkReceived != null) {
-        onMagnetLinkReceived!(magnetUri);
-      } else {
-        debugPrint('No magnet link handler registered');
+    // Deduplication check
+    final now = DateTime.now();
+    final lastProcessed = _recentlyProcessedUrls[manifestUrl];
+
+    if (lastProcessed != null) {
+      final timeSinceProcessed = now.difference(lastProcessed);
+      if (timeSinceProcessed < _deduplicationWindow) {
+        debugPrint('Ignoring duplicate Stremio manifest (processed ${timeSinceProcessed.inSeconds}s ago)');
+        return;
       }
+    }
+
+    // Clean up old entries
+    _recentlyProcessedUrls.removeWhere((key, value) {
+      return now.difference(value) > _deduplicationWindow;
+    });
+
+    // Mark as processed
+    _recentlyProcessedUrls[manifestUrl] = now;
+
+    if (onStremioAddonReceived != null) {
+      onStremioAddonReceived!(manifestUrl);
+    } else {
+      debugPrint('No Stremio addon handler registered');
     }
   }
 
@@ -149,8 +246,20 @@ class DeepLinkService {
       return;
     }
 
+    // Check if it's a stremio:// link
+    if (url.startsWith('stremio://')) {
+      _handleUri(Uri.parse(url));
+      return;
+    }
+
     // Check if it's an HTTP/HTTPS URL
     if (url.startsWith('http://') || url.startsWith('https://')) {
+      // Check if it's a Stremio manifest URL
+      if (url.contains('manifest.json')) {
+        _handleStremioManifestUrl(url);
+        return;
+      }
+
       // Deduplication check
       final now = DateTime.now();
       final lastProcessed = _recentlyProcessedUrls[url];
@@ -185,7 +294,8 @@ class DeepLinkService {
     text = text.trim();
 
     // If the entire text is a URL, return it
-    if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('magnet:')) {
+    if (text.startsWith('http://') || text.startsWith('https://') ||
+        text.startsWith('magnet:') || text.startsWith('stremio://')) {
       // Find the end of the URL (first whitespace or end of string)
       final endIndex = text.indexOf(RegExp(r'\s'));
       return endIndex == -1 ? text : text.substring(0, endIndex);
@@ -193,7 +303,7 @@ class DeepLinkService {
 
     // Try to find a URL in the text using regex
     final urlRegex = RegExp(
-      r'(https?://[^\s]+|magnet:\?[^\s]+)',
+      r'(https?://[^\s]+|magnet:\?[^\s]+|stremio://[^\s]+)',
       caseSensitive: false,
     );
     final match = urlRegex.firstMatch(text);

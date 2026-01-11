@@ -38,7 +38,15 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
   void initState() {
     super.initState();
     _urlFieldFocusNode.addListener(_onUrlFieldFocusChanged);
+    _stremioService.addAddonsChangedListener(_onAddonsChanged);
     _loadAddons();
+  }
+
+  void _onAddonsChanged() {
+    // Reload addons when they change (e.g., added via deep link)
+    if (mounted) {
+      _loadAddons();
+    }
   }
 
   void _onUrlFieldFocusChanged() {
@@ -49,6 +57,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
 
   @override
   void dispose() {
+    _stremioService.removeAddonsChangedListener(_onAddonsChanged);
     _urlController.dispose();
     _urlFieldFocusNode.removeListener(_onUrlFieldFocusChanged);
     _urlFieldFocusNode.dispose();
@@ -111,7 +120,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
       final addon = await _stremioService.addAddon(url);
 
       _urlController.clear();
-      await _loadAddons();
+      // Note: _loadAddons() is called automatically via the addons changed listener
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -140,7 +149,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
 
   Future<void> _toggleAddon(StremioAddon addon) async {
     await _stremioService.setAddonEnabled(addon.manifestUrl, !addon.enabled);
-    await _loadAddons();
+    // Note: _loadAddons() is called automatically via the addons changed listener
   }
 
   Future<void> _deleteAddon(StremioAddon addon) async {
@@ -169,7 +178,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
 
     try {
       await _stremioService.removeAddon(addon.manifestUrl);
-      await _loadAddons();
+      // Note: _loadAddons() is called automatically via the addons changed listener
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -208,7 +217,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
       if (mounted) Navigator.of(context).pop();
 
       if (updated != null) {
-        await _loadAddons();
+        // Note: _loadAddons() is called automatically via the addons changed listener
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('${updated.name} refreshed')),

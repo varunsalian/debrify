@@ -72,6 +72,20 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="magnet" />
             </intent-filter>
+            <!-- Stremio addon handler -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="stremio" />
+            </intent-filter>
+            <!-- HTTPS manifest.json handler for Stremio addons -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:pathPattern=".*manifest\\.json" />
+            </intent-filter>
             <!-- URL share handler (appears in share sheet) -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

@@ -53,6 +53,16 @@
 				<string>magnet</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>com.debrify.app.stremio</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>stremio</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>
