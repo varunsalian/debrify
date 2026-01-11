@@ -41,7 +41,7 @@ import '../models/stremio_addon.dart';
 import 'dart:async';
 
 // Search mode for torrent search
-enum SearchMode { keyword, imdb }
+enum SearchMode { keyword, catalog }
 
 class TorrentSearchScreen extends StatefulWidget {
   const TorrentSearchScreen({super.key});
@@ -517,7 +517,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Load available engines based on current search mode
     List<DynamicEngine> engines;
 
-    if (_searchMode == SearchMode.imdb) {
+    if (_searchMode == SearchMode.catalog) {
       // For IMDB mode, get engines that specifically support IMDB search
       engines = await TorrentService.getImdbSearchEngines();
       debugPrint('TorrentSearchScreen: Loading IMDB engines: ${engines.map((e) => e.name).toList()}');
@@ -533,7 +533,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       engines = await TorrentService.getAvailableEngines();
 
       // Filter based on mode even from all engines
-      if (_searchMode == SearchMode.imdb) {
+      if (_searchMode == SearchMode.catalog) {
         engines = engines.where((e) => e.supportsImdbSearch).toList();
       } else {
         engines = engines.where((e) => e.supportsKeywordSearch).toList();
@@ -1294,7 +1294,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   void _handleSearchFieldChanged(String value) {
     // In IMDB mode, trigger autocomplete search
-    if (_searchMode == SearchMode.imdb) {
+    if (_searchMode == SearchMode.catalog) {
       // On TV: Don't trigger autocomplete as user types (only on Enter/Submit)
       // On non-TV: Trigger autocomplete as they type (current behavior)
       if (!_isTelevision) {
@@ -1473,24 +1473,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ),
             ),
             PopupMenuItem(
-              value: SearchMode.imdb,
+              value: SearchMode.catalog,
               child: Row(
                 children: [
                   Icon(
                     Icons.auto_awesome_outlined,
                     size: 18,
-                    color: _searchMode == SearchMode.imdb
+                    color: _searchMode == SearchMode.catalog
                         ? const Color(0xFF7C3AED)
                         : Colors.white70,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'IMDB',
+                    'Catalog',
                     style: TextStyle(
-                      color: _searchMode == SearchMode.imdb
+                      color: _searchMode == SearchMode.catalog
                           ? const Color(0xFF7C3AED)
                           : Colors.white,
-                      fontWeight: _searchMode == SearchMode.imdb
+                      fontWeight: _searchMode == SearchMode.catalog
                           ? FontWeight.w600
                           : FontWeight.normal,
                     ),
@@ -1502,7 +1502,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: _searchMode == SearchMode.imdb
+              color: _searchMode == SearchMode.catalog
                   ? const Color(0xFF7C3AED)
                   : const Color(0xFF1E3A8A),
               borderRadius: BorderRadius.circular(999),
@@ -1511,7 +1511,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _searchMode == SearchMode.imdb
+                  _searchMode == SearchMode.catalog
                       ? Icons.auto_awesome_outlined
                       : Icons.search_rounded,
                   size: 16,
@@ -1519,7 +1519,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _searchMode == SearchMode.imdb ? 'IMDB' : 'Keyword',
+                  _searchMode == SearchMode.catalog ? 'Catalog' : 'Keyword',
                   style: const TextStyle(fontSize: 12, color: Colors.white),
                 ),
                 const SizedBox(width: 4),
@@ -1539,7 +1539,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void _toggleSearchMode() {
     setState(() {
       _searchMode =
-          _searchMode == SearchMode.keyword ? SearchMode.imdb : SearchMode.keyword;
+          _searchMode == SearchMode.keyword ? SearchMode.catalog : SearchMode.keyword;
       _imdbAutocompleteResults.clear();
       _selectedImdbTitle = null;
       _imdbSearchError = null;
@@ -2528,7 +2528,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final IconData hintIcon;
     final Color hintColor;
 
-    if (_searchMode == SearchMode.imdb) {
+    if (_searchMode == SearchMode.catalog) {
       hintText = 'IMDB mode shows only engines that support IMDB search (like Torrentio). Switch to Keyword mode to see all engines.';
       hintIcon = Icons.info_outline_rounded;
       hintColor = const Color(0xFF7C3AED);
@@ -9027,7 +9027,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               // In IMDB mode, don't trigger search on submit unless a selection has been made
                               if (_searchMode == SearchMode.keyword) {
                                 _searchTorrents(query);
-                              } else if (_searchMode == SearchMode.imdb) {
+                              } else if (_searchMode == SearchMode.catalog) {
                                 // On TV: Trigger autocomplete when Enter is pressed
                                 if (_isTelevision && _selectedImdbTitle == null) {
                                   _onImdbSearchTextChanged(query);
@@ -9048,7 +9048,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
 
                     // Helper text for IMDB mode on TV
-                    if (_searchMode == SearchMode.imdb && _isTelevision && _selectedImdbTitle == null) ...[
+                    if (_searchMode == SearchMode.catalog && _isTelevision && _selectedImdbTitle == null) ...[
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -9082,7 +9082,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ],
 
                     // IMDB Smart Search Mode UI components
-                    if (_searchMode == SearchMode.imdb) ...[
+                    if (_searchMode == SearchMode.catalog) ...[
                       // Autocomplete dropdown
                       _buildImdbAutocompleteDropdown(),
                       // Active selection chip
@@ -11423,17 +11423,17 @@ class _SearchTextFieldState extends State<_SearchTextField> {
               onSubmitted: widget.onSubmitted,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: widget.searchMode == SearchMode.imdb
-                    ? 'Search IMDB titles...'
+                hintText: widget.searchMode == SearchMode.catalog
+                    ? 'Search catalog...'
                     : 'Search all engines...',
                 hintStyle: TextStyle(
                   color: Colors.white.withValues(alpha: 0.5),
                 ),
                 prefixIcon: Icon(
-                  widget.searchMode == SearchMode.imdb
+                  widget.searchMode == SearchMode.catalog
                       ? Icons.auto_awesome_outlined
                       : Icons.search_rounded,
-                  color: widget.searchMode == SearchMode.imdb
+                  color: widget.searchMode == SearchMode.catalog
                       ? const Color(0xFF7C3AED)
                       : const Color(0xFF6366F1),
                 ),
