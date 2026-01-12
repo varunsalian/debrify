@@ -10480,63 +10480,99 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       builder: (context, constraints) {
         final isCompactLayout = constraints.maxWidth < 360;
 
-        // For direct/external streams, show a Play button instead of debrid buttons
+        // For direct/external streams, show Play button and Copy URL button
         if (torrent.isDirectStream || torrent.isExternalStream) {
-          return SizedBox(
-            width: double.infinity,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
-                onTap: () => _handleTorrentCardActivated(torrent, index),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
+          return Row(
+            children: [
+              // Play/Open button
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    gradient: LinearGradient(
-                      colors: torrent.isDirectStream
-                          ? const [Color(0xFF059669), Color(0xFF10B981)]
-                          : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (torrent.isDirectStream
-                            ? const Color(0xFF10B981)
-                            : const Color(0xFF6366F1)).withValues(alpha: 0.4),
-                        spreadRadius: 0,
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        torrent.isDirectStream
-                            ? Icons.play_circle_filled_rounded
-                            : Icons.open_in_new_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        torrent.isDirectStream ? 'Play Stream' : 'Open Link',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.2,
-                          color: Colors.white,
+                    focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
+                    onTap: () => _handleTorrentCardActivated(torrent, index),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: LinearGradient(
+                          colors: torrent.isDirectStream
+                              ? const [Color(0xFF059669), Color(0xFF10B981)]
+                              : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (torrent.isDirectStream
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFF6366F1)).withValues(alpha: 0.4),
+                            spreadRadius: 0,
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
                       ),
-                    ],
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            torrent.isDirectStream
+                                ? Icons.play_circle_filled_rounded
+                                : Icons.open_in_new_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            torrent.isDirectStream ? 'Play Stream' : 'Open Link',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              // Copy URL button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    final url = torrent.directUrl;
+                    if (url != null && url.isNotEmpty) {
+                      Clipboard.setData(ClipboardData(text: url));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('URL copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFF374151),
+                    ),
+                    child: const Icon(
+                      Icons.copy_rounded,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           );
         }
 
@@ -11052,63 +11088,99 @@ class _TorrentCardState extends State<_TorrentCard> {
               builder: (context, constraints) {
               final isCompactLayout = constraints.maxWidth < 360;
 
-              // For direct/external streams, show a Play button instead of debrid buttons
+              // For direct/external streams, show Play button and Copy URL button
               if (widget.torrent.isDirectStream || widget.torrent.isExternalStream) {
-                return SizedBox(
-                  width: double.infinity,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
-                      onTap: widget.onCardActivated,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
+                return Row(
+                  children: [
+                    // Play/Open button
+                    Expanded(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           borderRadius: BorderRadius.circular(12),
-                          gradient: LinearGradient(
-                            colors: widget.torrent.isDirectStream
-                                ? const [Color(0xFF059669), Color(0xFF10B981)]
-                                : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (widget.torrent.isDirectStream
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFF6366F1)).withValues(alpha: 0.4),
-                              spreadRadius: 0,
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              widget.torrent.isDirectStream
-                                  ? Icons.play_circle_filled_rounded
-                                  : Icons.open_in_new_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              widget.torrent.isDirectStream ? 'Play Stream' : 'Open Link',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.2,
-                                color: Colors.white,
+                          focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
+                          onTap: widget.onCardActivated,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              gradient: LinearGradient(
+                                colors: widget.torrent.isDirectStream
+                                    ? const [Color(0xFF059669), Color(0xFF10B981)]
+                                    : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (widget.torrent.isDirectStream
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFF6366F1)).withValues(alpha: 0.4),
+                                  spreadRadius: 0,
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
                             ),
-                          ],
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  widget.torrent.isDirectStream
+                                      ? Icons.play_circle_filled_rounded
+                                      : Icons.open_in_new_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  widget.torrent.isDirectStream ? 'Play Stream' : 'Open Link',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    // Copy URL button
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          final url = widget.torrent.directUrl;
+                          if (url != null && url.isNotEmpty) {
+                            Clipboard.setData(ClipboardData(text: url));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('URL copied to clipboard'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: const Color(0xFF374151),
+                          ),
+                          child: const Icon(
+                            Icons.copy_rounded,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               }
 

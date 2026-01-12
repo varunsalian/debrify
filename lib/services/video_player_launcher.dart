@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/movie_collection.dart';
 import '../models/playlist_view_mode.dart';
@@ -19,11 +20,115 @@ import '../services/pikpak_api_service.dart';
 import '../utils/series_parser.dart';
 
 final Map<String, String> _resolvedStreamCache = <String, String>{};
+final Map<String, String> _redirectCache = <String, String>{};
 
 void _cacheResolvedStream(String? resumeId, String url) {
   if (resumeId == null) return;
   if (url.isEmpty) return;
   _resolvedStreamCache[resumeId] = url;
+}
+
+/// Resolve redirects for a URL (for TV player HLS streams).
+/// Returns the final URL after following redirects, or original URL if no redirect.
+/// Only resolves URLs that look like they might be short redirect URLs.
+Future<String> _resolveRedirectUrl(String url) async {
+  debugPrint('[RedirectResolver] Input URL: $url');
+
+  // Check cache first
+  if (_redirectCache.containsKey(url)) {
+    final cached = _redirectCache[url]!;
+    debugPrint('[RedirectResolver] Cache HIT: $url -> $cached');
+    return cached;
+  }
+  debugPrint('[RedirectResolver] Cache MISS, checking URL...');
+
+  // Skip resolution for URLs that are unlikely to be redirects:
+  // - Already have media extensions
+  // - Known debrid CDN domains
+  final uri = Uri.tryParse(url);
+  if (uri == null) {
+    debugPrint('[RedirectResolver] SKIP: Invalid URL, using original');
+    return url;
+  }
+
+  final path = uri.path.toLowerCase();
+  final host = uri.host.toLowerCase();
+  debugPrint('[RedirectResolver] Host: $host, Path: $path');
+
+  // Skip if already has a media extension
+  if (path.endsWith('.m3u8') ||
+      path.endsWith('.mp4') ||
+      path.endsWith('.mkv') ||
+      path.endsWith('.ts') ||
+      path.endsWith('.mpd')) {
+    debugPrint('[RedirectResolver] SKIP: Has media extension, using original');
+    return url;
+  }
+
+  // Skip known debrid CDN domains (they don't redirect)
+  if (host.contains('real-debrid') ||
+      host.contains('torbox') ||
+      host.contains('pikpak') ||
+      host.contains('1fichier') ||
+      host.contains('rapidgator')) {
+    debugPrint('[RedirectResolver] SKIP: Known debrid CDN domain, using original');
+    return url;
+  }
+
+  debugPrint('[RedirectResolver] Attempting HEAD request to resolve redirects...');
+
+  try {
+    // Use a client that doesn't follow redirects automatically
+    final client = http.Client();
+    try {
+      final request = http.Request('HEAD', uri);
+      request.followRedirects = false;
+      request.headers['User-Agent'] =
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+      final response = await client.send(request).timeout(
+        const Duration(seconds: 5),
+      );
+
+      debugPrint('[RedirectResolver] Response status: ${response.statusCode}');
+      debugPrint('[RedirectResolver] Response headers: ${response.headers}');
+
+      // Check if it's a redirect
+      if (response.statusCode == 301 ||
+          response.statusCode == 302 ||
+          response.statusCode == 303 ||
+          response.statusCode == 307 ||
+          response.statusCode == 308) {
+        final location = response.headers['location'];
+        debugPrint('[RedirectResolver] Redirect detected! Location: $location');
+
+        if (location != null && location.isNotEmpty) {
+          // Handle relative URLs
+          final resolvedUri = uri.resolve(location);
+          final resolvedUrl = resolvedUri.toString();
+          debugPrint('[RedirectResolver] SUCCESS: Resolved $url -> $resolvedUrl');
+
+          // Cache the result
+          _redirectCache[url] = resolvedUrl;
+          return resolvedUrl;
+        } else {
+          debugPrint('[RedirectResolver] WARNING: Redirect but no Location header');
+        }
+      } else {
+        debugPrint('[RedirectResolver] No redirect (status ${response.statusCode}), using original');
+      }
+    } finally {
+      client.close();
+    }
+  } catch (e) {
+    debugPrint('[RedirectResolver] ERROR: $e');
+    debugPrint('[RedirectResolver] Falling back to original URL');
+  }
+
+  // No redirect or error - use original URL
+  _redirectCache[url] = url;
+  debugPrint('[RedirectResolver] Final URL (no change): $url');
+  return url;
 }
 
 void _clearResolvedStreams(Iterable<String?> resumeIds) {
@@ -549,7 +654,9 @@ class VideoPlayerLauncher {
     VideoPlayerLaunchArgs args,
   ) async {
     if (entry.url.isNotEmpty) {
-      return entry.url;
+      // For direct stream URLs, resolve redirects to get final URL
+      // (needed for HLS streams behind short URL redirects like USATV)
+      return await _resolveRedirectUrl(entry.url);
     }
 
     final provider = entry.provider?.toLowerCase();
@@ -1085,31 +1192,40 @@ class _AndroidTvPlaybackPayloadBuilder {
     final prepared = <PlaylistEntry>[];
     for (int i = 0; i < entries.length; i++) {
       final entry = entries[i];
-      if (entry.url.isNotEmpty || i != startIndex) {
-        prepared.add(entry);
+
+      // For start index entry, always resolve (handles redirects for direct streams)
+      if (i == startIndex) {
+        final resolved = await VideoPlayerLauncher._resolveEntryUrl(entry, args);
+        if (resolved.isEmpty) {
+          throw Exception('Failed to resolve initial stream');
+        }
+        // Only create new entry if URL changed
+        if (resolved != entry.url) {
+          prepared.add(
+            PlaylistEntry(
+              url: resolved,
+              title: entry.title,
+              relativePath: entry.relativePath,
+              restrictedLink: entry.restrictedLink,
+              torrentHash: entry.torrentHash,
+              sizeBytes: entry.sizeBytes,
+              provider: entry.provider,
+              torboxTorrentId: entry.torboxTorrentId,
+              torboxWebDownloadId: entry.torboxWebDownloadId,
+              torboxFileId: entry.torboxFileId,
+              pikpakFileId: entry.pikpakFileId,
+              rdTorrentId: entry.rdTorrentId,
+              rdLinkIndex: entry.rdLinkIndex,
+            ),
+          );
+        } else {
+          prepared.add(entry);
+        }
         continue;
       }
-      final resolved = await VideoPlayerLauncher._resolveEntryUrl(entry, args);
-      if (resolved.isEmpty) {
-        throw Exception('Failed to resolve initial stream');
-      }
-      prepared.add(
-        PlaylistEntry(
-          url: resolved,
-          title: entry.title,
-          relativePath: entry.relativePath,
-          restrictedLink: entry.restrictedLink,
-          torrentHash: entry.torrentHash,
-          sizeBytes: entry.sizeBytes,
-          provider: entry.provider,
-          torboxTorrentId: entry.torboxTorrentId,
-          torboxWebDownloadId: entry.torboxWebDownloadId,
-          torboxFileId: entry.torboxFileId,
-          pikpakFileId: entry.pikpakFileId,
-          rdTorrentId: entry.rdTorrentId,
-          rdLinkIndex: entry.rdLinkIndex,
-        ),
-      );
+
+      // Non-start entries are added as-is (will be resolved lazily if needed)
+      prepared.add(entry);
     }
     return prepared;
   }

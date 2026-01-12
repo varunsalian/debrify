@@ -29,7 +29,10 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -489,8 +492,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
 
+        // Create HTTP data source factory with redirect support for HLS/live streams
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(15000)
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+        // Wrap with DefaultDataSource.Factory for local file/content URI support
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+
+        // Create media source factory that uses the data source
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(dataSourceFactory)
+
         player = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setHandleAudioBecomingNoisy(true)
             .build()
 
