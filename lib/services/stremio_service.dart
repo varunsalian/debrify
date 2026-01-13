@@ -809,6 +809,15 @@ class StremioService {
     return addons.where((a) => a.supportsCatalogs).toList();
   }
 
+  /// Get all enabled addons that have catalogs OR search capability
+  /// This includes:
+  /// - Addons with browseable catalogs
+  /// - Addons with search-only capability (no catalogs but can search)
+  Future<List<StremioAddon>> getBrowseableOrSearchableAddons() async {
+    final addons = await getEnabledAddons();
+    return addons.where((a) => a.supportsCatalogs || a.hasSearchableCatalogs).toList();
+  }
+
   /// Get all available catalogs from all enabled catalog addons
   ///
   /// Returns a list of (addon, catalog) pairs for UI display

@@ -9441,39 +9441,78 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       );
                     }
 
-                    // Addon mode - show catalog browser for that specific addon
+                    // Addon mode - show catalog browser or search-only UI
                     // Skip if loading or has searched (user selected an item to search)
                     if (_selectedSource.type == SearchSourceType.addon &&
                         !_isLoading &&
                         !_hasSearched) {
-                      return CatalogBrowser(
-                        // Key ensures widget rebuilds when addon changes
-                        key: ValueKey('catalog_${_selectedSource.addon?.manifestUrl}'),
-                        // Filter to only show the selected addon's catalogs
-                        filterAddon: _selectedSource.addon,
-                        // Pass search query to search within addon catalogs
-                        searchQuery: _searchController.text,
-                        onItemSelected: (selection) {
-                          // Switch to catalog mode and trigger search
-                          setState(() {
-                            _searchMode = SearchMode.catalog;
-                            _selectedImdbTitle = ImdbTitleResult(
-                              imdbId: selection.imdbId,
-                              title: selection.title,
-                              year: selection.year,
-                              contentType: selection.contentType,
-                            );
-                            _isSeries = selection.isSeries;
-                            _searchController.text = selection.title;
-                            _activeAdvancedSelection = selection;
-                            // Clear autocomplete results since we have a selection
-                            _imdbAutocompleteResults.clear();
-                            _imdbSearchError = null;
-                            _seriesControlsExpanded = selection.isSeries;
-                          });
-                          _createAdvancedSelectionAndSearch();
-                        },
-                      );
+                      final addon = _selectedSource.addon;
+
+                      // If addon has catalogs, show catalog browser
+                      if (addon != null && addon.supportsCatalogs) {
+                        return CatalogBrowser(
+                          // Key ensures widget rebuilds when addon changes
+                          key: ValueKey('catalog_${addon.manifestUrl}'),
+                          // Filter to only show the selected addon's catalogs
+                          filterAddon: addon,
+                          // Pass search query to search within addon catalogs
+                          searchQuery: _searchController.text,
+                          onItemSelected: (selection) {
+                            // Switch to catalog mode and trigger search
+                            setState(() {
+                              _searchMode = SearchMode.catalog;
+                              _selectedImdbTitle = ImdbTitleResult(
+                                imdbId: selection.imdbId,
+                                title: selection.title,
+                                year: selection.year,
+                                contentType: selection.contentType,
+                              );
+                              _isSeries = selection.isSeries;
+                              _searchController.text = selection.title;
+                              _activeAdvancedSelection = selection;
+                              // Clear autocomplete results since we have a selection
+                              _imdbAutocompleteResults.clear();
+                              _imdbSearchError = null;
+                              _seriesControlsExpanded = selection.isSeries;
+                            });
+                            _createAdvancedSelectionAndSearch();
+                          },
+                        );
+                      }
+
+                      // Addon has search capability but no catalogs - show search prompt
+                      if (addon != null && addon.hasSearchableCatalogs) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.search_rounded,
+                                  size: 64,
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Search ${addon.name}',
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Type in the search box above to find content',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
                     }
 
                     // Loading state

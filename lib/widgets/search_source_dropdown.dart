@@ -411,7 +411,9 @@ class _DropdownMenuState extends State<_DropdownMenu> {
                             if (option.type == SearchSourceType.addon &&
                                 option.addon != null)
                               Text(
-                                '${option.addon!.catalogs.length} catalog${option.addon!.catalogs.length != 1 ? 's' : ''}',
+                                option.addon!.supportsCatalogs
+                                    ? '${option.addon!.catalogs.length} catalog${option.addon!.catalogs.length != 1 ? 's' : ''}'
+                                    : 'Search only',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: colorScheme.onSurfaceVariant,
                                 ),
@@ -442,6 +444,7 @@ class SearchSourceOptionsLoader {
   final StremioService _stremioService = StremioService.instance;
 
   /// Load all available search source options
+  /// Includes addons with catalogs OR search capability
   Future<List<SearchSourceOption>> loadOptions() async {
     final options = <SearchSourceOption>[
       SearchSourceOption.all(),
@@ -449,8 +452,8 @@ class SearchSourceOptionsLoader {
     ];
 
     try {
-      final catalogAddons = await _stremioService.getCatalogAddons();
-      for (final addon in catalogAddons) {
+      final addons = await _stremioService.getBrowseableOrSearchableAddons();
+      for (final addon in addons) {
         options.add(SearchSourceOption.fromAddon(addon));
       }
     } catch (e) {

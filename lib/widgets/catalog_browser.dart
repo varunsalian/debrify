@@ -442,25 +442,50 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
   Widget _buildFiltersRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          // Provider dropdown
-          Expanded(
-            child: _buildProviderDropdown(),
-          ),
-          const SizedBox(width: 12),
-          // Catalog dropdown
-          Expanded(
-            child: _buildCatalogDropdown(),
-          ),
-          // Genre dropdown (if supported)
-          if (_selectedCatalog?.supportsGenre ?? false) ...[
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildGenreDropdown(),
-            ),
-          ],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // On narrow screens (< 400px), stack dropdowns vertically
+          final isNarrow = constraints.maxWidth < 400;
+
+          if (isNarrow) {
+            return Column(
+              children: [
+                // Provider dropdown - full width
+                _buildProviderDropdown(),
+                const SizedBox(height: 8),
+                // Catalog dropdown - full width
+                _buildCatalogDropdown(),
+                // Genre dropdown (if supported)
+                if (_selectedCatalog?.supportsGenre ?? false) ...[
+                  const SizedBox(height: 8),
+                  _buildGenreDropdown(),
+                ],
+              ],
+            );
+          }
+
+          // Wide screens - horizontal row
+          return Row(
+            children: [
+              // Provider dropdown
+              Expanded(
+                child: _buildProviderDropdown(),
+              ),
+              const SizedBox(width: 12),
+              // Catalog dropdown
+              Expanded(
+                child: _buildCatalogDropdown(),
+              ),
+              // Genre dropdown (if supported)
+              if (_selectedCatalog?.supportsGenre ?? false) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildGenreDropdown(),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
