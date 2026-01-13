@@ -37,6 +37,9 @@ import '../models/debrify_tv_cache.dart';
 import '../widgets/advanced_search_sheet.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/catalog_browser.dart';
+import '../widgets/search_source_dropdown.dart';
+import '../widgets/homepage_catalog_grid.dart';
+import '../widgets/aggregated_search_results.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
 import '../models/stremio_addon.dart';
@@ -188,6 +191,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // IMDB Smart Search Mode state
   SearchMode _searchMode = SearchMode.keyword;
+
+  // Unified Search Source state
+  SearchSourceOption _selectedSource = SearchSourceOption.all();
+  List<SearchSourceOption> _availableSourceOptions = [];
+  bool _isLoadingSourceOptions = false;
+  final FocusNode _sourceDropdownFocusNode = FocusNode(debugLabel: 'source_dropdown');
+
   List<ImdbTitleResult> _imdbAutocompleteResults = [];
   bool _isImdbSearching = false;
   String? _imdbSearchError;
@@ -283,6 +293,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     _loadApiKeys();
     _loadSearchHistory();
+    _loadSearchSourceOptions();
     StorageService.getTorboxCacheCheckEnabled().then((enabled) {
       if (!mounted) return;
       setState(() {
@@ -749,6 +760,76 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
+  /// Loads available search source options (All, Keyword, + addon catalogs)
+  Future<void> _loadSearchSourceOptions() async {
+    if (_isLoadingSourceOptions) return;
+
+    setState(() => _isLoadingSourceOptions = true);
+
+    try {
+      final loader = SearchSourceOptionsLoader();
+      final options = await loader.loadOptions();
+
+      if (!mounted) return;
+      setState(() {
+        _availableSourceOptions = options;
+        _isLoadingSourceOptions = false;
+        // Default to "All" if available
+        if (_availableSourceOptions.isNotEmpty) {
+          _selectedSource = _availableSourceOptions.first;
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading search source options: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingSourceOptions = false;
+          // Fallback to basic options
+          _availableSourceOptions = [
+            SearchSourceOption.all(),
+            SearchSourceOption.keyword(),
+          ];
+          _selectedSource = _availableSourceOptions.first;
+        });
+      }
+    }
+  }
+
+  /// Handles selection of a search source from the dropdown
+  void _onSearchSourceChanged(SearchSourceOption source) {
+    setState(() {
+      _selectedSource = source;
+
+      // Map source to internal search mode for compatibility
+      switch (source.type) {
+        case SearchSourceType.all:
+          // "All" mode - shows homepage when empty, aggregated search when query exists
+          // We'll keep _searchMode as keyword for torrent search functionality
+          _searchMode = SearchMode.keyword;
+          break;
+        case SearchSourceType.keyword:
+          _searchMode = SearchMode.keyword;
+          break;
+        case SearchSourceType.addon:
+          // Addon mode - shows catalog browser for that addon
+          _searchMode = SearchMode.browse;
+          break;
+      }
+
+      // Clear previous state when switching sources
+      _imdbAutocompleteResults.clear();
+      _selectedImdbTitle = null;
+      _imdbSearchError = null;
+      _activeAdvancedSelection = null;
+      _seriesControlsExpanded = false;
+
+      // Reset search results
+      _hasSearched = false;
+      _torrents = [];
+      _allTorrents = [];
+    });
+  }
+
   // ============================================================================
   // Torrent Search History Methods
   // ============================================================================
@@ -880,6 +961,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _episodeInputFocused.dispose();
     _historyDisableSwitchFocused.dispose();
     _historyClearButtonFocused.dispose();
+
+    // Dispose Unified Search Source resources
+    _sourceDropdownFocusNode.dispose();
 
     // Dispose IMDB Smart Search Mode resources
     _modeSelectorFocusNode.dispose();
@@ -1379,6 +1463,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _handleSearchFieldChanged(String value) {
+    // "All" mode: Update UI to show aggregated results as user types
+    if (_selectedSource.type == SearchSourceType.all) {
+      // Reset search state so AggregatedSearchResults shows instead of torrent results
+      if (_hasSearched || _torrents.isNotEmpty) {
+        setState(() {
+          _hasSearched = false;
+          _torrents = [];
+          _allTorrents = [];
+        });
+      } else {
+        // Just trigger rebuild to update AggregatedSearchResults query
+        setState(() {});
+      }
+      return;
+    }
+
     // In IMDB mode, trigger autocomplete search
     if (_searchMode == SearchMode.catalog) {
       // On TV: Don't trigger autocomplete as user types (only on Enter/Submit)
@@ -1683,6 +1783,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
     // Reload engines for the new search mode
     _loadDefaultSettings();
+  }
+
+  /// Build the unified search source selector dropdown
+  Widget _buildSearchSourceSelector() {
+    if (_availableSourceOptions.isEmpty) {
+      // Loading state - show shimmer
+      return Container(
+        height: 48,
+        width: 120,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+      );
+    }
+
+    return SearchSourceDropdown(
+      selectedOption: _selectedSource,
+      options: _availableSourceOptions,
+      onChanged: _onSearchSourceChanged,
+      focusNode: _sourceDropdownFocusNode,
+      isTelevision: _isTelevision,
+    );
   }
 
   // IMDB autocomplete search with debouncing
@@ -9086,8 +9209,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Browse mode: just show mode selector
-                    if (_searchMode == SearchMode.browse) ...[
+                    // Addon mode: show simplified browse header (no search input)
+                    if (_selectedSource.type == SearchSourceType.addon) ...[
                       Row(
                         children: [
                           Icon(
@@ -9098,7 +9221,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Browse Catalogs',
+                              _selectedSource.label,
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.9),
                                 fontSize: 16,
@@ -9106,7 +9229,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               ),
                             ),
                           ),
-                          _buildModeSelector(),
+                          _buildSearchSourceSelector(),
                         ],
                       ),
                     ] else ...[
@@ -9174,8 +9297,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             },
                             onChanged: _handleSearchFieldChanged,
                             onSubmitted: (query) {
-                              // In IMDB mode, don't trigger search on submit unless a selection has been made
-                              if (_searchMode == SearchMode.keyword) {
+                              // "All" mode: Just update state to show aggregated results
+                              // Don't trigger direct torrent search
+                              if (_selectedSource.type == SearchSourceType.all) {
+                                if (query.isNotEmpty) {
+                                  // Trigger rebuild to show AggregatedSearchResults
+                                  setState(() {
+                                    // Reset search state so AggregatedSearchResults shows
+                                    _hasSearched = false;
+                                    _torrents = [];
+                                    _allTorrents = [];
+                                  });
+                                }
+                                return;
+                              }
+
+                              // Keyword mode: Direct torrent search
+                              if (_selectedSource.type == SearchSourceType.keyword) {
                                 _searchTorrents(query);
                               } else if (_searchMode == SearchMode.catalog) {
                                 // On TV: Trigger autocomplete when Enter is pressed
@@ -9193,7 +9331,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        _buildModeSelector(),
+                        _buildSearchSourceSelector(),
                       ],
                     ),
 
@@ -9253,9 +9391,74 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               Expanded(
                 child: Builder(
                   builder: (context) {
-                    // Browse mode - show catalog browser
-                    if (_searchMode == SearchMode.browse) {
+                    // "All" mode with no query - show homepage grid
+                    if (_selectedSource.type == SearchSourceType.all &&
+                        _searchController.text.isEmpty &&
+                        !_hasSearched) {
+                      return HomepageCatalogGrid(
+                        isTelevision: _isTelevision,
+                        onItemSelected: (selection) {
+                          // Switch to search mode and trigger search
+                          setState(() {
+                            _searchMode = SearchMode.catalog;
+                            _selectedImdbTitle = ImdbTitleResult(
+                              imdbId: selection.imdbId,
+                              title: selection.title,
+                              year: selection.year,
+                              contentType: selection.contentType,
+                            );
+                            _isSeries = selection.isSeries;
+                            _searchController.text = selection.title;
+                            _activeAdvancedSelection = selection;
+                            _imdbAutocompleteResults.clear();
+                            _imdbSearchError = null;
+                            _seriesControlsExpanded = selection.isSeries;
+                          });
+                          _createAdvancedSelectionAndSearch();
+                        },
+                      );
+                    }
+
+                    // "All" mode with query - show aggregated search results
+                    if (_selectedSource.type == SearchSourceType.all &&
+                        _searchController.text.isNotEmpty &&
+                        !_hasSearched &&
+                        !_isLoading) {
+                      return AggregatedSearchResults(
+                        query: _searchController.text,
+                        isTelevision: _isTelevision,
+                        onKeywordSearch: () {
+                          // Trigger keyword/torrent search
+                          _searchTorrents(_searchController.text);
+                        },
+                        onItemSelected: (selection) {
+                          // User selected a catalog item - trigger search
+                          setState(() {
+                            _searchMode = SearchMode.catalog;
+                            _selectedImdbTitle = ImdbTitleResult(
+                              imdbId: selection.imdbId,
+                              title: selection.title,
+                              year: selection.year,
+                              contentType: selection.contentType,
+                            );
+                            _isSeries = selection.isSeries;
+                            _activeAdvancedSelection = selection;
+                            _imdbAutocompleteResults.clear();
+                            _imdbSearchError = null;
+                            _seriesControlsExpanded = selection.isSeries;
+                          });
+                          _createAdvancedSelectionAndSearch();
+                        },
+                      );
+                    }
+
+                    // Addon mode - show catalog browser for that specific addon
+                    if (_selectedSource.type == SearchSourceType.addon) {
                       return CatalogBrowser(
+                        // Key ensures widget rebuilds when addon changes
+                        key: ValueKey('catalog_${_selectedSource.addon?.manifestUrl}'),
+                        // Filter to only show the selected addon's catalogs
+                        filterAddon: _selectedSource.addon,
                         onItemSelected: (selection) {
                           // Switch to catalog mode and trigger search
                           setState(() {
@@ -9279,6 +9482,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       );
                     }
 
+                    // Loading state
                     if (_isLoading) {
                       return ListView.builder(
                         padding: const EdgeInsets.only(

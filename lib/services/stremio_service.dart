@@ -940,6 +940,116 @@ class StremioService {
     return results;
   }
 
+  /// Fetch homepage content from all catalog addons
+  ///
+  /// Returns a list of sections, each containing items from a specific catalog.
+  /// Used for the "All" search source with no query (homepage-like view).
+  Future<List<CatalogSection>> fetchHomepageContent({
+    int itemsPerCatalog = 10,
+    int maxSections = 10,
+  }) async {
+    final catalogAddons = await getCatalogAddons();
+    final sections = <CatalogSection>[];
+
+    if (catalogAddons.isEmpty) {
+      debugPrint('StremioService: No catalog addons for homepage');
+      return [];
+    }
+
+    // Fetch from each addon's catalogs in parallel
+    final futures = <Future<CatalogSection?>>[];
+
+    for (final addon in catalogAddons) {
+      for (final catalog in addon.catalogs) {
+        if (sections.length + futures.length >= maxSections) break;
+
+        futures.add(_fetchCatalogSection(addon, catalog, itemsPerCatalog));
+      }
+      if (sections.length + futures.length >= maxSections) break;
+    }
+
+    final results = await Future.wait(futures);
+    for (final section in results) {
+      if (section != null && section.items.isNotEmpty) {
+        sections.add(section);
+      }
+    }
+
+    debugPrint('StremioService: Homepage loaded ${sections.length} sections');
+    return sections;
+  }
+
+  /// Fetch a single catalog section for homepage
+  Future<CatalogSection?> _fetchCatalogSection(
+    StremioAddon addon,
+    StremioAddonCatalog catalog,
+    int limit,
+  ) async {
+    try {
+      final items = await fetchCatalog(addon, catalog);
+      if (items.isEmpty) return null;
+
+      return CatalogSection(
+        title: '${addon.name}: ${catalog.name}',
+        addon: addon,
+        catalog: catalog,
+        items: items.take(limit).toList(),
+      );
+    } catch (e) {
+      debugPrint('StremioService: Error fetching section ${addon.name}/${catalog.name}: $e');
+      return null;
+    }
+  }
+
+  /// Search within a specific addon's searchable catalogs
+  ///
+  /// Returns deduplicated results from all searchable catalogs of the addon.
+  Future<List<StremioMeta>> searchAddonCatalogs(
+    StremioAddon addon,
+    String query,
+  ) async {
+    if (query.trim().isEmpty) return [];
+
+    final encodedQuery = Uri.encodeComponent(query.trim());
+
+    // Find all searchable catalogs in this addon
+    final searchableCatalogs = addon.catalogs
+        .where((c) => c.supportsSearch)
+        .toList();
+
+    if (searchableCatalogs.isEmpty) {
+      debugPrint('StremioService: Addon ${addon.name} has no searchable catalogs');
+      return [];
+    }
+
+    debugPrint(
+      'StremioService: Searching ${searchableCatalogs.length} catalogs in ${addon.name} for "$query"',
+    );
+
+    // Search all catalogs in parallel
+    final futures = <Future<List<StremioMeta>>>[];
+    for (final catalog in searchableCatalogs) {
+      futures.add(_searchSingleCatalog(addon, catalog, encodedQuery));
+    }
+
+    final results = await Future.wait(futures);
+
+    // Flatten and deduplicate by ID
+    final seen = <String, StremioMeta>{};
+    for (final catalogResults in results) {
+      for (final meta in catalogResults) {
+        final existing = seen[meta.id];
+        if (existing == null || _metadataScore(meta) > _metadataScore(existing)) {
+          seen[meta.id] = meta;
+        }
+      }
+    }
+
+    final deduped = seen.values.toList();
+    debugPrint('StremioService: Addon search returned ${deduped.length} results');
+    return deduped;
+  }
+
   /// Search across all catalogs that support search
   ///
   /// Returns deduplicated results by ID, keeping the best metadata.

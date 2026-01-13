@@ -217,6 +217,28 @@ class StremioMeta {
   String toString() => 'StremioMeta(id: $id, name: $name, year: $year)';
 }
 
+/// Represents a section of catalog content for homepage display
+class CatalogSection {
+  /// Display title (e.g., "Cinemeta: Popular Movies")
+  final String title;
+
+  /// The addon this section is from
+  final StremioAddon addon;
+
+  /// The specific catalog
+  final StremioAddonCatalog catalog;
+
+  /// Items in this section
+  final List<StremioMeta> items;
+
+  const CatalogSection({
+    required this.title,
+    required this.addon,
+    required this.catalog,
+    required this.items,
+  });
+}
+
 /// Represents a Stremio addon that can be used for torrent search.
 ///
 /// Stremio addons follow a standard protocol where:

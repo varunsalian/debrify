@@ -18,7 +18,11 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user selects an item to search streams for
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
 
-  const CatalogBrowser({super.key, this.onItemSelected});
+  /// Optional: Filter to show only this addon's catalogs
+  /// If null, shows all available catalog addons
+  final StremioAddon? filterAddon;
+
+  const CatalogBrowser({super.key, this.onItemSelected, this.filterAddon});
 
   @override
   State<CatalogBrowser> createState() => _CatalogBrowserState();
@@ -85,7 +89,15 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
   Future<void> _loadAddons() async {
     setState(() => _isLoadingAddons = true);
     try {
-      final catalogAddons = await _stremioService.getCatalogAddons();
+      List<StremioAddon> catalogAddons;
+
+      // If filterAddon is provided, only show that addon
+      if (widget.filterAddon != null) {
+        catalogAddons = [widget.filterAddon!];
+      } else {
+        catalogAddons = await _stremioService.getCatalogAddons();
+      }
+
       if (mounted) {
         setState(() {
           _addons = catalogAddons;
