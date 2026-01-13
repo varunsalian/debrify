@@ -40,6 +40,7 @@ import '../widgets/catalog_browser.dart';
 import '../widgets/search_source_dropdown.dart';
 import '../widgets/homepage_catalog_grid.dart';
 import '../widgets/aggregated_search_results.dart';
+import '../widgets/torrent_result_row.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
 import '../models/stremio_addon.dart';
@@ -9817,18 +9818,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: ValueListenableBuilder<bool>(
-                                        valueListenable: _sortDropdownFocused,
-                                        builder: (context, isFocused, child) => Container(
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(4),
-                                            border: isFocused
-                                                ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                                : null,
-                                          ),
-                                          child: child,
-                                        ),
-                                        child: DropdownButton<String>(
+                                      child: DropdownButton<String>(
                                           value: _sortBy,
                                           focusNode: _sortDropdownFocusNode,
                                           onChanged: (String? newValue) {
@@ -9891,7 +9881,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             size: 16,
                                           ),
                                         ),
-                                      ),
                                     ),
                                     const SizedBox(width: 8),
                                     Focus(
@@ -10512,50 +10501,198 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildTorrentCard(Torrent torrent, int index) {
-    // For TV mode, use the new isolated _TorrentCard widget
-    if (_isTelevision && index < _cardFocusNodes.length) {
-      return _TorrentCard(
-        key: ValueKey(torrent.infohash),
-        torrent: torrent,
-        index: index,
-        focusNode: _cardFocusNodes[index],
-        isTelevision: _isTelevision,
-        apiKey: _apiKey,
-        torboxApiKey: _torboxApiKey,
-        torboxCacheStatus: _torboxCacheStatus,
-        realDebridIntegrationEnabled: _realDebridIntegrationEnabled,
-        torboxIntegrationEnabled: _torboxIntegrationEnabled,
-        pikpakEnabled: _pikpakEnabled,
-        torboxCacheCheckEnabled: _torboxCacheCheckEnabled,
-        isSeries: _isSeries,
-        selectedImdbTitle: _selectedImdbTitle,
-        hasSeasonData: _availableSeasons != null && _availableSeasons!.isNotEmpty,
-        selectedSeason: _selectedSeason,
-        seasonInputFocusNode: _seasonInputFocusNode,
-        onCardActivated: () => _handleTorrentCardActivated(torrent, index),
-        onCopyMagnet: () => _copyMagnetLink(torrent.infohash),
-        onAddToDebrid: _addToRealDebrid,
-        onAddToTorbox: _addToTorbox,
-        onAddToPikPak: _sendToPikPak,
-        onShowFileSelection: _showFileSelectionDialog,
-        buildSizeOrPackChip: _buildSizeOrPackChip,
-        buildSourceStatChip: _buildSourceStatChip,
-        buildStreamTypeChip: _buildStreamTypeChip,
-        torboxResultIsCached: _torboxResultIsCached,
-        searchFocusNode: _searchFocusNode,
-        episodeInputFocusNode: _episodeInputFocusNode,
-        filterButtonFocusNode: _filterButtonFocusNode,
-      );
+    // For direct/external streams, use legacy card (they don't need debrid buttons)
+    if (torrent.isDirectStream || torrent.isExternalStream) {
+      return _buildDirectStreamCard(torrent, index);
     }
 
-    // For non-TV mode, use GestureDetector with inline card content
-    return GestureDetector(
-      onTap: () {
-        // Navigate to torrent details or perform default action
-        // For now, just log or do nothing since TV has the smart action
+    // Use new compact row for regular torrent results
+    final focusNode = index < _cardFocusNodes.length
+        ? _cardFocusNodes[index]
+        : FocusNode();
+
+    return TorrentResultRow(
+      key: ValueKey(torrent.infohash),
+      torrent: torrent,
+      index: index,
+      focusNode: focusNode,
+      isTelevision: _isTelevision,
+      qualityTier: torrent.qualityTier,
+      isCached: _torboxResultIsCached(torrent.infohash),
+      cacheService: _torboxResultIsCached(torrent.infohash) ? 'torbox' : null,
+      onTap: () => _handleTorrentCardActivated(torrent, index),
+      onNavigateUp: index == 0
+          ? () => _filterButtonFocusNode.requestFocus()
+          : () {
+              if (index > 0 && index - 1 < _cardFocusNodes.length) {
+                _cardFocusNodes[index - 1].requestFocus();
+              }
+            },
+      onNavigateDown: () {
+        if (index + 1 < _cardFocusNodes.length) {
+          _cardFocusNodes[index + 1].requestFocus();
+        }
       },
-      child: _buildNonTVCardContent(torrent),
     );
+  }
+
+  /// Build card for direct/external streams (no debrid needed)
+  /// Uses same visual style as TorrentResultRow for consistency
+  Widget _buildDirectStreamCard(Torrent torrent, int index) {
+    // Colors matching TorrentResultRow
+    const cardBg = Color(0xFF1E293B); // Slate 800
+    const textPrimary = Colors.white;
+    const textSecondary = Color(0xFF94A3B8); // Slate 400
+
+    // Accent color based on stream type
+    final accentColor = torrent.isDirectStream
+        ? const Color(0xFF10B981) // Green for direct
+        : const Color(0xFF6366F1); // Purple for external
+
+    return GestureDetector(
+      onTap: () => _handleTorrentCardActivated(torrent, index),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                // Accent bar on left (like TorrentResultRow)
+                Container(
+                  width: 4,
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      bottomLeft: Radius.circular(12),
+                    ),
+                  ),
+                ),
+                // Content
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Title
+                        Text(
+                          torrent.displayTitle,
+                          style: const TextStyle(
+                            color: textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            height: 1.3,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        // Metadata row
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            // Size
+                            if (torrent.sizeBytes > 0)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.storage_rounded, size: 12, color: const Color(0xFF60A5FA).withValues(alpha: 0.8)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _formatSizeCompact(torrent.sizeBytes),
+                                    style: const TextStyle(
+                                      color: Color(0xFF60A5FA),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            // Direct/External badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: accentColor.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    torrent.isDirectStream
+                                        ? Icons.play_circle_filled_rounded
+                                        : Icons.open_in_new_rounded,
+                                    size: 12,
+                                    color: accentColor,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    torrent.isDirectStream ? 'Direct' : 'External',
+                                    style: TextStyle(
+                                      color: accentColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Copy button
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: IconButton(
+                    onPressed: () {
+                      final url = torrent.directUrl;
+                      if (url != null && url.isNotEmpty) {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('URL copied to clipboard'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(
+                      Icons.copy_rounded,
+                      size: 18,
+                      color: textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatSizeCompact(int bytes) {
+    if (bytes <= 0) return 'N/A';
+    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = 0;
+    double size = bytes.toDouble();
+    while (size >= 1024 && i < suffixes.length - 1) {
+      size /= 1024;
+      i++;
+    }
+    return '${size.toStringAsFixed(size < 10 ? 1 : 0)} ${suffixes[i]}';
   }
 
   Widget _buildNonTVCardContent(Torrent torrent) {
