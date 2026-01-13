@@ -31,6 +31,7 @@ import 'services/magnet_link_handler.dart';
 import 'services/stremio_service.dart';
 import 'widgets/auto_launch_overlay.dart';
 import 'widgets/window_drag_area.dart';
+import 'widgets/mobile_floating_nav.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
 
@@ -1230,51 +1231,78 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             }
           },
           child: AnimatedPremiumBackground(
-            child: Scaffold(
-              backgroundColor: Colors.transparent,
-              appBar: AppBar(
-                title: WindowDragArea(
-                  child: PremiumTopNav(
-                    currentIndex: currentNavIndex,
-                    items: navItems,
-                    onTap: (relativeIndex) {
-                      final actualIndex = visibleIndices[relativeIndex];
-                      _onItemTapped(actualIndex);
-                    },
-                    badges: navBadges,
-                    haptics: true,
-                  ),
-                ),
-                automaticallyImplyLeading: false,
-              ),
-              body: SafeArea(
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 350),
-                    transitionBuilder: (child, animation) {
-                      final offsetAnimation =
-                          Tween<Offset>(
-                            begin: const Offset(0.02, 0.02),
-                            end: Offset.zero,
-                          ).animate(
-                            CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeOutCubic,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Show floating nav on mobile (narrow screens), but not on TV
+                final isMobile = constraints.maxWidth < 600 && !_isAndroidTv;
+
+                return Scaffold(
+                  backgroundColor: Colors.transparent,
+                  // Hide AppBar on mobile - we'll use floating nav instead
+                  appBar: isMobile
+                      ? null
+                      : AppBar(
+                          title: WindowDragArea(
+                            child: PremiumTopNav(
+                              currentIndex: currentNavIndex,
+                              items: navItems,
+                              onTap: (relativeIndex) {
+                                final actualIndex = visibleIndices[relativeIndex];
+                                _onItemTapped(actualIndex);
+                              },
+                              badges: navBadges,
+                              haptics: true,
                             ),
-                          );
-                      return FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(position: offsetAnimation, child: child),
-                      );
-                    },
-                    child: KeyedSubtree(
-                      key: ValueKey<int>(_selectedIndex),
-                      child: _pages[_selectedIndex],
-                    ),
+                          ),
+                          automaticallyImplyLeading: false,
+                        ),
+                  body: Stack(
+                    children: [
+                      SafeArea(
+                        child: FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 350),
+                            transitionBuilder: (child, animation) {
+                              final offsetAnimation =
+                                  Tween<Offset>(
+                                    begin: const Offset(0.02, 0.02),
+                                    end: Offset.zero,
+                                  ).animate(
+                                    CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic,
+                                    ),
+                                  );
+                              return FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(position: offsetAnimation, child: child),
+                              );
+                            },
+                            child: KeyedSubtree(
+                              key: ValueKey<int>(_selectedIndex),
+                              child: _pages[_selectedIndex],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Floating nav on mobile
+                      if (isMobile)
+                        MobileFloatingNav(
+                          currentIndex: currentNavIndex,
+                          items: [
+                            for (final navItem in navItems)
+                              MobileNavItem(navItem.icon, navItem.label),
+                          ],
+                          onTap: (relativeIndex) {
+                            final actualIndex = visibleIndices[relativeIndex];
+                            _onItemTapped(actualIndex);
+                          },
+                        ),
+                    ],
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ),
