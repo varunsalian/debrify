@@ -1479,6 +1479,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
+    // Addon mode: Trigger rebuild so CatalogBrowser gets updated searchQuery
+    if (_selectedSource.type == SearchSourceType.addon) {
+      setState(() {});
+      return;
+    }
+
     // In IMDB mode, trigger autocomplete search
     if (_searchMode == SearchMode.catalog) {
       // On TV: Don't trigger autocomplete as user types (only on Enter/Submit)
@@ -9209,30 +9215,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Addon mode: show simplified browse header (no search input)
-                    if (_selectedSource.type == SearchSourceType.addon) ...[
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.explore_rounded,
-                            color: Colors.white.withValues(alpha: 0.7),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _selectedSource.label,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          _buildSearchSourceSelector(),
-                        ],
-                      ),
-                    ] else ...[
+                    // All modes now show search input
+                    if (true) ...[
                     // Search Input + Advanced action
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -9328,6 +9312,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             onFocusChange: (focused) {
                               _searchFocused.value = focused; // No setState needed!
                             },
+                            // Disable search for addons that don't support it
+                            enabled: _selectedSource.type != SearchSourceType.addon ||
+                                (_selectedSource.addon?.hasSearchableCatalogs ?? false),
+                            disabledTooltip: "This addon doesn't support search",
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -9453,12 +9441,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     }
 
                     // Addon mode - show catalog browser for that specific addon
-                    if (_selectedSource.type == SearchSourceType.addon) {
+                    // Skip if loading or has searched (user selected an item to search)
+                    if (_selectedSource.type == SearchSourceType.addon &&
+                        !_isLoading &&
+                        !_hasSearched) {
                       return CatalogBrowser(
                         // Key ensures widget rebuilds when addon changes
                         key: ValueKey('catalog_${_selectedSource.addon?.manifestUrl}'),
                         // Filter to only show the selected addon's catalogs
                         filterAddon: _selectedSource.addon,
+                        // Pass search query to search within addon catalogs
+                        searchQuery: _searchController.text,
                         onItemSelected: (selection) {
                           // Switch to catalog mode and trigger search
                           setState(() {
@@ -11880,6 +11873,8 @@ class _SearchTextField extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final ValueChanged<bool> onFocusChange;
+  final bool enabled;
+  final String? disabledTooltip;
 
   const _SearchTextField({
     required this.controller,
@@ -11896,6 +11891,8 @@ class _SearchTextField extends StatefulWidget {
     required this.onChanged,
     required this.onSubmitted,
     required this.onFocusChange,
+    this.enabled = true,
+    this.disabledTooltip,
   });
 
   @override
@@ -12011,52 +12008,65 @@ class _SearchTextFieldState extends State<_SearchTextField> {
               }
               return KeyEventResult.ignored;
             },
-            child: TextField(
-              controller: widget.controller,
-              onSubmitted: widget.onSubmitted,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: widget.searchMode == SearchMode.catalog
-                    ? 'Search catalog...'
-                    : 'Search all engines...',
-                hintStyle: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+            child: Tooltip(
+              message: widget.enabled ? '' : (widget.disabledTooltip ?? 'Search not available'),
+              waitDuration: const Duration(milliseconds: 500),
+              child: TextField(
+                controller: widget.controller,
+                onSubmitted: widget.enabled ? widget.onSubmitted : null,
+                enabled: widget.enabled,
+                style: TextStyle(
+                  color: widget.enabled ? Colors.white : Colors.white.withValues(alpha: 0.4),
                 ),
-                prefixIcon: Icon(
-                  widget.searchMode == SearchMode.catalog
-                      ? Icons.auto_awesome_outlined
-                      : Icons.search_rounded,
-                  color: widget.searchMode == SearchMode.catalog
-                      ? const Color(0xFF7C3AED)
-                      : const Color(0xFF6366F1),
+                decoration: InputDecoration(
+                  hintText: !widget.enabled
+                      ? (widget.disabledTooltip ?? 'Search not available')
+                      : widget.searchMode == SearchMode.catalog
+                          ? 'Search catalog...'
+                          : 'Search all engines...',
+                  hintStyle: TextStyle(
+                    color: Colors.white.withValues(alpha: widget.enabled ? 0.5 : 0.3),
+                  ),
+                  prefixIcon: Icon(
+                    widget.searchMode == SearchMode.catalog
+                        ? Icons.auto_awesome_outlined
+                        : Icons.search_rounded,
+                    color: widget.enabled
+                        ? (widget.searchMode == SearchMode.catalog
+                            ? const Color(0xFF7C3AED)
+                            : const Color(0xFF6366F1))
+                        : Colors.white.withValues(alpha: 0.3),
+                  ),
+                  // Use ValueListenableBuilder to rebuild only the clear button, not entire TextField
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: widget.controller,
+                    builder: (context, value, child) {
+                      return value.text.isNotEmpty && widget.enabled
+                          ? IconButton(
+                              icon: const Icon(
+                                Icons.clear_rounded,
+                                color: Color(0xFFEF4444),
+                              ),
+                              onPressed: widget.onClearPressed,
+                            )
+                          : const SizedBox.shrink();
+                    },
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: widget.enabled
+                      ? Theme.of(context).colorScheme.surfaceContainerHigh
+                      : Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                 ),
-                // Use ValueListenableBuilder to rebuild only the clear button, not entire TextField
-                suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: widget.controller,
-                  builder: (context, value, child) {
-                    return value.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(
-                              Icons.clear_rounded,
-                              color: Color(0xFFEF4444),
-                            ),
-                            onPressed: widget.onClearPressed,
-                          )
-                        : const SizedBox.shrink();
-                  },
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
+                onChanged: widget.enabled ? widget.onChanged : null,
               ),
-              onChanged: widget.onChanged,
             ),
           ),
         ),

@@ -317,6 +317,9 @@ class StremioAddon {
   /// Whether this addon supports series/TV shows
   bool get supportsSeries => types.contains('series');
 
+  /// Whether this addon has any catalogs that support search
+  bool get hasSearchableCatalogs => catalogs.any((c) => c.supportsSearch);
+
   /// Whether this addon handles IMDB IDs
   bool get handlesImdbIds =>
       idPrefixes == null ||

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -22,7 +24,16 @@ class CatalogBrowser extends StatefulWidget {
   /// If null, shows all available catalog addons
   final StremioAddon? filterAddon;
 
-  const CatalogBrowser({super.key, this.onItemSelected, this.filterAddon});
+  /// Optional: Search query to filter catalog results
+  /// If provided, searches within the addon's searchable catalogs
+  final String? searchQuery;
+
+  const CatalogBrowser({
+    super.key,
+    this.onItemSelected,
+    this.filterAddon,
+    this.searchQuery,
+  });
 
   @override
   State<CatalogBrowser> createState() => _CatalogBrowserState();
@@ -50,6 +61,11 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
   int _currentSkip = 0;
   static const int _pageSize = 20;
 
+  // Search state
+  bool _isSearchMode = false;
+  String _lastSearchQuery = '';
+  Timer? _searchDebouncer;
+
   // Scroll controller for pagination
   final ScrollController _scrollController = ScrollController();
 
@@ -67,7 +83,35 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
   }
 
   @override
+  void didUpdateWidget(CatalogBrowser oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Handle search query changes
+    final newQuery = widget.searchQuery?.trim() ?? '';
+    final oldQuery = oldWidget.searchQuery?.trim() ?? '';
+
+    if (newQuery != oldQuery) {
+      // Cancel any pending search
+      _searchDebouncer?.cancel();
+
+      if (newQuery.isNotEmpty) {
+        // Debounce search to avoid flooding API on every keystroke
+        _searchDebouncer = Timer(const Duration(milliseconds: 400), () {
+          _performSearch(newQuery);
+        });
+      } else if (_isSearchMode) {
+        // Exit search mode - return to catalog browsing
+        setState(() {
+          _isSearchMode = false;
+          _lastSearchQuery = '';
+        });
+        _loadContent();
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    _searchDebouncer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _providerDropdownFocusNode.dispose();
@@ -176,6 +220,38 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
         setState(() {
           _isLoadingContent = false;
           _hasMoreContent = false;
+        });
+      }
+    }
+  }
+
+  /// Perform search within the addon's catalogs
+  Future<void> _performSearch(String query) async {
+    if (_selectedAddon == null) return;
+
+    setState(() {
+      _isSearchMode = true;
+      _lastSearchQuery = query;
+      _isLoadingContent = true;
+      _content = [];
+      _hasMoreContent = false; // Search doesn't support pagination
+    });
+
+    try {
+      final results = await _stremioService.searchAddonCatalogs(_selectedAddon!, query);
+
+      if (mounted) {
+        setState(() {
+          _content = results;
+          _isLoadingContent = false;
+          _refreshContentFocusNodes();
+        });
+      }
+    } catch (e) {
+      debugPrint('CatalogBrowser: Error searching: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingContent = false;
         });
       }
     }
@@ -482,7 +558,10 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        catalog.name,
+                        // Append type to distinguish catalogs with same name (e.g., "Popular Movies" vs "Popular Series")
+                        catalog.type.isNotEmpty
+                            ? '${catalog.name} (${catalog.type[0].toUpperCase()}${catalog.type.substring(1)})'
+                            : catalog.name,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,

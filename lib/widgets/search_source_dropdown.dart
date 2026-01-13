@@ -143,14 +143,19 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
   OverlayEntry _createOverlayEntry() {
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
+    // Minimum width for dropdown to prevent text wrapping
+    const double minDropdownWidth = 220;
+    final dropdownWidth = size.width < minDropdownWidth ? minDropdownWidth : size.width;
+    // Offset to align right edge if dropdown is wider than trigger
+    final horizontalOffset = size.width - dropdownWidth;
 
     return OverlayEntry(
       builder: (context) => Positioned(
-        width: size.width,
+        width: dropdownWidth,
         child: CompositedTransformFollower(
           link: _layerLink,
           showWhenUnlinked: false,
-          offset: Offset(0, size.height + 4),
+          offset: Offset(horizontalOffset, size.height + 4),
           child: Material(
             elevation: 8,
             borderRadius: BorderRadius.circular(12),
