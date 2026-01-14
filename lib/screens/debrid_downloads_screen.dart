@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:android_intent_plus/android_intent.dart';
+import 'package:http/http.dart' as http;
 import '../models/playlist_view_mode.dart';
 import '../models/rd_torrent.dart';
 import '../models/rd_file_node.dart';
@@ -2389,6 +2390,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                         _copyNodeDownloadLink(node);
                       } else if (value == 'open_external') {
                         _openWithExternalPlayer(node);
+                      } else if (value == 'deovr') {
+                        _openWithDeoVR(node);
                       }
                     },
                     itemBuilder: (context) => [
@@ -2427,6 +2430,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                               Icon(Icons.open_in_new, size: 18, color: Colors.orange),
                               SizedBox(width: 12),
                               Text('Open with External Player'),
+                            ],
+                          ),
+                        ),
+                      // DeoVR option for VR devices
+                      if (isVideo && !isFolder && Platform.isAndroid)
+                        const PopupMenuItem(
+                          value: 'deovr',
+                          child: Row(
+                            children: [
+                              Icon(Icons.vrpano, size: 18, color: Colors.teal),
+                              SizedBox(width: 12),
+                              Text('Open with DeoVR'),
                             ],
                           ),
                         ),
@@ -5907,6 +5922,232 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         Navigator.of(context).pop();
       }
       _showError('Failed to open with external player: $e');
+    }
+  }
+
+  /// Detect VR format from video title
+  /// Returns (screenType, stereoMode) with defaults of 180° SBS
+  ({String screenType, String stereoMode}) _detectVRFormat(String title) {
+    final titleUpper = title.toUpperCase();
+
+    // Detect stereo mode (default: sbs)
+    String stereoMode = 'sbs';
+    if (RegExp(r'\b(TB|3DV|OVERUNDER|OVER_UNDER)\b').hasMatch(titleUpper)) {
+      stereoMode = 'tb';
+    }
+
+    // Detect screen type (default: dome for 180°)
+    String screenType = 'dome';
+    if (RegExp(r'\b360\b|_360').hasMatch(titleUpper)) {
+      screenType = 'sphere';
+    } else if (RegExp(r'FISHEYE\s*190|FISHEYE190|_FISHEYE190').hasMatch(titleUpper)) {
+      screenType = 'rf52';
+    } else if (RegExp(r'MKX\s*200|MKX200|_MKX200').hasMatch(titleUpper)) {
+      screenType = 'mkx200';
+    } else if (RegExp(r'VRCA\s*220|VRCA220|_VRCA220').hasMatch(titleUpper)) {
+      screenType = 'mkx200';
+    } else if (RegExp(r'\bFISHEYE\b|_FISHEYE').hasMatch(titleUpper)) {
+      screenType = 'fisheye';
+    }
+
+    return (screenType: screenType, stereoMode: stereoMode);
+  }
+
+  /// Generate DeoVR JSON for a video URL with specified format
+  Map<String, dynamic> _generateDeoVRJson({
+    required String videoUrl,
+    required String title,
+    required String screenType,
+    required String stereoMode,
+  }) {
+    return {
+      'title': title,
+      'id': videoUrl.hashCode,
+      'is3d': stereoMode != 'off',
+      'screenType': screenType,
+      'stereoMode': stereoMode,
+      'encodings': [
+        {
+          'name': 'h264',
+          'videoSources': [
+            {
+              'resolution': 1080,
+              'url': videoUrl,
+            }
+          ]
+        }
+      ]
+    };
+  }
+
+  /// Show DeoVR format selection dialog and launch
+  Future<void> _openWithDeoVR(RDFileNode node) async {
+    if (_apiKey == null || _currentTorrentId == null) return;
+
+    // Detect format from title
+    final detected = _detectVRFormat(node.name);
+
+    // Screen type options with labels
+    const screenTypes = {
+      'flat': '2D Flat',
+      'dome': '180° (dome)',
+      'sphere': '360° (sphere)',
+      'fisheye': '180° Fisheye',
+      'mkx200': '200° MKX',
+      'rf52': '190° Canon RF52',
+    };
+
+    // Stereo mode options with labels
+    const stereoModes = {
+      'sbs': 'Side by Side',
+      'tb': 'Top-Bottom',
+      'off': 'Mono (2D)',
+    };
+
+    String selectedScreenType = detected.screenType;
+    String selectedStereoMode = detected.stereoMode;
+
+    // Show format selection dialog
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('DeoVR Format'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                node.name,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 16),
+              const Text('Screen Type', style: TextStyle(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedScreenType,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                items: screenTypes.entries
+                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => selectedScreenType = value);
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text('Stereo Mode', style: TextStyle(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedStereoMode,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                items: stereoModes.entries
+                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => selectedStereoMode = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Play'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != true || !mounted) return;
+
+    // User confirmed - now upload and launch
+    try {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Unrestrict the file's link
+      final downloadUrl = await DebridService.getFileDownloadUrl(
+        _apiKey!,
+        _currentTorrentId!,
+        node.linkIndex,
+      );
+
+      // Generate DeoVR JSON with selected format
+      final json = _generateDeoVRJson(
+        videoUrl: downloadUrl,
+        title: node.name,
+        screenType: selectedScreenType,
+        stereoMode: selectedStereoMode,
+      );
+      final jsonString = jsonEncode(json);
+
+      debugPrint('DeoVR JSON content: $jsonString');
+
+      // Upload JSON to jsonblob.com
+      final response = await http.post(
+        Uri.parse('https://jsonblob.com/api/jsonBlob'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonString,
+      );
+
+      if (response.statusCode != 201) {
+        throw Exception('Failed to upload JSON: ${response.statusCode}');
+      }
+
+      final location = response.headers['location'];
+      if (location == null) {
+        throw Exception('No location header in response');
+      }
+
+      final jsonUrl = 'https://jsonblob.com$location';
+      debugPrint('DeoVR JSON uploaded to: $jsonUrl');
+
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Launch DeoVR with the public URL
+      final deOvrUri = 'deovr://$jsonUrl';
+      debugPrint('Launching DeoVR with URI: $deOvrUri');
+
+      final intent = AndroidIntent(
+        action: 'action_view',
+        data: deOvrUri,
+      );
+      await intent.launch();
+      _showSuccess('Launching DeoVR...');
+    } catch (e) {
+      // Close loading indicator if still open
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      _showError('Failed to open with DeoVR: $e');
     }
   }
 }
