@@ -292,8 +292,8 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
             ),
           ),
 
-        // Cache indicator
-        if (widget.isCached)
+        // Cache indicator - only show when we know which service has it cached
+        if (widget.isCached && widget.cacheService != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(

@@ -10352,7 +10352,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       isTelevision: _isTelevision,
       qualityTier: torrent.qualityTier,
       isCached: _torboxResultIsCached(torrent.infohash),
-      cacheService: _torboxResultIsCached(torrent.infohash) ? 'torbox' : null,
+      // Only show cache badge if we actually checked cache status (not just assuming cached)
+      cacheService: (_torboxCacheCheckEnabled && _torboxCacheStatus != null && _torboxResultIsCached(torrent.infohash)) ? 'torbox' : null,
       onTap: () => _handleTorrentCardActivated(torrent, index),
       onNavigateUp: index == 0
           ? () => _filterButtonFocusNode.requestFocus()
