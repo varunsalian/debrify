@@ -187,7 +187,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Dynamic focus nodes for engine toggles
   final Map<String, FocusNode> _engineTileFocusNodes = {};
   final Map<String, bool> _engineTileFocusStates = {}; // Track focus as simple bools
-  bool _showProvidersPanel = false;
   AdvancedSearchSelection? _activeAdvancedSelection;
 
   // IMDB Smart Search Mode state
@@ -2657,6 +2656,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Widget _buildProvidersAccordion(BuildContext context) {
+    // Count enabled engines by capability
+    final keywordEngineCount = _availableEngines
+        .where((e) => e.supportsKeywordSearch && (_engineStates[e.name] ?? false))
+        .length;
+    final imdbEngineCount = _availableEngines
+        .where((e) => e.supportsImdbSearch && (_engineStates[e.name] ?? false))
+        .length;
+
     return ValueListenableBuilder<bool>(
       valueListenable: _providerAccordionFocused,
       builder: (context, isFocused, child) => Container(
@@ -2672,225 +2679,99 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
         child: child,
       ),
-      child: Column(
-        children: [
-          FocusableActionDetector(
-            focusNode: _providerAccordionFocusNode,
-            onShowFocusHighlight: (focused) {
-              _providerAccordionFocused.value = focused; // No setState needed!
+      child: FocusableActionDetector(
+        focusNode: _providerAccordionFocusNode,
+        onShowFocusHighlight: (focused) {
+          _providerAccordionFocused.value = focused;
+        },
+        shortcuts: _activateShortcuts,
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (intent) {
+              _showSourcesDialog(context);
+              return null;
             },
-            shortcuts: _activateShortcuts,
-            actions: <Type, Action<Intent>>{
-              ActivateIntent: CallbackAction<ActivateIntent>(
-                onInvoke: (intent) {
-                  setState(() => _showProvidersPanel = !_showProvidersPanel);
-                  return null;
-                },
-              ),
-            },
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              canRequestFocus: false,
-              onTap: () =>
-                  setState(() => _showProvidersPanel = !_showProvidersPanel),
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _providerAccordionFocused,
-                builder: (context, isFocused, child) => Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: isFocused
-                        ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
-                        : Colors.transparent,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: child,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _showProvidersPanel
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Search Providers (${_engineStates.values.where((enabled) => enabled).length})',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ),
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Column(
-                children: [
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _availableEngines.map((engine) {
-                      final engineId = engine.name;
-                      // Get or create focus node to avoid creating in build path
-                      final focusNode = _getOrCreateEngineFocusNode(engineId);
-                      final isEnabled = _engineStates[engineId] ?? false;
-                      final isFocused = _engineTileFocusStates[engineId] ?? false;
-
-                      return _buildProviderSwitch(
-                        context,
-                        label: engine.displayName,
-                        value: isEnabled,
-                        onToggle: (value) => _setEngineEnabled(engineId, value),
-                        tileFocusNode: focusNode,
-                        tileFocused: isFocused,
-                        onFocusChange: (visible) {
-                          if (_engineTileFocusStates[engineId] != visible) {
-                            setState(() {
-                              _engineTileFocusStates[engineId] = visible;
-                            });
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildAdvancedProviderHint(context),
-                ],
-              ),
-            ),
-            crossFadeState: _showProvidersPanel
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 220),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdvancedProviderHint(BuildContext context) {
-    // Show different hints based on search mode
-    final String hintText;
-    final IconData hintIcon;
-    final Color hintColor;
-
-    if (_searchMode == SearchMode.catalog) {
-      hintText = 'IMDB mode shows only engines that support IMDB search (like Torrentio). Switch to Keyword mode to see all engines.';
-      hintIcon = Icons.info_outline_rounded;
-      hintColor = const Color(0xFF7C3AED);
-    } else {
-      hintText = 'Need IMDb-accurate results? Switch to IMDB mode to search with IMDB IDs, seasons, and episodes.';
-      hintIcon = Icons.auto_awesome_rounded;
-      hintColor = const Color(0xFFFACC15);
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F2937),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: hintColor.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            hintIcon,
-            color: hintColor,
-            size: 18,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              hintText,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.white.withValues(alpha: 0.8),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProviderSwitch(
-    BuildContext context, {
-    required String label,
-    required bool value,
-    required ValueChanged<bool> onToggle,
-    required FocusNode tileFocusNode,
-    required bool tileFocused,
-    required ValueChanged<bool> onFocusChange,
-  }) {
-    return FocusableActionDetector(
-      focusNode: tileFocusNode,
-      shortcuts: _activateShortcuts,
-      actions: <Type, Action<Intent>>{
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (intent) {
-            onToggle(!value);
-            return null;
-          },
-        ),
-      },
-      onShowFocusHighlight: onFocusChange,
-      // Use Container instead of AnimatedContainer for instant feedback on TV
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: value
-              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6)
-              : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-          border: Border.all(
-            color: tileFocused
-                ? Theme.of(context).colorScheme.primary
-                : value
-                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)
-                    : Colors.transparent,
-            width: tileFocused ? 2 : 1,
-          ),
-        ),
+        },
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           canRequestFocus: false,
-          onTap: () => onToggle(!value),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          onTap: () => _showSourcesDialog(context),
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _providerAccordionFocused,
+            builder: (context, isFocused, child) => Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: isFocused
+                    ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                    : Colors.transparent,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: child,
+            ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  value ? Icons.check_circle : Icons.circle_outlined,
-                  size: 18,
-                  color: value
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  Icons.tune_rounded,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                // Show engine count based on mode
+                Text(
+                  'Sources',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    label,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: value
-                          ? Theme.of(context).colorScheme.onPrimaryContainer
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontWeight: value ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+                // Keyword engines badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
                   ),
+                  child: Text(
+                    '$keywordEngineCount',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF10B981),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    '+',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                // IMDB engines badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '$imdbEngineCount',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF8B5CF6),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                  size: 20,
                 ),
               ],
             ),
@@ -2898,6 +2779,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       ),
     );
+  }
+
+  /// Shows a dialog with all sources (engines + Stremio addons) for configuration
+  Future<void> _showSourcesDialog(BuildContext context) async {
+    // Fetch Stremio addons - only show torrent-searchable addons
+    // (supports streams + handles IMDB IDs + supports movies or series)
+    final stremioService = StremioService();
+    final allAddons = await stremioService.getAddons();
+    final streamAddons = allAddons.where((a) =>
+        a.supportsStreams &&
+        a.handlesImdbIds &&
+        (a.supportsMovies || a.supportsSeries)
+    ).toList();
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _SourcesDialog(
+        availableEngines: _availableEngines,
+        engineStates: Map.from(_engineStates),
+        streamAddons: streamAddons,
+        onEngineToggle: (engineId, enabled) {
+          _setEngineEnabled(engineId, enabled);
+        },
+        onAddonToggle: (manifestUrl, enabled) async {
+          await stremioService.setAddonEnabled(manifestUrl, enabled);
+        },
+        searchMode: _searchMode,
+      ),
+    );
+
+    // Refresh state after dialog closes
+    if (mounted) setState(() {});
   }
 
   void _copyMagnetLink(String infohash) {
@@ -9368,9 +9283,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       _buildImdbTypeAndEpisodeControls(),
                     ],
 
-                    // Search Engine Toggles
-                    const SizedBox(height: 16),
-                    _buildProvidersAccordion(context),
+                    // Search Engine Toggles - hide after search to save space
+                    if (!_hasSearched || _torrents.isEmpty) ...[
+                      const SizedBox(height: 16),
+                      _buildProvidersAccordion(context),
+                    ],
                     ], // end else (non-browse mode)
                   ],
                 ),
@@ -9709,7 +9626,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       );
                     }
                     final bool showCachedOnlyBanner = _showingTorboxCachedOnly;
-                    final int metadataRows = showCachedOnlyBanner ? 3 : 2;
+                    final int metadataRows = showCachedOnlyBanner ? 2 : 1;
 
                     // Restore scroll position if pending
                     if (_pendingScrollOffset != null) {
@@ -9731,6 +9648,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       padding: const EdgeInsets.only(bottom: 16),
                       itemCount: _torrents.length + metadataRows,
                       itemBuilder: (context, index) {
+                        // Combined Results + Sort row
                         if (index == 0) {
                           return FadeTransition(
                             opacity: _listAnimation,
@@ -9744,388 +9662,191 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFF1E40AF),
-                                    Color(0xFF1E3A8A),
-                                  ],
-                                ),
+                                color: const Color(0xFF1E293B).withValues(alpha: 0.9),
                                 borderRadius: BorderRadius.circular(8),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(
-                                      0xFF1E40AF,
-                                    ).withValues(alpha: 0.4),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
+                                border: Border.all(
+                                  color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                                ),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // First row: Results count + Sort controls
                                   Row(
                                     children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.2,
-                                          ),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: const Icon(
-                                          Icons.search_rounded,
+                                      // Results count
+                                      Text(
+                                        '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'}',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
                                           color: Colors.white,
-                                          size: 14,
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'}${_showingTorboxCachedOnly ? ' (Torbox cached)' : ''}',
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.white,
+                                      if (_showingTorboxCachedOnly)
+                                        Container(
+                                          margin: const EdgeInsets.only(left: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            'Cached',
+                                            style: TextStyle(fontSize: 10, color: Color(0xFF10B981)),
+                                          ),
+                                        ),
+                                      const Spacer(),
+                                      // Sort dropdown
+                                      DropdownButton<String>(
+                                        value: _sortBy,
+                                        focusNode: _sortDropdownFocusNode,
+                                        onChanged: (String? newValue) {
+                                          if (newValue != null) {
+                                            setState(() {
+                                              _sortBy = newValue;
+                                            });
+                                            _sortTorrents(reuseMetadata: true);
+                                          }
+                                        },
+                                        items: const [
+                                          DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 11))),
+                                          DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 11))),
+                                          DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 11))),
+                                          DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 11))),
+                                          DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 11))),
+                                        ],
+                                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 11),
+                                        underline: Container(),
+                                        isDense: true,
+                                        icon: Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
+                                      ),
+                                      // Sort direction
+                                      Focus(
+                                        focusNode: _sortDirectionFocusNode,
+                                        onFocusChange: (focused) {
+                                          _sortDirectionFocused.value = focused;
+                                          if (focused && _isTelevision) _scrollToFocusNode(_sortDirectionFocusNode);
+                                        },
+                                        onKeyEvent: (node, event) {
+                                          if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter)) {
+                                            setState(() => _sortAscending = !_sortAscending);
+                                            _sortTorrents(reuseMetadata: true);
+                                            return KeyEventResult.handled;
+                                          }
+                                          return KeyEventResult.ignored;
+                                        },
+                                        child: ValueListenableBuilder<bool>(
+                                          valueListenable: _sortDirectionFocused,
+                                          builder: (context, isFocused, child) => Container(
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: isFocused ? Border.all(color: const Color(0xFF3B82F6), width: 2) : null,
+                                            ),
+                                            child: child,
+                                          ),
+                                          child: IconButton(
+                                            onPressed: () {
+                                              setState(() => _sortAscending = !_sortAscending);
+                                              _sortTorrents(reuseMetadata: true);
+                                            },
+                                            icon: Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                          ),
+                                        ),
+                                      ),
+                                      // Filter button
+                                      Focus(
+                                        focusNode: _filterButtonFocusNode,
+                                        onFocusChange: (focused) {
+                                          _filterButtonFocused.value = focused;
+                                          if (focused && _isTelevision) _scrollToFocusNode(_filterButtonFocusNode);
+                                        },
+                                        onKeyEvent: (node, event) {
+                                          if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter)) {
+                                            if (!(_allTorrents.isEmpty && !_hasActiveFilters)) _openFiltersSheet();
+                                            return KeyEventResult.handled;
+                                          }
+                                          return KeyEventResult.ignored;
+                                        },
+                                        child: ValueListenableBuilder<bool>(
+                                          valueListenable: _filterButtonFocused,
+                                          builder: (context, isFocused, child) => Container(
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: isFocused ? Border.all(color: const Color(0xFF3B82F6), width: 2) : null,
+                                            ),
+                                            child: child,
+                                          ),
+                                          child: IconButton(
+                                            onPressed: (_allTorrents.isEmpty && !_hasActiveFilters) ? null : _openFiltersSheet,
+                                            icon: Stack(
+                                              clipBehavior: Clip.none,
+                                              children: [
+                                                Icon(Icons.filter_list_rounded, color: (_allTorrents.isEmpty && !_hasActiveFilters) ? Theme.of(context).disabledColor : Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
+                                                if (_hasActiveFilters)
+                                                  Positioned(right: -2, top: -2, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF38BDF8), shape: BoxShape.circle))),
+                                              ],
+                                            ),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
+                                  // Second row: Engine chips (if any)
                                   const SizedBox(height: 6),
                                   _buildEngineStatusChips(context),
+                                  // Active filters row
+                                  if (_hasActiveFilters)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        children: [
+                                          ..._buildActiveFilterBadges().map((badge) => Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(999)),
+                                            child: Text(badge, style: const TextStyle(fontSize: 10, color: Colors.white70)),
+                                          )),
+                                          Focus(
+                                            focusNode: _clearFiltersButtonFocusNode,
+                                            onFocusChange: (focused) => _clearFiltersButtonFocused.value = focused,
+                                            onKeyEvent: (node, event) {
+                                              if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter)) {
+                                                _clearAllFilters();
+                                                return KeyEventResult.handled;
+                                              }
+                                              return KeyEventResult.ignored;
+                                            },
+                                            child: ValueListenableBuilder<bool>(
+                                              valueListenable: _clearFiltersButtonFocused,
+                                              builder: (context, isFocused, child) => Container(
+                                                decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), border: isFocused ? Border.all(color: const Color(0xFF3B82F6), width: 2) : null),
+                                                child: child,
+                                              ),
+                                              child: GestureDetector(
+                                                onTap: _clearAllFilters,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  child: const Text('Clear', style: TextStyle(fontSize: 10, color: Color(0xFF3B82F6))),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
                           );
                         }
-                        if (index == 1) {
-                          return Container(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF1E293B,
-                              ).withValues(alpha: 0.8),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: const Color(
-                                  0xFF3B82F6,
-                                ).withValues(alpha: 0.2),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF1E40AF,
-                                  ).withValues(alpha: 0.1),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.sort_rounded,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Sort by:',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: DropdownButton<String>(
-                                          value: _sortBy,
-                                          focusNode: _sortDropdownFocusNode,
-                                          onChanged: (String? newValue) {
-                                            if (newValue != null) {
-                                              setState(() {
-                                                _sortBy = newValue;
-                                              });
-                                              _sortTorrents(reuseMetadata: true); // Reuse parsed metadata
-                                            }
-                                          },
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: 'relevance',
-                                              child: Text(
-                                                'Relevance',
-                                                style: TextStyle(fontSize: 12),
-                                              ),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'name',
-                                              child: Text(
-                                                'Name',
-                                                style: TextStyle(fontSize: 12),
-                                              ),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'size',
-                                              child: Text(
-                                                'Size',
-                                                style: TextStyle(fontSize: 12),
-                                              ),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'seeders',
-                                              child: Text(
-                                                'Seeders',
-                                                style: TextStyle(fontSize: 12),
-                                              ),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'date',
-                                              child: Text(
-                                                'Date',
-                                                style: TextStyle(fontSize: 12),
-                                              ),
-                                            ),
-                                          ],
-                                          style: TextStyle(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.onSurface,
-                                            fontSize: 12,
-                                          ),
-                                          underline: Container(),
-                                          icon: Icon(
-                                            Icons.arrow_drop_down,
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.onSurfaceVariant,
-                                            size: 16,
-                                          ),
-                                        ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Focus(
-                                      focusNode: _sortDirectionFocusNode,
-                                      onFocusChange: (focused) {
-                                        _sortDirectionFocused.value = focused;
-                                        if (focused && _isTelevision) {
-                                          _scrollToFocusNode(_sortDirectionFocusNode);
-                                        }
-                                      },
-                                      onKeyEvent: (node, event) {
-                                        if (event is KeyDownEvent &&
-                                            (event.logicalKey == LogicalKeyboardKey.select ||
-                                                event.logicalKey == LogicalKeyboardKey.enter)) {
-                                          setState(() {
-                                            _sortAscending = !_sortAscending;
-                                          });
-                                          _sortTorrents(reuseMetadata: true); // Reuse parsed metadata
-                                          return KeyEventResult.handled;
-                                        }
-                                        return KeyEventResult.ignored;
-                                      },
-                                      child: ValueListenableBuilder<bool>(
-                                        valueListenable: _sortDirectionFocused,
-                                        builder: (context, isFocused, child) => Container(
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(4),
-                                            border: isFocused
-                                                ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                                : null,
-                                          ),
-                                          child: child,
-                                        ),
-                                        child: IconButton(
-                                          onPressed: () {
-                                            setState(() {
-                                              _sortAscending = !_sortAscending;
-                                            });
-                                            _sortTorrents(reuseMetadata: true); // Reuse parsed metadata
-                                          },
-                                          icon: Icon(
-                                            _sortAscending
-                                                ? Icons.arrow_upward
-                                                : Icons.arrow_downward,
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.onSurfaceVariant,
-                                            size: 16,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(
-                                            minWidth: 24,
-                                            minHeight: 24,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Focus(
-                                      focusNode: _filterButtonFocusNode,
-                                      onFocusChange: (focused) {
-                                        _filterButtonFocused.value = focused;
-                                        if (focused && _isTelevision) {
-                                          _scrollToFocusNode(_filterButtonFocusNode);
-                                        }
-                                      },
-                                      onKeyEvent: (node, event) {
-                                        if (event is KeyDownEvent &&
-                                            (event.logicalKey == LogicalKeyboardKey.select ||
-                                                event.logicalKey == LogicalKeyboardKey.enter)) {
-                                          if (!(_allTorrents.isEmpty && !_hasActiveFilters)) {
-                                            _openFiltersSheet();
-                                          }
-                                          return KeyEventResult.handled;
-                                        }
-                                        return KeyEventResult.ignored;
-                                      },
-                                      child: ValueListenableBuilder<bool>(
-                                        valueListenable: _filterButtonFocused,
-                                        builder: (context, isFocused, child) => Container(
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(4),
-                                            border: isFocused
-                                                ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                                : null,
-                                          ),
-                                          child: child,
-                                        ),
-                                        child: IconButton(
-                                          onPressed:
-                                              (_allTorrents.isEmpty &&
-                                                  !_hasActiveFilters)
-                                              ? null
-                                              : _openFiltersSheet,
-                                          icon: Stack(
-                                            clipBehavior: Clip.none,
-                                            children: [
-                                              Icon(
-                                                Icons.filter_list_rounded,
-                                                color:
-                                                    (_allTorrents.isEmpty &&
-                                                        !_hasActiveFilters)
-                                                    ? Theme.of(
-                                                        context,
-                                                      ).disabledColor
-                                                    : Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurfaceVariant,
-                                                size: 18,
-                                              ),
-                                              if (_hasActiveFilters)
-                                                Positioned(
-                                                  right: -2,
-                                                  top: -2,
-                                                  child: Container(
-                                                    width: 8,
-                                                    height: 8,
-                                                    decoration: const BoxDecoration(
-                                                      color: Color(0xFF38BDF8),
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                          tooltip: 'Filter results',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (_hasActiveFilters)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        ..._buildActiveFilterBadges()
-                                            .map(
-                                              (badge) => Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.08),
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        999,
-                                                      ),
-                                                ),
-                                                child: Text(
-                                                  badge,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.white70,
-                                                  ),
-                                                ),
-                                              ),
-                                            )
-                                            .toList(),
-                                        Focus(
-                                          focusNode: _clearFiltersButtonFocusNode,
-                                          onFocusChange: (focused) {
-                                            _clearFiltersButtonFocused.value = focused; // No setState needed!
-                                          },
-                                          onKeyEvent: (node, event) {
-                                            if (event is KeyDownEvent &&
-                                                (event.logicalKey == LogicalKeyboardKey.select ||
-                                                    event.logicalKey == LogicalKeyboardKey.enter)) {
-                                              _clearAllFilters();
-                                              return KeyEventResult.handled;
-                                            }
-                                            return KeyEventResult.ignored;
-                                          },
-                                          child: ValueListenableBuilder<bool>(
-                                            valueListenable: _clearFiltersButtonFocused,
-                                            builder: (context, isFocused, child) => Container(
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: isFocused
-                                                    ? Border.all(color: const Color(0xFF3B82F6), width: 2)
-                                                    : null,
-                                              ),
-                                              child: child,
-                                            ),
-                                            child: TextButton(
-                                              onPressed: _clearAllFilters,
-                                              child: const Text(
-                                                'Clear filters',
-                                                style: TextStyle(fontSize: 11),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          );
-                        }
 
-                        if (showCachedOnlyBanner && index == 2) {
+                        if (showCachedOnlyBanner && index == 1) {
                           return _buildTorboxCachedOnlyNotice();
                         }
 
@@ -12412,6 +12133,372 @@ class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
                   color: Colors.white.withValues(alpha: 0.6),
                 )
               : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// Dialog for managing search sources (engines + Stremio addons)
+class _SourcesDialog extends StatefulWidget {
+  final List<DynamicEngine> availableEngines;
+  final Map<String, bool> engineStates;
+  final List<StremioAddon> streamAddons;
+  final void Function(String engineId, bool enabled) onEngineToggle;
+  final Future<void> Function(String manifestUrl, bool enabled) onAddonToggle;
+  final SearchMode searchMode;
+
+  const _SourcesDialog({
+    required this.availableEngines,
+    required this.engineStates,
+    required this.streamAddons,
+    required this.onEngineToggle,
+    required this.onAddonToggle,
+    required this.searchMode,
+  });
+
+  @override
+  State<_SourcesDialog> createState() => _SourcesDialogState();
+}
+
+class _SourcesDialogState extends State<_SourcesDialog> {
+  late Map<String, bool> _localEngineStates;
+  late Map<String, bool> _localAddonStates;
+
+  @override
+  void initState() {
+    super.initState();
+    _localEngineStates = Map.from(widget.engineStates);
+    _localAddonStates = {
+      for (final addon in widget.streamAddons) addon.manifestUrl: addon.enabled,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.tune_rounded,
+                    color: Color(0xFF3B82F6),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Active Sources',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Keyword Engines Section
+                    _buildSectionHeader(
+                      context,
+                      'Keyword Engines',
+                      '${widget.availableEngines.where((e) => e.supportsKeywordSearch && (_localEngineStates[e.name] ?? false)).length} enabled',
+                    ),
+                    const SizedBox(height: 12),
+                    ...widget.availableEngines
+                        .where((e) => e.supportsKeywordSearch)
+                        .map((engine) {
+                      final isEnabled = _localEngineStates[engine.name] ?? false;
+                      return _buildSourceTile(
+                        context,
+                        name: engine.displayName,
+                        isEnabled: isEnabled,
+                        onToggle: (value) {
+                          setState(() {
+                            _localEngineStates[engine.name] = value;
+                          });
+                          widget.onEngineToggle(engine.name, value);
+                        },
+                        badges: [
+                          _CapabilityBadge(label: 'Keyword', color: const Color(0xFF10B981)),
+                          if (engine.supportsImdbSearch)
+                            _CapabilityBadge(label: 'IMDB', color: const Color(0xFF8B5CF6)),
+                        ],
+                      );
+                    }),
+
+                    // Stremio Stream Addons Section (IMDB)
+                    if (widget.streamAddons.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildSectionHeader(
+                        context,
+                        'Stream Addons',
+                        '${_localAddonStates.values.where((e) => e).length} enabled',
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          'Used for IMDB/catalog searches',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ),
+                      ...widget.streamAddons.map((addon) {
+                        final isEnabled = _localAddonStates[addon.manifestUrl] ?? false;
+                        // Build badges based on actual addon capabilities
+                        final List<Widget> addonBadges = [];
+                        if (addon.handlesImdbIds) {
+                          addonBadges.add(_CapabilityBadge(label: 'IMDB', color: const Color(0xFF8B5CF6)));
+                        }
+                        // Show each content type as separate badge
+                        for (final type in addon.types) {
+                          final label = type[0].toUpperCase() + type.substring(1);
+                          addonBadges.add(_CapabilityBadge(label: label, color: const Color(0xFF0EA5E9)));
+                        }
+                        return _buildSourceTile(
+                          context,
+                          name: addon.name,
+                          isEnabled: isEnabled,
+                          onToggle: (value) async {
+                            setState(() {
+                              _localAddonStates[addon.manifestUrl] = value;
+                            });
+                            await widget.onAddonToggle(addon.manifestUrl, value);
+                          },
+                          badges: addonBadges,
+                          subtitle: addon.description,
+                        );
+                      }),
+                    ],
+
+                    // No addons hint
+                    if (widget.streamAddons.isEmpty) ...[
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              color: const Color(0xFF3B82F6),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Add Stremio addons in Settings to get more sources for IMDB searches.',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+            // Footer
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(
+                      'Close',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(BuildContext context, String title, String subtitle) {
+    return Row(
+      children: [
+        Text(
+          title.toUpperCase(),
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: Colors.white.withValues(alpha: 0.5),
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            subtitle,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: const Color(0xFF3B82F6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSourceTile(
+    BuildContext context, {
+    required String name,
+    required bool isEnabled,
+    required ValueChanged<bool> onToggle,
+    required List<Widget> badges,
+    String? subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => onToggle(!isEnabled),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isEnabled
+                  ? const Color(0xFF3B82F6).withValues(alpha: 0.1)
+                  : const Color(0xFF0F172A).withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isEnabled
+                    ? const Color(0xFF3B82F6).withValues(alpha: 0.3)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: [
+                // Toggle icon
+                Icon(
+                  isEnabled ? Icons.check_circle : Icons.circle_outlined,
+                  size: 20,
+                  color: isEnabled
+                      ? const Color(0xFF3B82F6)
+                      : Colors.white.withValues(alpha: 0.4),
+                ),
+                const SizedBox(width: 12),
+                // Name and badges
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Name on its own row
+                      Text(
+                        name,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: isEnabled ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      // Badges on separate row with wrapping
+                      if (badges.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: badges,
+                        ),
+                      ],
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small badge showing a capability
+class _CapabilityBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _CapabilityBadge({
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: color,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
