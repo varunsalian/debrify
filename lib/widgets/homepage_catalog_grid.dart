@@ -32,6 +32,7 @@ class HomepageCatalogGrid extends StatefulWidget {
 
 class _HomepageCatalogGridState extends State<HomepageCatalogGrid> {
   final StremioService _stremioService = StremioService.instance;
+  final ScrollController _scrollController = ScrollController();
 
   List<CatalogSection> _sections = [];
   bool _isLoading = true;
@@ -41,6 +42,12 @@ class _HomepageCatalogGridState extends State<HomepageCatalogGrid> {
   void initState() {
     super.initState();
     _loadContent();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadContent() async {
@@ -99,6 +106,7 @@ class _HomepageCatalogGridState extends State<HomepageCatalogGrid> {
     return RefreshIndicator(
       onRefresh: _loadContent,
       child: ListView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.symmetric(vertical: 16),
         itemCount: _sections.length,
         itemBuilder: (context, index) {

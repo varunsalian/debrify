@@ -39,10 +39,12 @@ class AggregatedSearchResults extends StatefulWidget {
 
 class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   final StremioService _stremioService = StremioService.instance;
+  final ScrollController _scrollController = ScrollController();
 
   List<StremioMeta> _results = [];
   bool _isLoading = false;
   String? _error;
+  String _lastSearchedQuery = ''; // Track last searched query to avoid duplicate searches
 
   late FocusNode _keywordSearchFocusNode;
   late List<FocusNode> _resultFocusNodes;
@@ -59,13 +61,15 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   @override
   void didUpdateWidget(AggregatedSearchResults oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.query != widget.query) {
+    // Only search if query actually changed AND we don't already have results for this query
+    if (oldWidget.query != widget.query && widget.query != _lastSearchedQuery) {
       _performSearch();
     }
   }
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _keywordSearchFocusNode.dispose();
     for (final node in _resultFocusNodes) {
       node.dispose();
@@ -88,11 +92,12 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     });
 
     try {
-      final results = await _stremioService.searchCatalogs(widget.query);
+      final searchQuery = widget.query; // Capture query at start of search
+      final results = await _stremioService.searchCatalogs(searchQuery);
 
       if (mounted) {
         // Sort results by relevance (title match priority)
-        final sortedResults = _sortByRelevance(results, widget.query);
+        final sortedResults = _sortByRelevance(results, searchQuery);
 
         // Update focus nodes for new results
         _updateFocusNodes(sortedResults.length);
@@ -100,6 +105,7 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
         setState(() {
           _results = sortedResults;
           _isLoading = false;
+          _lastSearchedQuery = searchQuery; // Remember what we searched for
         });
       }
     } catch (e) {
@@ -259,6 +265,7 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     final columns = _getColumnCount(screenWidth);
 
     return CustomScrollView(
+      controller: _scrollController,
       slivers: [
         // "Search [keyword]" action card - always first
         SliverToBoxAdapter(
