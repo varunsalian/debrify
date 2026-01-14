@@ -761,9 +761,9 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Responsive columns: more columns on wider screens
+        // Responsive columns: fewer columns = bigger cards for more title space
         final width = constraints.maxWidth;
-        final crossAxisCount = width > 900 ? 6 : width > 600 ? 4 : 3;
+        final crossAxisCount = width > 900 ? 5 : width > 600 ? 3 : 2;
 
         // Update column count for DPAD navigation
         _currentColumns = crossAxisCount;
@@ -773,9 +773,9 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
           padding: const EdgeInsets.all(12),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.7,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
+            childAspectRatio: 0.65, // Taller cards for more title space
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
           ),
       itemCount: _content.length + (_hasMoreContent ? 1 : 0),
       itemBuilder: (context, index) {
@@ -911,10 +911,11 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                           widget.item.name,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 13,
+                            fontSize: 14,
                             fontWeight: FontWeight.w600,
+                            height: 1.2,
                           ),
-                          maxLines: 2,
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
                         // Year/rating

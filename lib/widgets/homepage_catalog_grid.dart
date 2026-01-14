@@ -235,7 +235,7 @@ class _CatalogRowState extends State<_CatalogRow> {
   void _scrollToItem(int index) {
     if (!_scrollController.hasClients) return;
 
-    const double cardWidth = 140;
+    const double cardWidth = 160;
     const double cardSpacing = 12;
     final targetOffset = index * (cardWidth + cardSpacing);
 
@@ -323,7 +323,7 @@ class _CatalogRowState extends State<_CatalogRow> {
 
         // Horizontal item list
         SizedBox(
-          height: 220, // Card height + padding for scale animation
+          height: 260, // Card height + padding for scale animation
           child: ListView.builder(
             controller: _scrollController,
             scrollDirection: Axis.horizontal,
@@ -401,8 +401,8 @@ class _CatalogItemCard extends StatelessWidget {
           curve: Curves.easeOutCubic,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: 140,
-            height: 200,
+            width: 160,
+            height: 240,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: isFocused
@@ -471,11 +471,11 @@ class _CatalogItemCard extends StatelessWidget {
                           item.name,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 13,
+                            fontSize: 14,
                             fontWeight: FontWeight.w600,
                             height: 1.2,
                           ),
-                          maxLines: 2,
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
@@ -595,17 +595,17 @@ class _ShimmerRow extends StatelessWidget {
 
         // Items shimmer
         SizedBox(
-          height: 220,
+          height: 260,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: 6,
+            itemCount: 5,
             itemBuilder: (context, index) {
               return Padding(
-                padding: EdgeInsets.only(right: index < 5 ? 12 : 0),
+                padding: EdgeInsets.only(right: index < 4 ? 12 : 0),
                 child: Container(
-                  width: 140,
-                  height: 200,
+                  width: 160,
+                  height: 240,
                   decoration: BoxDecoration(
                     color: shimmerColor,
                     borderRadius: BorderRadius.circular(12),
