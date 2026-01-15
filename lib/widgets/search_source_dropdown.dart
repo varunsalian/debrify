@@ -113,11 +113,10 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
     setState(() {
       _isFocused = _focusNode.hasFocus;
     });
-    // Close dropdown when losing focus
-    if (!_isFocused && _isExpanded) {
-      _removeOverlay();
-      setState(() => _isExpanded = false);
-    }
+    // Don't auto-close dropdown when focus changes on TV
+    // The dropdown will close when an item is selected or escape is pressed
+    // This prevents the dropdown from closing immediately when focus
+    // transfers to the dropdown menu items
   }
 
   void _toggleDropdown() {
@@ -150,34 +149,51 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
     final horizontalOffset = size.width - dropdownWidth;
 
     return OverlayEntry(
-      builder: (context) => Positioned(
-        width: dropdownWidth,
-        child: CompositedTransformFollower(
-          link: _layerLink,
-          showWhenUnlinked: false,
-          offset: Offset(horizontalOffset, size.height + 4),
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(12),
-            color: Theme.of(context).colorScheme.surfaceContainerHigh,
-            child: _DropdownMenu(
-              options: widget.options,
-              selectedOption: widget.selectedOption,
-              isTelevision: widget.isTelevision,
-              onSelected: (option) {
-                _removeOverlay();
-                setState(() => _isExpanded = false);
-                widget.onChanged(option);
-                _focusNode.requestFocus();
-              },
-              onClose: () {
+      builder: (context) => Stack(
+        children: [
+          // Fullscreen barrier to detect taps outside (for touch/mouse)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
                 _removeOverlay();
                 setState(() => _isExpanded = false);
                 _focusNode.requestFocus();
               },
+              child: const ColoredBox(color: Colors.transparent),
             ),
           ),
-        ),
+          // The actual dropdown menu
+          Positioned(
+            width: dropdownWidth,
+            child: CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              offset: Offset(horizontalOffset, size.height + 4),
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(12),
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                child: _DropdownMenu(
+                  options: widget.options,
+                  selectedOption: widget.selectedOption,
+                  isTelevision: widget.isTelevision,
+                  onSelected: (option) {
+                    _removeOverlay();
+                    setState(() => _isExpanded = false);
+                    widget.onChanged(option);
+                    _focusNode.requestFocus();
+                  },
+                  onClose: () {
+                    _removeOverlay();
+                    setState(() => _isExpanded = false);
+                    _focusNode.requestFocus();
+                  },
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -9103,73 +9103,110 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       if (count > 0 || hasError) {
         final isSelected = _selectedEngineFilter == key;
+        final focusNode = _getOrCreateEngineFocusNode(key);
+        final isFocused = _engineTileFocusStates[key] ?? false;
+
+        void toggleFilter() {
+          if (hasError) return;
+          setState(() {
+            // Toggle filter: if already selected, deselect (show all)
+            _selectedEngineFilter = isSelected ? null : key;
+            // Apply filter to current torrents
+            _applyEngineFilter();
+          });
+        }
+
         chips.add(
-          GestureDetector(
-            onTap: hasError ? null : () {
+          Focus(
+            focusNode: focusNode,
+            onFocusChange: (focused) {
               setState(() {
-                // Toggle filter: if already selected, deselect (show all)
-                _selectedEngineFilter = isSelected ? null : key;
-                // Apply filter to current torrents
-                _applyEngineFilter();
+                _engineTileFocusStates[key] = focused;
               });
             },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: hasError
-                    ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3)
-                    : isSelected
-                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.8)
-                        : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent) {
+                if (event.logicalKey == LogicalKeyboardKey.select ||
+                    event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.space) {
+                  toggleFilter();
+                  return KeyEventResult.handled;
+                }
+              }
+              return KeyEventResult.ignored;
+            },
+            child: GestureDetector(
+              onTap: hasError ? null : toggleFilter,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
                   color: hasError
-                      ? Theme.of(context).colorScheme.error.withValues(alpha: 0.5)
+                      ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3)
                       : isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                  width: isSelected ? 2 : 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    hasError ? Icons.error_outline : isSelected ? Icons.filter_alt : Icons.check_circle,
-                    size: 14,
-                    color: hasError
-                        ? Theme.of(context).colorScheme.error
-                        : isSelected
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : Theme.of(context).colorScheme.primary,
+                          ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.8)
+                          : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isFocused
+                        ? Theme.of(context).colorScheme.primary
+                        : hasError
+                            ? Theme.of(context).colorScheme.error.withValues(alpha: 0.5)
+                            : isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                    width: isFocused || isSelected ? 2 : 1,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    short,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  boxShadow: isFocused
+                      ? [
+                          BoxShadow(
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      hasError ? Icons.error_outline : isSelected ? Icons.filter_alt : Icons.check_circle,
+                      size: 14,
                       color: hasError
-                          ? Theme.of(context).colorScheme.onErrorContainer
+                          ? Theme.of(context).colorScheme.error
                           : isSelected
                               ? Theme.of(context).colorScheme.onPrimary
-                              : Theme.of(context).colorScheme.onPrimaryContainer,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                      fontSize: 11,
+                              : Theme.of(context).colorScheme.primary,
                     ),
-                  ),
-                  if (!hasError && count > 0) ...[
                     const SizedBox(width: 4),
                     Text(
-                      '$count',
+                      short,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: isSelected
-                            ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.9)
-                            : Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
-                        fontSize: 10,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        color: hasError
+                            ? Theme.of(context).colorScheme.onErrorContainer
+                            : isSelected
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : Theme.of(context).colorScheme.onPrimaryContainer,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                        fontSize: 11,
                       ),
                     ),
+                    if (!hasError && count > 0) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '$count',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.9)
+                              : Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                          fontSize: 10,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -10461,14 +10498,65 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ? const Color(0xFF10B981) // Green for direct
         : const Color(0xFF6366F1); // Purple for external
 
-    return GestureDetector(
-      onTap: () => _handleTorrentCardActivated(torrent, index),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(12),
-        ),
+    // Get focus node for DPAD navigation
+    final focusNode = index < _cardFocusNodes.length
+        ? _cardFocusNodes[index]
+        : FocusNode();
+
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          // Handle select/enter to activate
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            _handleTorrentCardActivated(torrent, index);
+            return KeyEventResult.handled;
+          }
+          // Handle up navigation
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            if (index == 0) {
+              _filterButtonFocusNode.requestFocus();
+            } else if (index > 0 && index - 1 < _cardFocusNodes.length) {
+              _cardFocusNodes[index - 1].requestFocus();
+            }
+            return KeyEventResult.handled;
+          }
+          // Handle down navigation
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            if (index + 1 < _cardFocusNodes.length) {
+              _cardFocusNodes[index + 1].requestFocus();
+            }
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return GestureDetector(
+            onTap: () => _handleTorrentCardActivated(torrent, index),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: isFocused
+                    ? Border.all(color: accentColor, width: 2)
+                    : null,
+                boxShadow: isFocused
+                    ? [
+                        BoxShadow(
+                          color: accentColor.withValues(alpha: 0.4),
+                          blurRadius: 12,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: IntrinsicHeight(
@@ -10591,6 +10679,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
           ),
         ),
+            ),
+          );
+        },
       ),
     );
   }
