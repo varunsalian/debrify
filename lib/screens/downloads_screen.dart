@@ -587,15 +587,17 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     final inProgressGroups = groups.where((g) => !g.isFinished).toList();
     final finishedGroups = groups.where((g) => g.isFinished).toList();
 
-    return Column(
+    return Stack(
       children: [
-        Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: TabBar(
+        Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TabBar(
             controller: _tabController,
             isScrollable: false,
             dividerColor: Colors.transparent,
@@ -664,38 +666,71 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                   ],
                 ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Align(
-            alignment: Alignment.bottomRight,
-            child: FloatingActionButton.extended(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-              onPressed: () async {
-                final data = await Clipboard.getData('text/plain');
-                String? clipboardUrl;
+          ],
+        ),
+        Positioned(
+          left: 16,
+          bottom: 16 + MediaQuery.of(context).padding.bottom,
+          child: GestureDetector(
+            onTap: () async {
+              final data = await Clipboard.getData('text/plain');
+              String? clipboardUrl;
 
-                if (data?.text != null && data!.text!.isNotEmpty) {
-                  final url = data.text!.trim();
-                  if (_isDownloadLink(url)) {
-                    clipboardUrl = url;
-                    if (mounted) {
-                      final uri = Uri.tryParse(url);
-                      final fileName = uri?.path.split('/').last ?? 'file';
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Found download link in clipboard: $fileName'),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
+              if (data?.text != null && data!.text!.isNotEmpty) {
+                final url = data.text!.trim();
+                if (_isDownloadLink(url)) {
+                  clipboardUrl = url;
+                  if (mounted) {
+                    final uri = Uri.tryParse(url);
+                    final fileName = uri?.path.split('/').last ?? 'file';
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Found download link in clipboard: $fileName'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
                   }
                 }
+              }
 
-                await _showAddDialog(initialUrl: clipboardUrl);
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Add'),
+              await _showAddDialog(initialUrl: clipboardUrl);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.5),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.add_rounded,
+                    color: const Color(0xFF10B981),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Add',
+                    style: TextStyle(
+                      color: Color(0xFF10B981),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

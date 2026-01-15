@@ -9983,22 +9983,48 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       ),
         ),
-        // Bulk Add Floating Action Button (only show if PikPak is enabled)
+        // Bulk Add Button (only show if PikPak is logged in and enabled)
         if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision && _pikpakEnabled)
           Positioned(
-            right: 16,
-            bottom: 16,
-            child: FloatingActionButton.extended(
-              onPressed: _showBulkAddDialog,
-              backgroundColor: const Color(0xFF6366F1),
-              elevation: 8,
-              icon: const Icon(Icons.playlist_add, color: Colors.white),
-              label: const Text(
-                'Bulk Add',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
+            left: 16,
+            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            child: GestureDetector(
+              onTap: _showBulkAddDialog,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF0088CC).withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.playlist_add_rounded,
+                      color: const Color(0xFF0088CC),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Bulk',
+                      style: TextStyle(
+                        color: Color(0xFF0088CC),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
