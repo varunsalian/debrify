@@ -423,6 +423,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           _showMissingApiKeySnack('Real Debrid');
         } else if (index == 5) {
           _showMissingApiKeySnack('Torbox');
+        } else if (index == 6) {
+          // PikPak tab - check if enabled but hidden vs not configured
+          if (_pikpakEnabled && _pikpakHiddenFromNav) {
+            _showTabHiddenSnack('PikPak');
+          } else {
+            _showMissingApiKeySnack('PikPak');
+          }
         } else {
           _showIntegrationRequiredSnack();
         }
@@ -1161,6 +1168,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Connect Real Debrid or Torbox in Settings to unlock more tabs.'),
+      ),
+    );
+  }
+
+  void _showTabHiddenSnack(String provider) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$provider tab is hidden. Enable it in Settings to access.'),
       ),
     );
   }
