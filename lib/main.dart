@@ -390,7 +390,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   ];
 
   final List<String> _titles = [
-    'Torrent Search',
+    'Home',
     'Playlist',
     'Downloads',
     'Debrify TV',
@@ -401,7 +401,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   ];
 
   final List<IconData> _icons = [
-    Icons.search_rounded,
+    Icons.home_rounded,
     Icons.playlist_play_rounded,
     Icons.download_for_offline_rounded,
     Icons.tv_rounded,
