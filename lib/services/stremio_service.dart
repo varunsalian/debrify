@@ -365,23 +365,32 @@ class StremioService {
 
     debugPrint('StremioService: Using smart fallback for series search');
 
-    // Step 1: Try bare IMDB ID first
-    final List<StremioStream> initialStreams = [];
+    // Step 1: Try bare IMDB ID first (parallel)
+    final List<Future<List<StremioStream>>> initialFutures = [];
 
     for (final addon in applicableAddons) {
       final sourceKey = 'stremio:${addon.name}'.toLowerCase();
-      try {
-        final streams = await _fetchStreamsFromAddon(addon, 'series', imdbId);
-        addonCounts[sourceKey] = streams.length;
-        initialStreams.addAll(streams);
-        debugPrint(
-          'StremioService: ${addon.name} (bare IMDB) returned ${streams.length} streams',
-        );
-      } catch (e) {
-        addonCounts[sourceKey] = 0;
-        addonErrors[sourceKey] = e.toString();
-        debugPrint('StremioService: ${addon.name} (bare IMDB) error: $e');
-      }
+      initialFutures.add(
+        _fetchStreamsFromAddon(addon, 'series', imdbId).then((streams) {
+          addonCounts[sourceKey] = streams.length;
+          debugPrint(
+            'StremioService: ${addon.name} (bare IMDB) returned ${streams.length} streams',
+          );
+          return streams;
+        }).catchError((e) {
+          addonCounts[sourceKey] = 0;
+          addonErrors[sourceKey] = e.toString();
+          debugPrint('StremioService: ${addon.name} (bare IMDB) error: $e');
+          return <StremioStream>[];
+        }),
+      );
+    }
+
+    // Execute all bare IMDB searches in parallel
+    final initialResults = await Future.wait(initialFutures);
+    final List<StremioStream> initialStreams = [];
+    for (final streams in initialResults) {
+      initialStreams.addAll(streams);
     }
 
     // Convert initial streams to torrents
@@ -413,55 +422,55 @@ class StremioService {
       'falling back to season probing',
     );
 
-    // Determine seasons to probe
-    final List<int> seasonsToProbe =
+    // Determine seasons to probe (cap at 10 to avoid flooding servers)
+    const int maxSeasonsToProbe = 10;
+    List<int> seasonsToProbe =
         (availableSeasons != null && availableSeasons.isNotEmpty)
-            ? availableSeasons
+            ? (List<int>.from(availableSeasons)..sort()) // Sort to ensure we get earliest seasons
             : List.generate(5, (i) => i + 1); // Default to seasons 1-5
 
+    // Cap to first 10 seasons - season packs usually appear in early season searches
+    if (seasonsToProbe.length > maxSeasonsToProbe) {
+      debugPrint(
+        'StremioService: Capping seasons from ${seasonsToProbe.length} to $maxSeasonsToProbe',
+      );
+      seasonsToProbe = seasonsToProbe.take(maxSeasonsToProbe).toList();
+    }
+
     debugPrint(
-      'StremioService: Probing ${seasonsToProbe.length} seasons: $seasonsToProbe',
+      'StremioService: Probing ${seasonsToProbe.length} seasons IN PARALLEL: $seasonsToProbe',
     );
 
-    final List<StremioStream> fallbackStreams = [];
-    int consecutiveEmpty = 0;
+    // Create parallel futures for all season+addon combinations
+    final List<Future<List<StremioStream>>> seasonFutures = [];
 
     for (final seasonNum in seasonsToProbe) {
       final streamId = _buildStreamId(imdbId, seasonNum, 1); // S{n}E1
-      int seasonTotalStreams = 0;
 
       for (final addon in applicableAddons) {
-        try {
-          final streams = await _fetchStreamsFromAddon(addon, 'series', streamId);
-          seasonTotalStreams += streams.length;
-          fallbackStreams.addAll(streams);
-        } catch (e) {
-          debugPrint(
-            'StremioService: ${addon.name} error probing S${seasonNum}E1: $e',
-          );
-        }
+        seasonFutures.add(
+          _fetchStreamsFromAddon(addon, 'series', streamId).catchError((e) {
+            debugPrint(
+              'StremioService: ${addon.name} error probing S${seasonNum}E1: $e',
+            );
+            return <StremioStream>[];
+          }),
+        );
       }
-
-      debugPrint(
-        'StremioService: Season $seasonNum probe returned $seasonTotalStreams streams',
-      );
-
-      // Track consecutive empty seasons
-      if (seasonTotalStreams == 0) {
-        consecutiveEmpty++;
-        if (consecutiveEmpty >= maxConsecutiveEmpty) {
-          debugPrint(
-            'StremioService: $maxConsecutiveEmpty consecutive empty seasons, stopping probe',
-          );
-          break;
-        }
-      } else {
-        consecutiveEmpty = 0;
-      }
-
-      // Small delay between season probes
-      await Future.delayed(const Duration(milliseconds: 100));
     }
+
+    // Execute all season probes in parallel
+    final List<List<StremioStream>> seasonResults = await Future.wait(seasonFutures);
+
+    // Flatten results
+    final List<StremioStream> fallbackStreams = [];
+    for (final streams in seasonResults) {
+      fallbackStreams.addAll(streams);
+    }
+
+    debugPrint(
+      'StremioService: Parallel season probing returned ${fallbackStreams.length} streams',
+    );
 
     // Convert fallback streams to torrents
     final fallbackTorrents = _convertToTorrents(fallbackStreams);

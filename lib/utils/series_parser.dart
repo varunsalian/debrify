@@ -478,7 +478,8 @@ class SeriesParser {
 
     // PHASE 2: Extended season keywords (Full, Entire, Box Set)
     // "Full Series", "Entire Series", "Complete Box Set", "Full Collection"
-    text = text.replaceAll(RegExp(r'\b(?:Full|Entire|Complete)\s+(?:Series|Collection)\b', caseSensitive: false), ' ');
+    // Also handles "The Complete Series", "The Full Collection", etc.
+    text = text.replaceAll(RegExp(r'\b(?:The\s+)?(?:Full|Entire|Complete)\s+(?:Series|Collection)\b', caseSensitive: false), ' ');
     text = text.replaceAll(RegExp(r'\bBox\s+Set\b', caseSensitive: false), ' ');
 
     // PHASE 2: Alternative season range formats

@@ -2134,6 +2134,78 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _searchTorrents(selection.displayQuery);
   }
 
+  /// Handle catalog item selection (from AggregatedSearchResults or CatalogBrowser)
+  /// For series, fetches season metadata before searching to enable parallel season search
+  Future<void> _handleCatalogItemSelected(AdvancedSearchSelection selection, {bool updateSearchText = false}) async {
+    _cameFromCatalogBrowse = true;
+    _previousSearchQuery = _searchController.text;
+
+    setState(() {
+      _searchMode = SearchMode.catalog;
+      _selectedImdbTitle = ImdbTitleResult(
+        imdbId: selection.imdbId,
+        title: selection.title,
+        year: selection.year,
+        contentType: selection.contentType,
+      );
+      _isSeries = selection.isSeries;
+      if (updateSearchText) {
+        _searchController.text = selection.title;
+      }
+      _activeAdvancedSelection = selection;
+      _imdbAutocompleteResults.clear();
+      _imdbSearchError = null;
+      _seriesControlsExpanded = selection.isSeries;
+      _availableSeasons = null; // Reset before fetching
+      _selectedSeason = null;
+    });
+
+    // For series, fetch season metadata before searching
+    if (selection.isSeries) {
+      try {
+        debugPrint('TorrentSearchScreen: Fetching season metadata for series: ${selection.imdbId}');
+        final details = await ImdbLookupService.getTitleDetails(selection.imdbId);
+
+        if (!mounted) return;
+
+        // Extract available seasons from IMDbbot API
+        List<int>? availableSeasons;
+        try {
+          final main = details['main'];
+          if (main != null && main is Map) {
+            final episodes = main['episodes'];
+            if (episodes != null && episodes is Map) {
+              final seasons = episodes['seasons'];
+              if (seasons != null && seasons is List) {
+                availableSeasons = seasons
+                    .map((s) => (s is Map) ? (s['number'] as int?) : null)
+                    .where((n) => n != null)
+                    .cast<int>()
+                    .toList();
+                debugPrint('TorrentSearchScreen: Extracted ${availableSeasons.length} seasons for catalog series: $availableSeasons');
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('TorrentSearchScreen: Error extracting seasons for catalog series: $e');
+          availableSeasons = null;
+        }
+
+        if (mounted) {
+          setState(() {
+            _availableSeasons = availableSeasons;
+          });
+        }
+      } catch (e) {
+        debugPrint('TorrentSearchScreen: Error fetching season metadata for catalog series: $e');
+        // Continue without season data - search will still work
+      }
+    }
+
+    // Now search with season data available (if fetched)
+    _createAdvancedSelectionAndSearch();
+  }
+
   // Clear IMDB selection
   void _clearImdbSelection() {
     setState(() {
@@ -2987,20 +3059,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         break;
       case 'relevance':
       default:
-        // Sort by coverage type first, then maintain original order
+        // Sort by coverage type first, then season count, then seeders
         sortedTorrents.sort((a, b) {
           // Primary: coverage type prioritization
           if (shouldApplyCoveragePriority) {
             // Prefer season packs (lower priority number = higher rank)
             final coverageComp = a.coveragePriority.compareTo(b.coveragePriority);
             if (coverageComp != 0) return coverageComp;
+
+            // Secondary: season count (more seasons = higher rank)
+            final seasonComp = b.seasonCount.compareTo(a.seasonCount);
+            if (seasonComp != 0) return seasonComp;
           } else if (shouldPrioritizeSingleEpisode) {
             // Prefer single episodes (higher priority number = higher rank)
             final coverageComp = b.coveragePriority.compareTo(a.coveragePriority);
             if (coverageComp != 0) return coverageComp;
           }
 
-          // Secondary: seeders (best quality indicator for relevance)
+          // Tertiary: seeders (best quality indicator for relevance)
           return b.seeders.compareTo(a.seeders);
         });
         break;
@@ -9344,23 +9420,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _searchTorrents(_searchController.text);
                           },
                           onItemSelected: (selection) {
-                            _cameFromCatalogBrowse = true;
-                            _previousSearchQuery = _searchController.text;
-                            setState(() {
-                              _searchMode = SearchMode.catalog;
-                              _selectedImdbTitle = ImdbTitleResult(
-                                imdbId: selection.imdbId,
-                                title: selection.title,
-                                year: selection.year,
-                                contentType: selection.contentType,
-                              );
-                              _isSeries = selection.isSeries;
-                              _activeAdvancedSelection = selection;
-                              _imdbAutocompleteResults.clear();
-                              _imdbSearchError = null;
-                              _seriesControlsExpanded = selection.isSeries;
-                            });
-                            _createAdvancedSelectionAndSearch();
+                            _handleCatalogItemSelected(selection);
                           },
                         ),
                       ),
@@ -9377,24 +9437,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           // Freeze searchQuery while offstage to prevent reload/scroll reset
                           searchQuery: (_hasSearched || _isLoading) ? _previousSearchQuery : _searchController.text,
                           onItemSelected: (selection) {
-                            _cameFromCatalogBrowse = true;
-                            _previousSearchQuery = _searchController.text;
-                            setState(() {
-                              _searchMode = SearchMode.catalog;
-                              _selectedImdbTitle = ImdbTitleResult(
-                                imdbId: selection.imdbId,
-                                title: selection.title,
-                                year: selection.year,
-                                contentType: selection.contentType,
-                              );
-                              _isSeries = selection.isSeries;
-                              _searchController.text = selection.title;
-                              _activeAdvancedSelection = selection;
-                              _imdbAutocompleteResults.clear();
-                              _imdbSearchError = null;
-                              _seriesControlsExpanded = selection.isSeries;
-                            });
-                            _createAdvancedSelectionAndSearch();
+                            _handleCatalogItemSelected(selection, updateSearchText: true);
                           },
                         ),
                       ),

@@ -123,8 +123,20 @@ class Torrent {
     };
   }
 
-  /// Get the display title - uses transformed title if available, otherwise falls back to name
-  String get displayTitle => transformedTitle ?? name;
+  /// Get the display title - use original name, but strip everything after / or newline
+  String get displayTitle {
+    // Check for newline first (release_name\nfilename format)
+    final newlineIndex = name.indexOf('\n');
+    if (newlineIndex > 0) {
+      return name.substring(0, newlineIndex).trim();
+    }
+    // Then check for slash (release_name/filename format)
+    final slashIndex = name.indexOf('/');
+    if (slashIndex > 0) {
+      return name.substring(0, slashIndex).trim();
+    }
+    return name;
+  }
 
   /// Get coverage type as enum (for sorting)
   int get coveragePriority {
@@ -139,6 +151,36 @@ class Torrent {
         return 3;
       default:
         return 3; // Treat unknown as single episode
+    }
+  }
+
+  /// Get the number of seasons covered (for sorting - more seasons = higher value)
+  int get seasonCount {
+    switch (coverageType) {
+      case 'completeSeries':
+        // Complete series - use actual season count if available
+        if (startSeason != null && endSeason != null) {
+          return endSeason! - startSeason! + 1;
+        }
+        // If only endSeason available (e.g., "S01-S08"), use it
+        if (endSeason != null) {
+          return endSeason!;
+        }
+        // Unknown complete series - rank moderately high but not above known ranges
+        // This prevents "Complete Series" without range from beating "S01-S10"
+        return 8;
+      case 'multiSeasonPack':
+        // Multi-season pack - calculate range
+        if (startSeason != null && endSeason != null) {
+          return endSeason! - startSeason! + 1;
+        }
+        return endSeason ?? 2; // At least 2 seasons
+      case 'seasonPack':
+        return 1; // Single season
+      case 'singleEpisode':
+        return 0; // No full season
+      default:
+        return 0;
     }
   }
 }
