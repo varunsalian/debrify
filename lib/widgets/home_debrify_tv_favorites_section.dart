@@ -4,10 +4,22 @@ import '../models/debrify_tv/channel.dart';
 import '../services/storage_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/main_page_bridge.dart';
+import 'home_focus_controller.dart';
 
 /// Horizontal scrollable Debrify TV channel favorites section for the home screen
 class HomeDebrifyTvFavoritesSection extends StatefulWidget {
-  const HomeDebrifyTvFavoritesSection({super.key});
+  final HomeFocusController? focusController;
+  final VoidCallback? onRequestFocusAbove;
+  final VoidCallback? onRequestFocusBelow;
+  final bool isTelevision;
+
+  const HomeDebrifyTvFavoritesSection({
+    super.key,
+    this.focusController,
+    this.onRequestFocusAbove,
+    this.onRequestFocusBelow,
+    this.isTelevision = false,
+  });
 
   @override
   State<HomeDebrifyTvFavoritesSection> createState() =>
@@ -19,10 +31,36 @@ class _HomeDebrifyTvFavoritesSectionState
   List<DebrifyTvChannel> _favoriteChannels = [];
   bool _isLoading = true;
 
+  // Focus management for DPAD navigation
+  final List<FocusNode> _cardFocusNodes = [];
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _loadFavorites();
+  }
+
+  @override
+  void dispose() {
+    // Unregister from controller
+    widget.focusController?.unregisterSection(HomeSection.tvFavorites);
+    // Dispose focus nodes
+    for (final node in _cardFocusNodes) {
+      node.dispose();
+    }
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Ensure we have the right number of focus nodes for current items
+  void _ensureFocusNodes() {
+    while (_cardFocusNodes.length < _favoriteChannels.length) {
+      _cardFocusNodes.add(FocusNode(debugLabel: 'tv_channel_card_${_cardFocusNodes.length}'));
+    }
+    while (_cardFocusNodes.length > _favoriteChannels.length) {
+      _cardFocusNodes.removeLast().dispose();
+    }
   }
 
   Future<void> _loadFavorites() async {
@@ -57,6 +95,13 @@ class _HomeDebrifyTvFavoritesSectionState
           _favoriteChannels = favorites;
           _isLoading = false;
         });
+        // Update focus nodes and register with controller
+        _ensureFocusNodes();
+        widget.focusController?.registerSection(
+          HomeSection.tvFavorites,
+          hasItems: _favoriteChannels.isNotEmpty,
+          focusNodes: _cardFocusNodes,
+        );
       }
     } catch (e) {
       debugPrint('Error loading Debrify TV favorites: $e');
@@ -65,6 +110,13 @@ class _HomeDebrifyTvFavoritesSectionState
           _favoriteChannels = [];
           _isLoading = false;
         });
+        // Register as empty section
+        _ensureFocusNodes();
+        widget.focusController?.registerSection(
+          HomeSection.tvFavorites,
+          hasItems: false,
+          focusNodes: [],
+        );
       }
     }
   }
@@ -132,16 +184,21 @@ class _HomeDebrifyTvFavoritesSectionState
           ),
         ),
         const SizedBox(height: 4),
-        // Horizontal scrolling favorites
+        // Horizontal scrolling favorites with DPAD support
         SizedBox(
           height: 100,
           child: ListView.separated(
+            controller: _scrollController,
             scrollDirection: Axis.horizontal,
             itemCount: _favoriteChannels.length,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
               final channel = _favoriteChannels[index];
-              return _buildChannelCard(channel);
+              return _buildChannelCard(
+                channel,
+                index: index,
+                focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+              );
             },
           ),
         ),
@@ -149,9 +206,24 @@ class _HomeDebrifyTvFavoritesSectionState
     );
   }
 
-  Widget _buildChannelCard(DebrifyTvChannel channel) {
+  Widget _buildChannelCard(
+    DebrifyTvChannel channel, {
+    int index = 0,
+    FocusNode? focusNode,
+  }) {
     return _ChannelCardWithFocus(
       onTap: () => _openChannel(channel),
+      focusNode: focusNode,
+      index: index,
+      totalCount: _favoriteChannels.length,
+      scrollController: _scrollController,
+      onUpPressed: widget.onRequestFocusAbove,
+      onDownPressed: widget.onRequestFocusBelow,
+      onFocusChanged: (focused, idx) {
+        if (focused) {
+          widget.focusController?.saveLastFocusedIndex(HomeSection.tvFavorites, idx);
+        }
+      },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
@@ -269,11 +341,25 @@ class _HomeDebrifyTvFavoritesSectionState
 /// Focus-aware wrapper for channel cards with DPAD/TV support
 class _ChannelCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final FocusNode? focusNode;
+  final int index;
+  final int totalCount;
+  final ScrollController? scrollController;
+  final VoidCallback? onUpPressed;
+  final VoidCallback? onDownPressed;
+  final void Function(bool focused, int index)? onFocusChanged;
   final Widget Function(bool isFocused, bool isHovered) child;
 
   const _ChannelCardWithFocus({
     required this.onTap,
     required this.child,
+    this.focusNode,
+    this.index = 0,
+    this.totalCount = 1,
+    this.scrollController,
+    this.onUpPressed,
+    this.onDownPressed,
+    this.onFocusChanged,
   });
 
   @override
@@ -283,14 +369,54 @@ class _ChannelCardWithFocus extends StatefulWidget {
 class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
   bool _isFocused = false;
   bool _isHovered = false;
+  final GlobalKey _cardKey = GlobalKey();
+
+  void _onFocusChange(bool focused) {
+    setState(() => _isFocused = focused);
+    widget.onFocusChanged?.call(focused, widget.index);
+
+    // Scroll card into view when focused
+    if (focused && widget.scrollController != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _cardKey.currentContext;
+        if (context != null) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
+      // Select/Enter/GameButtonA - activate the card
       if (event.logicalKey == LogicalKeyboardKey.select ||
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.gameButtonA) {
         widget.onTap?.call();
         return KeyEventResult.handled;
+      }
+
+      // Arrow Up - go to previous section
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        widget.onUpPressed?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Down - go to next section
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        widget.onDownPressed?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Left/Right - let Flutter's directional focus handle it
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+          event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        return KeyEventResult.ignored;
       }
     }
     return KeyEventResult.ignored;
@@ -302,11 +428,15 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: Focus(
-        onFocusChange: (focused) => setState(() => _isFocused = focused),
+        focusNode: widget.focusNode,
+        onFocusChange: _onFocusChange,
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
-          child: widget.child(_isFocused, _isHovered),
+          child: KeyedSubtree(
+            key: _cardKey,
+            child: widget.child(_isFocused, _isHovered),
+          ),
         ),
       ),
     );

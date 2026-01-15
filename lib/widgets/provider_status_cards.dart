@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/rd_user.dart';
 import '../models/torbox_user.dart';
 import '../services/account_service.dart';
 import '../services/torbox_account_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/storage_service.dart';
+import 'home_focus_controller.dart';
 
 /// Data class to hold provider status info
 class ProviderStatus {
@@ -38,12 +40,20 @@ class ProviderStatusCards extends StatefulWidget {
   final VoidCallback? onTapRealDebrid;
   final VoidCallback? onTapTorbox;
   final VoidCallback? onTapPikPak;
+  final HomeFocusController? focusController;
+  final VoidCallback? onRequestFocusAbove;
+  final VoidCallback? onRequestFocusBelow;
+  final bool isTelevision;
 
   const ProviderStatusCards({
     super.key,
     this.onTapRealDebrid,
     this.onTapTorbox,
     this.onTapPikPak,
+    this.focusController,
+    this.onRequestFocusAbove,
+    this.onRequestFocusBelow,
+    this.isTelevision = false,
   });
 
   @override
@@ -56,10 +66,36 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
   ProviderStatus? _pikpakStatus;
   bool _isLoading = true;
 
+  // Focus management for DPAD navigation
+  final List<FocusNode> _cardFocusNodes = [];
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _loadProviderStatuses();
+  }
+
+  @override
+  void dispose() {
+    // Unregister from controller
+    widget.focusController?.unregisterSection(HomeSection.providers);
+    // Dispose focus nodes
+    for (final node in _cardFocusNodes) {
+      node.dispose();
+    }
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Ensure we have the right number of focus nodes for configured providers
+  void _ensureFocusNodes(int count) {
+    while (_cardFocusNodes.length < count) {
+      _cardFocusNodes.add(FocusNode(debugLabel: 'provider_card_${_cardFocusNodes.length}'));
+    }
+    while (_cardFocusNodes.length > count) {
+      _cardFocusNodes.removeLast().dispose();
+    }
   }
 
   Future<void> _loadProviderStatuses() async {
@@ -74,6 +110,20 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
 
     if (mounted) {
       setState(() => _isLoading = false);
+
+      // Count configured providers
+      int configuredCount = 0;
+      if (_rdStatus?.isConfigured == true) configuredCount++;
+      if (_torboxStatus?.isConfigured == true) configuredCount++;
+      if (_pikpakStatus?.isConfigured == true) configuredCount++;
+
+      // Update focus nodes and register with controller
+      _ensureFocusNodes(configuredCount);
+      widget.focusController?.registerSection(
+        HomeSection.providers,
+        hasItems: configuredCount > 0,
+        focusNodes: _cardFocusNodes,
+      );
     }
   }
 
@@ -252,8 +302,10 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
       return _buildNoProvidersState();
     }
 
-    // Build list of configured providers
+    // Build list of configured providers with focus nodes
     final configuredProviders = <Widget>[];
+    int focusIndex = 0;
+
     if (_rdStatus != null && _rdStatus!.isConfigured) {
       configuredProviders.add(
         _buildProviderCard(
@@ -261,8 +313,11 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
           color: const Color(0xFF10B981), // Emerald
           icon: Icons.bolt_rounded,
           onTap: widget.onTapRealDebrid,
+          index: focusIndex,
+          focusNode: focusIndex < _cardFocusNodes.length ? _cardFocusNodes[focusIndex] : null,
         ),
       );
+      focusIndex++;
     }
     if (_torboxStatus != null && _torboxStatus!.isConfigured) {
       configuredProviders.add(
@@ -271,8 +326,11 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
           color: const Color(0xFF3B82F6), // Blue
           icon: Icons.inventory_2_rounded,
           onTap: widget.onTapTorbox,
+          index: focusIndex,
+          focusNode: focusIndex < _cardFocusNodes.length ? _cardFocusNodes[focusIndex] : null,
         ),
       );
+      focusIndex++;
     }
     if (_pikpakStatus != null && _pikpakStatus!.isConfigured) {
       configuredProviders.add(
@@ -281,8 +339,11 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
           color: const Color(0xFFF59E0B), // Amber
           icon: Icons.cloud_upload_rounded,
           onTap: widget.onTapPikPak,
+          index: focusIndex,
+          focusNode: focusIndex < _cardFocusNodes.length ? _cardFocusNodes[focusIndex] : null,
         ),
       );
+      focusIndex++;
     }
 
     return Column(
@@ -323,10 +384,11 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
           ),
         ),
         const SizedBox(height: 4),
-        // Horizontal scrolling provider cards
+        // Horizontal scrolling provider cards with DPAD support
         SizedBox(
           height: 100,
           child: ListView.separated(
+            controller: _scrollController,
             scrollDirection: Axis.horizontal,
             itemCount: configuredProviders.length,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
@@ -464,13 +526,35 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
     required Color color,
     required IconData icon,
     VoidCallback? onTap,
+    int index = 0,
+    FocusNode? focusNode,
   }) {
     final bool hasWarning = status.daysRemaining != null && status.daysRemaining! <= 7;
     final bool hasError = status.error != null || !status.isConnected;
 
-    return GestureDetector(
+    // Count configured providers for totalCount
+    int configuredCount = 0;
+    if (_rdStatus?.isConfigured == true) configuredCount++;
+    if (_torboxStatus?.isConfigured == true) configuredCount++;
+    if (_pikpakStatus?.isConfigured == true) configuredCount++;
+
+    return _ProviderCardWithFocus(
       onTap: onTap,
-      child: Container(
+      accentColor: color,
+      focusNode: focusNode,
+      index: index,
+      totalCount: configuredCount,
+      scrollController: _scrollController,
+      onUpPressed: widget.onRequestFocusAbove,
+      onDownPressed: widget.onRequestFocusBelow,
+      onFocusChanged: (focused, idx) {
+        if (focused) {
+          widget.focusController?.saveLastFocusedIndex(HomeSection.providers, idx);
+        }
+      },
+      child: (isFocused, isHovered) {
+        final isActive = isFocused || isHovered;
+        return Container(
         width: 140, // Fixed width for horizontal scroll
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -484,20 +568,30 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
           ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: hasError
-                ? const Color(0xFFEF4444).withValues(alpha: 0.5)
-                : hasWarning
-                    ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
-                    : color.withValues(alpha: 0.3),
-            width: 1,
+            color: isActive
+                ? color
+                : hasError
+                    ? const Color(0xFFEF4444).withValues(alpha: 0.5)
+                    : hasWarning
+                        ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
+                        : color.withValues(alpha: 0.3),
+            width: isActive ? 2 : 1,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -603,6 +697,119 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                 ),
             ],
           ],
+        ),
+      );
+      },
+    );
+  }
+}
+
+/// Focus-aware wrapper for provider cards with DPAD/TV support
+class _ProviderCardWithFocus extends StatefulWidget {
+  final VoidCallback? onTap;
+  final Color accentColor;
+  final FocusNode? focusNode;
+  final int index;
+  final int totalCount;
+  final ScrollController? scrollController;
+  final VoidCallback? onUpPressed;
+  final VoidCallback? onDownPressed;
+  final void Function(bool focused, int index)? onFocusChanged;
+  final Widget Function(bool isFocused, bool isHovered) child;
+
+  const _ProviderCardWithFocus({
+    required this.onTap,
+    required this.accentColor,
+    required this.child,
+    this.focusNode,
+    this.index = 0,
+    this.totalCount = 1,
+    this.scrollController,
+    this.onUpPressed,
+    this.onDownPressed,
+    this.onFocusChanged,
+  });
+
+  @override
+  State<_ProviderCardWithFocus> createState() => _ProviderCardWithFocusState();
+}
+
+class _ProviderCardWithFocusState extends State<_ProviderCardWithFocus> {
+  bool _isFocused = false;
+  bool _isHovered = false;
+  final GlobalKey _cardKey = GlobalKey();
+
+  void _onFocusChange(bool focused) {
+    setState(() => _isFocused = focused);
+    widget.onFocusChanged?.call(focused, widget.index);
+
+    // Scroll card into view when focused
+    if (focused && widget.scrollController != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _cardKey.currentContext;
+        if (context != null) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      // Select/Enter/GameButtonA - activate the card
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Up - go to previous section
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        widget.onUpPressed?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Down - this is the last section, no action needed
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        widget.onDownPressed?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Left/Right - let Flutter's directional focus handle it
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+          event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        return KeyEventResult.ignored;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Focus(
+        focusNode: widget.focusNode,
+        onFocusChange: _onFocusChange,
+        onKeyEvent: _handleKeyEvent,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: (_isFocused || _isHovered) ? 1.05 : 1.0,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            child: KeyedSubtree(
+              key: _cardKey,
+              child: widget.child(_isFocused, _isHovered),
+            ),
+          ),
         ),
       ),
     );

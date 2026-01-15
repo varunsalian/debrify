@@ -43,6 +43,7 @@ import '../widgets/torrent_result_row.dart';
 import '../widgets/provider_status_cards.dart';
 import '../widgets/home_favorites_section.dart';
 import '../widgets/home_debrify_tv_favorites_section.dart';
+import '../widgets/home_focus_controller.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
 import '../models/stremio_addon.dart';
@@ -125,6 +126,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final ScrollController _resultsScrollController = ScrollController();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _providerAccordionFocusNode = FocusNode();
+
+  // Home screen DPAD navigation controller
+  late final HomeFocusController _homeFocusController;
+
   final FocusNode _advancedButtonFocusNode = FocusNode();
   final FocusNode _sortDropdownFocusNode = FocusNode();
   final FocusNode _sortDirectionFocusNode = FocusNode();
@@ -248,6 +253,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   @override
   void initState() {
     super.initState();
+
+    // Initialize home screen DPAD navigation controller
+    _homeFocusController = HomeFocusController();
+    _homeFocusController.sourcesAccordionFocusNode = _providerAccordionFocusNode;
 
     // Expose post-torrent action handler via bridge for deep links
     MainPageBridge.handleRealDebridResult = (result, torrentName, apiKey) async {
@@ -976,6 +985,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _resultsScrollController.dispose();
     _searchFocusNode.dispose();
     _providerAccordionFocusNode.dispose();
+    _homeFocusController.dispose();
     _advancedButtonFocusNode.dispose();
     _sortDropdownFocusNode.dispose();
     _sortDirectionFocusNode.dispose();
@@ -2787,20 +2797,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
         child: child,
       ),
-      child: FocusableActionDetector(
-        focusNode: _providerAccordionFocusNode,
-        onShowFocusHighlight: (focused) {
-          _providerAccordionFocused.value = focused;
+      child: Focus(
+        onKeyEvent: (node, event) {
+          // Handle Down arrow to navigate to home sections
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            _homeFocusController.focusFirstHomeSection();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         },
-        shortcuts: _activateShortcuts,
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (intent) {
-              _showSourcesDialog(context);
-              return null;
-            },
-          ),
-        },
+        child: FocusableActionDetector(
+          focusNode: _providerAccordionFocusNode,
+          onShowFocusHighlight: (focused) {
+            _providerAccordionFocused.value = focused;
+          },
+          shortcuts: _activateShortcuts,
+          actions: <Type, Action<Intent>>{
+            ActivateIntent: CallbackAction<ActivateIntent>(
+              onInvoke: (intent) {
+                _showSourcesDialog(context);
+                return null;
+              },
+            ),
+          },
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           canRequestFocus: false,
@@ -2884,6 +2904,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -9663,16 +9684,52 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             padding: const EdgeInsets.all(12),
                             children: [
                               // Playlist favorites section (horizontal scroll)
-                              const HomeFavoritesSection(),
+                              HomeFavoritesSection(
+                                focusController: _homeFocusController,
+                                isTelevision: _isTelevision,
+                                onRequestFocusAbove: () {
+                                  _providerAccordionFocusNode.requestFocus();
+                                },
+                                onRequestFocusBelow: () {
+                                  final next = _homeFocusController.getNextSection(HomeSection.favorites);
+                                  if (next != null) {
+                                    _homeFocusController.focusSection(next);
+                                  }
+                                },
+                              ),
                               const SizedBox(height: 16),
                               // Debrify TV favorites section (horizontal scroll)
-                              const HomeDebrifyTvFavoritesSection(),
+                              HomeDebrifyTvFavoritesSection(
+                                focusController: _homeFocusController,
+                                isTelevision: _isTelevision,
+                                onRequestFocusAbove: () {
+                                  final prev = _homeFocusController.getPreviousSection(HomeSection.tvFavorites);
+                                  if (prev != null) {
+                                    _homeFocusController.focusSection(prev);
+                                  }
+                                },
+                                onRequestFocusBelow: () {
+                                  final next = _homeFocusController.getNextSection(HomeSection.tvFavorites);
+                                  if (next != null) {
+                                    _homeFocusController.focusSection(next);
+                                  }
+                                },
+                              ),
                               const SizedBox(height: 16),
                               // Debrid services section
                               ProviderStatusCards(
+                                focusController: _homeFocusController,
+                                isTelevision: _isTelevision,
                                 onTapRealDebrid: () => MainPageBridge.switchTab?.call(4),
                                 onTapTorbox: () => MainPageBridge.switchTab?.call(5),
                                 onTapPikPak: () => MainPageBridge.switchTab?.call(6),
+                                onRequestFocusAbove: () {
+                                  final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
+                                  if (prev != null) {
+                                    _homeFocusController.focusSection(prev);
+                                  }
+                                },
+                                // Providers is the last section, no onRequestFocusBelow needed
                               ),
                             ],
                           );
@@ -10158,16 +10215,51 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       padding: const EdgeInsets.all(12),
       children: [
         // Playlist favorites section (horizontal scroll)
-        const HomeFavoritesSection(),
+        HomeFavoritesSection(
+          focusController: _homeFocusController,
+          isTelevision: _isTelevision,
+          onRequestFocusAbove: () {
+            _providerAccordionFocusNode.requestFocus();
+          },
+          onRequestFocusBelow: () {
+            final next = _homeFocusController.getNextSection(HomeSection.favorites);
+            if (next != null) {
+              _homeFocusController.focusSection(next);
+            }
+          },
+        ),
         const SizedBox(height: 16),
         // Debrify TV favorites section (horizontal scroll)
-        const HomeDebrifyTvFavoritesSection(),
+        HomeDebrifyTvFavoritesSection(
+          focusController: _homeFocusController,
+          isTelevision: _isTelevision,
+          onRequestFocusAbove: () {
+            final prev = _homeFocusController.getPreviousSection(HomeSection.tvFavorites);
+            if (prev != null) {
+              _homeFocusController.focusSection(prev);
+            }
+          },
+          onRequestFocusBelow: () {
+            final next = _homeFocusController.getNextSection(HomeSection.tvFavorites);
+            if (next != null) {
+              _homeFocusController.focusSection(next);
+            }
+          },
+        ),
         const SizedBox(height: 16),
         // Debrid services section
         ProviderStatusCards(
+          focusController: _homeFocusController,
+          isTelevision: _isTelevision,
           onTapRealDebrid: () => MainPageBridge.switchTab?.call(4), // RD tab
           onTapTorbox: () => MainPageBridge.switchTab?.call(5), // Torbox tab
           onTapPikPak: () => MainPageBridge.switchTab?.call(6), // PikPak tab
+          onRequestFocusAbove: () {
+            final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
+            if (prev != null) {
+              _homeFocusController.focusSection(prev);
+            }
+          },
         ),
         const SizedBox(height: 16),
         _buildHistoryHeaderRow(),

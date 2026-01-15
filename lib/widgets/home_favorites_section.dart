@@ -3,10 +3,22 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
+import 'home_focus_controller.dart';
 
 /// Horizontal scrollable favorites section for the home screen
 class HomeFavoritesSection extends StatefulWidget {
-  const HomeFavoritesSection({super.key});
+  final HomeFocusController? focusController;
+  final VoidCallback? onRequestFocusAbove;
+  final VoidCallback? onRequestFocusBelow;
+  final bool isTelevision;
+
+  const HomeFavoritesSection({
+    super.key,
+    this.focusController,
+    this.onRequestFocusAbove,
+    this.onRequestFocusBelow,
+    this.isTelevision = false,
+  });
 
   @override
   State<HomeFavoritesSection> createState() => _HomeFavoritesSectionState();
@@ -18,10 +30,38 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   bool _isLoading = true;
   String? _playingItemKey;
 
+  // Focus management for DPAD navigation
+  final List<FocusNode> _cardFocusNodes = [];
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _loadFavorites();
+  }
+
+  @override
+  void dispose() {
+    // Unregister from controller
+    widget.focusController?.unregisterSection(HomeSection.favorites);
+    // Dispose focus nodes
+    for (final node in _cardFocusNodes) {
+      node.dispose();
+    }
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Ensure we have the right number of focus nodes for current items
+  void _ensureFocusNodes() {
+    // Add nodes if needed
+    while (_cardFocusNodes.length < _favoriteItems.length) {
+      _cardFocusNodes.add(FocusNode(debugLabel: 'favorite_card_${_cardFocusNodes.length}'));
+    }
+    // Remove extra nodes if needed
+    while (_cardFocusNodes.length > _favoriteItems.length) {
+      _cardFocusNodes.removeLast().dispose();
+    }
   }
 
   Future<void> _loadFavorites() async {
@@ -62,6 +102,13 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           _progressMap = progressMap;
           _isLoading = false;
         });
+        // Update focus nodes and register with controller
+        _ensureFocusNodes();
+        widget.focusController?.registerSection(
+          HomeSection.favorites,
+          hasItems: _favoriteItems.isNotEmpty,
+          focusNodes: _cardFocusNodes,
+        );
       }
     } catch (e) {
       debugPrint('Error loading favorites: $e');
@@ -70,6 +117,13 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           _favoriteItems = [];
           _isLoading = false;
         });
+        // Register as empty section
+        _ensureFocusNodes();
+        widget.focusController?.registerSection(
+          HomeSection.favorites,
+          hasItems: false,
+          focusNodes: [],
+        );
       }
     }
   }
@@ -152,10 +206,11 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           ),
         ),
         const SizedBox(height: 4),
-        // Horizontal scrolling favorites
+        // Horizontal scrolling favorites with DPAD support
         SizedBox(
           height: 220,
           child: ListView.separated(
+            controller: _scrollController,
             scrollDirection: Axis.horizontal,
             itemCount: _favoriteItems.length,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
@@ -170,6 +225,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                 progress: progress,
                 isPlaying: isPlaying,
                 onTap: () => _playItem(item),
+                index: index,
+                focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
               );
             },
           ),
@@ -184,6 +241,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     bool isPlaying = false,
     required VoidCallback onTap,
     bool autofocus = false,
+    int index = 0,
+    FocusNode? focusNode,
   }) {
     final String title = (item['title'] as String?) ?? 'Unknown';
     final String? posterUrl = item['posterUrl'] as String?;
@@ -220,6 +279,17 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     return _FavoriteCardWithFocus(
       onTap: isPlaying ? null : onTap,
       autofocus: autofocus,
+      focusNode: focusNode,
+      index: index,
+      totalCount: _favoriteItems.length,
+      scrollController: _scrollController,
+      onUpPressed: widget.onRequestFocusAbove,
+      onDownPressed: widget.onRequestFocusBelow,
+      onFocusChanged: (focused, idx) {
+        if (focused) {
+          widget.focusController?.saveLastFocusedIndex(HomeSection.favorites, idx);
+        }
+      },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
@@ -453,12 +523,26 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 class _FavoriteCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
   final bool autofocus;
+  final FocusNode? focusNode;
+  final int index;
+  final int totalCount;
+  final ScrollController? scrollController;
+  final VoidCallback? onUpPressed;
+  final VoidCallback? onDownPressed;
+  final void Function(bool focused, int index)? onFocusChanged;
   final Widget Function(bool isFocused, bool isHovered) child;
 
   const _FavoriteCardWithFocus({
     required this.onTap,
     required this.child,
     this.autofocus = false,
+    this.focusNode,
+    this.index = 0,
+    this.totalCount = 1,
+    this.scrollController,
+    this.onUpPressed,
+    this.onDownPressed,
+    this.onFocusChanged,
   });
 
   @override
@@ -468,14 +552,55 @@ class _FavoriteCardWithFocus extends StatefulWidget {
 class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
   bool _isFocused = false;
   bool _isHovered = false;
+  final GlobalKey _cardKey = GlobalKey();
+
+  void _onFocusChange(bool focused) {
+    setState(() => _isFocused = focused);
+    widget.onFocusChanged?.call(focused, widget.index);
+
+    // Scroll card into view when focused
+    if (focused && widget.scrollController != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _cardKey.currentContext;
+        if (context != null) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
+      // Select/Enter/GameButtonA - activate the card
       if (event.logicalKey == LogicalKeyboardKey.select ||
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.gameButtonA) {
         widget.onTap?.call();
         return KeyEventResult.handled;
+      }
+
+      // Arrow Up - go to previous section
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        widget.onUpPressed?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Down - go to next section
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        widget.onDownPressed?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Left/Right - let Flutter's directional focus handle it
+      // (FocusTraversalGroup will move to adjacent cards)
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+          event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        return KeyEventResult.ignored;
       }
     }
     return KeyEventResult.ignored;
@@ -487,12 +612,16 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: Focus(
+        focusNode: widget.focusNode,
         autofocus: widget.autofocus,
-        onFocusChange: (focused) => setState(() => _isFocused = focused),
+        onFocusChange: _onFocusChange,
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
-          child: widget.child(_isFocused, _isHovered),
+          child: KeyedSubtree(
+            key: _cardKey,
+            child: widget.child(_isFocused, _isHovered),
+          ),
         ),
       ),
     );
