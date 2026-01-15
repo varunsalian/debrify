@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -46,6 +48,13 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   String? _error;
   String _lastSearchedQuery = ''; // Track last searched query to avoid duplicate searches
 
+  // Debounce timer for search
+  Timer? _debounceTimer;
+  // Longer debounce for TV (remote typing is slower)
+  Duration get _debounceDuration => widget.isTelevision
+      ? const Duration(milliseconds: 750)
+      : const Duration(milliseconds: 400);
+
   late FocusNode _keywordSearchFocusNode;
   late List<FocusNode> _resultFocusNodes;
   int _focusedIndex = -1; // -1 = keyword card focused, 0+ = result index
@@ -55,6 +64,7 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     super.initState();
     _keywordSearchFocusNode = FocusNode(debugLabel: 'keyword_search_card');
     _resultFocusNodes = [];
+    // Initial search without debounce
     _performSearch();
   }
 
@@ -63,12 +73,34 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     super.didUpdateWidget(oldWidget);
     // Only search if query actually changed AND we don't already have results for this query
     if (oldWidget.query != widget.query && widget.query != _lastSearchedQuery) {
-      _performSearch();
+      _debouncedSearch();
     }
+  }
+
+  void _debouncedSearch() {
+    // Cancel any pending search
+    _debounceTimer?.cancel();
+
+    // If query is empty, clear results immediately
+    if (widget.query.trim().isEmpty) {
+      setState(() {
+        _results = [];
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // Start debounce timer
+    _debounceTimer = Timer(_debounceDuration, () {
+      if (mounted) {
+        _performSearch();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _scrollController.dispose();
     _keywordSearchFocusNode.dispose();
     for (final node in _resultFocusNodes) {
@@ -437,7 +469,7 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   }
 }
 
-/// "Search [keyword]" action card
+/// Compact "Search torrents" action chip
 class _KeywordSearchCard extends StatelessWidget {
   final String query;
   final FocusNode focusNode;
@@ -464,77 +496,68 @@ class _KeywordSearchCard extends StatelessWidget {
       focusNode: focusNode,
       onFocusChange: onFocusChange,
       onKeyEvent: onKeyEvent,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                colorScheme.primary,
-                colorScheme.primary.withOpacity(0.8),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: isFocused
-                ? Border.all(color: Colors.white, width: 3)
-                : null,
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.primary.withOpacity(isFocused ? 0.5 : 0.3),
-                blurRadius: isFocused ? 20 : 12,
-                spreadRadius: isFocused ? 2 : 0,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(28),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: BoxDecoration(
+              color: colorScheme.primary,
+              borderRadius: BorderRadius.circular(28),
+              border: isFocused
+                  ? Border.all(color: Colors.white, width: 2)
+                  : null,
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.primary.withOpacity(0.4),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-                child: const Icon(
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
                   Icons.search,
                   color: Colors.white,
-                  size: 28,
+                  size: 20,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Search Torrents',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        const TextSpan(
+                          text: 'Tap to search ',
+                          style: TextStyle(
+                            color: Colors.white70,
+                          ),
+                        ),
+                        TextSpan(
+                          text: '"$query"',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Search for "$query" across torrent engines',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                    style: theme.textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.white.withOpacity(0.8),
-                size: 20,
-              ),
-            ],
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.arrow_forward,
+                  color: Colors.white70,
+                  size: 18,
+                ),
+              ],
+            ),
           ),
         ),
       ),

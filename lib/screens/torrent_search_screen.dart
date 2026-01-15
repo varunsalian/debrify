@@ -38,7 +38,6 @@ import '../widgets/advanced_search_sheet.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/catalog_browser.dart';
 import '../widgets/search_source_dropdown.dart';
-import '../widgets/homepage_catalog_grid.dart';
 import '../widgets/aggregated_search_results.dart';
 import '../widgets/torrent_result_row.dart';
 import '../services/imdb_lookup_service.dart';
@@ -9332,36 +9331,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 child: Stack(
                   children: [
                     // Catalog views - kept alive with Offstage to preserve scroll position
-                    // "All" mode with no query - homepage grid
-                    if (_selectedSource.type == SearchSourceType.all)
-                      Offstage(
-                        key: const ValueKey('homepage_offstage'),
-                        offstage: _searchController.text.isNotEmpty || _hasSearched || _isLoading,
-                        child: HomepageCatalogGrid(
-                          isTelevision: _isTelevision,
-                          onItemSelected: (selection) {
-                            _cameFromCatalogBrowse = true;
-                            _previousSearchQuery = _searchController.text;
-                            setState(() {
-                              _searchMode = SearchMode.catalog;
-                              _selectedImdbTitle = ImdbTitleResult(
-                                imdbId: selection.imdbId,
-                                title: selection.title,
-                                year: selection.year,
-                                contentType: selection.contentType,
-                              );
-                              _isSeries = selection.isSeries;
-                              _searchController.text = selection.title;
-                              _activeAdvancedSelection = selection;
-                              _imdbAutocompleteResults.clear();
-                              _imdbSearchError = null;
-                              _seriesControlsExpanded = selection.isSeries;
-                            });
-                            _createAdvancedSelectionAndSearch();
-                          },
-                        ),
-                      ),
-
                     // "All" mode with query - aggregated search results (wrapped in Offstage for stable tree)
                     if (_selectedSource.type == SearchSourceType.all)
                       Offstage(
