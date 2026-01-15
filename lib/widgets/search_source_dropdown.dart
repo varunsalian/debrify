@@ -214,7 +214,7 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
           onTap: _toggleDropdown,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
@@ -235,27 +235,32 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
                   : null,
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   widget.selectedOption.icon,
-                  size: 20,
+                  size: 18,
                   color: colorScheme.onSurface,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
+                const SizedBox(width: 8),
+                Flexible(
                   child: Text(
                     widget.selectedOption.label,
-                    style: theme.textTheme.bodyLarge?.copyWith(
+                    style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurface,
                       fontWeight: FontWeight.w500,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 4),
                 AnimatedRotation(
                   turns: _isExpanded ? 0.5 : 0,
                   duration: const Duration(milliseconds: 200),
                   child: Icon(
                     Icons.keyboard_arrow_down,
+                    size: 20,
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),

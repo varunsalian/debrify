@@ -9343,8 +9343,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             disabledTooltip: "This addon doesn't support search",
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        _buildSearchSourceSelector(),
+                        const SizedBox(width: 8),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 140),
+                          child: _buildSearchSourceSelector(),
+                        ),
                       ],
                     ),
 
