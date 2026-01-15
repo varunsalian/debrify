@@ -5946,7 +5946,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       screenType = 'mkx200';
     } else if (RegExp(r'VRCA\s*220|VRCA220|_VRCA220').hasMatch(titleUpper)) {
       screenType = 'mkx200';
-    } else if (RegExp(r'\bFISHEYE\b|_FISHEYE').hasMatch(titleUpper)) {
+    } else if (RegExp(r'\bFISHEYE\b|_FISHEYE|\b190\s*FISHEYE|_190_?FISHEYE').hasMatch(titleUpper)) {
       screenType = 'fisheye';
     }
 
@@ -5992,7 +5992,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       'flat': '2D Flat',
       'dome': '180° (dome)',
       'sphere': '360° (sphere)',
-      'fisheye': '180° Fisheye',
+      'fisheye': '190° Fisheye',
       'mkx200': '200° MKX',
       'rf52': '190° Canon RF52',
     };
