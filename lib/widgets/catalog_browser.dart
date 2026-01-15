@@ -331,16 +331,12 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
     widget.onItemSelected!(selection);
   }
 
-  // Current column count based on screen width (updated by LayoutBuilder)
-  int _currentColumns = 3;
-
   KeyEventResult _handleContentItemKey(int index, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    final columns = _currentColumns;
-
+    // List navigation (up/down only)
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index < columns) {
+      if (index == 0) {
         // Move to genre dropdown or catalog dropdown
         if (_selectedCatalog?.supportsGenre ?? false) {
           FocusScope.of(context).requestFocus(_genreDropdownFocusNode);
@@ -349,30 +345,14 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
         }
         return KeyEventResult.handled;
       }
-      final targetIndex = index - columns;
-      if (targetIndex >= 0 && targetIndex < _contentFocusNodes.length) {
-        FocusScope.of(context).requestFocus(_contentFocusNodes[targetIndex]);
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      final targetIndex = index + columns;
-      if (targetIndex < _contentFocusNodes.length) {
-        FocusScope.of(context).requestFocus(_contentFocusNodes[targetIndex]);
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (index % columns > 0) {
+      if (index > 0 && index - 1 < _contentFocusNodes.length) {
         FocusScope.of(context).requestFocus(_contentFocusNodes[index - 1]);
         return KeyEventResult.handled;
       }
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (index % columns < columns - 1 && index + 1 < _contentFocusNodes.length) {
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (index + 1 < _contentFocusNodes.length) {
         FocusScope.of(context).requestFocus(_contentFocusNodes[index + 1]);
         return KeyEventResult.handled;
       }
@@ -431,9 +411,9 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
         // Filters row
         _buildFiltersRow(),
         const SizedBox(height: 12),
-        // Content grid
+        // Content list
         Expanded(
-          child: _buildContentGrid(),
+          child: _buildContentList(),
         ),
       ],
     );
@@ -729,7 +709,7 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
     );
   }
 
-  Widget _buildContentGrid() {
+  Widget _buildContentList() {
     if (_isLoadingContent && _content.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(),
@@ -759,24 +739,9 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Responsive columns: fewer columns = bigger cards for more title space
-        final width = constraints.maxWidth;
-        final crossAxisCount = width > 900 ? 5 : width > 600 ? 3 : 2;
-
-        // Update column count for DPAD navigation
-        _currentColumns = crossAxisCount;
-
-        return GridView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.all(12),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.65, // Taller cards for more title space
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: _content.length + (_hasMoreContent ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= _content.length) {
@@ -790,22 +755,23 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
         }
 
         final item = _content[index];
-        return _CatalogItemCard(
-          item: item,
-          focusNode: index < _contentFocusNodes.length
-              ? _contentFocusNodes[index]
-              : null,
-          onTap: () => _onItemTap(item),
-          onKeyEvent: (event) => _handleContentItemKey(index, event),
-        );
-      },
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _CatalogItemCard(
+            item: item,
+            focusNode: index < _contentFocusNodes.length
+                ? _contentFocusNodes[index]
+                : null,
+            onTap: () => _onItemTap(item),
+            onKeyEvent: (event) => _handleContentItemKey(index, event),
+          ),
         );
       },
     );
   }
 }
 
-/// A card widget for displaying a catalog item (movie/series/channel)
+/// Horizontal card widget for displaying a catalog item (movie/series/channel)
 class _CatalogItemCard extends StatefulWidget {
   final StremioMeta item;
   final FocusNode? focusNode;
@@ -828,6 +794,9 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (focused) {
@@ -841,127 +810,89 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
         }
       },
       onKeyEvent: (node, event) => widget.onKeyEvent(event),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isFocused
-                  ? Colors.white.withValues(alpha: 0.8)
-                  : Colors.transparent,
-              width: 2,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isFocused
+                    ? colorScheme.primary
+                    : colorScheme.outline.withOpacity(0.2),
+                width: _isFocused ? 2 : 1,
+              ),
             ),
-            boxShadow: _isFocused
-                ? [
-                    BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      blurRadius: 12,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : null,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
+            child: Row(
               children: [
-                // Poster image
-                if (widget.item.poster != null)
-                  CachedNetworkImage(
-                    imageUrl: widget.item.poster!,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      child: const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                // Thumbnail
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 56,
+                    height: 80,
+                    child: _buildPoster(colorScheme),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Title
+                      Text(
+                        widget.item.name,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    errorWidget: (context, url, error) => _buildPlaceholder(),
-                  )
-                else
-                  _buildPlaceholder(),
-                // Gradient overlay
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.8),
+                      const SizedBox(height: 4),
+                      // Metadata row
+                      Row(
+                        children: [
+                          _buildTypeBadge(widget.item.type),
+                          if (widget.item.year != null) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.item.year!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          if (widget.item.imdbRating != null) ...[
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.star,
+                              size: 14,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              widget.item.imdbRating!.toStringAsFixed(1),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Type badge
-                        _buildTypeBadge(widget.item.type),
-                        const SizedBox(height: 4),
-                        // Title
-                        Text(
-                          widget.item.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        // Year/rating
-                        if (widget.item.year != null || widget.item.imdbRating != null)
-                          Row(
-                            children: [
-                              if (widget.item.year != null)
-                                Text(
-                                  widget.item.year!,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.7),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              if (widget.item.year != null &&
-                                  widget.item.imdbRating != null)
-                                Text(
-                                  ' \u2022 ',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              if (widget.item.imdbRating != null)
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.star_rounded,
-                                      size: 12,
-                                      color: Color(0xFFFBBF24),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      widget.item.imdbRating!.toStringAsFixed(1),
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.7),
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
+                ),
+                // Arrow
+                Icon(
+                  Icons.chevron_right,
+                  color: colorScheme.onSurfaceVariant,
                 ),
               ],
             ),
@@ -971,14 +902,38 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
     );
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPoster(ColorScheme colorScheme) {
+    if (widget.item.poster != null && widget.item.poster!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: widget.item.poster!,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: colorScheme.surfaceContainerHighest,
+          child: Center(
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colorScheme.primary,
+              ),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) => _buildPlaceholder(colorScheme),
+      );
+    }
+    return _buildPlaceholder(colorScheme);
+  }
+
+  Widget _buildPlaceholder(ColorScheme colorScheme) {
     return Container(
-      color: Colors.white.withValues(alpha: 0.05),
+      color: colorScheme.surfaceContainerHighest,
       child: Center(
         child: Icon(
           _getTypeIcon(widget.item.type),
-          size: 32,
-          color: Colors.white.withValues(alpha: 0.3),
+          size: 24,
+          color: colorScheme.onSurfaceVariant.withOpacity(0.5),
         ),
       ),
     );
@@ -990,44 +945,39 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
 
     switch (type.toLowerCase()) {
       case 'movie':
-        color = const Color(0xFF60A5FA);
+        color = Colors.blue;
         label = 'Movie';
         break;
       case 'series':
-        color = const Color(0xFF34D399);
+        color = Colors.purple;
         label = 'Series';
         break;
       case 'tv':
       case 'channel':
-        color = const Color(0xFFF472B6);
+        color = Colors.pink;
         label = 'TV';
         break;
       case 'anime':
-        color = const Color(0xFFA78BFA);
+        color = Colors.deepPurple;
         label = 'Anime';
         break;
       default:
-        color = const Color(0xFFFBBF24);
+        color = Colors.teal;
         label = type;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: color.withValues(alpha: 0.4),
-          width: 1,
-        ),
       ),
       child: Text(
-        label.toUpperCase(),
+        label,
         style: TextStyle(
           color: color,
-          fontSize: 9,
+          fontSize: 10,
           fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
         ),
       ),
     );

@@ -245,56 +245,31 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       return KeyEventResult.handled;
     }
 
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final columns = _getColumnCount(screenWidth);
-
-    // Arrow navigation in grid
+    // Arrow navigation in list (up/down only)
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index < columns) {
-        // First row: go to keyword card
+      if (index == 0) {
+        // First item: go to keyword card
         _keywordSearchFocusNode.requestFocus();
       } else {
-        // Move up one row
-        _resultFocusNodes[index - columns].requestFocus();
+        // Move up one item
+        _resultFocusNodes[index - 1].requestFocus();
       }
       return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      final nextIndex = index + columns;
-      if (nextIndex < _results.length) {
-        _resultFocusNodes[nextIndex].requestFocus();
+      if (index < _results.length - 1) {
+        _resultFocusNodes[index + 1].requestFocus();
         return KeyEventResult.handled;
       }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft && index > 0) {
-      _resultFocusNodes[index - 1].requestFocus();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
-        index < _results.length - 1) {
-      _resultFocusNodes[index + 1].requestFocus();
-      return KeyEventResult.handled;
     }
 
     return KeyEventResult.ignored;
   }
 
-  int _getColumnCount(double screenWidth) {
-    if (screenWidth > 1200) return 6;
-    if (screenWidth > 900) return 5;
-    if (screenWidth > 600) return 4;
-    if (screenWidth > 400) return 3;
-    return 2;
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final columns = _getColumnCount(screenWidth);
 
     return CustomScrollView(
       controller: _scrollController,
@@ -361,17 +336,14 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
         // Loading state
         if (_isLoading)
           SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.7,
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) => _ShimmerCard(),
-                childCount: 8,
+                (context, index) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _ShimmerCard(),
+                ),
+                childCount: 6,
               ),
             ),
           ),
@@ -400,32 +372,29 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
             ),
           ),
 
-        // Results grid
+        // Results list
         if (!_isLoading && _error == null && _results.isNotEmpty)
           SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.65,
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final item = _results[index];
-                  return _CatalogResultCard(
-                    item: item,
-                    focusNode: _resultFocusNodes[index],
-                    isFocused: _focusedIndex == index,
-                    onTap: () => _onItemSelected(item),
-                    onFocusChange: (focused) {
-                      setState(() {
-                        _focusedIndex = focused ? index : _focusedIndex;
-                      });
-                    },
-                    onKeyEvent: (node, event) =>
-                        _handleResultKeyEvent(node, event, index),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _CatalogResultCard(
+                      item: item,
+                      focusNode: _resultFocusNodes[index],
+                      isFocused: _focusedIndex == index,
+                      onTap: () => _onItemSelected(item),
+                      onFocusChange: (focused) {
+                        setState(() {
+                          _focusedIndex = focused ? index : _focusedIndex;
+                        });
+                      },
+                      onKeyEvent: (node, event) =>
+                          _handleResultKeyEvent(node, event, index),
+                    ),
                   );
                 },
                 childCount: _results.length,
@@ -565,7 +534,7 @@ class _KeywordSearchCard extends StatelessWidget {
   }
 }
 
-/// Individual catalog result card
+/// Horizontal catalog result card with thumbnail on left
 class _CatalogResultCard extends StatelessWidget {
   final StremioMeta item;
   final FocusNode focusNode;
@@ -592,96 +561,91 @@ class _CatalogResultCard extends StatelessWidget {
       focusNode: focusNode,
       onFocusChange: onFocusChange,
       onKeyEvent: onKeyEvent,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedScale(
-          scale: isFocused ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
               borderRadius: BorderRadius.circular(12),
-              border: isFocused
-                  ? Border.all(color: colorScheme.primary, width: 3)
-                  : null,
-              boxShadow: isFocused
-                  ? [
-                      BoxShadow(
-                        color: colorScheme.primary.withOpacity(0.4),
-                        blurRadius: 16,
-                        spreadRadius: 2,
+              border: Border.all(
+                color: isFocused
+                    ? colorScheme.primary
+                    : colorScheme.outline.withOpacity(0.2),
+                width: isFocused ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                // Thumbnail
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 56,
+                    height: 80,
+                    child: _buildPoster(colorScheme),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Title
+                      Text(
+                        item.name,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                      const SizedBox(height: 4),
+                      // Metadata row
+                      Row(
+                        children: [
+                          _buildTypeBadge(),
+                          if (item.year != null) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              item.year!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          if (item.imdbRating != null) ...[
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.star,
+                              size: 14,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${item.imdbRating}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(isFocused ? 9 : 12),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Poster
-                  _buildPoster(colorScheme),
-
-                  // Gradient overlay
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.7),
-                            Colors.black.withOpacity(0.95),
-                          ],
-                          stops: const [0, 0.4, 0.75, 1],
-                        ),
-                      ),
-                    ),
                   ),
-
-                  // Type badge
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: _buildTypeBadge(),
-                  ),
-
-                  // Title and metadata
-                  Positioned(
-                    left: 8,
-                    right: 8,
-                    bottom: 8,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          item.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        _buildMetadata(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                // Arrow
+                Icon(
+                  Icons.chevron_right,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ],
             ),
           ),
         ),
@@ -697,9 +661,13 @@ class _CatalogResultCard extends StatelessWidget {
         placeholder: (context, url) => Container(
           color: colorScheme.surfaceContainerHighest,
           child: Center(
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: colorScheme.primary,
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colorScheme.primary,
+              ),
             ),
           ),
         ),
@@ -715,7 +683,7 @@ class _CatalogResultCard extends StatelessWidget {
       child: Center(
         child: Icon(
           item.type == 'movie' ? Icons.movie : Icons.tv,
-          size: 40,
+          size: 24,
           color: colorScheme.onSurfaceVariant.withOpacity(0.5),
         ),
       ),
@@ -723,7 +691,7 @@ class _CatalogResultCard extends StatelessWidget {
   }
 
   Widget _buildTypeBadge() {
-    final typeLabel = item.type.toUpperCase();
+    final typeLabel = item.type == 'movie' ? 'Movie' : item.type == 'series' ? 'Series' : item.type;
     final color = item.type == 'movie'
         ? Colors.blue
         : item.type == 'series'
@@ -733,50 +701,84 @@ class _CatalogResultCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.9),
+        color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         typeLabel,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
   }
-
-  Widget _buildMetadata() {
-    final parts = <String>[];
-    if (item.year != null) parts.add(item.year!);
-    if (item.imdbRating != null) parts.add('★ ${item.imdbRating}');
-
-    if (parts.isEmpty) return const SizedBox.shrink();
-
-    return Text(
-      parts.join(' • '),
-      style: TextStyle(
-        color: Colors.white.withOpacity(0.7),
-        fontSize: 10,
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
 }
 
-/// Shimmer loading card
+/// Horizontal shimmer loading card
 class _ShimmerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
+        color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Thumbnail placeholder
+          Container(
+            width: 56,
+            height: 80,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Text placeholders
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 14,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 14,
+                  width: 120,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 12,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
