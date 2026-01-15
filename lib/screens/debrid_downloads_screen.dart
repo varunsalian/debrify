@@ -15,6 +15,7 @@ import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/rd_folder_tree_builder.dart';
+import '../utils/deovr_utils.dart' as deovr;
 import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
@@ -5925,84 +5926,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
-  /// Detect VR format from video title
-  /// Returns (screenType, stereoMode) with defaults of 180° SBS
-  ({String screenType, String stereoMode}) _detectVRFormat(String title) {
-    final titleUpper = title.toUpperCase();
-
-    // Detect stereo mode (default: sbs)
-    String stereoMode = 'sbs';
-    if (RegExp(r'\b(TB|3DV|OVERUNDER|OVER_UNDER)\b').hasMatch(titleUpper)) {
-      stereoMode = 'tb';
-    }
-
-    // Detect screen type (default: dome for 180°)
-    String screenType = 'dome';
-    if (RegExp(r'\b360\b|_360').hasMatch(titleUpper)) {
-      screenType = 'sphere';
-    } else if (RegExp(r'FISHEYE\s*190|FISHEYE190|_FISHEYE190').hasMatch(titleUpper)) {
-      screenType = 'rf52';
-    } else if (RegExp(r'MKX\s*200|MKX200|_MKX200').hasMatch(titleUpper)) {
-      screenType = 'mkx200';
-    } else if (RegExp(r'VRCA\s*220|VRCA220|_VRCA220').hasMatch(titleUpper)) {
-      screenType = 'mkx200';
-    } else if (RegExp(r'\bFISHEYE\b|_FISHEYE|\b190\s*FISHEYE|_190_?FISHEYE').hasMatch(titleUpper)) {
-      screenType = 'fisheye';
-    }
-
-    return (screenType: screenType, stereoMode: stereoMode);
-  }
-
-  /// Generate DeoVR JSON for a video URL with specified format
-  Map<String, dynamic> _generateDeoVRJson({
-    required String videoUrl,
-    required String title,
-    required String screenType,
-    required String stereoMode,
-  }) {
-    return {
-      'title': title,
-      'id': videoUrl.hashCode,
-      'is3d': stereoMode != 'off',
-      'screenType': screenType,
-      'stereoMode': stereoMode,
-      'encodings': [
-        {
-          'name': 'h264',
-          'videoSources': [
-            {
-              'resolution': 1080,
-              'url': videoUrl,
-            }
-          ]
-        }
-      ]
-    };
-  }
-
   /// Show DeoVR format selection dialog and launch
   Future<void> _openWithDeoVR(RDFileNode node) async {
     if (_apiKey == null || _currentTorrentId == null) return;
 
     // Detect format from title
-    final detected = _detectVRFormat(node.name);
-
-    // Screen type options with labels
-    const screenTypes = {
-      'flat': '2D Flat',
-      'dome': '180° (dome)',
-      'sphere': '360° (sphere)',
-      'fisheye': '190° Fisheye',
-      'mkx200': '200° MKX',
-      'rf52': '190° Canon RF52',
-    };
-
-    // Stereo mode options with labels
-    const stereoModes = {
-      'sbs': 'Side by Side',
-      'tb': 'Top-Bottom',
-      'off': 'Mono (2D)',
-    };
+    final detected = deovr.detectVRFormat(node.name);
 
     String selectedScreenType = detected.screenType;
     String selectedStereoMode = detected.stereoMode;
@@ -6036,7 +5965,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                items: screenTypes.entries
+                items: deovr.screenTypeLabels.entries
                     .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
                     .toList(),
                 onChanged: (value) {
@@ -6053,7 +5982,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                items: stereoModes.entries
+                items: deovr.stereoModeLabels.entries
                     .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
                     .toList(),
                 onChanged: (value) {
@@ -6098,7 +6027,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       );
 
       // Generate DeoVR JSON with selected format
-      final json = _generateDeoVRJson(
+      final json = deovr.generateDeoVRJson(
         videoUrl: downloadUrl,
         title: node.name,
         screenType: selectedScreenType,
