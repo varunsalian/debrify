@@ -27,12 +27,20 @@ class AggregatedSearchResults extends StatefulWidget {
   /// Whether running on TV
   final bool isTelevision;
 
+  /// Callback when keyword search focus node is ready (for external focus control)
+  final void Function(FocusNode focusNode)? onKeywordFocusNodeReady;
+
+  /// Callback when user presses Up arrow from keyword card (to return focus to search field)
+  final VoidCallback? onRequestFocusAbove;
+
   const AggregatedSearchResults({
     super.key,
     required this.query,
     required this.onKeywordSearch,
     this.onItemSelected,
     this.isTelevision = false,
+    this.onKeywordFocusNodeReady,
+    this.onRequestFocusAbove,
   });
 
   @override
@@ -57,6 +65,7 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
 
   late FocusNode _keywordSearchFocusNode;
   late List<FocusNode> _resultFocusNodes;
+  late List<GlobalKey> _resultCardKeys; // Keys for scroll-into-view
   int _focusedIndex = -1; // -1 = keyword card focused, 0+ = result index
 
   @override
@@ -64,6 +73,11 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     super.initState();
     _keywordSearchFocusNode = FocusNode(debugLabel: 'keyword_search_card');
     _resultFocusNodes = [];
+    _resultCardKeys = [];
+    // Notify parent of the focus node for external focus control
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onKeywordFocusNodeReady?.call(_keywordSearchFocusNode);
+    });
     // Initial search without debounce
     _performSearch();
   }
@@ -155,11 +169,30 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     for (final node in _resultFocusNodes) {
       node.dispose();
     }
-    // Create new nodes
+    // Create new nodes and keys
     _resultFocusNodes = List.generate(
       count,
       (i) => FocusNode(debugLabel: 'search_result_$i'),
     );
+    _resultCardKeys = List.generate(
+      count,
+      (i) => GlobalKey(debugLabel: 'search_result_key_$i'),
+    );
+  }
+
+  /// Scroll a result card into view when focused
+  void _scrollResultIntoView(int index) {
+    if (index < 0 || index >= _resultCardKeys.length) return;
+    final key = _resultCardKeys[index];
+    final context = key.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.3, // Show focused item in upper-middle of viewport
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   /// Sort results by relevance to the search query
@@ -224,6 +257,12 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     if (event.logicalKey == LogicalKeyboardKey.select ||
         event.logicalKey == LogicalKeyboardKey.enter) {
       widget.onKeywordSearch();
+      return KeyEventResult.handled;
+    }
+
+    // Up arrow: return focus to search field
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      widget.onRequestFocusAbove?.call();
       return KeyEventResult.handled;
     }
 
@@ -382,18 +421,27 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                   final item = _results[index];
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: _CatalogResultCard(
-                      item: item,
-                      focusNode: _resultFocusNodes[index],
-                      isFocused: _focusedIndex == index,
-                      onTap: () => _onItemSelected(item),
-                      onFocusChange: (focused) {
-                        setState(() {
-                          _focusedIndex = focused ? index : _focusedIndex;
-                        });
-                      },
-                      onKeyEvent: (node, event) =>
-                          _handleResultKeyEvent(node, event, index),
+                    child: KeyedSubtree(
+                      key: _resultCardKeys[index],
+                      child: _CatalogResultCard(
+                        item: item,
+                        focusNode: _resultFocusNodes[index],
+                        isFocused: _focusedIndex == index,
+                        onTap: () => _onItemSelected(item),
+                        onFocusChange: (focused) {
+                          setState(() {
+                            _focusedIndex = focused ? index : _focusedIndex;
+                          });
+                          // Scroll into view when focused
+                          if (focused) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _scrollResultIntoView(index);
+                            });
+                          }
+                        },
+                        onKeyEvent: (node, event) =>
+                            _handleResultKeyEvent(node, event, index),
+                      ),
                     ),
                   );
                 },

@@ -148,6 +148,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Timer? _pendingAutocompleteFocusRequest; // For cancelling overlapping focus requests
   Timer? _scrollThrottleTimer; // For throttling ensureVisible calls
 
+  // AggregatedSearchResults keyword card focus node (for direct focus from search field)
+  FocusNode? _aggregatedKeywordFocusNode;
+
   // Focus states using ValueNotifier to avoid full screen rebuilds
   final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _providerAccordionFocused = ValueNotifier<bool>(false);
@@ -9402,6 +9405,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: _selectedSource.type != SearchSourceType.addon ||
                                 (_selectedSource.addon?.hasSearchableCatalogs ?? false),
                             disabledTooltip: "This addon doesn't support search",
+                            // Direct focus navigation for "All" mode - focus aggregated results keyword card
+                            onDownArrowPressed: (_selectedSource.type == SearchSourceType.all &&
+                                    _searchController.text.isNotEmpty &&
+                                    !_hasSearched &&
+                                    !_isLoading &&
+                                    _aggregatedKeywordFocusNode != null)
+                                ? () {
+                                    _aggregatedKeywordFocusNode?.requestFocus();
+                                  }
+                                : null,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -9485,6 +9498,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           },
                           onItemSelected: (selection) {
                             _handleCatalogItemSelected(selection);
+                          },
+                          onKeywordFocusNodeReady: (focusNode) {
+                            _aggregatedKeywordFocusNode = focusNode;
+                          },
+                          onRequestFocusAbove: () {
+                            _searchFocusNode.requestFocus();
                           },
                         ),
                       ),
@@ -12107,6 +12126,8 @@ class _SearchTextField extends StatefulWidget {
   final ValueChanged<bool> onFocusChange;
   final bool enabled;
   final String? disabledTooltip;
+  /// Callback when down arrow is pressed (for direct focus navigation in "All" mode)
+  final VoidCallback? onDownArrowPressed;
 
   const _SearchTextField({
     required this.controller,
@@ -12125,6 +12146,7 @@ class _SearchTextField extends StatefulWidget {
     required this.onFocusChange,
     this.enabled = true,
     this.disabledTooltip,
+    this.onDownArrowPressed,
   });
 
   @override
@@ -12196,6 +12218,11 @@ class _SearchTextFieldState extends State<_SearchTextField> {
                 }
                 if (widget.isSeries && widget.selectedImdbTitle != null) {
                   widget.seasonInputFocusNode.requestFocus();
+                  return null;
+                }
+                // Use direct focus callback if provided (for "All" mode navigation)
+                if (widget.onDownArrowPressed != null) {
+                  widget.onDownArrowPressed!();
                   return null;
                 }
                 FocusScope.of(context).nextFocus();
