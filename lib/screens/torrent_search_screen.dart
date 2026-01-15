@@ -41,6 +41,7 @@ import '../widgets/search_source_dropdown.dart';
 import '../widgets/aggregated_search_results.dart';
 import '../widgets/torrent_result_row.dart';
 import '../widgets/provider_status_cards.dart';
+import '../widgets/home_favorites_section.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
 import '../models/stremio_addon.dart';
@@ -9617,12 +9618,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                          _selectedSource.addon!.supportsCatalogs)
                       );
                       if (catalogVisible) {
-                        // Show provider status cards when catalog is supposed to be visible
-                        // but no content is showing (empty search text)
-                        if (_searchController.text.isEmpty) {
+                        // For "All" mode with empty search, show favorites/provider cards
+                        // For addon mode (Cinemeta etc), CatalogBrowser has its own content - don't overlay
+                        if (_selectedSource.type == SearchSourceType.all && _searchController.text.isEmpty) {
                           return ListView(
                             padding: const EdgeInsets.all(12),
                             children: [
+                              // Favorites section (horizontal scroll)
+                              const HomeFavoritesSection(),
+                              const SizedBox(height: 16),
+                              // Debrid services section
                               ProviderStatusCards(
                                 onTapRealDebrid: () => MainPageBridge.switchTab?.call(4),
                                 onTapTorbox: () => MainPageBridge.switchTab?.call(5),
@@ -10085,7 +10090,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        // Provider status cards at the top
+        // Favorites section (horizontal scroll)
+        const HomeFavoritesSection(),
+        const SizedBox(height: 16),
+        // Debrid services section
         ProviderStatusCards(
           onTapRealDebrid: () => MainPageBridge.switchTab?.call(4), // RD tab
           onTapTorbox: () => MainPageBridge.switchTab?.call(5), // Torbox tab
