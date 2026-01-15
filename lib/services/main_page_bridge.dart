@@ -17,6 +17,7 @@ class MainPageBridge {
   static Future<void> Function(String fileId, String fileName)? handlePikPakResult;
   static VoidCallback? hideAutoLaunchOverlay;
   static Future<void> Function(Map<String, dynamic> playlistItem)? playPlaylistItem;
+  static Future<void> Function(String channelId)? watchDebrifyTvChannel;
 
   // ==========================================================================
   // Back Navigation Handling
@@ -117,5 +118,18 @@ class MainPageBridge {
     final item = _playlistItemToAutoPlay;
     _playlistItemToAutoPlay = null;
     return item;
+  }
+
+  // Store a Debrify TV channel ID that should be auto-played when DebrifyTVScreen initializes
+  static String? _debrifyTvChannelToAutoPlay;
+
+  static void notifyDebrifyTvChannelToAutoPlay(String channelId) {
+    _debrifyTvChannelToAutoPlay = channelId;
+  }
+
+  static String? getAndClearDebrifyTvChannelToAutoPlay() {
+    final channelId = _debrifyTvChannelToAutoPlay;
+    _debrifyTvChannelToAutoPlay = null;
+    return channelId;
   }
 }

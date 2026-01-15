@@ -232,6 +232,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   final Set<String> _inflightInfohashes = {};
   bool _isAndroidTv = false;
   bool _showSearchBar = false;
+  Set<String> _favoriteChannelIds = {};
   late final FocusNode _channelSearchFocusNode;
 
   // Progress UI state
@@ -253,15 +254,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
     _loadSettings();
     _loadChannels();
+    _loadFavoriteChannels();
 
-    // Check if this is a startup auto-launch
+    // Register watch channel handler for external calls (e.g., from home screen)
+    MainPageBridge.watchDebrifyTvChannel = _watchChannelById;
+
+    // Check if this is a startup auto-launch or pending auto-play from home screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkStartupAutoLaunch();
+      _checkPendingAutoPlay();
     });
   }
 
   @override
   void dispose() {
+    // Clear watch channel handler
+    MainPageBridge.watchDebrifyTvChannel = null;
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _prefetchStopRequested = true;
     _stopPrefetch();
@@ -726,6 +734,62 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           .map(DebrifyTvChannel.fromRecord)
           .toList(growable: false);
     });
+  }
+
+  Future<void> _loadFavoriteChannels() async {
+    final favoriteIds = await StorageService.getDebrifyTvFavoriteChannelIds();
+    if (!mounted) return;
+    setState(() {
+      _favoriteChannelIds = favoriteIds;
+    });
+  }
+
+  Future<void> _toggleChannelFavorite(DebrifyTvChannel channel) async {
+    final isFavorited = _favoriteChannelIds.contains(channel.id);
+    final newState = !isFavorited;
+
+    await StorageService.setDebrifyTvChannelFavorited(channel.id, newState);
+
+    if (!mounted) return;
+    setState(() {
+      if (newState) {
+        _favoriteChannelIds = {..._favoriteChannelIds, channel.id};
+      } else {
+        _favoriteChannelIds = _favoriteChannelIds.where((id) => id != channel.id).toSet();
+      }
+    });
+  }
+
+  /// Watch a channel by ID (called from external sources like home screen)
+  Future<void> _watchChannelById(String channelId) async {
+    final channel = _channels.firstWhereOrNull((c) => c.id == channelId);
+    if (channel != null) {
+      _watchChannel(channel);
+    } else {
+      debugPrint('DebrifyTVScreen: Channel with ID $channelId not found');
+    }
+  }
+
+  /// Check for pending auto-play channel from home screen
+  Future<void> _checkPendingAutoPlay() async {
+    final channelId = MainPageBridge.getAndClearDebrifyTvChannelToAutoPlay();
+    if (channelId == null) return;
+
+    // Wait for channels to load (similar to _checkStartupAutoLaunch)
+    int attempts = 0;
+    const maxAttempts = 50; // 5 seconds max wait
+    while (_channels.isEmpty && attempts < maxAttempts) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      attempts++;
+      if (!mounted) return;
+    }
+
+    if (_channels.isEmpty) {
+      debugPrint('DebrifyTVScreen: Channels not loaded for auto-play');
+      return;
+    }
+
+    _watchChannelById(channelId);
   }
 
   Future<DebrifyTvChannelCacheEntry> _computeChannelCacheEntry(
@@ -7086,6 +7150,31 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
           ],
           const SizedBox(height: 16),
+          // Favorite channels section (only shows if there are favorites)
+          _buildFavoriteChannelsSection(),
+          // "All" section header (only show when there are favorites to distinguish)
+          if (_favoriteChannelIds.isNotEmpty && filteredChannels.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.grid_view_rounded,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'All Channels',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Channel grid (responsive)
           Expanded(
             child: filteredChannels.isEmpty
@@ -7185,8 +7274,139 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
+  // Favorite Channels Section (horizontal row)
+  Widget _buildFavoriteChannelsSection() {
+    // Get favorite channels from the channels list
+    final favoriteChannels = _channels
+        .where((channel) => _favoriteChannelIds.contains(channel.id))
+        .toList();
+
+    // Don't show if no favorites
+    if (favoriteChannels.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.star_rounded,
+                size: 18,
+                color: const Color(0xFFFFD700).withValues(alpha: 0.9),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Favorites',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        // Horizontal scrolling favorites
+        SizedBox(
+          height: 100,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: favoriteChannels.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final channel = favoriteChannels[index];
+              return _buildFavoriteChannelCard(channel);
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // Favorite Channel Card (compact horizontal card)
+  Widget _buildFavoriteChannelCard(DebrifyTvChannel channel) {
+    return SizedBox(
+      width: 160,
+      height: 100,
+      child: TvFocusableCard(
+        onPressed: () => _watchChannel(channel),
+        onLongPress: () => _showTvChannelOptionsMenu(channel),
+        child: Stack(
+          children: [
+            // Main content
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Channel number badge (smaller)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE50914),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  // Channel name
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      channel.name.toUpperCase(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Star indicator
+            Positioned(
+              top: 4,
+              right: 4,
+              child: Icon(
+                Icons.star_rounded,
+                size: 14,
+                color: const Color(0xFFFFD700),
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 4,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // TV Channel Card (Grid item)
   Widget _buildTvChannelCard(DebrifyTvChannel channel) {
+    final isFavorited = _favoriteChannelIds.contains(channel.id);
+
     return TvFocusableCard(
       onPressed: () {
         _watchChannel(channel);
@@ -7197,6 +7417,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       showLongPressHint: _isAndroidTv, // Only show hint on Android TV
       child: Stack(
         children: [
+          // Favorite star indicator (top-left)
+          if (isFavorited)
+            Positioned(
+              top: 6,
+              left: 6,
+              child: Icon(
+                Icons.star_rounded,
+                size: 20,
+                color: const Color(0xFFFFD700),
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 4,
+                  ),
+                ],
+              ),
+            ),
           // Main card content
           Center(
             child: Column(
@@ -7243,22 +7480,31 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           // 3-dot menu for non-Android TV devices
           if (!_isAndroidTv)
             Positioned(
-              top: 4,
-              right: 4,
-              child: PopupMenuButton<String>(
-                icon: Icon(
-                  Icons.more_vert,
-                  color: Colors.white.withOpacity(0.7),
-                  size: 20,
+              top: 2,
+              right: 2,
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                padding: EdgeInsets.zero,
-                tooltip: 'Options',
+                child: PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.more_vert,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    size: 16,
+                  ),
+                  padding: EdgeInsets.zero,
+                  tooltip: 'Options',
                 color: const Color(0xFF1F1F1F),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 onSelected: (value) {
-                  if (value == 'edit') {
+                  if (value == 'favorite') {
+                    _toggleChannelFavorite(channel);
+                  } else if (value == 'edit') {
                     _handleEditChannel(channel);
                   } else if (value == 'share') {
                     _handleShareChannelAsMagnet(channel);
@@ -7267,6 +7513,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   }
                 },
                 itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'favorite',
+                    child: Row(
+                      children: [
+                        Icon(
+                          isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
+                          size: 18,
+                          color: const Color(0xFFFFD700),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(isFavorited ? 'Remove Favorite' : 'Add to Favorites'),
+                      ],
+                    ),
+                  ),
                   const PopupMenuItem(
                     value: 'edit',
                     child: Row(
@@ -7298,6 +7558,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     ),
                   ),
                 ],
+                ),
               ),
             ),
         ],
@@ -7307,6 +7568,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV Channel Options Menu (Edit/Delete)
   Future<void> _showTvChannelOptionsMenu(DebrifyTvChannel channel) async {
+    final isFavorited = _favoriteChannelIds.contains(channel.id);
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -7320,6 +7583,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Favorite toggle button
+              TvFocusableButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  _toggleChannelFavorite(channel);
+                },
+                icon: isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
+                label: isFavorited ? 'Remove Favorite' : 'Add to Favorites',
+                backgroundColor: const Color(0xFFFFD700),
+              ),
+              const SizedBox(height: 16),
               // Edit button
               TvFocusableButton(
                 onPressed: () {

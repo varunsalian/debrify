@@ -129,6 +129,8 @@ class StorageService {
       'debrify_tv_keyword_threshold';
   static const String _debrifyTvMinTorrentsPerKeywordKey =
       'debrify_tv_min_torrents_per_keyword';
+  static const String _debrifyTvFavoriteChannelsKey =
+      'debrify_tv_favorite_channels_v1';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -1655,6 +1657,66 @@ class StorageService {
       return favorites.keys.toSet();
     } catch (e) {
       debugPrint('Error reading playlist favorites: $e');
+      return {};
+    }
+  }
+
+  // ==========================================================================
+  // Debrify TV Channel Favorites
+  // ==========================================================================
+
+  /// Check if a Debrify TV channel is favorited
+  static Future<bool> isDebrifyTvChannelFavorited(String channelId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_debrifyTvFavoriteChannelsKey);
+
+    if (favoritesJson == null) return false;
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      return favorites.containsKey(channelId);
+    } catch (e) {
+      debugPrint('Error reading Debrify TV channel favorites: $e');
+      return false;
+    }
+  }
+
+  /// Set favorite status for a Debrify TV channel
+  static Future<void> setDebrifyTvChannelFavorited(
+    String channelId,
+    bool isFavorited,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_debrifyTvFavoriteChannelsKey);
+
+    Map<String, dynamic> favorites = {};
+    if (favoritesJson != null) {
+      try {
+        favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    if (isFavorited) {
+      favorites[channelId] = true;
+    } else {
+      favorites.remove(channelId);
+    }
+
+    await prefs.setString(_debrifyTvFavoriteChannelsKey, jsonEncode(favorites));
+  }
+
+  /// Get all favorite Debrify TV channel IDs
+  static Future<Set<String>> getDebrifyTvFavoriteChannelIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_debrifyTvFavoriteChannelsKey);
+
+    if (favoritesJson == null) return {};
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      return favorites.keys.toSet();
+    } catch (e) {
+      debugPrint('Error reading Debrify TV channel favorites: $e');
       return {};
     }
   }

@@ -42,6 +42,7 @@ import '../widgets/aggregated_search_results.dart';
 import '../widgets/torrent_result_row.dart';
 import '../widgets/provider_status_cards.dart';
 import '../widgets/home_favorites_section.dart';
+import '../widgets/home_debrify_tv_favorites_section.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
 import '../models/stremio_addon.dart';
@@ -9624,8 +9625,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           return ListView(
                             padding: const EdgeInsets.all(12),
                             children: [
-                              // Favorites section (horizontal scroll)
+                              // Playlist favorites section (horizontal scroll)
                               const HomeFavoritesSection(),
+                              const SizedBox(height: 16),
+                              // Debrify TV favorites section (horizontal scroll)
+                              const HomeDebrifyTvFavoritesSection(),
                               const SizedBox(height: 16),
                               // Debrid services section
                               ProviderStatusCards(
@@ -10090,8 +10094,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        // Favorites section (horizontal scroll)
+        // Playlist favorites section (horizontal scroll)
         const HomeFavoritesSection(),
+        const SizedBox(height: 16),
+        // Debrify TV favorites section (horizontal scroll)
+        const HomeDebrifyTvFavoritesSection(),
         const SizedBox(height: 16),
         // Debrid services section
         ProviderStatusCards(
