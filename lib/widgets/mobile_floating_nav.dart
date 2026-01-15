@@ -136,6 +136,8 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
     final colorScheme = Theme.of(context).colorScheme;
     final currentItem = widget.items[widget.currentIndex];
     final currentGradient = _getGradientForIndex(widget.currentIndex);
+    // Account for Android system navigation bar
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Stack(
       alignment: Alignment.bottomRight,
@@ -173,7 +175,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
 
         // Menu items
         Positioned(
-          bottom: 76,
+          bottom: 76 + bottomPadding,
           right: 8,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -214,7 +216,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
 
         // Main FAB button
         Positioned(
-          bottom: 16,
+          bottom: 16 + bottomPadding,
           right: 16,
           child: GestureDetector(
             onTap: _toggle,
