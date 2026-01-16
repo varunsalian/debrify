@@ -146,6 +146,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } else {
       // Displayed in a tab
       MainPageBridge.registerTabBackHandler('realdebrid', _handleBackNavigation);
+      // Register TV sidebar focus handler (tab index 4 = Real Debrid)
+      MainPageBridge.registerTvContentFocusHandler(4, () {
+        // Focus search button as entry point
+        _searchButtonFocusNode.requestFocus();
+      });
     }
 
     // If asked to show options for a specific torrent, open after init
@@ -210,6 +215,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('realdebrid');
+      MainPageBridge.unregisterTvContentFocusHandler(4);
     }
 
     _torrentScrollController.dispose();
@@ -2168,10 +2174,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          focusNode: _backButtonFocusNode,
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => _handleBackNavigation(),
+        leading: Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                MainPageBridge.focusTvSidebar != null) {
+              MainPageBridge.focusTvSidebar!();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: IconButton(
+            focusNode: _backButtonFocusNode,
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => _handleBackNavigation(),
+          ),
         ),
         title: Text(_getCurrentFolderTitle()),
         actions: [

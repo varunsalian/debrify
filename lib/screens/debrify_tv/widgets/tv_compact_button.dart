@@ -10,6 +10,7 @@ class TvCompactButton extends StatefulWidget {
   final IconData icon;
   final String? label;
   final Color backgroundColor;
+  final FocusNode? focusNode;
 
   const TvCompactButton({
     super.key,
@@ -17,6 +18,7 @@ class TvCompactButton extends StatefulWidget {
     required this.icon,
     required this.label,
     required this.backgroundColor,
+    this.focusNode,
   });
 
   @override
@@ -31,6 +33,7 @@ class _TvCompactButtonState extends State<TvCompactButton> {
     final isDisabled = widget.onPressed == null;
 
     return Focus(
+      focusNode: widget.focusNode,
       onFocusChange: (focused) {
         setState(() {
           _isFocused = focused;

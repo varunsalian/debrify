@@ -32,6 +32,7 @@ import 'services/stremio_service.dart';
 import 'widgets/auto_launch_overlay.dart';
 import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
+import 'widgets/tv_sidebar_nav.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
 
@@ -378,6 +379,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   DateTime? _lastBackPressTime;
   static const _backPressDuration = Duration(seconds: 2);
 
+  // TV sidebar navigation
+  final GlobalKey<TvSidebarNavState> _tvSidebarKey = GlobalKey<TvSidebarNavState>();
+
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
     const PlaylistScreen(),
@@ -539,6 +543,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           _selectedIndex = 3; // Debrify TV
         }
       });
+
+      // Set up TV sidebar focus callback
+      if (isTv) {
+        MainPageBridge.focusTvSidebar = () {
+          _tvSidebarKey.currentState?.requestFocus();
+        };
+      }
     });
 
     // Initialize deep link service for magnet links
@@ -556,6 +567,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
     MainPageBridge.hideAutoLaunchOverlay = null;
+    MainPageBridge.focusTvSidebar = null;
     _animationController.dispose();
     DeepLinkService().dispose();
     super.dispose();
@@ -825,6 +837,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         break;
     }
     MainPageBridge.setActiveTab(activeTabKey);
+
+    // Update active tab for TV sidebar navigation
+    MainPageBridge.setActiveTvTab(index);
   }
 
 
@@ -1251,6 +1266,68 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                 // Show floating nav on mobile (narrow screens), but not on TV
                 final isMobile = constraints.maxWidth < 600 && !_isAndroidTv;
 
+                // TV Layout: Sidebar + Content
+                if (_isAndroidTv) {
+                  return Scaffold(
+                    backgroundColor: Colors.transparent,
+                    body: Row(
+                      children: [
+                        // TV Sidebar Navigation
+                        TvSidebarNav(
+                          key: _tvSidebarKey,
+                          currentIndex: currentNavIndex,
+                          items: [
+                            for (final navItem in navItems)
+                              TvNavItem(navItem.icon, navItem.label),
+                          ],
+                          onTap: (relativeIndex) {
+                            final actualIndex = visibleIndices[relativeIndex];
+                            _onItemTapped(actualIndex);
+                            // Focus is handled by sidebar via MainPageBridge
+                          },
+                          onFocusContent: () {
+                            // Fallback for screens without registered handler
+                            FocusScope.of(context).nextFocus();
+                          },
+                        ),
+                        // Content area
+                        Expanded(
+                          child: SafeArea(
+                            left: false,
+                            child: FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 350),
+                                transitionBuilder: (child, animation) {
+                                  final offsetAnimation =
+                                      Tween<Offset>(
+                                        begin: const Offset(0.02, 0.02),
+                                        end: Offset.zero,
+                                      ).animate(
+                                        CurvedAnimation(
+                                          parent: animation,
+                                          curve: Curves.easeOutCubic,
+                                        ),
+                                      );
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: SlideTransition(position: offsetAnimation, child: child),
+                                  );
+                                },
+                                child: KeyedSubtree(
+                                  key: ValueKey<int>(_selectedIndex),
+                                  child: _pages[_selectedIndex],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // Mobile & Desktop Layout
                 return Scaffold(
                   backgroundColor: Colors.transparent,
                   // Hide AppBar on mobile - we'll use floating nav instead

@@ -127,6 +127,11 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       });
     } else {
       MainPageBridge.registerTabBackHandler('torbox', _handleBackNavigation);
+      // Register TV sidebar focus handler (tab index 5 = Torbox)
+      MainPageBridge.registerTvContentFocusHandler(5, () {
+        // Focus search button as entry point
+        _searchButtonFocusNode.requestFocus();
+      });
     }
   }
 
@@ -835,6 +840,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('torbox');
+      MainPageBridge.unregisterTvContentFocusHandler(5);
     }
 
     _scrollController.dispose();
@@ -5597,11 +5603,22 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         title: Text(_currentFolderName),
         actions: [
           if (showSearch)
-            IconButton(
-              focusNode: _searchButtonFocusNode,
-              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
-              onPressed: _toggleSearch,
-              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+            Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                    MainPageBridge.focusTvSidebar != null) {
+                  MainPageBridge.focusTvSidebar!();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: IconButton(
+                focusNode: _searchButtonFocusNode,
+                icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+                onPressed: _toggleSearch,
+                tooltip: _isSearchActive ? 'Close search' : 'Search files',
+              ),
             ),
         ],
       ),

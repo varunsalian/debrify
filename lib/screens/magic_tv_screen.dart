@@ -234,6 +234,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _showSearchBar = false;
   Set<String> _favoriteChannelIds = {};
   late final FocusNode _channelSearchFocusNode;
+  final FocusNode _quickPlayFocusNode = FocusNode(debugLabel: 'DebrifyTVQuickPlay');
 
   // Progress UI state
   final ValueNotifier<List<String>> _progress = ValueNotifier<List<String>>([]);
@@ -259,6 +260,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Register watch channel handler for external calls (e.g., from home screen)
     MainPageBridge.watchDebrifyTvChannel = _watchChannelById;
 
+    // Register TV sidebar focus handler (tab index 3 = Debrify TV)
+    MainPageBridge.registerTvContentFocusHandler(3, () {
+      // Focus Quick Play button as entry point (always visible)
+      _quickPlayFocusNode.requestFocus();
+    });
+
     // Check if this is a startup auto-launch or pending auto-play from home screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkStartupAutoLaunch();
@@ -270,6 +277,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   void dispose() {
     // Clear watch channel handler
     MainPageBridge.watchDebrifyTvChannel = null;
+    MainPageBridge.unregisterTvContentFocusHandler(3);
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _prefetchStopRequested = true;
     _stopPrefetch();
@@ -280,6 +288,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _keywordsController.dispose();
     _channelSearchController.dispose();
     _channelSearchFocusNode.dispose();
+    _quickPlayFocusNode.dispose();
     AndroidTvPlayerBridge.clearTorboxProvider();
     super.dispose();
   }
@@ -292,6 +301,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    // Handle left arrow for TV sidebar
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (MainPageBridge.focusTvSidebar != null) {
+        MainPageBridge.focusTvSidebar!();
+        return KeyEventResult.handled;
+      }
+    }
     if (key == LogicalKeyboardKey.arrowDown) {
       final ctx = node.context;
       if (ctx != null) {
@@ -7030,6 +7046,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         icon: Icons.play_arrow_rounded,
                         label: 'Quick Play',
                         backgroundColor: const Color(0xFFE50914),
+                        focusNode: _quickPlayFocusNode,
                       ),
                       const SizedBox(width: 12),
                       // Import button

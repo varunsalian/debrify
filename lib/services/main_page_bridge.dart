@@ -132,4 +132,51 @@ class MainPageBridge {
     _debrifyTvChannelToAutoPlay = null;
     return channelId;
   }
+
+  // ==========================================================================
+  // TV Sidebar Navigation (Android TV only)
+  // ==========================================================================
+  // Handles focus transitions between sidebar and content screens.
+  // - Sidebar calls requestTvContentFocus() when user exits sidebar
+  // - Screens call focusTvSidebar() when user is at left edge
+  // ==========================================================================
+
+  /// Callback to focus the TV sidebar. Set by main.dart.
+  static VoidCallback? focusTvSidebar;
+
+  /// Tab-specific content focus handlers for TV navigation.
+  /// Each screen registers how to focus its primary/entry element.
+  /// Key is the tab index (0=Home, 1=Playlist, 2=Downloads, etc.)
+  static final Map<int, VoidCallback> _tvContentFocusHandlers = {};
+
+  /// Currently active tab index for TV navigation
+  static int _activeTvTabIndex = 0;
+
+  /// Register a screen's content focus handler for TV navigation.
+  /// Call in initState. The handler should focus the screen's primary element.
+  static void registerTvContentFocusHandler(int tabIndex, VoidCallback handler) {
+    _tvContentFocusHandlers[tabIndex] = handler;
+  }
+
+  /// Unregister a screen's content focus handler. Call in dispose.
+  static void unregisterTvContentFocusHandler(int tabIndex) {
+    _tvContentFocusHandlers.remove(tabIndex);
+  }
+
+  /// Set the currently active tab index. Call from main.dart when tab changes.
+  static void setActiveTvTab(int index) {
+    _activeTvTabIndex = index;
+  }
+
+  /// Request focus on the current screen's content.
+  /// Called by sidebar when user exits (right arrow or select).
+  /// Returns true if a handler was found and called.
+  static bool requestTvContentFocus() {
+    final handler = _tvContentFocusHandlers[_activeTvTabIndex];
+    if (handler != null) {
+      handler();
+      return true;
+    }
+    return false;
+  }
 }

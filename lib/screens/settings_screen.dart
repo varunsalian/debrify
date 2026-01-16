@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../services/main_page_bridge.dart';
 
 import '../services/account_service.dart';
 import '../services/download_service.dart';
@@ -51,10 +54,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadSummaries();
+
+    // Register TV sidebar focus handler (tab index 7 = Settings)
+    MainPageBridge.registerTvContentFocusHandler(7, () {
+      _firstCardFocusNode.requestFocus();
+    });
   }
 
   @override
   void dispose() {
+    MainPageBridge.unregisterTvContentFocusHandler(7);
     _firstCardFocusNode.dispose();
     super.dispose();
   }
@@ -729,15 +738,25 @@ class _ConnectionCard extends StatelessWidget {
         ? (active ? Colors.green : Colors.red)
         : theme.colorScheme.outline;
 
-    return Material(
-      color: theme.colorScheme.surfaceContainerHigh,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        focusNode: focusNode,
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            MainPageBridge.focusTvSidebar != null) {
+          MainPageBridge.focusTvSidebar!();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Material(
+        color: theme.colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(18),
-        onTap: () async {
-          await info.onTap();
-        },
+        child: InkWell(
+          focusNode: focusNode,
+          borderRadius: BorderRadius.circular(18),
+          onTap: () async {
+            await info.onTap();
+          },
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -801,6 +820,7 @@ class _ConnectionCard extends StatelessWidget {
               const Icon(Icons.chevron_right_rounded),
             ],
           ),
+        ),
         ),
       ),
     );

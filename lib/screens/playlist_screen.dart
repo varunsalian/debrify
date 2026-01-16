@@ -61,6 +61,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Register playlist item playback handler
     MainPageBridge.playPlaylistItem = _playItem;
 
+    // Register TV sidebar focus handler (tab index 1 = Playlist)
+    MainPageBridge.registerTvContentFocusHandler(1, () {
+      // Focus search button as entry point
+      _searchFocusNode.requestFocus();
+    });
+
     // Check if there's a pending auto-play item
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final itemToPlay = MainPageBridge.getAndClearPlaylistItemToAutoPlay();
@@ -74,6 +80,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   void dispose() {
     // Clear static callback to prevent memory leak
     MainPageBridge.playPlaylistItem = null;
+    MainPageBridge.unregisterTvContentFocusHandler(1);
     // Remove listener before disposing controller
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
@@ -1857,6 +1864,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       autofocus: true, // Search button gets initial focus
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
+          // Handle left arrow for TV sidebar
+          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            if (MainPageBridge.focusTvSidebar != null) {
+              MainPageBridge.focusTvSidebar!();
+              return KeyEventResult.handled;
+            }
+          }
           if (event.logicalKey == LogicalKeyboardKey.select ||
               event.logicalKey == LogicalKeyboardKey.enter) {
             _showSearchDialog();

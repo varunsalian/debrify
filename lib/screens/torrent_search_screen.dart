@@ -303,6 +303,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _loadDefaultSettings();
     _detectTelevision();
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
+
+    // Register TV sidebar focus handler (tab index 0 = Home/TorrentSearch)
+    MainPageBridge.registerTvContentFocusHandler(0, () {
+      _providerAccordionFocusNode.requestFocus();
+    });
+
     _loadApiKeys();
     _loadSearchSourceOptions();
     StorageService.getTorboxCacheCheckEnabled().then((enabled) {
@@ -965,6 +971,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _engineTileFocusNodes.clear();
     _engineTileFocusStates.clear();
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
+    MainPageBridge.unregisterTvContentFocusHandler(0);
     MainPageBridge.handleRealDebridResult = null;
     MainPageBridge.handleTorboxResult = null;
     MainPageBridge.handlePikPakResult = null;
@@ -2718,9 +2725,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
       child: Focus(
         onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+          // Handle Left arrow to navigate to TV sidebar
+          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            if (_isTelevision && MainPageBridge.focusTvSidebar != null) {
+              MainPageBridge.focusTvSidebar!();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          }
+
           // Handle Down arrow to navigate to catalog browser or home sections
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
             // Check if CatalogBrowser is visible (addon mode with catalogs, not searched)
             final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
                 _selectedSource.addon != null &&

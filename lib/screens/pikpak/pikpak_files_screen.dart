@@ -122,6 +122,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       });
     } else {
       MainPageBridge.registerTabBackHandler('pikpak', _handleBackNavigation);
+      // Register TV sidebar focus handler (tab index 6 = PikPak)
+      MainPageBridge.registerTvContentFocusHandler(6, () {
+        // Focus search button as entry point
+        _searchButtonFocusNode.requestFocus();
+      });
     }
   }
 
@@ -140,6 +145,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('pikpak');
+      MainPageBridge.unregisterTvContentFocusHandler(6);
     }
 
     _scrollController.dispose();
@@ -1683,11 +1689,22 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: (_currentFolderId != null && !_isAtRestrictedRoot) || _isInVirtualFolder
-            ? IconButton(
-                focusNode: _backButtonFocusNode,
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => _handleBackNavigation(),
-                tooltip: 'Back',
+            ? Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                      MainPageBridge.focusTvSidebar != null) {
+                    MainPageBridge.focusTvSidebar!();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: IconButton(
+                  focusNode: _backButtonFocusNode,
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => _handleBackNavigation(),
+                  tooltip: 'Back',
+                ),
               )
             : null,
         title: Column(
