@@ -151,6 +151,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // AggregatedSearchResults keyword card focus node (for direct focus from search field)
   FocusNode? _aggregatedKeywordFocusNode;
 
+  // CatalogBrowser GlobalKey (for DPAD navigation from Sources)
+  final GlobalKey<CatalogBrowserState> _catalogBrowserKey = GlobalKey<CatalogBrowserState>();
+
   // Focus states using ValueNotifier to avoid full screen rebuilds
   final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _providerAccordionFocused = ValueNotifier<bool>(false);
@@ -2715,10 +2718,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
       child: Focus(
         onKeyEvent: (node, event) {
-          // Handle Down arrow to navigate to home sections
+          // Handle Down arrow to navigate to catalog browser or home sections
           if (event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.arrowDown) {
-            _homeFocusController.focusFirstHomeSection();
+            // Check if CatalogBrowser is visible (addon mode with catalogs, not searched)
+            final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
+                _selectedSource.addon != null &&
+                _selectedSource.addon!.supportsCatalogs &&
+                !_hasSearched &&
+                !_isLoading;
+
+            if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
+              _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
+            } else {
+              _homeFocusController.focusFirstHomeSection();
+            }
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -9424,14 +9438,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         _selectedSource.addon != null &&
                         _selectedSource.addon!.supportsCatalogs)
                       Offstage(
-                        key: ValueKey('catalog_offstage_${_selectedSource.addon!.manifestUrl}'),
                         offstage: _hasSearched || _isLoading,
                         child: CatalogBrowser(
+                          key: _catalogBrowserKey,
                           filterAddon: _selectedSource.addon,
                           // Freeze searchQuery while offstage to prevent reload/scroll reset
                           searchQuery: (_hasSearched || _isLoading) ? _previousSearchQuery : _searchController.text,
                           onItemSelected: (selection) {
                             _handleCatalogItemSelected(selection, updateSearchText: true);
+                          },
+                          onRequestFocusAbove: () {
+                            _providerAccordionFocusNode.requestFocus();
                           },
                         ),
                       ),

@@ -28,18 +28,22 @@ class CatalogBrowser extends StatefulWidget {
   /// If provided, searches within the addon's searchable catalogs
   final String? searchQuery;
 
+  /// Callback when user navigates up from the top of the catalog browser
+  final VoidCallback? onRequestFocusAbove;
+
   const CatalogBrowser({
     super.key,
     this.onItemSelected,
     this.filterAddon,
     this.searchQuery,
+    this.onRequestFocusAbove,
   });
 
   @override
-  State<CatalogBrowser> createState() => _CatalogBrowserState();
+  State<CatalogBrowser> createState() => CatalogBrowserState();
 }
 
-class _CatalogBrowserState extends State<CatalogBrowser> {
+class CatalogBrowserState extends State<CatalogBrowser> {
   // Service
   final StremioService _stremioService = StremioService.instance;
 
@@ -74,6 +78,12 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
   final FocusNode _catalogDropdownFocusNode = FocusNode(debugLabel: 'catalog_dropdown');
   final FocusNode _genreDropdownFocusNode = FocusNode(debugLabel: 'genre_dropdown');
   List<FocusNode> _contentFocusNodes = [];
+
+  /// Public method to request focus on the first dropdown (provider dropdown)
+  /// Called from parent when navigating down from Sources
+  void requestFocusOnFirstDropdown() {
+    _providerDropdownFocusNode.requestFocus();
+  }
 
   @override
   void initState() {
@@ -473,6 +483,21 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
   Widget _buildProviderDropdown() {
     return Focus(
       focusNode: _providerDropdownFocusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          // Up arrow: navigate to Sources above
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            widget.onRequestFocusAbove?.call();
+            return KeyEventResult.handled;
+          }
+          // Down arrow: navigate to catalog dropdown
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            FocusScope.of(context).requestFocus(_catalogDropdownFocusNode);
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.08),
@@ -530,6 +555,25 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
 
     return Focus(
       focusNode: _catalogDropdownFocusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          // Up arrow: navigate to provider dropdown
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            FocusScope.of(context).requestFocus(_providerDropdownFocusNode);
+            return KeyEventResult.handled;
+          }
+          // Down arrow: navigate to genre dropdown or first content item
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            if (_selectedCatalog?.supportsGenre ?? false) {
+              FocusScope.of(context).requestFocus(_genreDropdownFocusNode);
+            } else if (_contentFocusNodes.isNotEmpty) {
+              FocusScope.of(context).requestFocus(_contentFocusNodes[0]);
+            }
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.08),
@@ -591,6 +635,23 @@ class _CatalogBrowserState extends State<CatalogBrowser> {
 
     return Focus(
       focusNode: _genreDropdownFocusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          // Up arrow: navigate to catalog dropdown
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            FocusScope.of(context).requestFocus(_catalogDropdownFocusNode);
+            return KeyEventResult.handled;
+          }
+          // Down arrow: navigate to first content item
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            if (_contentFocusNodes.isNotEmpty) {
+              FocusScope.of(context).requestFocus(_contentFocusNodes[0]);
+            }
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.08),
