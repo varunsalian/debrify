@@ -359,13 +359,24 @@ class StremioAddon {
   ///
   /// Returns true if:
   /// - The addon has no idPrefixes restriction (null or empty), OR
-  /// - The addon's idPrefixes contains the prefix extracted from contentId
+  /// - The contentId starts with any of the addon's idPrefixes, OR
+  /// - The extracted prefix matches any of the addon's idPrefixes
   bool supportsContentId(String contentId) {
     // No restriction means addon accepts all IDs
     if (idPrefixes == null || idPrefixes!.isEmpty) {
       return true;
     }
 
+    // Check if contentId starts with any of the declared prefixes
+    // This handles complex IDs like "vavoo_SKY%20ARTE|group:it" where the
+    // prefix is "vavoo_" but colon-based extraction would fail
+    for (final p in idPrefixes!) {
+      if (contentId.startsWith(p)) {
+        return true;
+      }
+    }
+
+    // Fallback to extracted prefix matching
     final prefix = extractIdPrefix(contentId);
     if (prefix == null) {
       // Can't determine prefix - let addon try anyway

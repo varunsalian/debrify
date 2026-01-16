@@ -632,7 +632,11 @@ class StremioService {
     String type,
     String streamId,
   ) async {
-    final url = '${addon.baseUrl}/stream/$type/$streamId.json';
+    // Decode first (in case already encoded), then encode properly
+    // This handles IDs like "vavoo_SKY%20ATLANTIC|group:it" that are partially encoded
+    final decodedId = Uri.decodeComponent(streamId);
+    final encodedStreamId = Uri.encodeComponent(decodedId);
+    final url = '${addon.baseUrl}/stream/$type/$encodedStreamId.json';
 
     try {
       final uri = Uri.parse(url);
