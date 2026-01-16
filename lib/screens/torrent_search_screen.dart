@@ -234,15 +234,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   TorrentFilterState _filters = const TorrentFilterState.empty();
   bool get _hasActiveFilters => !_filters.isEmpty;
 
-  // Torrent Search History
-  List<Map<String, dynamic>> _searchHistory = [];
-  bool _historyTrackingEnabled = true;
-  final FocusNode _historyDisableSwitchFocusNode = FocusNode();
-  final FocusNode _historyClearButtonFocusNode = FocusNode();
-  final ValueNotifier<bool> _historyDisableSwitchFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _historyClearButtonFocused = ValueNotifier<bool>(false);
-  final List<FocusNode> _historyCardFocusNodes = [];
-
   late AnimationController _listAnimationController;
   late Animation<double> _listAnimation;
 
@@ -310,7 +301,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _detectTelevision();
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     _loadApiKeys();
-    _loadSearchHistory();
     _loadSearchSourceOptions();
     StorageService.getTorboxCacheCheckEnabled().then((enabled) {
       if (!mounted) return;
@@ -413,20 +403,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final index = _cardFocusNodes.length;
       final node = FocusNode(debugLabel: 'torrent-card-$index');
       _cardFocusNodes.add(node);
-    }
-  }
-
-  void _ensureHistoryFocusNodes() {
-    // Dispose old focus nodes if list shrunk
-    while (_historyCardFocusNodes.length > _searchHistory.length) {
-      _historyCardFocusNodes.removeLast().dispose();
-    }
-
-    // Add new focus nodes if list grew
-    while (_historyCardFocusNodes.length < _searchHistory.length) {
-      final index = _historyCardFocusNodes.length;
-      final node = FocusNode(debugLabel: 'history-card-$index');
-      _historyCardFocusNodes.add(node);
     }
   }
 
@@ -878,10 +854,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
-  // ============================================================================
-  // Torrent Search History Methods
-  // ============================================================================
-
   Torrent _findTorrentByInfohash(String infohash, String fallbackName) {
     return _torrents.firstWhere(
       (t) => t.infohash.toLowerCase() == infohash.toLowerCase(),
@@ -901,56 +873,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _loadSearchHistory() async {
-    final history = await StorageService.getTorrentSearchHistory();
-    final enabled = await StorageService.getTorrentSearchHistoryEnabled();
-    if (!mounted) return;
-    setState(() {
-      _searchHistory = history;
-      _historyTrackingEnabled = enabled;
-    });
-    _ensureHistoryFocusNodes();
-  }
-
-  Future<void> _saveToHistory(Torrent torrent, String service) async {
-    if (!_historyTrackingEnabled) return;
-    await StorageService.addTorrentToHistory(torrent.toJson(), service);
-    await _loadSearchHistory(); // Refresh
-  }
-
-  Future<void> _clearHistory() async {
-    await StorageService.clearTorrentSearchHistory();
-    await _loadSearchHistory();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Search history cleared'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  Future<void> _toggleHistoryTracking(bool enabled) async {
-    setState(() {
-      _historyTrackingEnabled = enabled;
-    });
-    await StorageService.setTorrentSearchHistoryEnabled(enabled);
-  }
-
-  String _getServiceLabel(String service) {
-    switch (service.toLowerCase()) {
-      case 'realdebrid':
-        return 'Real-Debrid';
-      case 'torbox':
-        return 'Torbox';
-      case 'pikpak':
-        return 'PikPak';
-      default:
-        return service;
-    }
   }
 
   @override
@@ -1008,8 +930,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _expandControlsFocused.dispose();
     _seasonInputFocused.dispose();
     _episodeInputFocused.dispose();
-    _historyDisableSwitchFocused.dispose();
-    _historyClearButtonFocused.dispose();
 
     // Dispose Unified Search Source resources
     _sourceDropdownFocusNode.dispose();
@@ -1034,13 +954,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       node.dispose();
     }
     // Card focus states now use index tracking - no disposal needed
-
-    // Dispose history focus nodes
-    _historyDisableSwitchFocusNode.dispose();
-    _historyClearButtonFocusNode.dispose();
-    for (final node in _historyCardFocusNodes) {
-      node.dispose();
-    }
 
     // Dispose dynamic engine focus nodes
     for (final node in _engineTileFocusNodes.values) {
@@ -3497,11 +3410,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       print('PikPak: Extracted file_id: $fileId, task_id: $taskId');
 
-      // Add to search history after successful addition to PikPak
-      final torrent = _findTorrentByInfohash(infohash, torrentName);
-      await _saveToHistory(torrent, 'pikpak');
-
       if (!mounted) return;
+
+      final torrent = _findTorrentByInfohash(infohash, torrentName);
 
       // Show loading dialog and start polling
       bool pollingStarted = false;
@@ -5583,10 +5494,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Close loading dialog
       Navigator.of(context).pop();
 
-      // Add to search history
-      final torrent = _findTorrentByInfohash(infohash, torrentName);
-      await _saveToHistory(torrent, 'realdebrid');
-
       // Handle post-torrent action
       await _handlePostTorrentAction(result, torrentName, apiKey, index);
     } catch (e) {
@@ -6106,11 +6013,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       }
 
-      // Add to search history
-      final torrent = _findTorrentByInfohash(infohash, torrentName);
-      await _saveToHistory(torrent, 'torbox');
-
       if (!mounted) return;
+      final torrent = _findTorrentByInfohash(infohash, torrentName);
       await _showTorboxPostAddOptions(torboxTorrent, torrent);
     } catch (e) {
       if (mounted && Navigator.of(context).canPop()) {
@@ -9762,7 +9666,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         }
                         return const SizedBox.shrink();
                       }
-                      return _buildHistorySection();
+                      return _buildHomeSection();
                     }
 
                     if (_torrents.isEmpty) {
@@ -10234,10 +10138,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   // ============================================================================
-  // Torrent Search History UI
+  // Home Section UI (Favorites & Providers)
   // ============================================================================
 
-  Widget _buildHistorySection() {
+  Widget _buildHomeSection() {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -10288,282 +10192,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 16),
-        _buildHistoryHeaderRow(),
-        const SizedBox(height: 12),
-        if (_searchHistory.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF1E293B), Color(0xFF334155)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.search_rounded,
-                  size: 48,
-                  color: Colors.white.withValues(alpha: 0.3),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No search history yet',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Your recent torrents will appear here',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.white.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (_searchHistory.isNotEmpty)
-        ..._searchHistory.asMap().entries.map((entry) {
-          final index = entry.key;
-          final historyItem = entry.value;
-          final torrentJson = historyItem['torrent'] as Map<String, dynamic>;
-          final torrent = Torrent.fromJson(torrentJson);
-          final service = historyItem['service'] as String;
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: const Color(0xFFFBBF24).withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFBBF24).withValues(alpha: 0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                if (index == 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFBBF24).withValues(alpha: 0.15),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(14),
-                        topRight: Radius.circular(14),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.history_rounded, size: 14, color: Color(0xFFFBBF24)),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Last clicked • ${_getServiceLabel(service)}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFFBBF24),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                _buildHistoryTorrentCard(torrent, index),
-              ],
-            ),
-          );
-        }),
       ],
-    );
-  }
-
-  Widget _buildHistoryTorrentCard(Torrent torrent, int index) {
-    // For TV mode, use dedicated history focus nodes
-    if (_isTelevision && index < _historyCardFocusNodes.length) {
-      return _TorrentCard(
-        key: ValueKey('history_${torrent.infohash}'),
-        torrent: torrent,
-        index: index,
-        focusNode: _historyCardFocusNodes[index],
-        isTelevision: _isTelevision,
-        apiKey: _apiKey,
-        torboxApiKey: _torboxApiKey,
-        torboxCacheStatus: _torboxCacheStatus,
-        realDebridIntegrationEnabled: _realDebridIntegrationEnabled,
-        torboxIntegrationEnabled: _torboxIntegrationEnabled,
-        pikpakEnabled: _pikpakEnabled,
-        torboxCacheCheckEnabled: _torboxCacheCheckEnabled,
-        isSeries: _isSeries,
-        selectedImdbTitle: _selectedImdbTitle,
-        hasSeasonData: _availableSeasons != null && _availableSeasons!.isNotEmpty,
-        selectedSeason: _selectedSeason,
-        seasonInputFocusNode: _seasonInputFocusNode,
-        onCardActivated: () => _handleTorrentCardActivated(torrent, index),
-        onCopyMagnet: () => _copyMagnetLink(torrent.infohash),
-        onAddToDebrid: _addToRealDebrid,
-        onAddToTorbox: _addToTorbox,
-        onAddToPikPak: _sendToPikPak,
-        onShowFileSelection: _showFileSelectionDialog,
-        buildSizeOrPackChip: _buildSizeOrPackChip,
-        buildSourceStatChip: _buildSourceStatChip,
-        buildStreamTypeChip: _buildStreamTypeChip,
-        torboxResultIsCached: _torboxResultIsCached,
-        searchFocusNode: _searchFocusNode,
-        episodeInputFocusNode: _episodeInputFocusNode,
-        filterButtonFocusNode: _filterButtonFocusNode,
-      );
-    }
-
-    // For non-TV, use regular non-TV card content
-    return _buildNonTVCardContent(torrent);
-  }
-
-  Widget _buildHistoryHeaderRow() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E293B), Color(0xFF334155)],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.history_rounded, color: Color(0xFFFBBF24), size: 20),
-          const SizedBox(width: 8),
-          const Text(
-            'Recent Searches',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          const Spacer(),
-          // History enabled label
-          Text(
-            _historyTrackingEnabled ? 'History' : 'Disabled',
-            style: TextStyle(
-              fontSize: 11,
-              color: _historyTrackingEnabled
-                  ? const Color(0xFF22C55E)
-                  : Colors.white.withValues(alpha: 0.5),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Disable Switch
-          Focus(
-            focusNode: _historyDisableSwitchFocusNode,
-            onFocusChange: (focused) {
-              _historyDisableSwitchFocused.value = focused; // No setState needed!
-            },
-            onKeyEvent: (node, event) {
-              if (event is KeyDownEvent &&
-                  (event.logicalKey == LogicalKeyboardKey.select ||
-                      event.logicalKey == LogicalKeyboardKey.enter ||
-                      event.logicalKey == LogicalKeyboardKey.space)) {
-                _toggleHistoryTracking(!_historyTrackingEnabled);
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _historyDisableSwitchFocused,
-              builder: (context, isFocused, child) => Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: isFocused
-                      ? Border.all(color: Colors.white, width: 2)
-                      : null,
-                ),
-                child: child,
-              ),
-              child: Transform.scale(
-                scale: 0.75,
-                child: Switch(
-                  value: _historyTrackingEnabled,
-                  onChanged: _toggleHistoryTracking,
-                  activeColor: const Color(0xFF22C55E),
-                  inactiveThumbColor: Colors.white.withValues(alpha: 0.7),
-                  inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Clear Button
-          Focus(
-            focusNode: _historyClearButtonFocusNode,
-            onFocusChange: (focused) {
-              _historyClearButtonFocused.value = focused; // No setState needed!
-            },
-            onKeyEvent: (node, event) {
-              if (event is KeyDownEvent &&
-                  (event.logicalKey == LogicalKeyboardKey.select ||
-                      event.logicalKey == LogicalKeyboardKey.enter)) {
-                _clearHistory();
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: InkWell(
-              onTap: _clearHistory,
-              borderRadius: BorderRadius.circular(8),
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _historyClearButtonFocused,
-                builder: (context, isFocused, child) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isFocused
-                        ? const Color(0xFFEF4444).withValues(alpha: 0.2)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isFocused
-                          ? const Color(0xFFEF4444)
-                          : const Color(0xFFEF4444).withValues(alpha: 0.3),
-                      width: isFocused ? 2 : 1,
-                    ),
-                  ),
-                  child: child,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.clear_all_rounded, size: 16, color: Color(0xFFEF4444)),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'Clear',
-                      style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
