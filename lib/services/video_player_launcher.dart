@@ -161,6 +161,11 @@ class VideoPlayerLaunchArgs {
   final bool Function()? isAndroidTvOverride;
   final bool disableAutoResume;
   final PlaylistViewMode? viewMode;
+  // Content metadata for fetching external subtitles from Stremio addons
+  final String? contentImdbId;
+  final String? contentType; // 'movie' or 'series'
+  final int? contentSeason;
+  final int? contentEpisode;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -185,6 +190,10 @@ class VideoPlayerLaunchArgs {
     this.isAndroidTvOverride,
     this.disableAutoResume = false,
     this.viewMode,
+    this.contentImdbId,
+    this.contentType,
+    this.contentSeason,
+    this.contentEpisode,
   });
 
   VideoPlayerScreen toWidget() {
@@ -210,6 +219,10 @@ class VideoPlayerLaunchArgs {
       hideBackButton: hideBackButton,
       disableAutoResume: disableAutoResume,
       viewMode: viewMode,
+      contentImdbId: contentImdbId,
+      contentType: contentType,
+      contentSeason: contentSeason,
+      contentEpisode: contentEpisode,
     );
   }
 }

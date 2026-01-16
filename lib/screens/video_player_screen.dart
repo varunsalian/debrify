@@ -105,6 +105,11 @@ class VideoPlayerScreen extends StatefulWidget {
   final bool disableAutoResume;
   // Explicit view mode - if null, auto-detect from filenames
   final PlaylistViewMode? viewMode;
+  // Content metadata for fetching external subtitles from Stremio addons
+  final String? contentImdbId;
+  final String? contentType; // 'movie' or 'series'
+  final int? contentSeason;
+  final int? contentEpisode;
 
   const VideoPlayerScreen({
     Key? key,
@@ -132,6 +137,10 @@ class VideoPlayerScreen extends StatefulWidget {
     this.httpHeaders,
     this.disableAutoResume = false,
     this.viewMode,
+    this.contentImdbId,
+    this.contentType,
+    this.contentSeason,
+    this.contentEpisode,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -3335,6 +3344,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _showTracksSheet(BuildContext context) async {
+    debugPrint('VideoPlayer: Opening TracksSheet with contentImdbId=${widget.contentImdbId}, '
+        'contentType=${widget.contentType}, '
+        'season=${widget.contentSeason}, episode=${widget.contentEpisode}');
     await TracksSheet.show(
       context,
       _player,
@@ -3342,6 +3354,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await _persistTrackChoice(audioId, subtitleId);
       },
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
+      contentImdbId: widget.contentImdbId,
+      contentType: widget.contentType,
+      contentSeason: widget.contentSeason,
+      contentEpisode: widget.contentEpisode,
     );
   }
 

@@ -1213,15 +1213,16 @@ class StremioService {
   /// Validate that an addon has useful resources
   ///
   /// Returns null if valid, or an error message if invalid.
-  /// Accepts any addon that provides streams or catalogs.
+  /// Accepts any addon that provides streams, catalogs, or subtitles.
   String? _validateAddon(StremioAddon addon) {
     final hasStreams = addon.supportsStreams;
     final hasCatalogs = addon.supportsCatalogs;
+    final hasSubtitles = addon.resources.contains('subtitles');
 
     // Must have at least one useful resource
-    if (!hasStreams && !hasCatalogs) {
-      return 'This addon doesn\'t provide streams or catalogs. '
-          'Debrify requires addons with stream or catalog support.';
+    if (!hasStreams && !hasCatalogs && !hasSubtitles) {
+      return 'This addon doesn\'t provide streams, catalogs, or subtitles. '
+          'Debrify requires addons with stream, catalog, or subtitle support.';
     }
 
     return null; // Valid

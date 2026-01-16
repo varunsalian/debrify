@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-// Netflix-style radio tile widget for track selection
+/// Netflix-style radio tile widget for track selection
 class NetflixRadioTile extends StatelessWidget {
   final String value;
   final String groupValue;
   final String title;
+  final String? subtitle;
   final ValueChanged<String?> onChanged;
 
   const NetflixRadioTile({
@@ -12,6 +13,7 @@ class NetflixRadioTile extends StatelessWidget {
     required this.value,
     required this.groupValue,
     required this.title,
+    this.subtitle,
     required this.onChanged,
   }) : super(key: key);
 
@@ -66,17 +68,33 @@ class NetflixRadioTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: isSelected
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.8),
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      fontSize: 14,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : Colors.white.withOpacity(0.8),
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle!,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],

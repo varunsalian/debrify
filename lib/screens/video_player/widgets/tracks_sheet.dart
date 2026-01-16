@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
+import '../../../models/stremio_subtitle.dart';
+import '../../../services/stremio_subtitle_service.dart';
 import '../constants/color_constants.dart';
 import '../widgets/netflix_radio_tile.dart';
 import '../utils/language_mapping.dart';
@@ -8,7 +10,8 @@ import '../services/subtitle_settings_service.dart';
 /// Modal bottom sheet for selecting audio and subtitle tracks
 ///
 /// Provides a Netflix-style UI for switching between available
-/// audio tracks and subtitle options.
+/// audio tracks and subtitle options, with separate sections for
+/// embedded and addon subtitles.
 class TracksSheet {
   /// Shows the tracks selection bottom sheet
   ///
@@ -17,17 +20,26 @@ class TracksSheet {
   /// - [player]: media_kit player instance
   /// - [onTrackChanged]: Callback when tracks are changed (audio ID, subtitle ID)
   /// - [onSubtitleStyleChanged]: Callback when subtitle style settings change
+  /// - [contentImdbId]: IMDB ID for fetching addon subtitles
+  /// - [contentType]: Content type ('movie' or 'series')
+  /// - [contentSeason]: Season number for series
+  /// - [contentEpisode]: Episode number for series
   static Future<void> show(
     BuildContext context,
     mk.Player player, {
-    required Future<void> Function(String audioId, String subtitleId) onTrackChanged,
+    required Future<void> Function(String audioId, String subtitleId)
+        onTrackChanged,
     void Function(SubtitleSettingsData settings)? onSubtitleStyleChanged,
+    String? contentImdbId,
+    String? contentType,
+    int? contentSeason,
+    int? contentEpisode,
   }) async {
     final tracks = player.state.tracks;
     final audios = tracks.audio
         .where((a) => a.id.toLowerCase() != 'no')
         .toList(growable: false);
-    final subs = tracks.subtitle
+    final embeddedSubs = tracks.subtitle
         .where(
           (s) => s.id.toLowerCase() != 'auto' && s.id.toLowerCase() != 'no',
         )
@@ -38,6 +50,10 @@ class TracksSheet {
     // Load subtitle style settings
     SubtitleSettingsData subtitleStyle =
         await SubtitleSettingsService.instance.loadAll();
+
+    // Stremio addon subtitles state (managed internally)
+    List<StremioSubtitle>? stremioSubtitles;
+    bool isLoadingStremioSubtitles = false;
 
     await showModalBottomSheet(
       context: context,
@@ -50,45 +66,58 @@ class TracksSheet {
         return SafeArea(
           top: false,
           child: FractionallySizedBox(
-            heightFactor: 0.7,
+            heightFactor: 0.75,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               child: StatefulBuilder(
                 builder: (context, setModalState) {
+                  // Debug: Log content metadata
+                  debugPrint('TracksSheet: contentImdbId=$contentImdbId, '
+                      'contentType=$contentType, '
+                      'season=$contentSeason, episode=$contentEpisode');
+                  debugPrint('TracksSheet: stremioSubtitles=${stremioSubtitles?.length}, '
+                      'isLoading=$isLoadingStremioSubtitles');
+
+                  // Fetch Stremio subtitles on first build
+                  if (stremioSubtitles == null &&
+                      !isLoadingStremioSubtitles &&
+                      contentImdbId != null &&
+                      contentType != null) {
+                    // Set loading state
+                    isLoadingStremioSubtitles = true;
+                    debugPrint('TracksSheet: Starting subtitle fetch...');
+                    // Trigger async fetch
+                    Future(() async {
+                      try {
+                        debugPrint('TracksSheet: Calling StremioSubtitleService.fetchSubtitles()');
+                        final result =
+                            await StremioSubtitleService.instance.fetchSubtitles(
+                          type: contentType,
+                          imdbId: contentImdbId,
+                          season: contentSeason,
+                          episode: contentEpisode,
+                        );
+                        debugPrint('TracksSheet: Fetch complete, got ${result.subtitles.length} subtitles');
+                        setModalState(() {
+                          stremioSubtitles = result.subtitles;
+                          isLoadingStremioSubtitles = false;
+                        });
+                      } catch (e) {
+                        debugPrint('TracksSheet: Fetch error: $e');
+                        setModalState(() {
+                          isLoadingStremioSubtitles = false;
+                        });
+                      }
+                    });
+                  } else if (contentImdbId == null || contentType == null) {
+                    debugPrint('TracksSheet: No content metadata provided, skipping subtitle fetch');
+                  }
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Header
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: VideoPlayerColors.netflixRed.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.tune_rounded,
-                              color: VideoPlayerColors.netflixRed,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Audio & Subtitles',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, color: Colors.white),
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                        ],
-                      ),
+                      _buildHeader(context),
                       const SizedBox(height: 16),
 
                       // Scrollable content
@@ -99,293 +128,119 @@ class TracksSheet {
                             children: [
                               // Audio tracks section
                               if (audios.isNotEmpty) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Row(
-                                    children: [
-                                      Icon(Icons.audiotrack_rounded,
-                                          color: Colors.white70, size: 18),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'AUDIO TRACK',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                _buildSectionHeader(
+                                  icon: Icons.audiotrack_rounded,
+                                  title: 'AUDIO TRACK',
                                 ),
                                 const SizedBox(height: 12),
-                                ListView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemCount: audios.length,
-                                  itemBuilder: (context, index) {
-                                    final a = audios[index];
-                                    return NetflixRadioTile(
-                                      value: a.id,
-                                      groupValue: selectedAudio,
-                                      title: LanguageMapper.labelForTrack(a, index),
-                                      onChanged: (v) async {
-                                        if (v == null) return;
-                                        setModalState(() {
-                                          selectedAudio = v;
-                                        });
-                                        await player.setAudioTrack(a);
-                                        await onTrackChanged(v, selectedSub);
-                                      },
-                                    );
+                                _buildAudioTracksList(
+                                  audios: audios,
+                                  selectedAudio: selectedAudio,
+                                  player: player,
+                                  selectedSub: selectedSub,
+                                  onTrackChanged: onTrackChanged,
+                                  setModalState: setModalState,
+                                  onAudioChanged: (v) {
+                                    setModalState(() => selectedAudio = v);
                                   },
                                 ),
                                 const SizedBox(height: 20),
                               ],
 
-                              // Subtitle tracks section
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.subtitles_rounded,
-                                        color: Colors.white70, size: 18),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'SUBTITLES',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              // Subtitles Off option + Embedded subtitles section
+                              _buildSectionHeader(
+                                icon: Icons.subtitles_rounded,
+                                title: embeddedSubs.isNotEmpty
+                                    ? 'EMBEDDED SUBTITLES'
+                                    : 'SUBTITLES',
                               ),
                               const SizedBox(height: 12),
-                              ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: subs.length + 1,
-                                itemBuilder: (context, index) {
-                                  if (index == 0) {
-                                    return NetflixRadioTile(
-                                      value: 'no',
-                                      groupValue: selectedSub,
-                                      title: 'Off',
-                                      onChanged: (v) async {
-                                        if (v == null) return;
-                                        setModalState(() {
-                                          selectedSub = v;
-                                        });
-                                        await player.setSubtitleTrack(mk.SubtitleTrack.no());
-                                        await onTrackChanged(
-                                          selectedAudio,
-                                          v,
-                                        );
-                                      },
-                                    );
-                                  }
-                                  final s = subs[index - 1];
-                                  return NetflixRadioTile(
-                                    value: s.id,
-                                    groupValue: selectedSub,
-                                    title: LanguageMapper.labelForTrack(s, index - 1),
-                                    onChanged: (v) async {
-                                      if (v == null) return;
-                                      setModalState(() {
-                                        selectedSub = v;
-                                      });
-                                      await player.setSubtitleTrack(s);
-                                      await onTrackChanged(
-                                        selectedAudio,
-                                        v,
-                                      );
-                                    },
-                                  );
+                              _buildSubtitleOffTile(
+                                selectedSub: selectedSub,
+                                selectedAudio: selectedAudio,
+                                player: player,
+                                onTrackChanged: onTrackChanged,
+                                setModalState: setModalState,
+                                onSubChanged: (v) {
+                                  setModalState(() => selectedSub = v);
                                 },
                               ),
+                              if (embeddedSubs.isNotEmpty)
+                                _buildEmbeddedSubtitlesList(
+                                  subs: embeddedSubs,
+                                  selectedSub: selectedSub,
+                                  selectedAudio: selectedAudio,
+                                  player: player,
+                                  onTrackChanged: onTrackChanged,
+                                  setModalState: setModalState,
+                                  onSubChanged: (v) {
+                                    setModalState(() => selectedSub = v);
+                                  },
+                                ),
+
+                              // Addon subtitles section
+                              if ((stremioSubtitles != null &&
+                                      stremioSubtitles!.isNotEmpty) ||
+                                  isLoadingStremioSubtitles) ...[
+                                const SizedBox(height: 20),
+                                _buildSectionHeader(
+                                  icon: Icons.extension_rounded,
+                                  title: 'ADDON SUBTITLES',
+                                  trailing: isLoadingStremioSubtitles
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white54,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(height: 12),
+                                if (isLoadingStremioSubtitles &&
+                                    (stremioSubtitles == null ||
+                                        stremioSubtitles!.isEmpty))
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 12),
+                                    child: Center(
+                                      child: Text(
+                                        'Loading subtitles from addons...',
+                                        style: TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                else if (stremioSubtitles != null)
+                                  _buildAddonSubtitlesList(
+                                    subtitles: stremioSubtitles!,
+                                    selectedSub: selectedSub,
+                                    selectedAudio: selectedAudio,
+                                    player: player,
+                                    onTrackChanged: onTrackChanged,
+                                    setModalState: setModalState,
+                                    onSubChanged: (v) {
+                                      setModalState(() => selectedSub = v);
+                                    },
+                                  ),
+                              ],
 
                               // Subtitle Style section
                               const SizedBox(height: 20),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.format_size_rounded,
-                                        color: Colors.white70, size: 18),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'SUBTITLE STYLE',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              _buildSectionHeader(
+                                icon: Icons.format_size_rounded,
+                                title: 'SUBTITLE STYLE',
                               ),
                               const SizedBox(height: 12),
-
-                              // Size setting
-                              _SubtitleStyleRow(
-                                label: 'Size',
-                                value: subtitleStyle.size.label,
-                                onDecrease: () async {
-                                  final newIndex = (subtitleStyle.sizeIndex - 1)
-                                      .clamp(0, SubtitleSize.options.length - 1);
-                                  await SubtitleSettingsService.instance
-                                      .setSizeIndex(newIndex);
-                                  setModalState(() {
-                                    subtitleStyle = subtitleStyle.copyWith(
-                                        sizeIndex: newIndex);
-                                  });
-                                  onSubtitleStyleChanged?.call(subtitleStyle);
+                              _buildSubtitleStyleSettings(
+                                subtitleStyle: subtitleStyle,
+                                setModalState: setModalState,
+                                onStyleChanged: (newStyle) {
+                                  setModalState(() => subtitleStyle = newStyle);
+                                  onSubtitleStyleChanged?.call(newStyle);
                                 },
-                                onIncrease: () async {
-                                  final newIndex = (subtitleStyle.sizeIndex + 1)
-                                      .clamp(0, SubtitleSize.options.length - 1);
-                                  await SubtitleSettingsService.instance
-                                      .setSizeIndex(newIndex);
-                                  setModalState(() {
-                                    subtitleStyle = subtitleStyle.copyWith(
-                                        sizeIndex: newIndex);
-                                  });
-                                  onSubtitleStyleChanged?.call(subtitleStyle);
-                                },
-                              ),
-
-                              // Style setting
-                              _SubtitleStyleRow(
-                                label: 'Style',
-                                value: subtitleStyle.style.label,
-                                onDecrease: () async {
-                                  final newIndex = (subtitleStyle.styleIndex - 1)
-                                      .clamp(0, SubtitleStyle.options.length - 1);
-                                  await SubtitleSettingsService.instance
-                                      .setStyleIndex(newIndex);
-                                  setModalState(() {
-                                    subtitleStyle = subtitleStyle.copyWith(
-                                        styleIndex: newIndex);
-                                  });
-                                  onSubtitleStyleChanged?.call(subtitleStyle);
-                                },
-                                onIncrease: () async {
-                                  final newIndex = (subtitleStyle.styleIndex + 1)
-                                      .clamp(0, SubtitleStyle.options.length - 1);
-                                  await SubtitleSettingsService.instance
-                                      .setStyleIndex(newIndex);
-                                  setModalState(() {
-                                    subtitleStyle = subtitleStyle.copyWith(
-                                        styleIndex: newIndex);
-                                  });
-                                  onSubtitleStyleChanged?.call(subtitleStyle);
-                                },
-                              ),
-
-                              // Color setting
-                              _SubtitleStyleRow(
-                                label: 'Color',
-                                value: subtitleStyle.color.label,
-                                valueColor: subtitleStyle.color.color,
-                                onDecrease: () async {
-                                  final newIndex = (subtitleStyle.colorIndex - 1)
-                                      .clamp(0, SubtitleColor.options.length - 1);
-                                  await SubtitleSettingsService.instance
-                                      .setColorIndex(newIndex);
-                                  setModalState(() {
-                                    subtitleStyle = subtitleStyle.copyWith(
-                                        colorIndex: newIndex);
-                                  });
-                                  onSubtitleStyleChanged?.call(subtitleStyle);
-                                },
-                                onIncrease: () async {
-                                  final newIndex = (subtitleStyle.colorIndex + 1)
-                                      .clamp(0, SubtitleColor.options.length - 1);
-                                  await SubtitleSettingsService.instance
-                                      .setColorIndex(newIndex);
-                                  setModalState(() {
-                                    subtitleStyle = subtitleStyle.copyWith(
-                                        colorIndex: newIndex);
-                                  });
-                                  onSubtitleStyleChanged?.call(subtitleStyle);
-                                },
-                              ),
-
-                              // Background setting
-                              _SubtitleStyleRow(
-                                label: 'Background',
-                                value: subtitleStyle.background.label,
-                                onDecrease: () async {
-                                  final newIndex = (subtitleStyle.bgIndex - 1)
-                                      .clamp(0, SubtitleBackground.options.length - 1);
-                                  await SubtitleSettingsService.instance
-                                      .setBgIndex(newIndex);
-                                  setModalState(() {
-                                    subtitleStyle =
-                                        subtitleStyle.copyWith(bgIndex: newIndex);
-                                  });
-                                  onSubtitleStyleChanged?.call(subtitleStyle);
-                                },
-                                onIncrease: () async {
-                                  final newIndex = (subtitleStyle.bgIndex + 1)
-                                      .clamp(0, SubtitleBackground.options.length - 1);
-                                  await SubtitleSettingsService.instance
-                                      .setBgIndex(newIndex);
-                                  setModalState(() {
-                                    subtitleStyle =
-                                        subtitleStyle.copyWith(bgIndex: newIndex);
-                                  });
-                                  onSubtitleStyleChanged?.call(subtitleStyle);
-                                },
-                              ),
-
-                              // Reset button
-                              const SizedBox(height: 16),
-                              Center(
-                                child: TextButton.icon(
-                                  onPressed: () async {
-                                    await SubtitleSettingsService.instance
-                                        .resetToDefaults();
-                                    final newSettings =
-                                        await SubtitleSettingsService.instance
-                                            .loadAll();
-                                    setModalState(() {
-                                      subtitleStyle = newSettings;
-                                    });
-                                    onSubtitleStyleChanged?.call(subtitleStyle);
-                                  },
-                                  icon: const Icon(Icons.refresh_rounded,
-                                      size: 18),
-                                  label: const Text('Reset to Defaults'),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.white70,
-                                  ),
-                                ),
                               ),
                             ],
                           ),
@@ -399,6 +254,291 @@ class TracksSheet {
           ),
         );
       },
+    );
+  }
+
+  static Widget _buildHeader(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: VideoPlayerColors.netflixRed.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(
+            Icons.tune_rounded,
+            color: VideoPlayerColors.netflixRed,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Text(
+          'Audio & Subtitles',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          icon: const Icon(Icons.close_rounded, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildSectionHeader({
+    required IconData icon,
+    required String title,
+    Widget? trailing,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white70, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          if (trailing != null) ...[
+            const Spacer(),
+            trailing,
+          ],
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildAudioTracksList({
+    required List<mk.AudioTrack> audios,
+    required String selectedAudio,
+    required mk.Player player,
+    required String selectedSub,
+    required Future<void> Function(String, String) onTrackChanged,
+    required StateSetter setModalState,
+    required void Function(String) onAudioChanged,
+  }) {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: audios.length,
+      itemBuilder: (context, index) {
+        final a = audios[index];
+        return NetflixRadioTile(
+          value: a.id,
+          groupValue: selectedAudio,
+          title: LanguageMapper.labelForTrack(a, index),
+          onChanged: (v) async {
+            if (v == null) return;
+            onAudioChanged(v);
+            await player.setAudioTrack(a);
+            await onTrackChanged(v, selectedSub);
+          },
+        );
+      },
+    );
+  }
+
+  static Widget _buildSubtitleOffTile({
+    required String selectedSub,
+    required String selectedAudio,
+    required mk.Player player,
+    required Future<void> Function(String, String) onTrackChanged,
+    required StateSetter setModalState,
+    required void Function(String) onSubChanged,
+  }) {
+    return NetflixRadioTile(
+      value: 'no',
+      groupValue: selectedSub,
+      title: 'Off',
+      onChanged: (v) async {
+        if (v == null) return;
+        onSubChanged(v);
+        await player.setSubtitleTrack(mk.SubtitleTrack.no());
+        await onTrackChanged(selectedAudio, v);
+      },
+    );
+  }
+
+  static Widget _buildEmbeddedSubtitlesList({
+    required List<mk.SubtitleTrack> subs,
+    required String selectedSub,
+    required String selectedAudio,
+    required mk.Player player,
+    required Future<void> Function(String, String) onTrackChanged,
+    required StateSetter setModalState,
+    required void Function(String) onSubChanged,
+  }) {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: subs.length,
+      itemBuilder: (context, index) {
+        final s = subs[index];
+        return NetflixRadioTile(
+          value: s.id,
+          groupValue: selectedSub,
+          title: LanguageMapper.labelForTrack(s, index),
+          onChanged: (v) async {
+            if (v == null) return;
+            onSubChanged(v);
+            await player.setSubtitleTrack(s);
+            await onTrackChanged(selectedAudio, v);
+          },
+        );
+      },
+    );
+  }
+
+  static Widget _buildAddonSubtitlesList({
+    required List<StremioSubtitle> subtitles,
+    required String selectedSub,
+    required String selectedAudio,
+    required mk.Player player,
+    required Future<void> Function(String, String) onTrackChanged,
+    required StateSetter setModalState,
+    required void Function(String) onSubChanged,
+  }) {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: subtitles.length,
+      itemBuilder: (context, index) {
+        final sub = subtitles[index];
+        // Use a prefix to distinguish addon subtitles from embedded ones
+        final subId = 'stremio:${sub.id}';
+        return NetflixRadioTile(
+          value: subId,
+          groupValue: selectedSub,
+          title: sub.displayName,
+          subtitle: sub.source,
+          onChanged: (v) async {
+            if (v == null) return;
+            onSubChanged(v);
+            // Load external subtitle via URL
+            final track = mk.SubtitleTrack.uri(
+              sub.url,
+              title: sub.displayName,
+              language: sub.lang,
+            );
+            await player.setSubtitleTrack(track);
+            await onTrackChanged(selectedAudio, v);
+          },
+        );
+      },
+    );
+  }
+
+  static Widget _buildSubtitleStyleSettings({
+    required SubtitleSettingsData subtitleStyle,
+    required StateSetter setModalState,
+    required void Function(SubtitleSettingsData) onStyleChanged,
+  }) {
+    return Column(
+      children: [
+        // Size setting
+        _SubtitleStyleRow(
+          label: 'Size',
+          value: subtitleStyle.size.label,
+          onDecrease: () async {
+            final newIndex = (subtitleStyle.sizeIndex - 1)
+                .clamp(0, SubtitleSize.options.length - 1);
+            await SubtitleSettingsService.instance.setSizeIndex(newIndex);
+            onStyleChanged(subtitleStyle.copyWith(sizeIndex: newIndex));
+          },
+          onIncrease: () async {
+            final newIndex = (subtitleStyle.sizeIndex + 1)
+                .clamp(0, SubtitleSize.options.length - 1);
+            await SubtitleSettingsService.instance.setSizeIndex(newIndex);
+            onStyleChanged(subtitleStyle.copyWith(sizeIndex: newIndex));
+          },
+        ),
+
+        // Style setting
+        _SubtitleStyleRow(
+          label: 'Style',
+          value: subtitleStyle.style.label,
+          onDecrease: () async {
+            final newIndex = (subtitleStyle.styleIndex - 1)
+                .clamp(0, SubtitleStyle.options.length - 1);
+            await SubtitleSettingsService.instance.setStyleIndex(newIndex);
+            onStyleChanged(subtitleStyle.copyWith(styleIndex: newIndex));
+          },
+          onIncrease: () async {
+            final newIndex = (subtitleStyle.styleIndex + 1)
+                .clamp(0, SubtitleStyle.options.length - 1);
+            await SubtitleSettingsService.instance.setStyleIndex(newIndex);
+            onStyleChanged(subtitleStyle.copyWith(styleIndex: newIndex));
+          },
+        ),
+
+        // Color setting
+        _SubtitleStyleRow(
+          label: 'Color',
+          value: subtitleStyle.color.label,
+          valueColor: subtitleStyle.color.color,
+          onDecrease: () async {
+            final newIndex = (subtitleStyle.colorIndex - 1)
+                .clamp(0, SubtitleColor.options.length - 1);
+            await SubtitleSettingsService.instance.setColorIndex(newIndex);
+            onStyleChanged(subtitleStyle.copyWith(colorIndex: newIndex));
+          },
+          onIncrease: () async {
+            final newIndex = (subtitleStyle.colorIndex + 1)
+                .clamp(0, SubtitleColor.options.length - 1);
+            await SubtitleSettingsService.instance.setColorIndex(newIndex);
+            onStyleChanged(subtitleStyle.copyWith(colorIndex: newIndex));
+          },
+        ),
+
+        // Background setting
+        _SubtitleStyleRow(
+          label: 'Background',
+          value: subtitleStyle.background.label,
+          onDecrease: () async {
+            final newIndex = (subtitleStyle.bgIndex - 1)
+                .clamp(0, SubtitleBackground.options.length - 1);
+            await SubtitleSettingsService.instance.setBgIndex(newIndex);
+            onStyleChanged(subtitleStyle.copyWith(bgIndex: newIndex));
+          },
+          onIncrease: () async {
+            final newIndex = (subtitleStyle.bgIndex + 1)
+                .clamp(0, SubtitleBackground.options.length - 1);
+            await SubtitleSettingsService.instance.setBgIndex(newIndex);
+            onStyleChanged(subtitleStyle.copyWith(bgIndex: newIndex));
+          },
+        ),
+
+        // Reset button
+        const SizedBox(height: 16),
+        Center(
+          child: TextButton.icon(
+            onPressed: () async {
+              await SubtitleSettingsService.instance.resetToDefaults();
+              final newSettings =
+                  await SubtitleSettingsService.instance.loadAll();
+              onStyleChanged(newSettings);
+            },
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Reset to Defaults'),
+            style: TextButton.styleFrom(foregroundColor: Colors.white70),
+          ),
+        ),
+      ],
     );
   }
 }
