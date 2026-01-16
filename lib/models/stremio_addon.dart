@@ -653,17 +653,18 @@ class StremioStream {
     String? infoHash = json['infoHash'] as String?;
     final behaviorHints = json['behaviorHints'] as Map<String, dynamic>?;
 
-    // Try to extract infoHash from behaviorHints.bingeGroup (format: "addon|hash")
+    // Try to extract infoHash from behaviorHints.bingeGroup
+    // Formats: "addon|hash" or "addon|debrid|hash" (e.g., "comet|realdebrid|58b0e410...")
     if (infoHash == null && behaviorHints != null) {
       final bingeGroup = behaviorHints['bingeGroup'] as String?;
       if (bingeGroup != null && bingeGroup.contains('|')) {
         final parts = bingeGroup.split('|');
-        if (parts.length >= 2) {
-          final potentialHash = parts[1];
-          // Validate it looks like a hash (40 hex chars for SHA1)
-          if (potentialHash.length == 40 &&
-              RegExp(r'^[a-fA-F0-9]+$').hasMatch(potentialHash)) {
-            infoHash = potentialHash;
+        // Check each part for a valid SHA1 hash (40 hex chars)
+        for (final part in parts) {
+          if (part.length == 40 &&
+              RegExp(r'^[a-fA-F0-9]+$').hasMatch(part)) {
+            infoHash = part;
+            break;
           }
         }
       }
