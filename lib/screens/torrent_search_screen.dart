@@ -9256,7 +9256,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return PopScope(
+      canPop: !_cameFromCatalogBrowse,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop && _cameFromCatalogBrowse) {
+          _goBackToCatalog();
+        }
+      },
+      child: Stack(
       children: [
         Container(
           decoration: BoxDecoration(
@@ -10143,6 +10150,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
           ),
       ],
+      ),
     );
   }
 
