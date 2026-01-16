@@ -18,11 +18,6 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
   final FocusNode _urlFieldFocusNode = FocusNode(debugLabel: 'url-field');
   final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'add-button');
 
-  // Quick add chip focus nodes
-  final FocusNode _torrentioChipFocusNode = FocusNode(debugLabel: 'torrentio-chip');
-  final FocusNode _piratebayChipFocusNode = FocusNode(debugLabel: 'piratebay-chip');
-  final FocusNode _cometChipFocusNode = FocusNode(debugLabel: 'comet-chip');
-
   bool _isLoading = true;
   bool _isAdding = false;
   String? _error;
@@ -62,9 +57,6 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
     _urlFieldFocusNode.removeListener(_onUrlFieldFocusChanged);
     _urlFieldFocusNode.dispose();
     _addButtonFocusNode.dispose();
-    _torrentioChipFocusNode.dispose();
-    _piratebayChipFocusNode.dispose();
-    _cometChipFocusNode.dispose();
     for (final node in _addonFocusNodes.values) {
       node.dispose();
     }
@@ -190,55 +182,6 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to remove addon: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _refreshAddon(StremioAddon addon) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Row(
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(width: 16),
-            Text('Refreshing ${addon.name}...'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final updated = await _stremioService.refreshAddon(addon.manifestUrl);
-      if (mounted) Navigator.of(context).pop();
-
-      if (updated != null) {
-        // Note: _loadAddons() is called automatically via the addons changed listener
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${updated.name} refreshed')),
-          );
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to refresh addon'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) Navigator.of(context).pop();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -405,50 +348,6 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          // Quick add buttons for popular addons
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FocusTraversalOrder(
-                order: const NumericFocusOrder(2),
-                child: _QuickAddChip(
-                  label: 'Torrentio',
-                  focusNode: _torrentioChipFocusNode,
-                  onTap: () => _openQuickAddInfo(
-                    'Torrentio',
-                    'https://torrentio.strem.fun/configure',
-                    'Configure your debrid service and preferences, then copy the manifest URL.',
-                  ),
-                ),
-              ),
-              FocusTraversalOrder(
-                order: const NumericFocusOrder(3),
-                child: _QuickAddChip(
-                  label: 'ThePirateBay+',
-                  focusNode: _piratebayChipFocusNode,
-                  onTap: () {
-                    _urlController.text =
-                        'https://thepiratebay-plus.strem.fun/manifest.json';
-                    _urlFieldFocusNode.requestFocus();
-                  },
-                ),
-              ),
-              FocusTraversalOrder(
-                order: const NumericFocusOrder(4),
-                child: _QuickAddChip(
-                  label: 'Comet',
-                  focusNode: _cometChipFocusNode,
-                  onTap: () => _openQuickAddInfo(
-                    'Comet',
-                    'https://comet.elfhosted.com/configure',
-                    'Configure your debrid service, then copy the manifest URL.',
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -505,49 +404,6 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _openQuickAddInfo(String name, String configUrl, String instructions) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add $name'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(instructions),
-            const SizedBox(height: 16),
-            const Text(
-              'Configuration URL:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            SelectableText(
-              configUrl,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: configUrl));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('URL copied to clipboard')),
-              );
-            },
-            child: const Text('Copy URL'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it'),
-          ),
-        ],
       ),
     );
   }
@@ -689,7 +545,6 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
           focusNode: _addonFocusNodes[addon.manifestUrl]!,
           onTap: () => _showAddonDetails(addon),
           onToggle: () => _toggleAddon(addon),
-          onRefresh: () => _refreshAddon(addon),
           onDelete: () => _deleteAddon(addon),
         );
       },
@@ -704,7 +559,6 @@ class _AddonTile extends StatefulWidget {
   final FocusNode focusNode;
   final VoidCallback onTap;
   final VoidCallback onToggle;
-  final VoidCallback onRefresh;
   final VoidCallback onDelete;
 
   const _AddonTile({
@@ -713,7 +567,6 @@ class _AddonTile extends StatefulWidget {
     required this.focusNode,
     required this.onTap,
     required this.onToggle,
-    required this.onRefresh,
     required this.onDelete,
   });
 
@@ -742,16 +595,6 @@ class _AddonTileState extends State<_AddonTile> {
     });
   }
 
-  IconData _getIconForAddon(StremioAddon addon) {
-    final name = addon.name.toLowerCase();
-    if (name.contains('torrentio')) return Icons.tornado;
-    if (name.contains('piratebay') || name.contains('pirate')) return Icons.sailing;
-    if (name.contains('comet')) return Icons.rocket_launch;
-    if (name.contains('mediafusion')) return Icons.merge;
-    if (name.contains('aio')) return Icons.all_inclusive;
-    return Icons.extension;
-  }
-
   String _getAddonSubtitle(StremioAddon addon) {
     final parts = <String>[];
 
@@ -770,21 +613,43 @@ class _AddonTileState extends State<_AddonTile> {
     return parts.join(' - ');
   }
 
+  void _showOptionsSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AddonOptionsSheet(
+        addon: widget.addon,
+        onToggle: () {
+          Navigator.of(context).pop();
+          widget.onToggle();
+        },
+        onDetails: () {
+          Navigator.of(context).pop();
+          widget.onTap();
+        },
+        onDelete: () {
+          Navigator.of(context).pop();
+          widget.onDelete();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return FocusTraversalOrder(
-      order: NumericFocusOrder((widget.index + 5).toDouble()), // Start after chips
+      order: NumericFocusOrder((widget.index + 2).toDouble()),
       child: Focus(
         focusNode: widget.focusNode,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-          // Handle Enter/Select to show details
+          // Handle Enter/Select to show options
           if (event.logicalKey == LogicalKeyboardKey.enter ||
               event.logicalKey == LogicalKeyboardKey.select) {
-            widget.onTap();
+            _showOptionsSheet();
             return KeyEventResult.handled;
           }
 
@@ -803,7 +668,7 @@ class _AddonTileState extends State<_AddonTile> {
           ),
           elevation: _isFocused ? 8 : 1,
           child: InkWell(
-            onTap: widget.onTap,
+            onTap: _showOptionsSheet,
             borderRadius: BorderRadius.circular(12),
             child: Container(
               decoration: _isFocused
@@ -821,7 +686,7 @@ class _AddonTileState extends State<_AddonTile> {
                         ? theme.colorScheme.primaryContainer
                         : theme.colorScheme.surfaceContainerHighest,
                     child: Icon(
-                      _getIconForAddon(widget.addon),
+                      Icons.extension,
                       color: widget.addon.enabled
                           ? theme.colorScheme.onPrimaryContainer
                           : theme.colorScheme.onSurfaceVariant,
@@ -852,46 +717,253 @@ class _AddonTileState extends State<_AddonTile> {
                       ],
                     ),
                   ),
-                  // Actions
-                  IconButton(
-                    onPressed: widget.onRefresh,
-                    icon: const Icon(Icons.refresh, size: 20),
-                    tooltip: 'Refresh',
-                  ),
-                  Switch(
-                    value: widget.addon.enabled,
-                    onChanged: (_) => widget.onToggle(),
-                  ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'delete') {
-                        widget.onDelete();
-                      } else if (value == 'details') {
-                        widget.onTap();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'details',
-                        child: ListTile(
-                          leading: Icon(Icons.info_outline),
-                          title: Text('Details'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                  // Status indicator
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.addon.enabled
+                          ? Colors.green.withValues(alpha: 0.1)
+                          : theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      widget.addon.enabled ? 'ON' : 'OFF',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: widget.addon.enabled
+                            ? Colors.green
+                            : theme.colorScheme.onSurfaceVariant,
                       ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: ListTile(
-                          leading: Icon(Icons.delete_outline, color: Colors.red),
-                          title: Text('Remove', style: TextStyle(color: Colors.red)),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.chevron_right,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for addon options - DPAD friendly
+class _AddonOptionsSheet extends StatefulWidget {
+  final StremioAddon addon;
+  final VoidCallback onToggle;
+  final VoidCallback onDetails;
+  final VoidCallback onDelete;
+
+  const _AddonOptionsSheet({
+    required this.addon,
+    required this.onToggle,
+    required this.onDetails,
+    required this.onDelete,
+  });
+
+  @override
+  State<_AddonOptionsSheet> createState() => _AddonOptionsSheetState();
+}
+
+class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
+  final FocusNode _toggleFocusNode = FocusNode(debugLabel: 'toggle-option');
+  final FocusNode _detailsFocusNode = FocusNode(debugLabel: 'details-option');
+  final FocusNode _deleteFocusNode = FocusNode(debugLabel: 'delete-option');
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-focus the first option after build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _toggleFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _toggleFocusNode.dispose();
+    _detailsFocusNode.dispose();
+    _deleteFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: widget.addon.enabled
+                        ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                    child: Icon(
+                      Icons.extension,
+                      color: widget.addon.enabled
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.addon.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.3)),
+            const SizedBox(height: 8),
+            // Options
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(0),
+              child: _OptionTile(
+                focusNode: _toggleFocusNode,
+                icon: widget.addon.enabled
+                    ? Icons.toggle_off_outlined
+                    : Icons.toggle_on_outlined,
+                label: widget.addon.enabled ? 'Disable' : 'Enable',
+                onTap: widget.onToggle,
+              ),
+            ),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: _OptionTile(
+                focusNode: _detailsFocusNode,
+                icon: Icons.info_outline,
+                label: 'View Details',
+                onTap: widget.onDetails,
+              ),
+            ),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(2),
+              child: _OptionTile(
+                focusNode: _deleteFocusNode,
+                icon: Icons.delete_outline,
+                label: 'Remove',
+                isDestructive: true,
+                onTap: widget.onDelete,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Single option tile for the bottom sheet
+class _OptionTile extends StatefulWidget {
+  final FocusNode focusNode;
+  final IconData icon;
+  final String label;
+  final bool isDestructive;
+  final VoidCallback onTap;
+
+  const _OptionTile({
+    required this.focusNode,
+    required this.icon,
+    required this.label,
+    this.isDestructive = false,
+    required this.onTap,
+  });
+
+  @override
+  State<_OptionTile> createState() => _OptionTileState();
+}
+
+class _OptionTileState extends State<_OptionTile> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChanged);
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    setState(() {
+      _isFocused = widget.focusNode.hasFocus;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = widget.isDestructive
+        ? Colors.red.shade400
+        : theme.colorScheme.onSurface;
+
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+        if (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.select) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: _isFocused
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: _isFocused
+              ? Border.all(
+                  color: theme.colorScheme.primary,
+                  width: 2,
+                )
+              : null,
+        ),
+        child: ListTile(
+          leading: Icon(widget.icon, color: color),
+          title: Text(
+            widget.label,
+            style: TextStyle(color: color),
+          ),
+          onTap: widget.onTap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
       ),
@@ -923,75 +995,6 @@ class _DetailRow extends StatelessWidget {
             child: Text(value),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _QuickAddChip extends StatefulWidget {
-  final String label;
-  final FocusNode focusNode;
-  final VoidCallback onTap;
-
-  const _QuickAddChip({
-    required this.label,
-    required this.focusNode,
-    required this.onTap,
-  });
-
-  @override
-  State<_QuickAddChip> createState() => _QuickAddChipState();
-}
-
-class _QuickAddChipState extends State<_QuickAddChip> {
-  bool _isFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_onFocusChanged);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocusChanged);
-    super.dispose();
-  }
-
-  void _onFocusChanged() {
-    setState(() {
-      _isFocused = widget.focusNode.hasFocus;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-
-        return KeyEventResult.ignored;
-      },
-      child: ActionChip(
-        label: Text(widget.label),
-        avatar: const Icon(Icons.add, size: 16),
-        onPressed: widget.onTap,
-        side: _isFocused
-            ? BorderSide(
-                color: Theme.of(context).colorScheme.primary,
-                width: 2,
-              )
-            : null,
-        backgroundColor: _isFocused
-            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-            : null,
       ),
     );
   }
